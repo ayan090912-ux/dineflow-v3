@@ -150,7 +150,12 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       setSuccessMessage(`Authenticated successfully! Loading ${config.title}...`);
       setTimeout(() => {
         onLoginSuccess(result.user?.role || portal, result.user);
-        onNavigate(config.targetDashboard);
+        
+        if (portal === 'restaurant' && result.restaurant && (!result.restaurant.isApproved || result.restaurant.lifecycleStatus === 'PENDING_APPROVAL')) {
+          onNavigate('/restaurant/pending-approval');
+        } else {
+          onNavigate(config.targetDashboard);
+        }
       }, 500);
     } catch (err: any) {
       setErrorMessage(err.message || 'Authentication failed. Please check your credentials.');

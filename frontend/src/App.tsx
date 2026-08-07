@@ -10,7 +10,9 @@ import { AuthPage } from './apps/auth/AuthPage';
 import { RoleLoginPage, PortalType } from './apps/auth/RoleLoginPage';
 import { UnauthorizedPage } from './apps/auth/UnauthorizedPage';
 import { SetupWizard } from './apps/onboarding/SetupWizard';
+import { PendingApprovalPage } from './apps/onboarding/PendingApprovalPage';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
+import { ErrorBoundary } from './packages/ui';
 import { api } from './packages/api/client';
 import {
   Building2,
@@ -69,278 +71,287 @@ export default function App() {
   };
 
   return (
-    <ThemeProvider>
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-        {/* Sleek Subdomain & Environment Switcher Bar */}
-        {showDomainBar ? (
-          <header className="bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-md">
-            <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center font-black text-white text-[10px] shadow-sm">
-                DF
+    <ErrorBoundary>
+      <ThemeProvider>
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+          {/* Sleek Subdomain & Environment Switcher Bar */}
+          {showDomainBar ? (
+            <header className="bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-2.5">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center font-black text-white text-[10px] shadow-sm">
+                  DF
+                </div>
+                <span className="text-xs font-bold text-slate-300 hidden sm:inline-flex items-center gap-1.5">
+                  DineFlow Cloud OS
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </span>
               </div>
-              <span className="text-xs font-bold text-slate-300 hidden sm:inline-flex items-center gap-1.5">
-                DineFlow Cloud OS
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              </span>
-            </div>
 
-            {/* Core Domain Switcher Pills */}
-            <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto scrollbar-none no-scrollbar">
+              {/* Core Domain Switcher Pills */}
+              <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto scrollbar-none no-scrollbar">
+                <button
+                  onClick={() => navigateTo('/')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath === '/' || currentPath === '/landing'
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>www.dineflow.com</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('/admin/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/admin')
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>/admin/login</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('/restaurant/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/restaurant')
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Utensils className="w-3.5 h-3.5" />
+                  <span>/restaurant/login</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('/kitchen/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/kitchen')
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <ChefHat className="w-3.5 h-3.5 text-amber-400" />
+                  <span>/kitchen/login</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('/bar/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/bar')
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Wine className="w-3.5 h-3.5 text-purple-400" />
+                  <span>/bar/login</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('/waiter/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/waiter')
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>/waiter/login</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('/customer')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath === '/customer' || currentPath === '/order'
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>order.dineflow.com</span>
+                </button>
+              </div>
+
               <button
-                onClick={() => navigateTo('/')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  currentPath === '/' || currentPath === '/landing'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                onClick={() => setShowDomainBar(false)}
+                className="text-[11px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded hover:bg-slate-900 transition-colors hidden md:block"
+                title="Hide domain switcher bar"
               >
-                <Globe className="w-3.5 h-3.5" />
-                <span>www.dineflow.com</span>
+                Hide Bar ✕
               </button>
-
-              <button
-                onClick={() => navigateTo('/admin/login')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  currentPath.startsWith('/admin')
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Building2 className="w-3.5 h-3.5" />
-                <span>/admin/login</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/restaurant/login')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  currentPath.startsWith('/restaurant')
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Utensils className="w-3.5 h-3.5" />
-                <span>/restaurant/login</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/kitchen/login')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  currentPath.startsWith('/kitchen')
-                    ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <ChefHat className="w-3.5 h-3.5 text-amber-400" />
-                <span>/kitchen/login</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/bar/login')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  currentPath.startsWith('/bar')
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Wine className="w-3.5 h-3.5 text-purple-400" />
-                <span>/bar/login</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/waiter/login')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  currentPath.startsWith('/waiter')
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
-                <span>/waiter/login</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/customer')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  currentPath === '/customer' || currentPath === '/order'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>order.dineflow.com</span>
-              </button>
-            </div>
-
+            </header>
+          ) : (
             <button
-              onClick={() => setShowDomainBar(false)}
-              className="text-[11px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded hover:bg-slate-900 transition-colors hidden md:block"
-              title="Hide domain switcher bar"
+              onClick={() => setShowDomainBar(true)}
+              className="fixed top-2 right-2 z-50 bg-slate-900/90 text-slate-400 hover:text-white text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-800 shadow-xl"
             >
-              Hide Bar ✕
+              Switch Domain 🌐
             </button>
-          </header>
-        ) : (
-          <button
-            onClick={() => setShowDomainBar(true)}
-            className="fixed top-2 right-2 z-50 bg-slate-900/90 text-slate-400 hover:text-white text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-800 shadow-xl"
-          >
-            Switch Domain 🌐
-          </button>
-        )}
-
-        {/* Dynamic App & Router Render */}
-        <div className="flex-1">
-          {/* Landing Web Page */}
-          {(currentPath === '/' || currentPath === '/landing') && (
-            <LandingWebsite
-              onStartTrial={(ownerData) => {
-                if (ownerData) setActiveOwnerData(ownerData);
-                navigateTo('/wizard');
-              }}
-              onLogin={() => navigateTo('/restaurant/login')}
-              onOpenApp={(app) => {
-                if (app === 'platform') navigateTo('/admin/login');
-                else if (app === 'waiter') navigateTo('/waiter/login');
-                else if (app === 'customer') navigateTo('/customer');
-                else navigateTo('/restaurant/login');
-              }}
-            />
           )}
 
-          {/* Dedicated Login Portals */}
-          {currentPath === '/admin/login' && (
-            <RoleLoginPage
-              portal="admin"
-              onNavigate={navigateTo}
-              onLoginSuccess={(_, user) => setCurrentUser(user)}
-            />
-          )}
-
-          {currentPath === '/restaurant/login' && (
-            <RoleLoginPage
-              portal="restaurant"
-              onNavigate={navigateTo}
-              onLoginSuccess={(_, user) => setCurrentUser(user)}
-            />
-          )}
-
-          {currentPath === '/kitchen/login' && (
-            <RoleLoginPage
-              portal="kitchen"
-              onNavigate={navigateTo}
-              onLoginSuccess={(_, user) => setCurrentUser(user)}
-            />
-          )}
-
-          {currentPath === '/bar/login' && (
-            <RoleLoginPage
-              portal="bar"
-              onNavigate={navigateTo}
-              onLoginSuccess={(_, user) => setCurrentUser(user)}
-            />
-          )}
-
-          {currentPath === '/waiter/login' && (
-            <RoleLoginPage
-              portal="waiter"
-              onNavigate={navigateTo}
-              onLoginSuccess={(_, user) => setCurrentUser(user)}
-            />
-          )}
-
-          {/* Dashboards with Role-Based Access Control (RBAC) */}
-          {currentPath === '/admin/dashboard' && (
-            checkRoleAccess(['PLATFORM_ADMIN', 'SUPER_ADMIN']) ? (
-              <PlatformApp onLogout={() => handleLogout('/admin/login')} />
-            ) : (
-              <UnauthorizedPage
-                requiredRole="PLATFORM_ADMIN"
-                userRole={currentUser?.role}
-                userEmail={currentUser?.email}
-                targetPath="/admin/dashboard"
-                onNavigate={navigateTo}
+          {/* Dynamic App & Router Render */}
+          <div className="flex-1">
+            {/* Landing Web Page */}
+            {(currentPath === '/' || currentPath === '/landing') && (
+              <LandingWebsite
+                onStartTrial={(ownerData) => {
+                  if (ownerData) setActiveOwnerData(ownerData);
+                  navigateTo('/wizard');
+                }}
+                onLogin={() => navigateTo('/restaurant/login')}
+                onOpenApp={(app) => {
+                  if (app === 'platform') navigateTo('/admin/login');
+                  else if (app === 'waiter') navigateTo('/waiter/login');
+                  else if (app === 'customer') navigateTo('/customer');
+                  else navigateTo('/restaurant/login');
+                }}
               />
-            )
-          )}
+            )}
 
-          {currentPath === '/restaurant/dashboard' && (
-            checkRoleAccess(['RESTAURANT_OWNER', 'MANAGER', 'SUPER_ADMIN']) ? (
-              <RestaurantApp
-                onEditSetup={() => navigateTo('/wizard')}
+            {/* Dedicated Login Portals */}
+            {currentPath === '/admin/login' && (
+              <RoleLoginPage
+                portal="admin"
+                onNavigate={navigateTo}
+                onLoginSuccess={(_, user) => setCurrentUser(user)}
+              />
+            )}
+
+            {currentPath === '/restaurant/login' && (
+              <RoleLoginPage
+                portal="restaurant"
+                onNavigate={navigateTo}
+                onLoginSuccess={(_, user) => setCurrentUser(user)}
+              />
+            )}
+
+            {currentPath === '/kitchen/login' && (
+              <RoleLoginPage
+                portal="kitchen"
+                onNavigate={navigateTo}
+                onLoginSuccess={(_, user) => setCurrentUser(user)}
+              />
+            )}
+
+            {currentPath === '/bar/login' && (
+              <RoleLoginPage
+                portal="bar"
+                onNavigate={navigateTo}
+                onLoginSuccess={(_, user) => setCurrentUser(user)}
+              />
+            )}
+
+            {currentPath === '/waiter/login' && (
+              <RoleLoginPage
+                portal="waiter"
+                onNavigate={navigateTo}
+                onLoginSuccess={(_, user) => setCurrentUser(user)}
+              />
+            )}
+
+            {/* Dashboards with Role-Based Access Control (RBAC) */}
+            {currentPath === '/admin/dashboard' && (
+              checkRoleAccess(['PLATFORM_ADMIN', 'SUPER_ADMIN']) ? (
+                <PlatformApp onLogout={() => handleLogout('/admin/login')} />
+              ) : (
+                <UnauthorizedPage
+                  requiredRole="PLATFORM_ADMIN"
+                  userRole={currentUser?.role}
+                  userEmail={currentUser?.email}
+                  targetPath="/admin/dashboard"
+                  onNavigate={navigateTo}
+                />
+              )
+            )}
+
+            {currentPath === '/restaurant/dashboard' && (
+              checkRoleAccess(['RESTAURANT_OWNER', 'MANAGER', 'SUPER_ADMIN']) ? (
+                <RestaurantApp
+                  onEditSetup={() => navigateTo('/wizard')}
+                  onLogout={() => handleLogout('/restaurant/login')}
+                />
+              ) : (
+                <UnauthorizedPage
+                  requiredRole="RESTAURANT_OWNER"
+                  userRole={currentUser?.role}
+                  userEmail={currentUser?.email}
+                  targetPath="/restaurant/dashboard"
+                  onNavigate={navigateTo}
+                />
+              )
+            )}
+
+            {currentPath === '/restaurant/pending-approval' && (
+              <PendingApprovalPage
+                onNavigate={navigateTo}
                 onLogout={() => handleLogout('/restaurant/login')}
               />
-            ) : (
-              <UnauthorizedPage
-                requiredRole="RESTAURANT_OWNER"
-                userRole={currentUser?.role}
-                userEmail={currentUser?.email}
-                targetPath="/restaurant/dashboard"
-                onNavigate={navigateTo}
-              />
-            )
-          )}
+            )}
 
-          {currentPath === '/kitchen/dashboard' && (
-            checkRoleAccess(['CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-              <KitchenETADashboard
-                orders={kitchenOrders}
-                onRefreshOrders={() => api.getOrders('rest-1').then(setKitchenOrders)}
-                onLogout={() => handleLogout('/kitchen/login')}
-              />
-            ) : (
-              <UnauthorizedPage
-                requiredRole="CHEF / KITCHEN STAFF"
-                userRole={currentUser?.role}
-                userEmail={currentUser?.email}
-                targetPath="/kitchen/dashboard"
-                onNavigate={navigateTo}
-              />
-            )
-          )}
+            {currentPath === '/kitchen/dashboard' && (
+              checkRoleAccess(['CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                <KitchenETADashboard
+                  orders={kitchenOrders}
+                  onRefreshOrders={() => api.getOrders('rest-1').then(setKitchenOrders)}
+                  onLogout={() => handleLogout('/kitchen/login')}
+                />
+              ) : (
+                <UnauthorizedPage
+                  requiredRole="CHEF / KITCHEN STAFF"
+                  userRole={currentUser?.role}
+                  userEmail={currentUser?.email}
+                  targetPath="/kitchen/dashboard"
+                  onNavigate={navigateTo}
+                />
+              )
+            )}
 
-          {currentPath === '/bar/dashboard' && (
-            checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-              <BarTerminal onLogout={() => handleLogout('/bar/login')} />
-            ) : (
-              <UnauthorizedPage
-                requiredRole="BARTENDER / BAR STAFF"
-                userRole={currentUser?.role}
-                userEmail={currentUser?.email}
-                targetPath="/bar/dashboard"
-                onNavigate={navigateTo}
+            {currentPath === '/bar/dashboard' && (
+              checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                <BarTerminal onLogout={() => handleLogout('/bar/login')} />
+              ) : (
+                <UnauthorizedPage
+                  requiredRole="BARTENDER / BAR STAFF"
+                  userRole={currentUser?.role}
+                  userEmail={currentUser?.email}
+                  targetPath="/bar/dashboard"
+                  onNavigate={navigateTo}
+                />
+              )
+            )}
+
+            {currentPath === '/waiter/dashboard' && (
+              checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
+              ) : (
+                <UnauthorizedPage
+                  requiredRole="WAITER / FLOOR STAFF"
+                  userRole={currentUser?.role}
+                  userEmail={currentUser?.email}
+                  targetPath="/waiter/dashboard"
+                  onNavigate={navigateTo}
+                />
+              )
+            )}
+
+            {/* Setup Wizard */}
+            {currentPath === '/wizard' && (
+              <SetupWizard
+                initialOwnerData={activeOwnerData}
+                onFinishSetup={(setupData) => {
+                  setActiveOwnerData((prev: any) => ({ ...prev, ...setupData }));
+                  navigateTo('/restaurant/pending-approval');
+                }}
               />
-            )
-          )}
+            )}
 
-          {currentPath === '/waiter/dashboard' && (
-            checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-              <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
-            ) : (
-              <UnauthorizedPage
-                requiredRole="WAITER / FLOOR STAFF"
-                userRole={currentUser?.role}
-                userEmail={currentUser?.email}
-                targetPath="/waiter/dashboard"
-                onNavigate={navigateTo}
-              />
-            )
-          )}
-
-          {/* Setup Wizard */}
-          {currentPath === '/wizard' && (
-            <SetupWizard
-              initialOwnerData={activeOwnerData}
-              onFinishSetup={(setupData) => {
-                setActiveOwnerData((prev: any) => ({ ...prev, ...setupData }));
-                navigateTo('/restaurant/dashboard');
-              }}
-            />
-          )}
-
-          {/* Customer Ordering Mobile Web App */}
-          {(currentPath === '/customer' || currentPath === '/order') && <CustomerApp />}
+            {/* Customer Ordering Mobile Web App */}
+            {(currentPath === '/customer' || currentPath === '/order') && <CustomerApp />}
+          </div>
         </div>
-      </div>
-    </ThemeProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

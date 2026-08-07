@@ -867,8 +867,8 @@ class DineFlowApiClient {
       ownerName: restData.ownerName || this.currentUser?.name || 'Restaurant Owner',
       ownerEmail: restData.ownerEmail || this.currentUser?.email || 'owner@dineflow.com',
       domain: `${slug}.dineflow.app`,
-      isApproved: true,
-      lifecycleStatus: 'LIVE',
+      isApproved: false,
+      lifecycleStatus: 'DRAFT',
       status: 'OPEN',
       rating: 5.0,
       activeOrdersCount: 0,
@@ -948,11 +948,9 @@ class DineFlowApiClient {
       existing.outdoorTablesCount = setupData.tables?.outdoor || setupData.outdoorTables || existing.outdoorTablesCount;
       existing.vipTablesCount = setupData.tables?.vip || setupData.vipTables || existing.vipTablesCount;
       existing.tablesCount = (existing.indoorTablesCount || 0) + (existing.outdoorTablesCount || 0) + (existing.vipTablesCount || 0);
-      existing.lifecycleStatus = 'LIVE';
-      existing.isApproved = true;
-      existing.status = 'OPEN';
+      existing.lifecycleStatus = 'PENDING_APPROVAL';
+      existing.isApproved = false;
       existing.submittedAt = now;
-      existing.approvedAt = now;
       existing.rejectionReason = undefined;
       existing.requestedChanges = undefined;
 
@@ -971,8 +969,8 @@ class DineFlowApiClient {
         recipientRole: 'PLATFORM_ADMIN',
         restaurantId: existing.id,
         restaurantName: existing.name,
-        title: 'Launch Request Submitted',
-        message: `${existing.name} completed restaurant configuration and requested platform launch approval.`,
+        title: 'New restaurant waiting for approval',
+        message: `New restaurant waiting for approval: ${existing.name}. Configuration and floorplan submitted.`,
         type: 'LAUNCH_REQUESTED',
         timestamp: 'Just now',
         isRead: false,

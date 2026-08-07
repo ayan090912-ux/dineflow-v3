@@ -287,12 +287,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         // Fallback login succeeded inside createRestaurantForOwner
       }
 
-      // Submit application and immediately approve for instant local dashboard access
+      // Submit application for platform launch approval (sets status to PENDING_APPROVAL)
       await api.submitRestaurantLaunch({
         id: rest.id,
         name: rest.name,
       });
-      await api.approveRestaurant(rest.id);
 
       onFinishSetup(finalData);
     } catch (err) {
