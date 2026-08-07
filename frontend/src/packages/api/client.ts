@@ -621,7 +621,7 @@ export class DineFlowApiClient {
       });
 
       this.saveDatabase();
-      realtimeBus.emit('RESTAURANT_APPROVED' as any, rest);
+      realtimeBus.emit('RESTAURANT_APPROVED' as any, { restaurantId: rest.id, restaurantName: rest.name } as any);
     }
     return rest;
   }
