@@ -1263,6 +1263,8 @@ export class DineFlowApiClient {
       customerName: orderData.customerName || 'Guest',
       items: orderData.items || [],
       totalAmount: orderData.totalAmount || 0,
+      taxAmount: orderData.taxAmount || 0,
+      tipAmount: orderData.tipAmount || 0,
       status: orderData.status || 'PENDING',
       targetDestination: orderData.targetDestination || 'KITCHEN',
       createdAt: new Date().toISOString(),
