@@ -291,7 +291,7 @@ export interface ShiftSummaryData {
   assignedSection: string;
 }
 
-export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'IN_KITCHEN' | 'PREPARING_DRINKS' | 'READY' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
+export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'IN_KITCHEN' | 'PREPARING' | 'IN_PREPARATION' | 'PREPARING_DRINKS' | 'READY' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
 
 export interface OrderItem {
   id: string;
@@ -362,6 +362,7 @@ export interface Employee {
   shiftStart?: string;
   password?: string;
   isAccountDisabled?: boolean;
+  joinedDate?: string;
   createdAt?: string;
   lastLoginAt?: string;
 }

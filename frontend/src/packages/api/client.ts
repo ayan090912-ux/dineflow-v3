@@ -1208,9 +1208,9 @@ export class DineFlowApiClient {
     };
   }
 
-  async getSmartETARecommendation(itemNames?: string[]) {
+  async getSmartETARecommendation(itemNames?: any) {
     await delay(100);
-    return 15;
+    return { recommendedMinutes: 15, confidenceScore: 0.95 };
   }
 
   // Customer & Portal Helper APIs
@@ -1266,7 +1266,7 @@ export class DineFlowApiClient {
 
   async verifyOwnerEmail(email: string, code?: string) {
     await delay(150);
-    return true;
+    return { user: this.currentUser, tokens: this.currentTokens };
   }
 
   async createOrganization(orgData: any) {
