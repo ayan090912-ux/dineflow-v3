@@ -581,14 +581,22 @@ export class DineFlowApiClient {
   }
 
   async approveRestaurant(restaurantId: string) {
-    await delay(300);
-    const rest = this.restaurants.find((r) => r.id === restaurantId);
+    await delay(200);
+    const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
     if (rest) {
       const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       rest.isApproved = true;
       rest.status = 'OPEN';
       rest.lifecycleStatus = 'LIVE';
       rest.approvedAt = now;
+
+      // Ensure associated owner user is linked to this restaurant
+      const user = this.users.find(
+        (u) => u.restaurantId === rest.id || (rest.ownerEmail && u.email.toLowerCase() === rest.ownerEmail.toLowerCase())
+      );
+      if (user) {
+        user.restaurantId = rest.id;
+      }
 
       this.platformNotifications.unshift({
         id: `pnotif-${Date.now()}`,
@@ -613,6 +621,7 @@ export class DineFlowApiClient {
       });
 
       this.saveDatabase();
+      realtimeBus.emit('RESTAURANT_APPROVED' as any, rest);
     }
     return rest;
   }

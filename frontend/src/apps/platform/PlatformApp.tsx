@@ -130,56 +130,56 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     await api.approveRestaurant(id);
     showSuccess('Restaurant Approved & Activated Live! 🚀');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const handleReject = async (id: string) => {
     await api.rejectRestaurant(id, actionReason || 'Application declined by Platform Admin.');
     showSuccess('Application Declined. Owner notified.');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const handleRequestChanges = async (id: string) => {
     await api.requestChangesRestaurant(id, actionReason || 'Please verify GST number and add menu items.');
     showSuccess('Changes Requested. Owner notified.');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const handleActivate = async (id: string) => {
     await api.activateRestaurant(id);
     showSuccess('Restaurant Activated successfully.');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const handleDeactivate = async (id: string) => {
     await api.deactivateRestaurant(id, actionReason || 'Deactivated by Platform Admin.');
     showSuccess('Restaurant set to Inactive/Deactivated.');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const handleSuspend = async (id: string) => {
     await api.suspendRestaurant(id, actionReason || 'Administrative Suspension');
     showSuccess('Account Suspended. Owner login disabled.');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const handleDelete = async (id: string) => {
     await api.deleteRestaurant(id);
     showSuccess('Restaurant soft-deleted. Record retained in DB.');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const handleSendReminder = async (id: string) => {
     await api.sendReminder(id, reminderType, reminderMessage);
     showSuccess('Reminder Notification dispatched to Owner!');
     closeModals();
-    loadData();
+    await loadData();
   };
 
   const showSuccess = (msg: string) => {
