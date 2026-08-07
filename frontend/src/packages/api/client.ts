@@ -824,6 +824,453 @@ export class DineFlowApiClient {
     return this.inventory.filter((i) => i.restaurantId === targetId);
   }
 
+  async updateRestaurantTheme(restaurantId: string, theme: ThemeConfig) {
+    await delay(100);
+    const rest = this.restaurants.find((r) => r.id === restaurantId);
+    if (rest) {
+      rest.theme = theme;
+      this.saveDatabase();
+    }
+    return theme;
+  }
+
+  async resubmitRestaurantLaunch(restaurantId: string) {
+    await delay(300);
+    const rest = this.restaurants.find((r) => r.id === restaurantId);
+    if (rest) {
+      rest.lifecycleStatus = 'PENDING_APPROVAL';
+      rest.isApproved = false;
+      rest.rejectionReason = undefined;
+      rest.requestedChanges = undefined;
+      this.saveDatabase();
+    }
+    return rest;
+  }
+
+  async switchActiveRestaurant(restId: string) {
+    this.currentRestaurantId = restId;
+    if (this.currentUser) {
+      this.currentUser.restaurantId = restId;
+      this.saveSession(this.currentUser, this.currentUser.tokens || ({} as any), restId);
+    }
+  }
+
+  async createNewBranchOutlet(data: { name: string; branchName: string; city: string; address: string; phone: string; cuisine: string }) {
+    await delay(300);
+    const rest = await this.createRestaurantForOwner({
+      name: data.name,
+      cuisine: data.cuisine,
+      address: data.address,
+      phone: data.phone,
+      email: this.currentUser?.email || 'owner@restaurant.com',
+      ownerName: this.currentUser?.name || 'Restaurant Owner',
+      ownerEmail: this.currentUser?.email || 'owner@restaurant.com',
+    });
+    rest.branchName = data.branchName;
+    rest.city = data.city;
+    this.saveDatabase();
+    return rest;
+  }
+
+  // Table Management APIs
+  async createTable(tableData: Partial<Table>) {
+    await delay(150);
+    const targetRestId = this.resolveTenantRestaurantId(tableData.restaurantId);
+    const newTable: Table = {
+      id: `tbl-${Date.now()}`,
+      restaurantId: targetRestId || 'rest-1',
+      tableNumber: tableData.tableNumber || `Table ${this.tables.length + 1}`,
+      capacity: tableData.capacity || 4,
+      section: tableData.section || 'Main Hall',
+      shape: tableData.shape || 'RECTANGLE',
+      status: 'AVAILABLE',
+      qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://${targetRestId}.dineflow.app/order?table=${tableData.tableNumber}`,
+      isVip: tableData.isVip || false,
+    };
+    this.tables.push(newTable);
+    this.saveDatabase();
+    return newTable;
+  }
+
+  async updateTable(tableId: string, updates: Partial<Table>) {
+    await delay(150);
+    const table = this.tables.find((t) => t.id === tableId);
+    if (table) {
+      Object.assign(table, updates);
+      this.saveDatabase();
+    }
+    return table;
+  }
+
+  async deleteTable(tableId: string) {
+    await delay(150);
+    this.tables = this.tables.filter((t) => t.id !== tableId);
+    this.saveDatabase();
+  }
+
+  async mergeTables(tableIds: string[], customLabel?: string) {
+    await delay(200);
+    const mergedId = `grp-${Date.now()}`;
+    const label = customLabel || `Merged Group (${tableIds.length} Tables)`;
+    this.tables.forEach((t) => {
+      if (tableIds.includes(t.id)) {
+        t.status = 'MERGED';
+        t.isMerged = true;
+        t.mergedGroupId = mergedId;
+        t.mergedLabel = label;
+      }
+    });
+    this.saveDatabase();
+  }
+
+  async unmergeTables(tableIds: string[]) {
+    await delay(200);
+    this.tables.forEach((t) => {
+      if (tableIds.includes(t.id)) {
+        t.status = 'AVAILABLE';
+        t.isMerged = false;
+        t.mergedGroupId = undefined;
+        t.mergedLabel = undefined;
+      }
+    });
+    this.saveDatabase();
+  }
+
+  async reserveTable(tableId: string, reservationDetails: any) {
+    await delay(150);
+    const table = this.tables.find((t) => t.id === tableId);
+    if (table) {
+      table.status = 'RESERVED';
+      table.reservedForName = reservationDetails.reservedForName;
+      table.reservedForPhone = reservationDetails.reservedForPhone;
+      table.reservationTime = reservationDetails.reservationTime;
+      table.partySize = reservationDetails.partySize;
+      this.saveDatabase();
+    }
+    return table;
+  }
+
+  async cancelTableReservation(tableId: string) {
+    await delay(150);
+    const table = this.tables.find((t) => t.id === tableId);
+    if (table) {
+      table.status = 'AVAILABLE';
+      table.reservedForName = undefined;
+      table.reservedForPhone = undefined;
+      table.reservationTime = undefined;
+      table.partySize = undefined;
+      this.saveDatabase();
+    }
+    return table;
+  }
+
+  async checkInReservedTable(tableId: string) {
+    await delay(150);
+    const table = this.tables.find((t) => t.id === tableId);
+    if (table) {
+      table.status = 'OCCUPIED';
+      this.saveDatabase();
+    }
+    return table;
+  }
+
+  async updateTableStatus(tableId: string, status: any) {
+    await delay(100);
+    const table = this.tables.find((t) => t.id === tableId);
+    if (table) {
+      table.status = status;
+      this.saveDatabase();
+    }
+    return table;
+  }
+
+  // Menu APIs
+  async toggleMenuItemAvailability(itemId: string) {
+    await delay(100);
+    const item = this.menuItems.find((m) => m.id === itemId);
+    if (item) {
+      item.isAvailable = !item.isAvailable;
+      this.saveDatabase();
+    }
+    return item;
+  }
+
+  async addMenuItem(itemData: Partial<MenuItem>) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
+    const newItem: MenuItem = {
+      id: `item-${Date.now()}`,
+      restaurantId: restId,
+      categoryId: itemData.categoryId || 'cat-1',
+      name: itemData.name || 'New Item',
+      description: itemData.description || '',
+      price: itemData.price || 9.99,
+      image: itemData.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500',
+      isAvailable: itemData.isAvailable !== false,
+      isVegetarian: itemData.isVegetarian || false,
+      isSpicy: itemData.isSpicy || false,
+      prepTimeMinutes: itemData.prepTimeMinutes || 15,
+      targetDestination: itemData.targetDestination || 'KITCHEN',
+    };
+    this.menuItems.push(newItem);
+    this.saveDatabase();
+    return newItem;
+  }
+
+  async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
+    await delay(150);
+    const item = this.menuItems.find((m) => m.id === itemId);
+    if (item) {
+      Object.assign(item, updates);
+      this.saveDatabase();
+    }
+    return item;
+  }
+
+  async deleteMenuItem(itemId: string) {
+    await delay(150);
+    this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
+    this.saveDatabase();
+  }
+
+  // Employee APIs
+  async addEmployee(empData: Partial<Employee>) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(empData.restaurantId) || 'rest-1';
+    const newEmp: Employee = {
+      id: `emp-${Date.now()}`,
+      restaurantId: restId,
+      name: empData.name || 'Staff Member',
+      email: empData.email || 'staff@restaurant.com',
+      phone: empData.phone || '+1 555-0100',
+      role: empData.role || 'WAITER',
+      status: 'OFF_DUTY',
+      hourlyRate: empData.hourlyRate || 18,
+      joinedDate: new Date().toISOString().split('T')[0],
+      isAccountDisabled: false,
+    };
+    this.employees.push(newEmp);
+    this.saveDatabase();
+    return newEmp;
+  }
+
+  async updateEmployee(empId: string, updates: Partial<Employee>) {
+    await delay(150);
+    const emp = this.employees.find((e) => e.id === empId);
+    if (emp) {
+      Object.assign(emp, updates);
+      this.saveDatabase();
+    }
+    return emp;
+  }
+
+  async toggleEmployeeAccountStatus(empId: string) {
+    await delay(100);
+    const emp = this.employees.find((e) => e.id === empId);
+    if (emp) {
+      emp.isAccountDisabled = !emp.isAccountDisabled;
+      this.saveDatabase();
+    }
+    return emp;
+  }
+
+  async resetEmployeePassword(empId: string) {
+    await delay(150);
+    const newPass = `pass_${Math.floor(1000 + Math.random() * 9000)}`;
+    const emp = this.employees.find((e) => e.id === empId);
+    if (emp) {
+      emp.password = newPass;
+      this.saveDatabase();
+    }
+    return newPass;
+  }
+
+  async deleteEmployee(empId: string) {
+    await delay(150);
+    this.employees = this.employees.filter((e) => e.id !== empId);
+    this.saveDatabase();
+  }
+
+  async updateEmployeeStatus(empId: string, status: any) {
+    await delay(100);
+    const emp = this.employees.find((e) => e.id === empId);
+    if (emp) {
+      emp.status = status;
+      this.saveDatabase();
+    }
+    return emp;
+  }
+
+  // Inventory APIs
+  async addInventoryItem(invData: Partial<InventoryItem>) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(invData.restaurantId) || 'rest-1';
+    const newItem: InventoryItem = {
+      id: `inv-${Date.now()}`,
+      restaurantId: restId,
+      name: invData.name || 'Raw Material',
+      category: invData.category || 'Pantry',
+      quantity: invData.quantity || 10,
+      unit: invData.unit || 'kg',
+      minThreshold: invData.minThreshold || 2,
+      costPerUnit: invData.costPerUnit || 5,
+      supplierName: invData.supplierName || 'General Foods',
+      storageLocation: invData.storageLocation || 'Main Storage',
+      lastRestocked: new Date().toISOString().split('T')[0],
+    };
+    this.inventory.push(newItem);
+    this.saveDatabase();
+    return newItem;
+  }
+
+  async updateInventoryQuantity(itemId: string, delta: number) {
+    await delay(100);
+    const item = this.inventory.find((i) => i.id === itemId);
+    if (item) {
+      item.quantity = Math.max(0, item.quantity + delta);
+      this.saveDatabase();
+    }
+    return item;
+  }
+
+  async deleteInventoryItem(itemId: string) {
+    await delay(150);
+    this.inventory = this.inventory.filter((i) => i.id !== itemId);
+    this.saveDatabase();
+  }
+
+  // Order & Kitchen APIs
+  async acceptOrder(orderId: string, prepTime: number) {
+    await delay(150);
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.status = 'IN_PREPARATION';
+      order.estimatedPrepTimeMinutes = prepTime;
+      this.saveDatabase();
+    }
+    return order;
+  }
+
+  async updateOrderETA(orderId: string, prepTimeMinutes: number) {
+    await delay(100);
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.estimatedPrepTimeMinutes = prepTimeMinutes;
+      this.saveDatabase();
+    }
+    return order;
+  }
+
+  async toggleOrderTimer(orderId: string) {
+    await delay(100);
+    const order = this.orders.find((o) => o.id === orderId);
+    return order;
+  }
+
+  async markOrderReady(orderId: string) {
+    await delay(150);
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.status = 'READY';
+      this.saveDatabase();
+    }
+    return order;
+  }
+
+  async deliverOrder(orderId: string) {
+    await delay(150);
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.status = 'DELIVERED';
+      this.saveDatabase();
+    }
+    return order;
+  }
+
+  async updateOrderStatus(orderId: string, status: any) {
+    await delay(150);
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.status = status;
+      this.saveDatabase();
+    }
+    return order;
+  }
+
+  // Waiter & Customer Request APIs
+  async getCustomerRequests(restaurantId?: string) {
+    await delay(100);
+    return [...this.customerRequests];
+  }
+
+  async getWaiterNotifications(restaurantId?: string) {
+    await delay(100);
+    return [...this.notifications];
+  }
+
+  async getWaiterShiftSummary() {
+    await delay(100);
+    return {
+      activeTablesAssigned: 4,
+      totalOrdersServed: 18,
+      tipsCollected: 145.0,
+      totalSalesVolume: 1250.0,
+    };
+  }
+
+  async acceptCustomerRequest(reqId: string) {
+    await delay(100);
+    const req = this.customerRequests.find((r) => r.id === reqId);
+    if (req) {
+      req.status = 'ACCEPTED';
+      this.saveDatabase();
+    }
+    return req;
+  }
+
+  async rejectCustomerRequest(reqId: string) {
+    await delay(100);
+    const req = this.customerRequests.find((r) => r.id === reqId);
+    if (req) {
+      req.status = 'REJECTED';
+      this.saveDatabase();
+    }
+    return req;
+  }
+
+  async updateCustomerRequestStatus(reqId: string, status: any) {
+    await delay(100);
+    const req = this.customerRequests.find((r) => r.id === reqId);
+    if (req) {
+      req.status = status;
+      this.saveDatabase();
+    }
+    return req;
+  }
+
+  async transferCustomerRequest(reqId: string, newWaiterId: string) {
+    await delay(100);
+    return true;
+  }
+
+  async sendWaiterBroadcast(message: string) {
+    await delay(100);
+    return true;
+  }
+
+  async createCustomerRequest(req: any) {
+    await delay(100);
+    this.customerRequests.push(req);
+    this.saveDatabase();
+    return req;
+  }
+
+  async markAllNotificationsRead() {
+    await delay(100);
+    this.notifications.forEach((n) => (n.isRead = true));
+    this.saveDatabase();
+  }
+
   // Helper to clear database store
   clearDatabase() {
     this.organizations = [];

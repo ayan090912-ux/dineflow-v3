@@ -14,6 +14,7 @@ export interface User {
   name: string;
   email: string;
   phone?: string;
+  password?: string;
   role: UserRole;
   avatar?: string;
   restaurantId?: string;
@@ -113,6 +114,9 @@ export interface Restaurant {
   privateRoomsCount?: number;
   isApproved: boolean;
   isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  deletedReason?: string;
   status: 'OPEN' | 'CLOSED' | 'BUSY';
   lifecycleStatus: RestaurantLifecycleStatus;
   rejectionReason?: string;
@@ -137,7 +141,7 @@ export interface PlatformNotification {
   restaurantName?: string;
   title: string;
   message: string;
-  type: 'NEW_REGISTRATION' | 'LAUNCH_REQUESTED' | 'RESUBMITTED' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'SUSPENDED';
+  type: 'NEW_REGISTRATION' | 'LAUNCH_REQUESTED' | 'RESUBMITTED' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'SUSPENDED' | 'SYSTEM_ANNOUNCEMENT';
   timestamp: string;
   isRead: boolean;
 }
