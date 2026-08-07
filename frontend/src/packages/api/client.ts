@@ -1253,6 +1253,32 @@ export class DineFlowApiClient {
     return order;
   }
 
+  async createOrder(orderData: Partial<Order>) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
+    const newOrd: Order = {
+      id: `ord-${Date.now()}`,
+      restaurantId: restId,
+      tableNumber: orderData.tableNumber || 'Table 01',
+      customerName: orderData.customerName || 'Guest',
+      items: orderData.items || [],
+      totalAmount: orderData.totalAmount || 0,
+      status: orderData.status || 'PENDING',
+      targetDestination: orderData.targetDestination || 'KITCHEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      paymentStatus: orderData.paymentStatus || 'UNPAID',
+    };
+    this.orders.unshift(newOrd);
+    this.saveDatabase();
+    realtimeBus.emit('OrderCreated' as any, {
+      orderId: newOrd.id,
+      tableNumber: newOrd.tableNumber,
+      data: newOrd,
+    });
+    return newOrd;
+  }
+
   async getKitchenAnalytics(restaurantId?: string) {
     await delay(100);
     return {

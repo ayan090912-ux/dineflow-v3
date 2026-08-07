@@ -37,7 +37,6 @@ import {
   ShieldX,
   Lock,
   Unlock,
-  Copy,
   Check,
   Building2,
   ChevronDown,
