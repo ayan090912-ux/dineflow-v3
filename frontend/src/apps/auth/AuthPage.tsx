@@ -98,7 +98,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setIsLoading(true);
     try {
       const res = await api.loginOwner(loginEmail, loginPassword);
-      setSuccessMessage(`Welcome back, ${res.user.name}! Directing to ${res.restaurant?.name || 'Dashboard'}...`);
+      const restName = (res as any).restaurant?.name || 'Dashboard';
+      setSuccessMessage(`Welcome back, ${res.user.name}! Directing to ${restName}...`);
       setTimeout(() => {
         if (onLoginSuccess) {
           onLoginSuccess(res);
