@@ -221,8 +221,14 @@ export interface Table {
   mergedTableNumbers?: string[];
   parentMergedTableId?: string;
   mergedGroupLabel?: string;
+  mergedGroupId?: string;
+  mergedLabel?: string;
   // Table Reservation
   reservationDetails?: TableReservation;
+  reservedForName?: string;
+  reservedForPhone?: string;
+  reservationTime?: string;
+  partySize?: number;
 }
 
 export type CustomerRequestType =

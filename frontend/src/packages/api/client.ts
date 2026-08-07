@@ -1044,7 +1044,7 @@ export class DineFlowApiClient {
       email: empData.email || 'staff@restaurant.com',
       phone: empData.phone || '+1 555-0100',
       role: empData.role || 'WAITER',
-      status: 'OFF_DUTY',
+      status: 'OFF_CLOCK',
       hourlyRate: empData.hourlyRate || 18,
       joinedDate: new Date().toISOString().split('T')[0],
       isAccountDisabled: false,
@@ -1074,9 +1074,9 @@ export class DineFlowApiClient {
     return emp;
   }
 
-  async resetEmployeePassword(empId: string) {
+  async resetEmployeePassword(empId: string, customPass?: string) {
     await delay(150);
-    const newPass = `pass_${Math.floor(1000 + Math.random() * 9000)}`;
+    const newPass = customPass || `pass_${Math.floor(1000 + Math.random() * 9000)}`;
     const emp = this.employees.find((e) => e.id === empId);
     if (emp) {
       emp.password = newPass;
@@ -1117,6 +1117,7 @@ export class DineFlowApiClient {
       supplierName: invData.supplierName || 'General Foods',
       storageLocation: invData.storageLocation || 'Main Storage',
       lastRestocked: new Date().toISOString().split('T')[0],
+      status: 'IN_STOCK',
     };
     this.inventory.push(newItem);
     this.saveDatabase();
@@ -1144,14 +1145,14 @@ export class DineFlowApiClient {
     await delay(150);
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
-      order.status = 'IN_PREPARATION';
+      order.status = 'PREPARING';
       order.estimatedPrepTimeMinutes = prepTime;
       this.saveDatabase();
     }
     return order;
   }
 
-  async updateOrderETA(orderId: string, prepTimeMinutes: number) {
+  async updateOrderETA(orderId: string, prepTimeMinutes: number, note?: string, updatedBy?: string) {
     await delay(100);
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
@@ -1197,6 +1198,103 @@ export class DineFlowApiClient {
     return order;
   }
 
+  async getKitchenAnalytics(restaurantId?: string) {
+    await delay(100);
+    return {
+      avgPrepTimeMinutes: 14,
+      totalOrdersPrepared: 42,
+      onTimeDeliveryRate: 98.5,
+      activeKitchenStations: 3,
+    };
+  }
+
+  async getSmartETARecommendation(itemNames?: string[]) {
+    await delay(100);
+    return 15;
+  }
+
+  // Customer & Portal Helper APIs
+  async requestBill(tableNumber: string, restaurantId?: string) {
+    await delay(150);
+    const req = {
+      id: `req-${Date.now()}`,
+      restaurantId: restaurantId || this.currentRestaurantId || 'rest-1',
+      tableNumber,
+      requestType: 'BILL',
+      message: `Table ${tableNumber} requested the final bill.`,
+      status: 'PENDING',
+      timestamp: 'Just now',
+    };
+    this.customerRequests.push(req as any);
+    this.saveDatabase();
+    return req;
+  }
+
+  async callWaiter(tableNumber: string, reason: string, restaurantId?: string) {
+    await delay(150);
+    const req = {
+      id: `req-${Date.now()}`,
+      restaurantId: restaurantId || this.currentRestaurantId || 'rest-1',
+      tableNumber,
+      requestType: 'WATER',
+      message: `Table ${tableNumber} called waiter: ${reason}`,
+      status: 'PENDING',
+      timestamp: 'Just now',
+    };
+    this.customerRequests.push(req as any);
+    this.saveDatabase();
+    return req;
+  }
+
+  async createCustomerOrder(orderData: any) {
+    await delay(250);
+    const newOrder = {
+      id: `ord-${Date.now()}`,
+      restaurantId: orderData.restaurantId || this.currentRestaurantId || 'rest-1',
+      tableNumber: orderData.tableNumber || 'Table 01',
+      items: orderData.items || [],
+      subtotal: orderData.subtotal || 0,
+      tax: orderData.tax || 0,
+      total: orderData.total || 0,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+    this.orders.unshift(newOrder as any);
+    this.saveDatabase();
+    return newOrder;
+  }
+
+  async verifyOwnerEmail(email: string, code?: string) {
+    await delay(150);
+    return true;
+  }
+
+  async createOrganization(orgData: any) {
+    await delay(200);
+    const newOrg: Organization = {
+      id: `org-${Date.now()}`,
+      name: orgData.name || 'New Organization',
+      legalBusinessName: orgData.legalBusinessName || orgData.name || 'New Corp',
+      country: orgData.country || 'United States',
+      currency: orgData.currency || 'USD ($)',
+      timezone: orgData.timezone || 'UTC',
+      businessAddress: orgData.businessAddress || 'Main Street',
+      contactNumber: orgData.contactNumber || '+1 555-0100',
+      supportEmail: orgData.supportEmail || 'support@org.com',
+      slug: (orgData.name || 'org').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      plan: 'STARTER',
+      status: 'ACTIVE',
+      restaurantsCount: 1,
+      monthlyRevenue: 0,
+      createdAt: new Date().toISOString().split('T')[0],
+      ownerName: orgData.ownerName || 'Owner',
+      ownerEmail: orgData.ownerEmail || 'owner@org.com',
+    };
+    this.organizations.push(newOrg);
+    this.saveDatabase();
+    return newOrg;
+  }
+
   // Waiter & Customer Request APIs
   async getCustomerRequests(restaurantId?: string) {
     await delay(100);
@@ -1218,7 +1316,7 @@ export class DineFlowApiClient {
     };
   }
 
-  async acceptCustomerRequest(reqId: string) {
+  async acceptCustomerRequest(reqId: string, waiterId?: string) {
     await delay(100);
     const req = this.customerRequests.find((r) => r.id === reqId);
     if (req) {
@@ -1228,7 +1326,7 @@ export class DineFlowApiClient {
     return req;
   }
 
-  async rejectCustomerRequest(reqId: string) {
+  async rejectCustomerRequest(reqId: string, waiterId?: string) {
     await delay(100);
     const req = this.customerRequests.find((r) => r.id === reqId);
     if (req) {
@@ -1253,7 +1351,7 @@ export class DineFlowApiClient {
     return true;
   }
 
-  async sendWaiterBroadcast(message: string) {
+  async sendWaiterBroadcast(message: string, senderId?: string) {
     await delay(100);
     return true;
   }
