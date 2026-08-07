@@ -28,6 +28,7 @@ import {
   Eye,
   Edit,
   Save,
+  Copy,
   RotateCcw,
   Edit3,
   KeyRound,
@@ -103,6 +104,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   });
 
   // Menu Search, Filter, Edit & Delete State
+  const [menuCatalogMode, setMenuCatalogMode] = useState<'FOOD' | 'BAR'>('FOOD');
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('ALL');
 
@@ -111,13 +113,30 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
 
   const filteredMenuItems = menuItems.filter((item) => {
-    const matchesCategory = selectedMenuCategory === 'ALL' || item.categoryId === selectedMenuCategory;
+    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory !== undefined;
+    if (menuCatalogMode === 'BAR' && !isBarItem) return false;
+    if (menuCatalogMode === 'FOOD' && isBarItem) return false;
+
+    const matchesCategory = selectedMenuCategory === 'ALL' || item.categoryId === selectedMenuCategory || item.barCategory === selectedMenuCategory;
     const matchesSearch =
       item.name.toLowerCase().includes(menuSearchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(menuSearchQuery.toLowerCase()) ||
+      (item.brand && item.brand.toLowerCase().includes(menuSearchQuery.toLowerCase())) ||
       item.price.toString().includes(menuSearchQuery);
     return matchesCategory && matchesSearch;
   });
+
+  const handleDuplicateItem = async (itemId: string) => {
+    try {
+      const dup = await api.duplicateMenuItem(itemId);
+      if (dup) {
+        addToast('success', 'Item Duplicated ✨', `Created copy: ${dup.name}`);
+        await loadData();
+      }
+    } catch (err) {
+      console.error('Failed to duplicate item:', err);
+    }
+  };
 
   // Staff Management State
   const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
@@ -433,18 +452,24 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       return;
     }
     const restId = currentRestaurant?.id || 'rest-1';
+    const isBar = menuCatalogMode === 'BAR';
     await api.addMenuItem({
       restaurantId: restId,
       categoryId: newItem.categoryId,
+      barCategory: isBar ? (newItem.categoryId as any) : undefined,
       name: newItem.name,
       description: newItem.description,
       price: parseFloat(newItem.price),
-      image: newItem.image || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop&q=80',
+      image: newItem.image || (isBar ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600' : 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600'),
       isAvailable: true,
+      targetDestination: isBar ? 'BAR' : 'KITCHEN',
+      isAlcoholic: isBar,
+      alcoholPercentage: isBar ? 40 : 0,
+      glassSize: isBar ? '60ml Peg' : undefined,
     });
-    addToast('success', 'Menu Item Added', `${newItem.name} added to menu`);
+    addToast('success', `${isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `${newItem.name} added to catalog`);
     setIsAddItemModalOpen(false);
-    setNewItem({ name: '', description: '', price: '', categoryId: 'cat-1', image: '' });
+    setNewItem({ name: '', description: '', price: '', categoryId: isBar ? 'Cocktails' : 'cat-1', image: '' });
     loadData();
   };
 
@@ -463,8 +488,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       description: editingItem.description,
       price: typeof editingItem.price === 'string' ? parseFloat(editingItem.price) : editingItem.price,
       categoryId: editingItem.categoryId,
+      barCategory: editingItem.barCategory,
+      brand: editingItem.brand,
+      alcoholPercentage: editingItem.alcoholPercentage,
+      glassSize: editingItem.glassSize,
+      bottleSize: editingItem.bottleSize,
       image: editingItem.image,
       isAvailable: editingItem.isAvailable,
+      targetDestination: editingItem.targetDestination,
+      isAlcoholic: editingItem.isAlcoholic,
     });
     addToast('success', 'Menu Item Updated', `${editingItem.name} updated successfully`);
     setIsEditItemModalOpen(false);
@@ -1105,6 +1137,47 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               />
             </div>
 
+            {/* Bar Operating Analytics (When Bar Module Enabled) */}
+            {currentRestaurant?.features?.bar !== false && (
+              <Card className="bg-gradient-to-br from-slate-900 via-purple-950/20 to-slate-900 border-purple-500/30 p-6 space-y-4 shadow-xl rounded-3xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-purple-300 font-bold text-base">
+                    <Wine className="w-5 h-5 text-purple-400 animate-pulse" />
+                    <span>Bar Operating Analytics & Craft Beverage Revenue</span>
+                  </div>
+                  <Badge variant="brand" className="bg-purple-600/30 text-purple-300 border-purple-500/40 font-mono text-[10px]">
+                    BAR MODULE ACTIVE
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Today's Bar Revenue</span>
+                    <p className="text-xl font-black text-amber-400 mt-0.5">$1,240.50</p>
+                    <span className="text-[10px] text-emerald-400 font-mono">↑ 18.5% vs yesterday</span>
+                  </div>
+
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Bar Orders Today</span>
+                    <p className="text-xl font-black text-white mt-0.5">24 Orders</p>
+                    <span className="text-[10px] text-purple-300 font-mono">Cocktails & Spirits</span>
+                  </div>
+
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Avg Drink Prep Time</span>
+                    <p className="text-xl font-black text-emerald-400 mt-0.5">4.2 Mins</p>
+                    <span className="text-[10px] text-slate-400 font-mono">Mixology station</span>
+                  </div>
+
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Peak Bar Hours</span>
+                    <p className="text-sm font-bold text-amber-300 mt-1">8:00 PM - 11:00 PM</p>
+                    <span className="text-[10px] text-slate-400 font-mono">High lounge volume</span>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {/* Quick Actions & Live Order Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="lg:col-span-2 bg-slate-900 border-slate-800 p-6 space-y-4">
@@ -1534,16 +1607,51 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   <UtensilsCrossed className="w-5 h-5 text-rose-500" /> Menu Catalog & Availability Engine
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Add, edit, delete, and control real-time ordering availability across all digital channels.
+                  Manage independent Food & Bar catalogs, categories, drink specs, and digital menu pricing.
                 </p>
               </div>
+
+              {/* Sub-Tab Switcher: Food Menu vs Bar Menu */}
+              <div className="flex items-center gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
+                <button
+                  onClick={() => {
+                    setMenuCatalogMode('FOOD');
+                    setSelectedMenuCategory('ALL');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                    menuCatalogMode === 'FOOD'
+                      ? 'bg-rose-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <UtensilsCrossed className="w-3.5 h-3.5" />
+                  <span>Food Menu</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setMenuCatalogMode('BAR');
+                    setSelectedMenuCategory('ALL');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                    menuCatalogMode === 'BAR'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Wine className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Bar Menu</span>
+                </button>
+              </div>
+
               <Button
                 variant="brand"
                 size="sm"
                 onClick={() => setIsAddItemModalOpen(true)}
                 icon={<Plus className="w-3.5 h-3.5" />}
+                className={menuCatalogMode === 'BAR' ? 'bg-purple-600 hover:bg-purple-500 font-bold' : ''}
               >
-                Add Dish / Drink
+                {menuCatalogMode === 'BAR' ? 'Add Bar Drink 🍸' : 'Add Food Item 🍽️'}
               </Button>
             </div>
 
@@ -1553,7 +1661,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 <SearchInput
                   value={menuSearchQuery}
                   onChange={setMenuSearchQuery}
-                  placeholder="Search dish, description, price..."
+                  placeholder={menuCatalogMode === 'BAR' ? "Search cocktails, wine, brand..." : "Search dish, description, price..."}
                 />
               </div>
 
@@ -1563,25 +1671,44 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   onClick={() => setSelectedMenuCategory('ALL')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                     selectedMenuCategory === 'ALL'
-                      ? 'bg-rose-600 text-white shadow'
+                      ? menuCatalogMode === 'BAR' ? 'bg-purple-600 text-white shadow' : 'bg-rose-600 text-white shadow'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  All Items ({menuItems.length})
+                  All {menuCatalogMode === 'BAR' ? 'Drinks' : 'Items'} ({filteredMenuItems.length})
                 </button>
-                {MOCK_CATEGORIES.map((cat) => {
-                  const count = menuItems.filter((i) => i.categoryId === cat.id).length;
+                {(menuCatalogMode === 'BAR'
+                  ? [
+                      'Beer',
+                      'Wine',
+                      'Whiskey',
+                      'Vodka',
+                      'Rum',
+                      'Gin',
+                      'Cocktails',
+                      'Mocktails',
+                      'Champagne',
+                      'Tequila',
+                      'Premium Bottles',
+                      'Shots',
+                      'Signature Drinks',
+                    ]
+                  : MOCK_CATEGORIES.map((c) => c.name)
+                ).map((catName) => {
+                  const count = menuItems.filter(
+                    (i) => i.categoryId === catName || i.barCategory === catName
+                  ).length;
                   return (
                     <button
-                      key={cat.id}
-                      onClick={() => setSelectedMenuCategory(cat.id)}
+                      key={catName}
+                      onClick={() => setSelectedMenuCategory(catName)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                        selectedMenuCategory === cat.id
-                          ? 'bg-rose-600 text-white shadow'
+                        selectedMenuCategory === catName
+                          ? menuCatalogMode === 'BAR' ? 'bg-purple-600 text-white shadow' : 'bg-rose-600 text-white shadow'
                           : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                       }`}
                     >
-                      {cat.name} ({count})
+                      {catName} {count > 0 ? `(${count})` : ''}
                     </button>
                   );
                 })}
@@ -1598,17 +1725,25 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                       <div className="relative mb-3 rounded-xl overflow-hidden group">
                         <img src={item.image} alt={item.name} className="w-full h-40 object-cover group-hover:scale-105 transition-transform duration-300" />
                         <span className="absolute top-2 left-2 px-2.5 py-1 bg-slate-950/80 backdrop-blur-md rounded-lg text-[10px] font-bold text-slate-200 border border-slate-700">
-                          {categoryObj?.name || 'General'}
+                          {item.barCategory || categoryObj?.name || 'General'}
                         </span>
                         <span className={`absolute top-2 right-2 px-2.5 py-1 rounded-lg text-[10px] font-bold backdrop-blur-md ${
                           item.isAvailable ? 'bg-emerald-500/80 text-white' : 'bg-rose-500/80 text-white'
                         }`}>
                           {item.isAvailable ? 'In Stock' : '86ed'}
                         </span>
+                        {item.alcoholPercentage && (
+                          <span className="absolute bottom-2 left-2 px-2 py-0.5 bg-purple-950/90 text-purple-300 text-[10px] font-mono font-bold rounded border border-purple-500/40">
+                            {item.alcoholPercentage}% ABV
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-start justify-between gap-2">
-                        <h4 className="font-bold text-white text-sm">{item.name}</h4>
+                        <div>
+                          <h4 className="font-bold text-white text-sm">{item.name}</h4>
+                          {item.brand && <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>}
+                        </div>
                         <span className="font-mono font-bold text-rose-400 text-base">${item.price.toFixed(2)}</span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
@@ -1624,21 +1759,32 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                         {item.isAvailable ? 'Mark 86ed' : 'Enable Item'}
                       </Button>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDuplicateItem(item.id)}
+                          className="hover:bg-slate-800 text-slate-400 hover:text-amber-300 px-2"
+                          title="Duplicate Drink / Dish"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenEditModal(item)}
-                          className="hover:bg-slate-800 text-slate-300 hover:text-white px-2.5"
+                          className="hover:bg-slate-800 text-slate-300 hover:text-white px-2"
                           title="Edit Menu Item"
                         >
-                          <Edit className="w-3.5 h-3.5 text-blue-400 mr-1" /> Edit
+                          <Edit className="w-3.5 h-3.5 text-blue-400" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeletingItem(item)}
-                          className="hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 px-2.5"
+                          className="hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 px-2"
                           title="Delete Menu Item"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-500" />
@@ -1652,8 +1798,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               {filteredMenuItems.length === 0 && (
                 <div className="col-span-full py-12 text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">
                   <UtensilsCrossed className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                  <p className="text-sm font-semibold text-slate-300">No menu items found</p>
-                  <p className="text-xs text-slate-500 mt-1">Try adjusting your filter or search query, or add a new dish.</p>
+                  <p className="text-sm font-semibold text-slate-300">No {menuCatalogMode === 'BAR' ? 'bar drinks' : 'food items'} found</p>
+                  <p className="text-xs text-slate-500 mt-1">Try adjusting your category filter or add a new menu entry.</p>
                   <Button
                     variant="brand"
                     size="sm"
@@ -1661,7 +1807,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                     onClick={() => setIsAddItemModalOpen(true)}
                     icon={<Plus className="w-3.5 h-3.5" />}
                   >
-                    Add New Menu Item
+                    Add New {menuCatalogMode === 'BAR' ? 'Drink' : 'Item'}
                   </Button>
                 </div>
               )}
@@ -2279,11 +2425,31 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 onChange={(e) => setNewItem({ ...newItem, categoryId: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
               >
-                {MOCK_CATEGORIES.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
+                {(menuCatalogMode === 'BAR'
+                  ? [
+                      'Beer',
+                      'Wine',
+                      'Whiskey',
+                      'Vodka',
+                      'Rum',
+                      'Gin',
+                      'Cocktails',
+                      'Mocktails',
+                      'Champagne',
+                      'Tequila',
+                      'Premium Bottles',
+                      'Shots',
+                      'Signature Drinks',
+                    ].map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))
+                  : MOCK_CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    )))}
               </select>
             </div>
 

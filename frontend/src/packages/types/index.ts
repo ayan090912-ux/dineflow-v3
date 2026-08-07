@@ -155,8 +155,10 @@ export type BarCategoryName =
   | 'Gin'
   | 'Cocktails'
   | 'Mocktails'
+  | 'Champagne'
+  | 'Tequila'
+  | 'Premium Bottles'
   | 'Shots'
-  | 'Premium'
   | 'Signature Drinks';
 
 export interface MenuItem {
@@ -178,6 +180,12 @@ export interface MenuItem {
   bottleSize?: string;
   glassSize?: string;
   barCategory?: BarCategoryName;
+  brand?: string;
+  servingOptions?: string[];
+  discountPercentage?: number;
+  isFeatured?: boolean;
+  isRecommended?: boolean;
+  isBestSeller?: boolean;
   options?: {
     name: string;
     choices: { name: string; priceDelta: number }[];

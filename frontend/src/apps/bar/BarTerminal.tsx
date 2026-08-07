@@ -18,8 +18,10 @@ import {
   Filter,
   Volume2,
   VolumeX,
+  Plus,
+  Minus,
 } from 'lucide-react';
-import { Button, Card, Badge, Input } from '../../packages/ui';
+import { Button, Card, Badge, Input, Modal } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Order, OrderItem, OrderStatus } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
@@ -31,9 +33,10 @@ interface BarTerminalProps {
 export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastNotification, setLastNotification] = useState<string>('');
+  const [selectedOrderForEta, setSelectedOrderForEta] = useState<Order | null>(null);
+  const [customEtaInput, setCustomEtaInput] = useState('10');
 
   useEffect(() => {
     loadBarOrders();
@@ -42,20 +45,42 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       if (event.type === 'OrderCreated' || event.type === 'OrderAccepted' || event.type === 'OrderReady') {
         loadBarOrders();
         setLastNotification(`New Drink Activity on ${event.tableNumber || 'Bar'}`);
+        if (soundEnabled) {
+          playNotificationSound();
+        }
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [soundEnabled]);
+
+  const playNotificationSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+    } catch (e) {}
+  };
 
   const loadBarOrders = async () => {
     setIsLoading(true);
     try {
-      const allOrders = await api.getOrders('rest-1');
-      // Filter orders destined for BAR or containing alcoholic / drink items
+      const restId = api.getCurrentRestaurantId() || undefined;
+      const allOrders = await api.getOrders(restId);
+      // Filter orders destined for BAR or containing drink/alcoholic items
       const barOrders = allOrders.filter(
         (o) =>
           o.targetDestination === 'BAR' ||
+          o.targetDestination === 'MIXED' ||
           o.items.some((i) => i.targetDestination === 'BAR' || i.isAlcoholic)
       );
       setOrders(barOrders);
@@ -75,18 +100,54 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     }
   };
 
+  const handleAdjustEta = async (orderId: string, deltaMinutes: number) => {
+    try {
+      const order = orders.find((o) => o.id === orderId);
+      const currentEta = order?.estimatedPrepTimeMinutes || 10;
+      const newEta = Math.max(1, currentEta + deltaMinutes);
+      await api.updateOrderETA(orderId, newEta, `Adjusted by ${deltaMinutes > 0 ? '+' : ''}${deltaMinutes}m`);
+      await loadBarOrders();
+    } catch (err) {
+      console.error('Failed to adjust ETA:', err);
+    }
+  };
+
+  const handleSaveCustomEta = async () => {
+    if (!selectedOrderForEta) return;
+    const mins = parseInt(customEtaInput, 10);
+    if (isNaN(mins) || mins <= 0) return;
+    await api.updateOrderETA(selectedOrderForEta.id, mins, 'Custom Bartender ETA');
+    setSelectedOrderForEta(null);
+    await loadBarOrders();
+  };
+
   // Divide orders into Bar Pipeline stages
   const pendingOrders = orders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED');
-  const preparingOrders = orders.filter((o) => o.status === 'PREPARING_DRINKS' || o.status === 'IN_KITCHEN');
+  const preparingOrders = orders.filter(
+    (o) => o.status === 'PREPARING_DRINKS' || o.status === 'PREPARING' || o.status === 'IN_KITCHEN' || o.status === 'IN_PREPARATION'
+  );
   const readyOrders = orders.filter((o) => o.status === 'READY');
   const completedOrders = orders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED');
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
+      {/* Top Banner Notification */}
+      {lastNotification && (
+        <div className="bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-lg">
+          <span className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-slate-950 animate-bounce" />
+            {lastNotification}
+          </span>
+          <button onClick={() => setLastNotification('')} className="hover:opacity-80">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Bar Terminal Top Navigation Header */}
       <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between shadow-2xl sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white shadow-xl shadow-purple-950/40">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-600 to-amber-500 text-white shadow-xl shadow-purple-950/40">
             <Wine className="w-6 h-6 animate-pulse" />
           </div>
           <div>
@@ -97,7 +158,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
               </Badge>
             </div>
             <p className="text-xs text-slate-400 font-mono">
-              Lumière Bistro & Bar • Cocktail Lounge & Station
+              Live Mixology Station & Drink Fulfillment Queue
             </p>
           </div>
         </div>
@@ -122,6 +183,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
             size="sm"
             onClick={() => setSoundEnabled(!soundEnabled)}
             className="border-slate-800 text-slate-300"
+            title={soundEnabled ? 'Mute Order Audio Alerts' : 'Enable Order Audio Alerts'}
           >
             {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
           </Button>
@@ -171,7 +233,9 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
                   order={ord}
                   actionLabel="Start Mixology 🍸"
                   actionVariant="warning"
-                  onAction={() => handleUpdateStatus(ord.id, 'PREPARING_DRINKS')}
+                  onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
+                  onAdjustEta={(delta) => handleAdjustEta(ord.id, delta)}
+                  onCustomEta={() => setSelectedOrderForEta(ord)}
                 />
               ))}
               {pendingOrders.length === 0 && (
@@ -202,6 +266,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
                   actionLabel="Mark Ready ✨"
                   actionVariant="brand"
                   onAction={() => handleUpdateStatus(ord.id, 'READY')}
+                  onAdjustEta={(delta) => handleAdjustEta(ord.id, delta)}
+                  onCustomEta={() => setSelectedOrderForEta(ord)}
                 />
               ))}
               {preparingOrders.length === 0 && (
@@ -262,6 +328,30 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
           </div>
         </div>
       </main>
+
+      {/* CUSTOM ETA MODAL */}
+      <Modal
+        isOpen={!!selectedOrderForEta}
+        onClose={() => setSelectedOrderForEta(null)}
+        title={`Set Custom Drink Prep ETA for Table ${selectedOrderForEta?.tableNumber}`}
+      >
+        <div className="space-y-4 text-xs">
+          <Input
+            label="Estimated Drink Prep Time (Minutes)"
+            type="number"
+            value={customEtaInput}
+            onChange={(e) => setCustomEtaInput(e.target.value)}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedOrderForEta(null)}>
+              Cancel
+            </Button>
+            <Button variant="brand" size="sm" onClick={handleSaveCustomEta} className="bg-purple-600 font-bold">
+              Update ETA
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
@@ -272,8 +362,12 @@ const BarOrderCard: React.FC<{
   actionLabel?: string;
   actionVariant?: 'warning' | 'brand' | 'success';
   onAction?: () => void;
+  onAdjustEta?: (deltaMinutes: number) => void;
+  onCustomEta?: () => void;
   isCompleted?: boolean;
-}> = ({ order, actionLabel, actionVariant = 'brand', onAction, isCompleted }) => {
+}> = ({ order, actionLabel, actionVariant = 'brand', onAction, onAdjustEta, onCustomEta, isCompleted }) => {
+  const drinkItems = order.items.filter((i) => i.targetDestination === 'BAR' || i.isAlcoholic || true);
+
   return (
     <Card className="bg-slate-900 border-slate-800/90 p-4 space-y-3 shadow-xl rounded-2xl relative overflow-hidden group hover:border-slate-700 transition-all">
       {/* Header Info */}
@@ -284,15 +378,22 @@ const BarOrderCard: React.FC<{
           </span>
           <span className="text-[11px] font-mono text-slate-400">#{order.id.slice(-4)}</span>
         </div>
-        <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+        <div className="flex items-center gap-1 text-[10px] text-amber-400 font-mono">
           <Clock className="w-3 h-3" />
-          {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
+          <span>{order.estimatedPrepTimeMinutes || 10}m ETA</span>
+        </div>
       </div>
+
+      {order.customerName && (
+        <p className="text-[11px] text-slate-300 font-bold flex items-center gap-1">
+          <User className="w-3 h-3 text-purple-400" />
+          <span>Guest: {order.customerName}</span>
+        </p>
+      )}
 
       {/* Drink Items List */}
       <div className="space-y-2 py-1 border-y border-slate-800/80">
-        {order.items.map((item, idx) => (
+        {drinkItems.map((item, idx) => (
           <div key={idx} className="flex items-start justify-between gap-2 text-xs">
             <div className="space-y-0.5">
               <div className="flex items-center gap-1.5">
@@ -300,13 +401,13 @@ const BarOrderCard: React.FC<{
                 <span className="font-bold text-slate-200">{item.name}</span>
               </div>
               {item.glassSize && (
-                <span className="text-[10px] font-mono text-purple-400 block">
-                  Glass: {item.glassSize} {item.alcoholPercentage ? `• ${item.alcoholPercentage}% ABV` : ''}
+                <span className="text-[10px] font-mono text-purple-300 block">
+                  Serving: {item.glassSize} {item.alcoholPercentage ? `• ${item.alcoholPercentage}% ABV` : ''}
                 </span>
               )}
               {item.notes && (
                 <span className="text-[10px] text-amber-300 italic block">
-                  Note: "{item.notes}"
+                  Option/Note: "{item.notes}"
                 </span>
               )}
             </div>
@@ -316,6 +417,37 @@ const BarOrderCard: React.FC<{
           </div>
         ))}
       </div>
+
+      {/* ETA Adjustment Buttons */}
+      {!isCompleted && onAdjustEta && (
+        <div className="flex items-center justify-between gap-2 text-[10px] font-mono bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+          <span className="text-slate-400">Adjust ETA:</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onAdjustEta(-5)}
+              className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 hover:bg-slate-700 font-bold"
+              title="Decrease prep time by 5 minutes"
+            >
+              -5m
+            </button>
+            <button
+              onClick={() => onAdjustEta(5)}
+              className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 hover:bg-slate-700 font-bold"
+              title="Increase prep time by 5 minutes"
+            >
+              +5m
+            </button>
+            {onCustomEta && (
+              <button
+                onClick={onCustomEta}
+                className="px-2 py-0.5 rounded bg-purple-600/30 text-purple-300 border border-purple-500/40 hover:bg-purple-600/50 font-bold"
+              >
+                Set
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Special Instructions */}
       {order.specialInstructions && (

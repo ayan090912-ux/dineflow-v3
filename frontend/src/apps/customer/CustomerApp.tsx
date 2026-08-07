@@ -26,6 +26,7 @@ import {
   QrCode,
   Users,
   Wine,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   Button,
@@ -60,6 +61,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
+  const [selectedServingOption, setSelectedServingOption] = useState<string>('');
 
   const [selectedTableNum, setSelectedTableNum] = useState<string>(tableNumber);
   const [currentTable, setCurrentTable] = useState<Table | null>(null);
@@ -69,7 +71,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [isCallWaiterModalOpen, setIsCallWaiterModalOpen] = useState(false);
 
   // Cart state
-  const [cart, setCart] = useState<{ item: MenuItem; quantity: number; notes?: string }[]>([]);
+  const [cart, setCart] = useState<{ item: MenuItem; quantity: number; notes?: string; servingOption?: string }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Active Live Order
@@ -77,6 +79,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   useEffect(() => {
+    const savedAge = typeof window !== 'undefined' && sessionStorage.getItem('dineflow_bar_age_verified');
+    if (savedAge === 'true') {
+      setIsAgeConfirmed(true);
+    }
     loadRestaurantAndMenu();
     loadTableInfo();
     loadInitialOrder();
@@ -86,13 +92,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         setActiveOrder(event.data);
 
         if (event.type === 'ETAUpdated') {
-          addToast('info', 'Kitchen ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
+          addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
         } else if (event.type === 'OrderAccepted') {
-          addToast('success', 'Order Accepted! 🔥', `Estimated cooking time: ${event.estimatedPrepTimeMinutes} mins`);
+          addToast('success', 'Order Accepted! 🔥', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
         } else if (event.type === 'OrderReady') {
-          addToast('success', 'Order Ready! ✨', 'Your order is prepared and ready to serve.');
+          addToast('success', 'Order Ready! ✨', 'Your food/drinks are prepared and ready.');
         } else if (event.type === 'OrderDelivered') {
-          addToast('success', 'Food & Drinks Served 🍽️', 'Enjoy your meal!');
+          addToast('success', 'Served 🍽️', 'Enjoy your order!');
         }
       }
       loadTableInfo();
@@ -102,7 +108,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   }, [selectedTableNum]);
 
   const loadTableInfo = async () => {
-    const tbls = await api.getTables('rest-1');
+    const restId = api.getCurrentRestaurantId() || undefined;
+    const tbls = await api.getTables(restId);
     setAllRestaurantTables(tbls);
     const tbl = tbls.find(
       (t) => t.tableNumber.toLowerCase() === selectedTableNum.toLowerCase() || t.id === selectedTableNum
@@ -113,11 +120,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   };
 
   const loadRestaurantAndMenu = async () => {
+    const restId = api.getCurrentRestaurantId() || undefined;
     const rests = await api.getRestaurants();
-    const r = rests.find((x) => x.id === 'rest-1') || rests[0];
+    const r = rests.find((x) => x.id === restId) || rests[0];
     if (r) setCurrentRestaurant(r);
 
-    const items = await api.getMenuItems('rest-1');
+    const items = await api.getMenuItems(r?.id || restId);
     setMenuItems(items);
   };
 
@@ -139,14 +147,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const handleConfirmAge = () => {
     setIsAgeConfirmed(true);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('dineflow_bar_age_verified', 'true');
+    }
     setIsAgeModalOpen(false);
     setCurrentMenuTab('BAR');
     setActiveCategory('all');
-    addToast('success', 'Age Verified 🍸', 'Welcome to the Bar Menu!');
+    addToast('success', 'Age Verified 🍸', 'Welcome to the Bar Lounge Menu!');
   };
 
   const loadInitialOrder = async () => {
-    const allOrders = await api.getOrders('rest-1');
+    const restId = api.getCurrentRestaurantId() || undefined;
+    const allOrders = await api.getOrders(restId);
     const tableOrd = allOrders.find((o) => o.tableNumber === tableNumber && o.status !== 'DELIVERED');
     if (tableOrd) {
       setActiveOrder(tableOrd);
@@ -165,22 +177,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     if (!selectedItem) return;
     const itemToAdd = {
       ...selectedItem,
-      targetDestination: currentMenuTab === 'BAR' ? ('BAR' as const) : ('KITCHEN' as const),
+      targetDestination: currentMenuTab === 'BAR' || selectedItem.targetDestination === 'BAR' || selectedItem.isAlcoholic ? ('BAR' as const) : ('KITCHEN' as const),
     };
+
+    const combinedNotes = [selectedServingOption ? `Serving: ${selectedServingOption}` : '', specialInstructions].filter(Boolean).join(' • ');
 
     setCart((prev) => {
       const existing = prev.find((c) => c.item.id === selectedItem.id);
       if (existing) {
         return prev.map((c) =>
-          c.item.id === selectedItem.id ? { ...c, quantity: c.quantity + quantity, notes: specialInstructions } : c
+          c.item.id === selectedItem.id ? { ...c, quantity: c.quantity + quantity, notes: combinedNotes } : c
         );
       }
-      return [...prev, { item: itemToAdd, quantity, notes: specialInstructions }];
+      return [...prev, { item: itemToAdd, quantity, notes: combinedNotes, servingOption: selectedServingOption }];
     });
-    addToast('success', 'Added to Cart', `${quantity}x ${selectedItem.name}`);
+    addToast('success', 'Added to Order Cart', `${quantity}x ${selectedItem.name}`);
     setSelectedItem(null);
     setQuantity(1);
     setSpecialInstructions('');
+    setSelectedServingOption('');
   };
 
   const handleCheckout = async () => {
@@ -199,23 +214,23 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       id: `oi-${Date.now()}-${idx}`,
       menuItemId: c.item.id,
       name: c.item.name,
-      price: c.item.price,
       quantity: c.quantity,
+      price: c.item.price,
       notes: c.notes,
-      targetDestination: c.item.targetDestination || (currentMenuTab === 'BAR' ? 'BAR' : 'KITCHEN'),
+      targetDestination: c.item.targetDestination || (c.item.isAlcoholic ? 'BAR' : 'KITCHEN'),
       isAlcoholic: c.item.isAlcoholic,
       alcoholPercentage: c.item.alcoholPercentage,
-      glassSize: c.item.glassSize,
+      glassSize: c.item.glassSize || c.item.bottleSize,
     }));
 
-    const newOrd = await api.createCustomerOrder({
-      restaurantId: 'rest-1',
+    const restId = api.getCurrentRestaurantId() || 'rest-1';
+
+    const newOrd = await api.createOrder({
+      restaurantId: restId,
       tableNumber: selectedTableNum,
-      customerName: 'Guest Customer',
+      customerName: 'Guest',
       items: orderItems,
       totalAmount: total,
-      taxAmount: tax,
-      tipAmount: 0,
       status: 'PENDING',
       targetDestination: targetDest,
       paymentStatus: 'UNPAID',
@@ -224,7 +239,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     setActiveOrder(newOrd);
     setCart([]);
     setIsCartOpen(false);
-    addToast('success', 'Order Transmitted! 🎉', `Sent to kitchen for ${selectedTableNum}.`);
+    addToast('success', 'Order Transmitted! 🎉', `Routing: ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`);
   };
 
   const handleCallWaiter = () => {
@@ -239,11 +254,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const subtotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
   const totalCartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
 
+  // Filter Items
   const filteredItems = menuItems.filter((item) => {
-    const matchesCat = activeCategory === 'all' || item.categoryId === activeCategory;
+    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory !== undefined;
+    if (currentMenuTab === 'BAR' && !isBarItem) return false;
+    if (currentMenuTab === 'FOOD' && isBarItem) return false;
+
+    const matchesCat = activeCategory === 'all' || item.categoryId === activeCategory || item.barCategory === activeCategory;
     const matchesQuery =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.brand && item.brand.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCat && matchesQuery;
   });
 
@@ -281,12 +302,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               <p>Reserved Time: <strong className="text-amber-300">{currentTable.reservationDetails?.reservationTime || '7:30 PM'}</strong></p>
               <p>Party Size: <strong className="text-white">{currentTable.reservationDetails?.partySize || currentTable.capacity} Persons</strong></p>
             </div>
-
-            {currentTable.reservationDetails?.notes && (
-              <p className="text-[11px] text-slate-400 italic bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
-                "{currentTable.reservationDetails.notes}"
-              </p>
-            )}
           </Card>
 
           <div className="space-y-3 pt-2">
@@ -298,76 +313,26 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             >
               I am {currentTable.reservationDetails?.reservedForName || 'the Reserved Guest'} (Check In)
             </Button>
-
-            <Button
-              variant="outline"
-              className="w-full py-3 text-xs border-slate-700 text-slate-300 hover:bg-slate-800"
-              onClick={() => setIsTableSelectorModalOpen(true)}
-              icon={<QrCode className="w-4 h-4 text-rose-400" />}
-            >
-              Scan / Select Different Unreserved Table
-            </Button>
           </div>
         </div>
-
-        {/* Table Selector Modal */}
-        <Modal
-          isOpen={isTableSelectorModalOpen}
-          onClose={() => setIsTableSelectorModalOpen(false)}
-          title="Switch Table Floor Plan"
-        >
-          <div className="space-y-4">
-            <p className="text-xs text-slate-300">Select an available table to proceed directly to ordering menu:</p>
-            <div className="grid grid-cols-2 gap-2.5 max-h-64 overflow-y-auto">
-              {allRestaurantTables.map((t) => {
-                const isRes = t.status === 'RESERVED' || !!t.reservationDetails;
-                const isMer = t.isMerged || t.status === 'MERGED';
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      setSelectedTableNum(t.tableNumber);
-                      setIsTableSelectorModalOpen(false);
-                    }}
-                    className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
-                      isRes
-                        ? 'bg-amber-950/20 border-amber-500/40 text-amber-300'
-                        : isMer
-                        ? 'bg-sky-950/20 border-sky-500/40 text-sky-300'
-                        : t.tableNumber === selectedTableNum
-                        ? 'bg-rose-600 border-rose-500 text-white font-bold'
-                        : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="font-bold text-xs">{t.tableNumber}</span>
-                    <span className="text-[10px] text-slate-400">{t.section || 'Main'} • {t.capacity} seats</span>
-                    {isRes ? (
-                      <span className="text-[9px] text-amber-400 font-bold mt-1">🔒 Reserved</span>
-                    ) : isMer ? (
-                      <span className="text-[9px] text-sky-400 font-bold mt-1">🔗 Merged Group</span>
-                    ) : (
-                      <span className="text-[9px] text-emerald-400 font-bold mt-1">✓ Available</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </Modal>
       </div>
     );
   }
 
+  const isBarTheme = currentMenuTab === 'BAR';
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-28 max-w-md mx-auto relative border-x border-slate-800 shadow-2xl">
+    <div className={`min-h-screen font-sans pb-28 max-w-md mx-auto relative border-x border-slate-800 shadow-2xl transition-colors duration-500 ${
+      isBarTheme ? 'bg-gradient-to-b from-slate-950 via-slate-900 to-amber-950/40 text-slate-100' : 'bg-slate-900 text-slate-100'
+    }`}>
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
       {/* Hero Banner Header */}
       <div className="relative h-52 w-full bg-slate-800 overflow-hidden">
         <img
-          src={theme.bannerUrl}
+          src={isBarTheme ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1200&auto=format&fit=crop&q=80' : theme.bannerUrl}
           alt={theme.restaurantName}
-          className="w-full h-full object-cover brightness-75"
+          className="w-full h-full object-cover brightness-75 transition-all duration-700"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 
@@ -375,11 +340,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
           <button
             onClick={() => setIsTableSelectorModalOpen(true)}
-            className="px-3 py-1 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg flex items-center gap-1.5 transition-all"
-            title="Click to switch table"
+            className={`px-3 py-1 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5 transition-all ${
+              isBarTheme ? 'bg-amber-600 hover:bg-amber-500' : 'bg-rose-600 hover:bg-rose-500'
+            }`}
           >
             <span>📍 {selectedTableNum}</span>
-            <span className="text-[10px] bg-rose-800/80 px-1.5 py-0.5 rounded">Switch 🔀</span>
+            <span className="text-[10px] bg-black/30 px-1.5 py-0.5 rounded">Switch 🔀</span>
           </button>
         </div>
 
@@ -393,7 +359,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           <div>
             <h1 className="text-xl font-black text-white tracking-tight">{theme.restaurantName}</h1>
             <p className="text-xs text-slate-300 font-medium flex items-center gap-2 mt-0.5">
-              <span>⭐ 4.9 (120+ reviews)</span> • <span>Modern Fine Dining</span>
+              <span>⭐ 4.9 (120+ reviews)</span> • <span>{isBarTheme ? 'VIP Cocktail & Wine Lounge 🍷' : 'Fine Dining Restaurant'}</span>
             </p>
           </div>
         </div>
@@ -441,7 +407,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               onClick={() => handleSwitchMenuTab('BAR')}
               className={`py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 ${
                 currentMenuTab === 'BAR'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                  ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -457,7 +423,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
-      {/* Live Order Status & ETA Tracker (If active) */}
+      {/* Live Order Status & ETA Tracker */}
       {activeOrder && (
         <CustomerLiveTracker order={activeOrder} onUpdateOrder={setActiveOrder} />
       )}
@@ -471,32 +437,39 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={currentMenuTab === 'BAR' ? "Search cocktails, wine, beer..." : "Search menu items or ingredients..."}
-            className="w-full bg-slate-800 text-slate-100 text-xs rounded-xl pl-10 pr-4 py-2.5 border border-slate-700/80 focus:outline-none focus:border-rose-500"
+            placeholder={isBarTheme ? "Search whiskey, cocktails, wine, beer..." : "Search menu items..."}
+            className={`w-full bg-slate-800 text-slate-100 text-xs rounded-xl pl-10 pr-4 py-2.5 border focus:outline-none ${
+              isBarTheme ? 'border-amber-500/40 focus:border-amber-400' : 'border-slate-700/80 focus:border-rose-500'
+            }`}
           />
         </div>
 
-        {/* Categories (Swaps between Food Categories & Bar Categories) */}
+        {/* Categories */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           <button
             onClick={() => setActiveCategory('all')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
               activeCategory === 'all'
-                ? 'bg-[var(--brand-primary,#e11d48)] text-white shadow-md'
+                ? isBarTheme ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'bg-rose-600 text-white shadow-md'
                 : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
             }`}
           >
-            All {currentMenuTab === 'BAR' ? 'Drinks 🍸' : 'Dishes 🍽️'}
+            All {isBarTheme ? 'Drinks 🍸' : 'Dishes 🍽️'}
           </button>
-          {(currentMenuTab === 'BAR'
+          {(isBarTheme
             ? [
                 { id: 'Cocktails', name: 'Cocktails' },
-                { id: 'Signature Drinks', name: 'Signature Drinks' },
+                { id: 'Signature Drinks', name: 'Signature' },
                 { id: 'Beer', name: 'Beer' },
                 { id: 'Wine', name: 'Wine' },
                 { id: 'Whiskey', name: 'Whiskey' },
+                { id: 'Vodka', name: 'Vodka' },
+                { id: 'Rum', name: 'Rum' },
                 { id: 'Gin', name: 'Gin' },
+                { id: 'Champagne', name: 'Champagne' },
+                { id: 'Tequila', name: 'Tequila' },
                 { id: 'Mocktails', name: 'Mocktails' },
+                { id: 'Shots', name: 'Shots' },
               ]
             : MOCK_CATEGORIES.filter((c) => c.restaurantId === 'rest-1')
           ).map((cat) => (
@@ -505,7 +478,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               onClick={() => setActiveCategory(cat.id)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                 activeCategory === cat.id
-                  ? 'bg-[var(--brand-primary,#e11d48)] text-white shadow-md'
+                  ? isBarTheme ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'bg-rose-600 text-white shadow-md'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
@@ -516,78 +489,75 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
         {/* Menu Items List */}
         <div className="space-y-4">
-          {menuItems
-            .filter((item) => {
-              if (currentMenuTab === 'BAR') {
-                return item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory;
-              } else {
-                return item.targetDestination !== 'BAR' && !item.barCategory;
-              }
-            })
-            .filter((item) => {
-              if (activeCategory !== 'all') {
-                return item.categoryId === activeCategory || item.barCategory === activeCategory;
-              }
-              return true;
-            })
-            .filter((item) =>
-              searchQuery
-                ? item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  item.description.toLowerCase().includes(searchQuery.toLowerCase())
-                : true
-            )
-            .map((item) => (
-              <Card
-                key={item.id}
-                className="bg-slate-800/80 border-slate-700/60 p-3.5 flex gap-3.5 hover:border-slate-600 transition-all cursor-pointer rounded-2xl group"
-                onClick={() => {
-                  setSelectedItem(item);
-                  setQuantity(1);
-                }}
-              >
+          {filteredItems.map((item) => (
+            <Card
+              key={item.id}
+              className={`p-3.5 flex gap-3.5 transition-all cursor-pointer rounded-2xl group ${
+                isBarTheme
+                  ? 'bg-slate-900/90 border-amber-500/30 hover:border-amber-400 shadow-xl shadow-amber-950/20'
+                  : 'bg-slate-800/80 border-slate-700/60 hover:border-slate-600'
+              }`}
+              onClick={() => {
+                setSelectedItem(item);
+                setQuantity(1);
+                setSelectedServingOption(item.servingOptions?.[0] || '');
+              }}
+            >
+              <div className="relative shrink-0">
                 <img
                   src={item.image}
                   alt={item.name}
-                  className="w-24 h-24 rounded-xl object-cover shrink-0 border border-slate-700/80 group-hover:scale-105 transition-transform"
+                  className="w-24 h-24 rounded-xl object-cover border border-slate-700/80 group-hover:scale-105 transition-transform"
                 />
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-start justify-between gap-1">
-                      <h3 className="text-sm font-bold text-slate-100 truncate">{item.name}</h3>
-                      {item.isVegetarian && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
-                          Veg
-                        </span>
-                      )}
-                      {item.isAlcoholic && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 font-bold">
-                          {item.alcoholPercentage}% ABV
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-400 line-clamp-2 mt-1">{item.description}</p>
-                    {(item.glassSize || item.bottleSize) && (
-                      <p className="text-[10px] text-amber-400 font-mono mt-0.5">
-                        {item.glassSize || item.bottleSize}
-                      </p>
+                {item.isAlcoholic && (
+                  <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-950/90 text-purple-300 border border-purple-500/40">
+                    {item.alcoholPercentage || 40}% ABV
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-1">
+                    <h3 className="text-sm font-bold text-slate-100 truncate">{item.name}</h3>
+                    {item.isVegetarian && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                        Veg
+                      </span>
                     )}
                   </div>
-
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/50">
-                    <span className="text-sm font-black text-emerald-400">
-                      {formatPrice(item.price)}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="brand"
-                      className="text-xs py-1 px-3 rounded-lg font-bold"
-                    >
-                      Add +
-                    </Button>
-                  </div>
+                  {item.brand && (
+                    <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>
+                  )}
+                  <p className="text-xs text-slate-400 line-clamp-2 mt-1">{item.description}</p>
+                  {(item.glassSize || item.bottleSize) && (
+                    <p className="text-[10px] text-purple-300 font-mono mt-0.5">
+                      Serving: {item.glassSize || item.bottleSize}
+                    </p>
+                  )}
                 </div>
-              </Card>
-            ))}
+
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/50">
+                  <span className="text-sm font-black text-emerald-400">
+                    {formatPrice(item.price)}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="brand"
+                    className={`text-xs py-1 px-3 rounded-lg font-bold ${
+                      isBarTheme ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' : 'bg-rose-600 hover:bg-rose-500'
+                    }`}
+                  >
+                    Add +
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+          {filteredItems.length === 0 && (
+            <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-slate-400 text-xs">
+              No items available in this category.
+            </div>
+          )}
         </div>
       </div>
 
@@ -596,32 +566,60 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         <div className="fixed bottom-4 left-4 right-4 z-40 max-w-md mx-auto">
           <button
             onClick={() => setIsCartOpen(true)}
-            className="w-full bg-[var(--brand-primary,#e11d48)] text-white font-bold p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:opacity-95 transition-opacity active:scale-[0.98]"
+            className={`w-full text-white font-bold p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:opacity-95 transition-opacity active:scale-[0.98] ${
+              isBarTheme ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950' : 'bg-rose-600'
+            }`}
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center font-mono text-xs font-black">
+              <div className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center font-mono text-xs font-black">
                 {totalCartCount}
               </div>
-              <span className="text-sm">View Cart Order</span>
+              <span className="text-sm font-black">View Order Cart</span>
             </div>
             <span className="font-mono text-base font-black">{formatPrice(subtotal)} →</span>
           </button>
         </div>
       )}
 
-      {/* Food Details Modal */}
+      {/* Item Selection & Customization Modal */}
       <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem?.name}
       >
         {selectedItem && (
-          <div className="space-y-4">
+          <div className="space-y-4 text-xs">
             <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-48 object-cover rounded-2xl" />
-            <p className="text-xs text-slate-300">{selectedItem.description}</p>
+            
+            {selectedItem.brand && (
+              <p className="text-amber-400 font-mono font-bold">Brand: {selectedItem.brand}</p>
+            )}
+            
+            <p className="text-slate-300">{selectedItem.description}</p>
+
+            {selectedItem.servingOptions && selectedItem.servingOptions.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="font-bold text-slate-200 block">Serving Option:</span>
+                <div className="flex flex-wrap gap-2">
+                  {selectedItem.servingOptions.map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => setSelectedServingOption(opt)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                        selectedServingOption === opt
+                          ? 'bg-amber-500 text-slate-950 border-amber-400'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between py-2 border-y border-slate-800">
-              <span className="text-xs font-bold text-slate-300">Quantity</span>
+              <span className="font-bold text-slate-300">Quantity</span>
               <div className="flex items-center gap-3 bg-slate-800 p-1.5 rounded-xl">
                 <Button
                   variant="ghost"
@@ -644,60 +642,56 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             </div>
 
             <Input
-              label="Special Kitchen Instructions"
-              placeholder="e.g. Extra sauce on side, allergy note..."
+              label="Instructions / Notes"
+              placeholder="e.g. Extra ice, lime slice, allergy..."
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
             />
 
-            <Button variant="brand" className="w-full py-3 text-sm font-bold mt-2" onClick={handleAddToCart}>
-              Add {quantity} to Order • {formatPrice(selectedItem.price * quantity)}
+            <Button
+              variant="brand"
+              onClick={handleAddToCart}
+              className="w-full py-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+            >
+              Add to Cart ({formatPrice(selectedItem.price * quantity)})
             </Button>
           </div>
         )}
       </Modal>
 
-      {/* Cart Drawer Modal */}
+      {/* Cart Summary Modal */}
       <Modal
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        title="Your Table Order"
-        description={`Delivering directly to ${tableNumber}`}
+        title="Your Table Order Summary"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 text-xs">
           <div className="space-y-2 max-h-60 overflow-y-auto">
             {cart.map((c, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-800/80 rounded-xl">
+              <div key={idx} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-white">{c.quantity}x {c.item.name}</p>
-                  {c.notes && <p className="text-[10px] text-amber-300">{c.notes}</p>}
+                  <p className="font-bold text-white text-sm">{c.quantity}x {c.item.name}</p>
+                  {c.notes && <p className="text-[10px] text-amber-300 italic">{c.notes}</p>}
                 </div>
-                <span className="font-mono font-bold text-xs text-rose-400">
-                  {formatPrice(c.item.price * c.quantity)}
-                </span>
+                <span className="font-mono font-bold text-emerald-400">{formatPrice(c.item.price * c.quantity)}</span>
               </div>
             ))}
           </div>
 
-          <div className="pt-3 border-t border-slate-800 space-y-1 text-xs">
-            <div className="flex justify-between text-slate-400">
-              <span>Subtotal</span>
-              <span>{formatPrice(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-slate-400">
-              <span>Estimated Tax (9%)</span>
-              <span>{formatPrice(subtotal * 0.09)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-base text-white pt-2 border-t border-slate-800">
-              <span>Total Due</span>
-              <span className="font-mono text-emerald-400">
-                {formatPrice(subtotal * 1.09)}
-              </span>
+          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1 font-mono">
+            <div className="flex justify-between text-slate-400"><span>Subtotal:</span><span>{formatPrice(subtotal)}</span></div>
+            <div className="flex justify-between text-slate-400"><span>Tax (9%):</span><span>{formatPrice(subtotal * 0.09)}</span></div>
+            <div className="flex justify-between text-white font-bold text-sm pt-1 border-t border-slate-800">
+              <span>Total:</span><span>{formatPrice(subtotal * 1.09)}</span>
             </div>
           </div>
 
-          <Button variant="brand" className="w-full py-3.5 font-bold text-sm" onClick={handleCheckout}>
-            Transmit Order to Kitchen 🔥
+          <Button
+            variant="brand"
+            onClick={handleCheckout}
+            className="w-full py-3.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl"
+          >
+            Transmit Order to Kitchen & Bar 🔥
           </Button>
         </div>
       </Modal>
@@ -708,46 +702,81 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         onClose={() => setIsTableSelectorModalOpen(false)}
         title="Switch Dining Table Floor Plan"
       >
-        <div className="space-y-4">
-          <p className="text-xs text-slate-300">Select an available table to switch your QR ordering session:</p>
+        <div className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-2.5 max-h-64 overflow-y-auto">
-            {allRestaurantTables.map((t) => {
-              const isRes = t.status === 'RESERVED' || !!t.reservationDetails;
-              const isMer = t.isMerged || t.status === 'MERGED';
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setSelectedTableNum(t.tableNumber);
-                    setIsTableSelectorModalOpen(false);
-                  }}
-                  className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
-                    isRes
-                      ? 'bg-amber-950/20 border-amber-500/40 text-amber-300'
-                      : isMer
-                      ? 'bg-sky-950/20 border-sky-500/40 text-sky-300'
-                      : t.tableNumber === selectedTableNum
-                      ? 'bg-rose-600 border-rose-500 text-white font-bold shadow-lg shadow-rose-950/40'
-                      : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <span className="font-bold text-xs">{t.tableNumber}</span>
-                  <span className="text-[10px] text-slate-400">{t.section || 'Main'} • {t.capacity} seats</span>
-                  {isRes ? (
-                    <span className="text-[9px] text-amber-400 font-bold mt-1">🔒 Reserved</span>
-                  ) : isMer ? (
-                    <span className="text-[9px] text-sky-400 font-bold mt-1">🔗 Merged Group</span>
-                  ) : (
-                    <span className="text-[9px] text-emerald-400 font-bold mt-1">✓ Available</span>
-                  )}
-                </button>
-              );
-            })}
+            {allRestaurantTables.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setSelectedTableNum(t.tableNumber);
+                  setIsTableSelectorModalOpen(false);
+                }}
+                className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                  t.tableNumber === selectedTableNum
+                    ? 'bg-rose-600 border-rose-500 text-white font-bold'
+                    : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <span className="font-bold text-xs">{t.tableNumber}</span>
+                <span className="text-[10px] text-slate-400">{t.section || 'Main'}</span>
+              </button>
+            ))}
           </div>
         </div>
       </Modal>
 
-      {/* Call Waiter Service Modal */}
+      {/* Legal Age Confirmation Modal */}
+      <Modal
+        isOpen={isAgeModalOpen}
+        onClose={() => setIsAgeModalOpen(false)}
+        title="Legal Drinking Age Verification 🍷"
+      >
+        <div className="space-y-4 text-xs">
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-200 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
+              <Wine className="w-5 h-5 text-amber-400" />
+              <span>Age Verification Required</span>
+            </div>
+            <p className="text-xs text-amber-200/90 leading-relaxed">
+              Before viewing or ordering from our craft beverage & cocktail menu, please confirm that you are of legal drinking age in your jurisdiction (21+).
+            </p>
+          </div>
+
+          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="ageCheckbox"
+              className="w-4 h-4 rounded border-slate-700 text-amber-500 focus:ring-amber-500"
+              defaultChecked={true}
+            />
+            <label htmlFor="ageCheckbox" className="text-xs text-slate-300 font-semibold cursor-pointer">
+              I confirm I am of legal drinking age (21+).
+            </label>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAgeModalOpen(false)}
+              className="border-slate-800 text-slate-400"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={handleConfirmAge}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
+              icon={<Sparkles className="w-4 h-4" />}
+            >
+              Enter Bar Lounge 🍸
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Call Waiter Modal */}
       <CallWaiterModal
         isOpen={isCallWaiterModalOpen}
         onClose={() => setIsCallWaiterModalOpen(false)}

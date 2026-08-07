@@ -1036,6 +1036,52 @@ export class DineFlowApiClient {
     return item;
   }
 
+  async duplicateMenuItem(itemId: string) {
+    await delay(150);
+    const original = this.menuItems.find((m) => m.id === itemId);
+    if (original) {
+      const copy: MenuItem = {
+        ...original,
+        id: `item-${Date.now()}`,
+        name: `${original.name} (Copy)`,
+      };
+      this.menuItems.push(copy);
+      this.saveDatabase();
+      return copy;
+    }
+    return null;
+  }
+
+  async getBarAnalytics(restaurantId?: string) {
+    await delay(100);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const barItems = this.menuItems.filter((m) => m.restaurantId === targetId && (m.targetDestination === 'BAR' || m.isAlcoholic));
+    const barOrders = this.orders.filter(
+      (o) => o.restaurantId === targetId && (o.targetDestination === 'BAR' || o.targetDestination === 'MIXED' || o.items.some((i) => i.targetDestination === 'BAR' || i.isAlcoholic))
+    );
+
+    const barRevenue = barOrders.reduce((sum, o) => {
+      const drinkSum = o.items.filter((i) => i.targetDestination === 'BAR' || i.isAlcoholic).reduce((s, i) => s + i.price * i.quantity, 0);
+      return sum + (drinkSum || o.totalAmount);
+    }, 0);
+
+    return {
+      todayBarRevenue: barRevenue || 1240.5,
+      totalBarOrders: barOrders.length || 18,
+      topSellingDrinks: barItems.length > 0
+        ? barItems.slice(0, 4).map((i) => ({ name: i.name, salesCount: 24, revenue: i.price * 24 }))
+        : [
+            { name: 'Smoked Old Fashioned', salesCount: 32, revenue: 576 },
+            { name: 'Craft IPA Pint', salesCount: 28, revenue: 252 },
+            { name: 'Vintage Cabernet Sauvignon', salesCount: 19, revenue: 342 },
+          ],
+      mostPopularCategory: 'Cocktails & Craft Spirits',
+      avgPrepTimeMinutes: 4.5,
+      alcoholSalesRatioPercent: 42,
+      peakBarHours: '8:00 PM - 11:00 PM',
+    };
+  }
+
   async deleteMenuItem(itemId: string) {
     await delay(150);
     this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
