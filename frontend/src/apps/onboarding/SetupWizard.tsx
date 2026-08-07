@@ -73,9 +73,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || 'Lumiere Bistro');
   const [brandName, setBrandName] = useState('Lumiere Hospitality Group');
   const [restaurantType, setRestaurantType] = useState('fine_dining');
-  const [ownerName, setOwnerName] = useState(initialOwnerData?.ownerName || 'Restaurant Owner');
-  const [ownerEmail, setOwnerEmail] = useState(initialOwnerData?.email || 'owner@lumiere.com');
-  const [ownerPassword, setOwnerPassword] = useState('owner123');
+  const [ownerName, setOwnerName] = useState(initialOwnerData?.ownerName || initialOwnerData?.name || '');
+  const [ownerEmail, setOwnerEmail] = useState(initialOwnerData?.ownerEmail || initialOwnerData?.email || '');
+  const [ownerPhone, setOwnerPhone] = useState(initialOwnerData?.phone || '+1 555-0100');
+  const [ownerPassword, setOwnerPassword] = useState(initialOwnerData?.password || '');
+  const [ownerConfirmPassword, setOwnerConfirmPassword] = useState(initialOwnerData?.password || '');
 
   // Step 2: Address
   const [country, setCountry] = useState('United States');
@@ -263,11 +265,23 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     };
 
     try {
+      // Register owner account
+      try {
+        await api.registerOwner({
+          name: ownerName || 'Restaurant Owner',
+          email: ownerEmail || 'owner@restaurant.com',
+          phone: ownerPhone || '+1 555-0100',
+          password: ownerPassword || 'owner123',
+        });
+      } catch (e) {
+        // Fallback if account already created
+      }
+
       const rest = await api.createRestaurantForOwner({
         name: restaurantName,
         cuisine: restaurantType.replace('_', ' '),
         address: `${address}, ${city}, ${state} ${pinCode}`,
-        phone: initialOwnerData?.phone || '+1 555-0100',
+        phone: ownerPhone || '+1 555-0100',
         email: ownerEmail || 'owner@restaurant.com',
         ownerName: ownerName || 'Restaurant Owner',
         ownerEmail: ownerEmail || 'owner@restaurant.com',
@@ -280,17 +294,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         },
       });
 
-      // Log in as owner of this newly registered restaurant
-      try {
-        await api.loginOwner(ownerEmail || rest.ownerEmail || 'owner@lumiere.com', ownerPassword || 'owner123');
-      } catch (e) {
-        // Fallback login succeeded inside createRestaurantForOwner
-      }
-
       // Submit application for platform launch approval (sets status to PENDING_APPROVAL)
       await api.submitRestaurantLaunch({
-        id: rest.id,
-        name: rest.name,
+        id: rest?.id,
+        name: rest?.name || restaurantName,
       });
 
       onFinishSetup(finalData);
@@ -389,10 +396,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">Restaurant Owner Account & Dashboard Credentials</h4>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Input
                   label="Owner Full Name *"
-                  placeholder="e.g. Elena Rostova"
+                  placeholder="e.g. Alex Mercer"
                   value={ownerName}
                   onChange={(e) => setOwnerName(e.target.value)}
                 />
@@ -404,11 +411,24 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   onChange={(e) => setOwnerEmail(e.target.value)}
                 />
                 <Input
+                  label="Phone Number *"
+                  placeholder="+1 555-0100"
+                  value={ownerPhone}
+                  onChange={(e) => setOwnerPhone(e.target.value)}
+                />
+                <Input
                   label="Dashboard Password *"
                   type="password"
                   placeholder="••••••••"
                   value={ownerPassword}
                   onChange={(e) => setOwnerPassword(e.target.value)}
+                />
+                <Input
+                  label="Confirm Password *"
+                  type="password"
+                  placeholder="••••••••"
+                  value={ownerConfirmPassword}
+                  onChange={(e) => setOwnerConfirmPassword(e.target.value)}
                 />
               </div>
             </div>

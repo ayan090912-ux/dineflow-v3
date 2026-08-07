@@ -818,11 +818,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             </div>
 
             <div className="space-y-3">
-              {[
-                { id: 't-101', restaurant: 'Lumière Bistro & Bar', subject: 'Domain SSL Certificate Verification', priority: 'HIGH', status: 'OPEN', time: '1 hour ago' },
-                { id: 't-102', restaurant: 'Pizza Hub', subject: 'Thermal Printer Bluetooth Integration', priority: 'MEDIUM', status: 'IN_PROGRESS', time: '3 hours ago' },
-                { id: 't-103', restaurant: 'Sakura Omakase Lab', subject: 'Multi-tax GST percentage config query', priority: 'LOW', status: 'RESOLVED', time: 'Yesterday' },
-              ].map((t) => (
+              {(allRestaurants.length > 0
+                ? allRestaurants.slice(0, 3).map((r, idx) => ({
+                    id: `t-10${idx + 1}`,
+                    restaurant: r.name,
+                    subject: idx === 0 ? 'Domain & QR Code Configuration Query' : idx === 1 ? 'Thermal Printer & KDS Integration' : 'Multi-tax GST Percentage Configuration',
+                    priority: idx === 0 ? 'HIGH' : 'MEDIUM',
+                    status: idx === 0 ? 'OPEN' : 'RESOLVED',
+                    time: `${idx + 1} hours ago`,
+                  }))
+                : [
+                    { id: 't-101', restaurant: 'Registered Outlet', subject: 'Domain & QR Code Configuration Query', priority: 'HIGH', status: 'OPEN', time: '1 hour ago' },
+                  ]
+              ).map((t) => (
                 <Card key={t.id} className="bg-slate-900 border-slate-800 p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 rounded-xl bg-slate-800 text-rose-400 font-mono text-xs font-bold">
