@@ -1,0 +1,6 @@
+{
+  "name": "DineFlow Cloud",
+  "description": "Multi-Tenant SaaS Restaurant Operations & Ordering Platform featuring Platform Admin, Restaurant Dashboard, Waiter Terminal OS, and Mobile Customer QR App.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

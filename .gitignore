@@ -1,0 +1,23 @@
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.vite/
+*.log
+
+# Python / Backend
+.venv/
+backend/dineflow-backend/.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local Environment & IDE
+.env
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
