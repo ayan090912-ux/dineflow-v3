@@ -49,6 +49,7 @@ import {
   Link,
   Unlink,
   Phone,
+  Wine,
 } from 'lucide-react';
 import {
   Button,

@@ -25,6 +25,7 @@ import {
   RefreshCw,
   QrCode,
   Users,
+  Wine,
 } from 'lucide-react';
 import {
   Button,
@@ -40,7 +41,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CallWaiterModal } from './CallWaiterModal';
 import { api } from '../../packages/api/client';
-import { MenuItem, Order, OrderItem, OrderStatus, Table } from '../../packages/types';
+import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant } from '../../packages/types';
 import { MOCK_CATEGORIES } from '../../packages/data/mockData';
 import { CustomerLiveTracker } from './CustomerLiveTracker';
 import { realtimeBus } from '../../packages/api/realtime';

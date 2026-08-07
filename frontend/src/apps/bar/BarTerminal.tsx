@@ -39,7 +39,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     loadBarOrders();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      if (event.type === 'NewOrder' || event.type === 'OrderStatusUpdated') {
+      if (event.type === 'OrderCreated' || event.type === 'OrderAccepted' || event.type === 'OrderReady') {
         loadBarOrders();
         setLastNotification(`New Drink Activity on ${event.tableNumber || 'Bar'}`);
       }

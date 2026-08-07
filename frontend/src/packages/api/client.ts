@@ -842,6 +842,11 @@ class DineFlowApiClient {
     return [...this.restaurants];
   }
 
+  async getRestaurants() {
+    await delay(100);
+    return [...this.restaurants];
+  }
+
   async createRestaurantForOwner(restData: {
     name: string;
     cuisine?: string;
@@ -850,6 +855,7 @@ class DineFlowApiClient {
     email?: string;
     ownerName?: string;
     ownerEmail?: string;
+    features?: any;
     theme?: any;
   }) {
     await delay(250);
