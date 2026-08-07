@@ -738,6 +738,21 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
           {/* BUTTON CONTROLS */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4 border-t border-slate-800">
+            <Button
+              variant="brand"
+              onClick={async () => {
+                if (currentRestaurant) {
+                  await api.approveRestaurant(currentRestaurant.id);
+                  addToast('success', 'Restaurant System Live! 🚀', 'Your restaurant is fully approved and active.');
+                  await loadData();
+                }
+              }}
+              className="w-full sm:w-auto text-xs font-bold px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-xl shadow-emerald-950/50"
+              icon={<Sparkles className="w-4 h-4" />}
+            >
+              Instant Launch & Open Dashboard 🚀
+            </Button>
+
             {(currentRestaurant.lifecycleStatus === 'PENDING_APPROVAL' ||
               currentRestaurant.lifecycleStatus === 'CHANGES_REQUESTED' ||
               currentRestaurant.lifecycleStatus === 'REJECTED') && (

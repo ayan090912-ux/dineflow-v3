@@ -867,8 +867,8 @@ class DineFlowApiClient {
       ownerName: restData.ownerName || this.currentUser?.name || 'Restaurant Owner',
       ownerEmail: restData.ownerEmail || this.currentUser?.email || 'owner@dineflow.com',
       domain: `${slug}.dineflow.app`,
-      isApproved: false,
-      lifecycleStatus: 'DRAFT',
+      isApproved: true,
+      lifecycleStatus: 'LIVE',
       status: 'OPEN',
       rating: 5.0,
       activeOrdersCount: 0,
@@ -892,9 +892,29 @@ class DineFlowApiClient {
     this.restaurants.unshift(newRest);
     this.currentRestaurantId = id;
     this.seedIsolatedTenantData(id, restData.name);
-    if (this.currentUser && this.currentTokens) {
-      this.saveSession(this.currentUser, this.currentTokens, id);
-    }
+
+    // Create or update owner user session
+    const ownerUser: User = {
+      id: `usr-owner-${Date.now()}`,
+      firstName: restData.ownerName?.split(' ')[0] || 'Restaurant',
+      lastName: restData.ownerName?.split(' ')[1] || 'Owner',
+      name: restData.ownerName || 'Restaurant Owner',
+      email: restData.ownerEmail || 'owner@restaurant.com',
+      phone: restData.phone || '+1 555-0100',
+      role: 'RESTAURANT_OWNER',
+      isEmailVerified: true,
+      orgId: newRest.orgId,
+      restaurantId: id,
+    };
+    const tokens: AuthTokens = {
+      accessToken: `df_owner_jwt_${Date.now()}`,
+      refreshToken: `df_owner_ref_${Date.now()}`,
+      expiresIn: 86400,
+      tokenType: 'Bearer',
+    };
+    this.users.push(ownerUser);
+    this.saveSession(ownerUser, tokens, id);
+
     return newRest;
   }
 
@@ -928,9 +948,11 @@ class DineFlowApiClient {
       existing.outdoorTablesCount = setupData.tables?.outdoor || setupData.outdoorTables || existing.outdoorTablesCount;
       existing.vipTablesCount = setupData.tables?.vip || setupData.vipTables || existing.vipTablesCount;
       existing.tablesCount = (existing.indoorTablesCount || 0) + (existing.outdoorTablesCount || 0) + (existing.vipTablesCount || 0);
-      existing.lifecycleStatus = 'PENDING_APPROVAL';
-      existing.isApproved = false;
+      existing.lifecycleStatus = 'LIVE';
+      existing.isApproved = true;
+      existing.status = 'OPEN';
       existing.submittedAt = now;
+      existing.approvedAt = now;
       existing.rejectionReason = undefined;
       existing.requestedChanges = undefined;
 

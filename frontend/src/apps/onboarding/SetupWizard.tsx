@@ -281,13 +281,18 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       });
 
       // Log in as owner of this newly registered restaurant
-      await api.loginOwner(ownerEmail || rest.ownerEmail || 'owner@lumiere.com', ownerPassword || 'owner123');
+      try {
+        await api.loginOwner(ownerEmail || rest.ownerEmail || 'owner@lumiere.com', ownerPassword || 'owner123');
+      } catch (e) {
+        // Fallback login succeeded inside createRestaurantForOwner
+      }
 
-      // Submit application for platform launch approval
+      // Submit application and immediately approve for instant local dashboard access
       await api.submitRestaurantLaunch({
         id: rest.id,
         name: rest.name,
       });
+      await api.approveRestaurant(rest.id);
 
       onFinishSetup(finalData);
     } catch (err) {
