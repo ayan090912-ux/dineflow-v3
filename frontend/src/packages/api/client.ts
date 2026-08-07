@@ -974,7 +974,7 @@ export class DineFlowApiClient {
     return table;
   }
 
-  async updateTableStatus(tableId: string, status: any) {
+  async updateTableStatus(tableId: string, status: any, updatedBy?: any) {
     await delay(100);
     const table = this.tables.find((t) => t.id === tableId);
     if (table) {

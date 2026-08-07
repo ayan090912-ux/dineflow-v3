@@ -241,7 +241,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     if (!selectedOrderForEta) return;
     const mins = parseInt(customEtaInput, 10);
     if (isNaN(mins) || mins <= 0) return;
-    await api.updateOrderETA(selectedOrderForEta.id, null, mins, etaChangeReason || 'Manual custom ETA set by Chef');
+    await api.updateOrderETA(selectedOrderForEta.id, mins, etaChangeReason || 'Manual custom ETA set by Chef');
     showToast(`ETA set to ${mins} mins for Order #${selectedOrderForEta.id}`, 'success');
     setSelectedOrderForEta(null);
     setEtaChangeReason('');

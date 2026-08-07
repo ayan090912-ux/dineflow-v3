@@ -98,7 +98,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setIsLoading(true);
     try {
       const res = await api.loginOwner(loginEmail, loginPassword);
-      setSuccessMessage(`Welcome back, ${res.user.name}! Directing to ${res.restaurant.name}...`);
+      setSuccessMessage(`Welcome back, ${res.user.name}! Directing to ${res.restaurant?.name || 'Dashboard'}...`);
       setTimeout(() => {
         if (onLoginSuccess) {
           onLoginSuccess(res);
@@ -153,8 +153,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setIsLoading(true);
     try {
       const res = await api.registerOwner({
-        firstName,
-        lastName,
+        name: `${firstName} ${lastName}`,
         email: regEmail,
         phone: regPhone,
         password: regPassword,

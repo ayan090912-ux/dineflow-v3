@@ -285,14 +285,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Merge Failed', 'Please select at least 2 tables to merge.');
       return;
     }
-    const res = await api.mergeTables(selectedTableIdsForMerge, customMergeLabel);
-    if (res.success) {
-      addToast('success', 'Tables Merged Successfully! 🔗', 'Kitchen, Waiters, and Staff notified.');
-      setIsMergeTablesModalOpen(false);
-      setSelectedTableIdsForMerge([]);
-      setCustomMergeLabel('');
-      await loadData();
-    }
+    await api.mergeTables(selectedTableIdsForMerge, customMergeLabel);
+    addToast('success', 'Tables Merged Successfully! 🔗', 'Kitchen, Waiters, and Staff notified.');
+    setIsMergeTablesModalOpen(false);
+    setSelectedTableIdsForMerge([]);
+    setCustomMergeLabel('');
+    await loadData();
   };
 
   const handleUnmergeTables = async (tableIds: string[]) => {
