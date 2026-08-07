@@ -137,6 +137,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     }
   };
 
+  const handleBulkImportBarDrinks = async () => {
+    if (!currentRestaurant) return;
+    const defaultCraftDrinks = [
+      { name: 'Smoked Bourbon Old Fashioned', categoryId: 'Cocktails', price: 18.5, brand: 'Woodford Reserve', alcoholPercentage: 45, bottleSize: '750ml', servingSize: '60ml Peg', description: 'Aged Kentucky bourbon, Angostura bitters & smoked oak rosemary.' },
+      { name: 'Empress Botanical Gin Fizz', categoryId: 'Cocktails', price: 16.0, brand: 'Empress 1908', alcoholPercentage: 42.5, bottleSize: '750ml', servingSize: 'Highball', description: 'Empress 1908 indigo gin, fresh yuzu & elderflower liqueur.' },
+      { name: 'Patrón Añejo Tequila Shot', categoryId: 'Shots', price: 12.0, brand: 'Patrón', alcoholPercentage: 40, bottleSize: '750ml', servingSize: '30ml Shot', description: 'Oak barrel aged 100% blue Weber agave tequila shot with lime salt.' },
+      { name: 'Dom Pérignon Vintage Champagne 2012', categoryId: 'Champagne', price: 280.0, brand: 'Dom Pérignon', alcoholPercentage: 12.5, bottleSize: '750ml Bottle', servingSize: 'Flute Glass', description: 'Prestige cuvée champagne with white peach, mint & toasted brioche notes.' },
+      { name: 'Macallan 18 Sherry Oak Single Malt', categoryId: 'Whiskey', price: 42.0, brand: 'Macallan', alcoholPercentage: 43, bottleSize: '750ml', servingSize: '60ml Neat', description: 'Single malt Scotch whisky matured in hand-crafted sherry seasoned oak casks.' },
+      { name: 'Belvedere Intense Vodka', categoryId: 'Vodka', price: 15.0, brand: 'Belvedere', alcoholPercentage: 40, bottleSize: '1L', servingSize: '60ml Peg', description: 'Quintuple distilled Polish rye vodka with vanilla & black pepper finish.' },
+      { name: 'Craft Hazy Double IPA', categoryId: 'Beer', price: 9.5, brand: 'Hazy Brew Co', alcoholPercentage: 8.2, bottleSize: '500ml', servingSize: 'Draft Pint', description: 'Unfiltered double dry-hopped IPA with tropical fruit aroma.' },
+    ];
+    await api.bulkImportBarMenuItems(currentRestaurant.id, defaultCraftDrinks as any);
+    addToast('success', 'Bulk Craft Drinks Imported 🍹', 'Added 7 premium bar catalog drinks.');
+    await loadData();
+  };
+
   // Staff Management State
   const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
   const [newStaff, setNewStaff] = useState({
@@ -1643,15 +1659,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 </button>
               </div>
 
-              <Button
-                variant="brand"
-                size="sm"
-                onClick={() => setIsAddItemModalOpen(true)}
-                icon={<Plus className="w-3.5 h-3.5" />}
-                className={menuCatalogMode === 'BAR' ? 'bg-purple-600 hover:bg-purple-500 font-bold' : ''}
-              >
-                {menuCatalogMode === 'BAR' ? 'Add Bar Drink 🍸' : 'Add Food Item 🍽️'}
-              </Button>
+              <div className="flex items-center gap-2">
+                {menuCatalogMode === 'BAR' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkImportBarDrinks}
+                    className="border-purple-500/40 text-purple-300 hover:bg-purple-950/40 font-bold text-xs"
+                    icon={<Sparkles className="w-3.5 h-3.5" />}
+                  >
+                    Bulk Import Craft Drinks
+                  </Button>
+                )}
+
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => setIsAddItemModalOpen(true)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                  className={menuCatalogMode === 'BAR' ? 'bg-purple-600 hover:bg-purple-500 font-bold' : ''}
+                >
+                  {menuCatalogMode === 'BAR' ? 'Add Bar Drink 🍸' : 'Add Food Item 🍽️'}
+                </Button>
+              </div>
             </div>
 
             {/* Filter & Search Toolbar */}

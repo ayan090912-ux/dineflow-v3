@@ -200,6 +200,38 @@ export interface MenuCategory {
   order: number;
 }
 
+export interface BarCategory {
+  id: string;
+  restaurantId: string;
+  name: string;
+  icon?: string;
+  displayOrder: number;
+  isEnabled: boolean;
+}
+
+export interface BarMenuItem {
+  id: string;
+  restaurantId: string;
+  categoryId: string;
+  name: string;
+  description: string;
+  price: number;
+  image: string;
+  brand?: string;
+  alcoholPercentage?: number;
+  bottleSize?: string;
+  servingSize?: string;
+  prepTimeMinutes?: number;
+  discountPercentage?: number;
+  isFeatured?: boolean;
+  isRecommended?: boolean;
+  isAvailable: boolean;
+  displayOrder?: number;
+  targetDestination: 'BAR';
+  isAlcoholic: boolean;
+  servingOptions?: string[];
+}
+
 export interface TableReservation {
   reservedForName: string;
   reservedForPhone?: string;

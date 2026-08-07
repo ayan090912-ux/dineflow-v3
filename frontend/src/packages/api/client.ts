@@ -14,6 +14,8 @@ import {
   WaiterNotification,
   PlatformNotification,
   MenuCategory,
+  BarCategory,
+  BarMenuItem,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -29,6 +31,8 @@ export class DineFlowApiClient {
   private restaurants: Restaurant[] = [];
   private menuItems: MenuItem[] = [];
   private categories: MenuCategory[] = [];
+  private barCategories: BarCategory[] = [];
+  private barMenuItems: BarMenuItem[] = [];
   private orders: Order[] = [];
   private tables: Table[] = [];
   private employees: Employee[] = [];
@@ -59,6 +63,8 @@ export class DineFlowApiClient {
           this.restaurants = db.restaurants || [];
           this.menuItems = db.menuItems || [];
           this.categories = db.categories || [];
+          this.barCategories = db.barCategories || [];
+          this.barMenuItems = db.barMenuItems || [];
           this.orders = db.orders || [];
           this.tables = db.tables || [];
           this.employees = db.employees || [];
@@ -100,6 +106,8 @@ export class DineFlowApiClient {
           restaurants: this.restaurants,
           menuItems: this.menuItems,
           categories: this.categories,
+          barCategories: this.barCategories,
+          barMenuItems: this.barMenuItems,
           orders: this.orders,
           tables: this.tables,
           employees: this.employees,
@@ -1086,6 +1094,278 @@ export class DineFlowApiClient {
     await delay(150);
     this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
     this.saveDatabase();
+  }
+
+  // --- Dedicated Bar Category APIs ---
+  async getBarCategories(restaurantId?: string) {
+    await delay(100);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    let cats = this.barCategories.filter((c) => c.restaurantId === targetId);
+    if (cats.length === 0) {
+      const defaultNames = [
+        'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Gin', 'Brandy',
+        'Cocktails', 'Mocktails', 'Champagne', 'Tequila', 'Premium Bottles',
+        'Shots', 'Soft Drinks', 'Coffee', 'Signature Drinks'
+      ];
+      cats = defaultNames.map((name, idx) => ({
+        id: `bar-cat-${targetId}-${idx + 1}`,
+        restaurantId: targetId,
+        name,
+        displayOrder: idx + 1,
+        isEnabled: true,
+      }));
+      this.barCategories.push(...cats);
+      this.saveDatabase();
+    }
+    return cats.sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+
+  async addBarCategory(data: { restaurantId?: string; name: string; isEnabled?: boolean }) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(data.restaurantId) || 'rest-1';
+    const newCat: BarCategory = {
+      id: `bcat-${Date.now()}`,
+      restaurantId: restId,
+      name: data.name,
+      displayOrder: this.barCategories.filter((c) => c.restaurantId === restId).length + 1,
+      isEnabled: data.isEnabled !== false,
+    };
+    this.barCategories.push(newCat);
+    this.saveDatabase();
+    return newCat;
+  }
+
+  async updateBarCategory(id: string, updates: Partial<BarCategory>) {
+    await delay(150);
+    const cat = this.barCategories.find((c) => c.id === id);
+    if (cat) {
+      Object.assign(cat, updates);
+      this.saveDatabase();
+    }
+    return cat;
+  }
+
+  async deleteBarCategory(id: string) {
+    await delay(150);
+    this.barCategories = this.barCategories.filter((c) => c.id !== id);
+    this.saveDatabase();
+  }
+
+  async toggleBarCategoryStatus(id: string) {
+    await delay(100);
+    const cat = this.barCategories.find((c) => c.id === id);
+    if (cat) {
+      cat.isEnabled = !cat.isEnabled;
+      this.saveDatabase();
+    }
+    return cat;
+  }
+
+  // --- Dedicated Bar Menu Item APIs ---
+  async getBarMenuItems(restaurantId?: string) {
+    await delay(100);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    let items = this.barMenuItems.filter((m) => m.restaurantId === targetId);
+    // If venue has no drinks created yet, populate standard craft drink menu defaults
+    if (items.length === 0) {
+      items = [
+        {
+          id: `bitem-${targetId}-1`,
+          restaurantId: targetId,
+          categoryId: 'Cocktails',
+          name: 'Smoked Bourbon Old Fashioned',
+          description: 'Aged Kentucky bourbon, Angostura bitters, orange peel & smoked oak rosemary infusion.',
+          price: 18.50,
+          image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600',
+          brand: 'Woodford Reserve',
+          alcoholPercentage: 45,
+          bottleSize: '750ml',
+          servingSize: '60ml Peg',
+          prepTimeMinutes: 4,
+          discountPercentage: 0,
+          isFeatured: true,
+          isRecommended: true,
+          isAvailable: true,
+          displayOrder: 1,
+          targetDestination: 'BAR',
+          isAlcoholic: true,
+          servingOptions: ['On the Rocks', 'Neat', 'Soda Mixer'],
+        },
+        {
+          id: `bitem-${targetId}-2`,
+          restaurantId: targetId,
+          categoryId: 'Cocktails',
+          name: 'Empress Botanical Gin Fizz',
+          description: 'Empress 1908 indigo gin, fresh yuzu, elderflower liqueur, sparkling tonic & butterfly pea floral foam.',
+          price: 16.00,
+          image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600',
+          brand: 'Empress 1908',
+          alcoholPercentage: 42.5,
+          bottleSize: '750ml',
+          servingSize: 'Highball Glass',
+          prepTimeMinutes: 3,
+          discountPercentage: 0,
+          isFeatured: true,
+          isRecommended: true,
+          isAvailable: true,
+          displayOrder: 2,
+          targetDestination: 'BAR',
+          isAlcoholic: true,
+          servingOptions: ['With Tonic', 'On the Rocks', 'Soda Spritz'],
+        },
+        {
+          id: `bitem-${targetId}-3`,
+          restaurantId: targetId,
+          categoryId: 'Beer',
+          name: 'Hazy Hops Double IPA',
+          description: 'Local craft microbrewery double dry-hopped IPA with mango & citrus notes.',
+          price: 9.50,
+          image: 'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=600',
+          brand: 'Hazy Mountain Brew Co',
+          alcoholPercentage: 8.2,
+          bottleSize: '500ml',
+          servingSize: 'Draft Pint',
+          prepTimeMinutes: 2,
+          discountPercentage: 0,
+          isFeatured: false,
+          isRecommended: true,
+          isAvailable: true,
+          displayOrder: 3,
+          targetDestination: 'BAR',
+          isAlcoholic: true,
+          servingOptions: ['Chilled Draft Pint', 'Chilled Can'],
+        },
+        {
+          id: `bitem-${targetId}-4`,
+          restaurantId: targetId,
+          categoryId: 'Wine',
+          name: 'Napa Reserve Cabernet Sauvignon 2019',
+          description: 'Rich dark cherry, blackberry, vanilla bean and roasted espresso oak finish.',
+          price: 24.00,
+          image: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=600',
+          brand: 'Napa Estate Reserve',
+          alcoholPercentage: 14.5,
+          bottleSize: '750ml Bottle',
+          servingSize: 'Wine Glass (150ml)',
+          prepTimeMinutes: 2,
+          discountPercentage: 0,
+          isFeatured: true,
+          isRecommended: true,
+          isAvailable: true,
+          displayOrder: 4,
+          targetDestination: 'BAR',
+          isAlcoholic: true,
+          servingOptions: ['Glass (150ml)', 'Full Bottle (750ml)'],
+        },
+      ];
+      this.barMenuItems.push(...items);
+      this.saveDatabase();
+    }
+    return items;
+  }
+
+  async addBarMenuItem(itemData: Partial<BarMenuItem>) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
+    const newItem: BarMenuItem = {
+      id: `bitem-${Date.now()}`,
+      restaurantId: restId,
+      categoryId: itemData.categoryId || 'Cocktails',
+      name: itemData.name || 'Signature Cocktail',
+      description: itemData.description || 'Craft artisan cocktail mix.',
+      price: itemData.price || 14.50,
+      image: itemData.image || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600',
+      brand: itemData.brand || '',
+      alcoholPercentage: itemData.alcoholPercentage ?? 40,
+      bottleSize: itemData.bottleSize || '750ml',
+      servingSize: itemData.servingSize || '60ml Peg',
+      prepTimeMinutes: itemData.prepTimeMinutes || 4,
+      discountPercentage: itemData.discountPercentage || 0,
+      isFeatured: itemData.isFeatured || false,
+      isRecommended: itemData.isRecommended || false,
+      isAvailable: itemData.isAvailable !== false,
+      displayOrder: itemData.displayOrder || this.barMenuItems.filter((b) => b.restaurantId === restId).length + 1,
+      targetDestination: 'BAR',
+      isAlcoholic: itemData.isAlcoholic !== false,
+      servingOptions: itemData.servingOptions || ['On the Rocks', 'Neat', 'Soda Mixer'],
+    };
+    this.barMenuItems.push(newItem);
+    this.saveDatabase();
+    return newItem;
+  }
+
+  async updateBarMenuItem(itemId: string, updates: Partial<BarMenuItem>) {
+    await delay(150);
+    const item = this.barMenuItems.find((m) => m.id === itemId);
+    if (item) {
+      Object.assign(item, updates);
+      this.saveDatabase();
+    }
+    return item;
+  }
+
+  async duplicateBarMenuItem(itemId: string) {
+    await delay(150);
+    const original = this.barMenuItems.find((m) => m.id === itemId);
+    if (original) {
+      const copy: BarMenuItem = {
+        ...original,
+        id: `bitem-${Date.now()}`,
+        name: `${original.name} (Copy)`,
+      };
+      this.barMenuItems.push(copy);
+      this.saveDatabase();
+      return copy;
+    }
+    return null;
+  }
+
+  async toggleBarMenuItemAvailability(itemId: string) {
+    await delay(100);
+    const item = this.barMenuItems.find((m) => m.id === itemId);
+    if (item) {
+      item.isAvailable = !item.isAvailable;
+      this.saveDatabase();
+    }
+    return item;
+  }
+
+  async deleteBarMenuItem(itemId: string) {
+    await delay(150);
+    this.barMenuItems = this.barMenuItems.filter((m) => m.id !== itemId);
+    this.saveDatabase();
+  }
+
+  async bulkImportBarMenuItems(restaurantId: string, items: Partial<BarMenuItem>[]) {
+    await delay(200);
+    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const created = items.map((i, idx) => ({
+      id: `bitem-${Date.now()}-${idx}`,
+      restaurantId: restId,
+      categoryId: i.categoryId || 'Cocktails',
+      name: i.name || `Imported Drink ${idx + 1}`,
+      description: i.description || '',
+      price: i.price || 12.00,
+      image: i.image || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600',
+      brand: i.brand || '',
+      alcoholPercentage: i.alcoholPercentage ?? 40,
+      bottleSize: i.bottleSize || '750ml',
+      servingSize: i.servingSize || '60ml Peg',
+      prepTimeMinutes: i.prepTimeMinutes || 4,
+      discountPercentage: i.discountPercentage || 0,
+      isFeatured: i.isFeatured || false,
+      isRecommended: i.isRecommended || false,
+      isAvailable: i.isAvailable !== false,
+      displayOrder: (i.displayOrder || idx + 1),
+      targetDestination: 'BAR' as const,
+      isAlcoholic: i.isAlcoholic !== false,
+      servingOptions: i.servingOptions || ['On the Rocks', 'Neat'],
+    }));
+    this.barMenuItems.push(...created);
+    this.saveDatabase();
+    return created;
   }
 
   // Employee APIs
