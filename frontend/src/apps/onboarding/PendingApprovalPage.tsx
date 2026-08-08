@@ -146,7 +146,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
         <div className="pt-2 space-y-2">
           <h1 className="text-3xl font-black text-white tracking-tight">{restName}</h1>
           <p className="text-xs text-slate-400 font-mono">
-            {restaurant?.domain || `${restName.toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app`} • ID: {restaurant?.id || 'rest-new'}
+            {restaurant?.domain || `${(restName || 'restaurant').toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app`} • ID: {restaurant?.id || 'rest-new'}
           </p>
         </div>
 

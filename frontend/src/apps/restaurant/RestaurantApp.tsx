@@ -1172,7 +1172,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 Add Menu Item
               </Button>
             )}
-            <Badge variant="success">Domain: {theme.restaurantName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app</Badge>
+            <Badge variant="success">Domain: {(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app</Badge>
           </div>
         </header>
 
@@ -1183,8 +1183,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <div className="relative rounded-3xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-900">
               <div className="h-44 sm:h-52 w-full relative">
                 <img
-                  src={theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80'}
-                  alt={theme.restaurantName}
+                  src={theme?.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80'}
+                  alt={theme?.restaurantName || 'Restaurant'}
                   className="w-full h-full object-cover brightness-50"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
@@ -1193,8 +1193,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               <div className="p-6 sm:p-8 -mt-20 relative z-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-6">
                 <div className="flex items-end gap-5">
                   <img
-                    src={theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80'}
-                    alt={theme.restaurantName}
+                    src={theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80'}
+                    alt={theme?.restaurantName || 'Restaurant'}
                     className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover border-4 border-slate-950 shadow-2xl bg-slate-900 shrink-0"
                   />
                   <div className="space-y-1">
@@ -1203,11 +1203,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> Restaurant Status: Live
                       </span>
                       <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                        {currentRestaurant?.domain || `${theme.restaurantName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app`}
+                        {currentRestaurant?.domain || `${(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app`}
                       </span>
                     </div>
                     <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                      🍽️ {theme.restaurantName.toUpperCase()}
+                      🍽️ {(theme?.restaurantName || currentRestaurant?.name || 'Restaurant').toUpperCase()}
                     </h1>
                     <p className="text-sm text-slate-300 font-semibold">
                       Welcome Back, {currentUser?.name || 'Restaurant Owner'} 👋
@@ -1518,7 +1518,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <Card className="bg-slate-900 border-slate-800 p-8 max-w-xl mx-auto text-center space-y-6 shadow-2xl">
               <div className="p-6 bg-slate-950 rounded-3xl border border-sky-500/30 inline-block shadow-inner">
                 <QRCodeDisplay
-                  value={`https://${currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order`}
+                  url={`https://${currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order`}
+                  tableNumber="COUNTER"
+                  restaurantName={currentRestaurant?.name || theme?.restaurantName || 'Food Truck'}
+                  restaurantLogo={theme?.logo}
+                  isPickup={true}
                   size={240}
                 />
               </div>

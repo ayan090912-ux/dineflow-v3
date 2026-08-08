@@ -20,28 +20,32 @@ import {
 } from 'lucide-react';
 
 export interface QRCodeDisplayProps {
-  url: string;
-  tableNumber: string;
-  restaurantName: string;
+  url?: string;
+  value?: string;
+  tableNumber?: string;
+  restaurantName?: string;
   restaurantLogo?: string;
   section?: string;
   capacity?: number;
   size?: number;
+  isPickup?: boolean;
 }
 
 export type QRDesignPreset = 'SIMPLE' | 'ACRYLIC_DARK' | 'GOLD_LUXE' | 'WOOD_BISTRO' | 'NEON_CYBER';
 
 export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   url,
+  value,
   tableNumber,
   restaurantName,
   restaurantLogo = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
   section = 'Main Dining Hall',
   capacity = 4,
   size = 200,
+  isPickup = false,
 }) => {
   const [preset, setPreset] = useState<QRDesignPreset>('ACRYLIC_DARK');
-  const [ctaText, setCtaText] = useState('Scan to View Menu & Order Live');
+  const [ctaText, setCtaText] = useState(isPickup || tableNumber === 'COUNTER' ? 'Scan to Order & Collect at Counter' : 'Scan to View Menu & Order Live');
   const [showLogo, setShowLogo] = useState(true);
   const [showWifi, setShowWifi] = useState(true);
   const [accentColor, setAccentColor] = useState('#f43f5e'); // Rose 500
@@ -51,9 +55,13 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
+  const qrUrl = url || value || 'https://dineflow.app';
+  const safeTableNum = (tableNumber || (isPickup ? 'COUNTER' : 'Table 01')).trim();
+  const safeRestName = restaurantName || 'DineFlow Venue';
+
   // Copy link to clipboard
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(qrUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -65,20 +73,20 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
     const image = canvas.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = image;
-    a.download = `QR_Code_${tableNumber.replace(/\s+/g, '_')}_Simple.png`;
+    a.download = `QR_Code_${safeTableNum.replace(/\s+/g, '_')}_Simple.png`;
     a.click();
   };
 
   // Download SVG file
   const handleDownloadSVG = () => {
-    const svgElement = document.getElementById(`qr-svg-${tableNumber.replace(/\s+/g, '_')}`);
+    const svgElement = document.getElementById(`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`);
     if (!svgElement) return;
     const svgData = new XMLSerializer().serializeToString(svgElement);
     const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const svgUrl = URL.createObjectURL(svgBlob);
     const a = document.createElement('a');
     a.href = svgUrl;
-    a.download = `QR_Code_${tableNumber.replace(/\s+/g, '_')}.svg`;
+    a.download = `QR_Code_${safeTableNum.replace(/\s+/g, '_')}.svg`;
     a.click();
     URL.revokeObjectURL(svgUrl);
   };
@@ -314,38 +322,49 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
         {/* Visual Stand Card Container */}
         <div
           ref={printAreaRef}
-          className={`w-full max-w-xs p-6 rounded-3xl transition-all shadow-2xl relative overflow-hidden flex flex-col items-center text-center border-2 ${
-            preset === 'SIMPLE'
-              ? 'bg-white text-slate-900 border-slate-200 shadow-slate-200/50'
-              : preset === 'GOLD_LUXE'
-              ? 'bg-slate-950 text-slate-100 border-amber-500/80 shadow-amber-950/40 ring-1 ring-amber-500/30'
-              : preset === 'WOOD_BISTRO'
-              ? 'bg-stone-900 text-amber-50 border-amber-700/80 shadow-stone-950/50'
-              : preset === 'NEON_CYBER'
-              ? 'bg-slate-950 text-cyan-100 border-cyan-500/80 shadow-cyan-950/50'
-              : 'bg-slate-900 text-white border-rose-500/70 shadow-rose-950/30'
-          }`}
+          className="w-72 sm:w-80 p-6 rounded-3xl text-center space-y-4 shadow-2xl relative transition-all duration-300 border shrink-0"
+          style={{
+            backgroundColor:
+              preset === 'ACRYLIC_DARK'
+                ? '#0f172a'
+                : preset === 'GOLD_LUXE'
+                ? '#1e1b4b'
+                : preset === 'WOOD_BISTRO'
+                ? '#291e10'
+                : preset === 'NEON_CYBER'
+                ? '#020617'
+                : '#ffffff',
+            color: preset === 'SIMPLE' ? '#0f172a' : '#ffffff',
+            borderColor:
+              preset === 'GOLD_LUXE'
+                ? '#fbbf24'
+                : preset === 'NEON_CYBER'
+                ? '#38bdf8'
+                : 'rgba(255,255,255,0.1)',
+          }}
         >
-          {/* Header Restaurant Brand */}
+          {/* Header Branding */}
           <div className="space-y-1 my-1">
             {showLogo && restaurantLogo && (
               <img
                 src={restaurantLogo}
-                alt={restaurantName}
+                alt={safeRestName}
                 className="w-12 h-12 mx-auto rounded-2xl object-cover border-2 border-white/20 shadow-md mb-2"
               />
             )}
-            <h3 className="font-black text-lg tracking-tight uppercase">{restaurantName}</h3>
-            <p className="text-[11px] opacity-75 font-mono">
-              {section} • {capacity} Seats
-            </p>
+            <h3 className="font-black text-lg tracking-tight uppercase">{safeRestName}</h3>
+            {safeTableNum !== 'COUNTER' && !isPickup && (
+              <p className="text-[11px] opacity-75 font-mono">
+                {section} • {capacity} Seats
+              </p>
+            )}
           </div>
 
           {/* QR Code Container Badge */}
           <div className="p-4 bg-white rounded-2xl shadow-xl my-4 border border-slate-100 relative group">
             <QRCodeCanvas
               ref={qrCanvasRef}
-              value={url}
+              value={qrUrl}
               size={size}
               level="H"
               marginSize={2}
@@ -355,8 +374,8 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
             {/* Hidden SVG for Vector Downloads */}
             <div className="hidden">
               <QRCodeSVG
-                id={`qr-svg-${tableNumber.replace(/\s+/g, '_')}`}
-                value={url}
+                id={`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`}
+                value={qrUrl}
                 size={size}
                 level="H"
                 includeMargin={true}
@@ -377,7 +396,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
           {/* Table Badge */}
           <div className="space-y-0.5">
-            <span className="text-2xl font-black font-mono tracking-wider">{tableNumber}</span>
+            <span className="text-2xl font-black font-mono tracking-wider">{safeTableNum}</span>
           </div>
 
           {/* Footer Wi-Fi Tag */}
