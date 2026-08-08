@@ -168,19 +168,6 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
 
   const currentUser = api.getCurrentUser();
 
-  // Auto-redirect active logged-in users straight to their dashboard so they are never asked for credentials again
-  useEffect(() => {
-    if (currentUser) {
-      const activeDashboard =
-        currentUser.role === 'PLATFORM_ADMIN' || currentUser.role === 'SUPER_ADMIN' ? '/admin/dashboard' :
-        currentUser.role === 'RESTAURANT_OWNER' || currentUser.role === 'MANAGER' ? '/restaurant/dashboard' :
-        currentUser.role === 'CHEF' ? '/kitchen/dashboard' :
-        currentUser.role === 'BARTENDER' || currentUser.role === 'BAR_STAFF' ? '/bar/dashboard' :
-        currentUser.role === 'WAITER' ? '/waiter' : '/restaurant/dashboard';
-      onNavigate(activeDashboard);
-    }
-  }, [currentUser]);
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
       {/* Dynamic Background Glow Elements */}

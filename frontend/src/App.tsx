@@ -106,7 +106,7 @@ export default function App() {
                 <span className="text-[10px] font-mono text-amber-400 font-bold px-1.5 hidden md:block uppercase">Staff:</span>
 
                 <button
-                  onClick={() => navigateTo('/kitchen/login')}
+                  onClick={() => navigateTo(currentUser ? '/kitchen/dashboard' : '/kitchen/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/kitchen')
                       ? 'bg-amber-600 text-white shadow-sm'
@@ -118,7 +118,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => navigateTo('/waiter/login')}
+                  onClick={() => navigateTo(currentUser ? '/waiter' : '/waiter/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/waiter')
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -130,7 +130,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => navigateTo('/bar/login')}
+                  onClick={() => navigateTo(currentUser ? '/bar/dashboard' : '/bar/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/bar')
                       ? 'bg-purple-600 text-white shadow-sm'
@@ -145,7 +145,7 @@ export default function App() {
                 <span className="text-[10px] font-mono text-rose-400 font-bold px-1.5 hidden md:block uppercase">Management:</span>
 
                 <button
-                  onClick={() => navigateTo('/restaurant/login')}
+                  onClick={() => navigateTo(currentUser ? '/restaurant/dashboard' : '/restaurant/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/restaurant')
                       ? 'bg-rose-600 text-white shadow-sm'
@@ -157,7 +157,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => navigateTo('/admin/login')}
+                  onClick={() => navigateTo(currentUser ? '/admin/dashboard' : '/admin/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/admin')
                       ? 'bg-indigo-600 text-white shadow-sm'
