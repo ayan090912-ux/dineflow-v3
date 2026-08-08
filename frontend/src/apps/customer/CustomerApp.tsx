@@ -230,10 +230,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     }));
 
     const restId = api.getCurrentRestaurantId() || 'rest-1';
+    const isNoTable = currentRestaurant?.hasTables === false;
 
     const newOrd = await api.createOrder({
       restaurantId: restId,
-      tableNumber: selectedTableNum,
+      tableNumber: isNoTable ? 'COUNTER' : selectedTableNum,
+      orderType: isNoTable ? 'PICKUP' : 'DINE_IN',
       customerName: 'Guest',
       items: orderItems,
       totalAmount: total,
@@ -245,7 +247,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     setActiveOrder(newOrd);
     setCart([]);
     setIsCartOpen(false);
-    addToast('success', 'Order Transmitted! 🎉', `Routing: ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`);
+    addToast('success', 'Order Transmitted! 🎉', `Order #${newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`);
   };
 
   const handleCallWaiter = () => {
@@ -378,27 +380,37 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       </div>
 
-      {/* Quick Action Bar (Call Waiter & Bill) */}
-      <div className="p-4 grid grid-cols-2 gap-3 bg-slate-950 border-b border-slate-800/80 sticky top-0 z-20 backdrop-blur-md bg-slate-950/90">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCallWaiter}
-          className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 py-2.5 rounded-xl font-bold"
-          icon={<PhoneCall className="w-4 h-4 text-amber-400" />}
-        >
-          Call Waiter
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRequestBill}
-          className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 py-2.5 rounded-xl font-bold"
-          icon={<Receipt className="w-4 h-4 text-emerald-400" />}
-        >
-          Request Bill
-        </Button>
-      </div>
+      {/* Quick Action Bar (Call Waiter & Bill for Tables, or Counter Pickup Header for Food Truck) */}
+      {currentRestaurant?.hasTables !== false ? (
+        <div className="p-4 grid grid-cols-2 gap-3 bg-slate-950 border-b border-slate-800/80 sticky top-0 z-20 backdrop-blur-md bg-slate-950/90">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCallWaiter}
+            className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 py-2.5 rounded-xl font-bold"
+            icon={<PhoneCall className="w-4 h-4 text-amber-400" />}
+          >
+            Call Waiter
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRequestBill}
+            className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 py-2.5 rounded-xl font-bold"
+            icon={<Receipt className="w-4 h-4 text-emerald-400" />}
+          >
+            Request Bill
+          </Button>
+        </div>
+      ) : (
+        <div className="px-4 py-2.5 bg-sky-500/10 border-b border-sky-500/30 text-sky-200 flex items-center justify-between text-xs font-bold sticky top-0 z-20 backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <ShoppingBag className="w-4 h-4 text-sky-400" />
+            <span>Counter Pickup Ordering — Direct to Kitchen</span>
+          </div>
+          <Badge variant="warning" className="text-[10px]">PICKUP</Badge>
+        </div>
+      )}
 
       {/* Food Menu ⇄ Bar Menu Switcher (If Bar Feature is Enabled) */}
       {(currentRestaurant?.hasBar || (currentRestaurant?.hasBar === undefined && currentRestaurant?.features?.bar !== false)) && (

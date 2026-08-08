@@ -1347,50 +1347,70 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 </div>
               </Card>
 
-              {/* Table Alert Summary */}
-              <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-                <h3 className="text-base font-bold text-white">Table Alerts</h3>
-                <div className="space-y-3">
-                  {tables
-                    .filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED')
-                    .map((t) => (
-                      <div
-                        key={t.id}
-                        className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-2">
-                          {t.status === 'WAITER_CALLED' ? (
-                            <PhoneCall className="w-4 h-4 text-amber-400 animate-bounce" />
-                          ) : (
-                            <Receipt className="w-4 h-4 text-emerald-400" />
-                          )}
-                          <div>
-                            <p className="text-xs font-bold text-white">{t.tableNumber}</p>
-                            <p className="text-[10px] text-amber-300">
-                              {t.status === 'WAITER_CALLED' ? 'Requested Waiter Assistance' : 'Requested Final Bill'}
-                            </p>
+              {/* Table Alert Summary / Counter Pickup Summary */}
+              {currentRestaurant?.hasTables !== false ? (
+                <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                  <h3 className="text-base font-bold text-white">Table Alerts</h3>
+                  <div className="space-y-3">
+                    {(tables || [])
+                      .filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED')
+                      .map((t) => (
+                        <div
+                          key={t.id}
+                          className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-2">
+                            {t.status === 'WAITER_CALLED' ? (
+                              <PhoneCall className="w-4 h-4 text-amber-400 animate-bounce" />
+                            ) : (
+                              <Receipt className="w-4 h-4 text-emerald-400" />
+                            )}
+                            <div>
+                              <p className="text-xs font-bold text-white">{t.tableNumber}</p>
+                              <p className="text-[10px] text-amber-300">
+                                {t.status === 'WAITER_CALLED' ? 'Requested Waiter Assistance' : 'Requested Final Bill'}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-[10px] px-2 py-1"
-                          onClick={() => {
-                            api.getTables('rest-1').then(() => {
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-[10px] px-2 py-1"
+                            onClick={() => {
                               addToast('success', 'Alert Cleared');
                               loadData();
-                            });
-                          }}
-                        >
-                          Acknowledge
-                        </Button>
-                      </div>
-                    ))}
-                  {tables.filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length === 0 && (
-                    <p className="text-xs text-slate-500 text-center py-6">No pending waiter calls or bill requests.</p>
-                  )}
-                </div>
-              </Card>
+                            }}
+                          >
+                            Acknowledge
+                          </Button>
+                        </div>
+                      ))}
+                    {(tables || []).filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length === 0 && (
+                      <p className="text-xs text-slate-500 text-center py-6">No pending waiter calls or bill requests.</p>
+                    )}
+                  </div>
+                </Card>
+              ) : (
+                <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                  <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
+                    <Truck className="w-5 h-5 text-sky-400" />
+                    <span>Counter / Pickup Order OS</span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    This venue operates without tables. Customers scan your counter QR code to place pickup orders (#F1024) directly to your Kitchen KDS.
+                  </p>
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-3">
+                    <QrCode className="w-12 h-12 text-sky-400 mx-auto" />
+                    <div>
+                      <p className="text-xs font-bold text-white">Food Truck Counter Entry Point</p>
+                      <p className="text-[10px] font-mono text-slate-400 truncate">https://{currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order</p>
+                    </div>
+                    <Button variant="brand" size="sm" onClick={() => setActiveTab('qr_pickup')} className="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold">
+                      View Printable Counter QR
+                    </Button>
+                  </div>
+                </Card>
+              )}
             </div>
           </div>
         )}
@@ -1475,9 +1495,57 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
           <KitchenETADashboard orders={orders} onRefreshOrders={loadData} />
         )}
 
-        {/* Tab: Bar Terminal KDS */}
+        {/* Tab 3.5: Bar Terminal */}
         {activeTab === 'bar' && (
           <BarTerminal />
+        )}
+
+        {/* Tab 3.6: Counter / Pickup QR Entry Point */}
+        {activeTab === 'qr_pickup' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <QrCode className="w-5 h-5 text-sky-400" /> Business Counter QR Code & Pickup Ordering
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Print or display this single QR code at your Food Truck or Stall counter for customer pickup orders.
+                </p>
+              </div>
+            </div>
+
+            <Card className="bg-slate-900 border-slate-800 p-8 max-w-xl mx-auto text-center space-y-6 shadow-2xl">
+              <div className="p-6 bg-slate-950 rounded-3xl border border-sky-500/30 inline-block shadow-inner">
+                <QRCodeDisplay
+                  value={`https://${currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order`}
+                  size={240}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Badge variant="warning" className="px-3 py-1 text-xs font-mono font-bold">
+                  COUNTER PICKUP QR
+                </Badge>
+                <h4 className="text-xl font-bold text-white">{currentRestaurant?.name || 'Food Truck'}</h4>
+                <p className="text-xs font-mono text-sky-300">https://{currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order</p>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Customers scan this code to view your food menu, add items to cart, and place pickup orders with unique ticket numbers (e.g. #F1024).
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800 flex justify-center gap-3">
+                <Button
+                  variant="brand"
+                  size="md"
+                  onClick={() => window.print()}
+                  className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold"
+                  icon={<QrCode className="w-4 h-4" />}
+                >
+                  Print Counter QR Sign
+                </Button>
+              </div>
+            </Card>
+          </div>
         )}
 
         {/* Tab 4: Table Floorplan, Merging & Reservations */}

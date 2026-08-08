@@ -361,6 +361,7 @@ export interface Order {
   id: string;
   restaurantId: string;
   tableNumber: string;
+  orderType?: 'DINE_IN' | 'PICKUP';
   customerName?: string;
   customerPhone?: string;
   items: OrderItem[];

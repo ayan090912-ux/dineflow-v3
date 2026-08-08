@@ -542,11 +542,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-300 font-semibold mt-0.5">
-                          {order.customerName || 'Walk-in Guest'} • Dine-in
+                          {order.customerName || 'Walk-in Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup Order' : 'Dine-in'}
                         </p>
                       </div>
-                      <Badge variant="brand" className="px-3 py-1 text-sm font-black bg-amber-500 text-slate-950">
-                        📍 T-{order.tableNumber}
+                      <Badge variant={order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'warning' : 'brand'} className="px-3 py-1 text-xs font-black">
+                        {order.tableNumber && order.tableNumber !== 'COUNTER' ? `📍 Table ${order.tableNumber}` : '🛍️ PICKUP ORDER'}
                       </Badge>
                     </div>
 
@@ -598,7 +598,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       onClick={() => handleOpenAcceptModal(order)}
                       icon={<Sparkles className="w-4 h-4" />}
                     >
-                      Accept Ticket & Set Timer
+                      Accept Ticket & Set ETA
                     </Button>
                   </Card>
                 ))
@@ -643,11 +643,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                             )}
                           </div>
                           <p className="text-xs text-slate-300 font-semibold mt-0.5">
-                            {order.customerName || 'Guest'} • Dine-in
+                            {order.customerName || 'Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup Order' : 'Dine-in'}
                           </p>
                         </div>
-                        <Badge variant="brand" className="px-3 py-1 text-sm font-black bg-rose-600 text-white">
-                          📍 T-{order.tableNumber}
+                        <Badge variant={order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'warning' : 'brand'} className="px-3 py-1 text-xs font-black">
+                          {order.tableNumber && order.tableNumber !== 'COUNTER' ? `📍 Table ${order.tableNumber}` : '🛍️ PICKUP ORDER'}
                         </Badge>
                       </div>
 
@@ -779,7 +779,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             <div className="space-y-4">
               <div className="p-3 bg-slate-900 rounded-2xl border border-emerald-500/40 flex justify-between items-center shadow-md">
                 <span className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 3. Plated & Waiter Pass ({readyOrders.length})
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 3. Plated & Ready ({readyOrders.length})
                 </span>
                 <Badge variant="success">{readyOrders.length}</Badge>
               </div>
@@ -788,7 +788,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 <div className="p-8 text-center bg-slate-900/40 rounded-2xl border border-slate-800 text-slate-500 text-xs">
                   <UtensilsCrossed className="w-7 h-7 text-slate-600 mx-auto mb-2" />
                   <p className="font-bold text-slate-400">Pass Window Clean</p>
-                  <p className="text-[11px] text-slate-500 mt-1">No dishes awaiting waiter pickup.</p>
+                  <p className="text-[11px] text-slate-500 mt-1">No dishes awaiting pickup.</p>
                 </div>
               ) : (
                 readyOrders.map((order) => (
@@ -799,10 +799,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     <div className="flex justify-between items-start">
                       <div>
                         <span className="font-mono font-black text-emerald-400 text-xl">#{order.id}</span>
-                        <p className="text-xs text-emerald-300 font-bold mt-0.5">Plated & Ready for Waiter!</p>
+                        <p className="text-xs text-emerald-300 font-bold mt-0.5">Plated & Ready!</p>
                       </div>
-                      <Badge variant="brand" className="px-3 py-1 text-sm font-black bg-emerald-500 text-slate-950">
-                        📍 T-{order.tableNumber}
+                      <Badge variant={order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'warning' : 'brand'} className="px-3 py-1 text-xs font-black">
+                        {order.tableNumber && order.tableNumber !== 'COUNTER' ? `📍 Table ${order.tableNumber}` : '🛍️ PICKUP READY'}
                       </Badge>
                     </div>
 

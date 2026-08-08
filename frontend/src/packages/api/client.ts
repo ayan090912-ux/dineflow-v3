@@ -1313,7 +1313,11 @@ export class DineFlowApiClient {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    return this.tables.filter((t) => t.restaurantId === targetId);
+    const rest = this.restaurants.find((r) => r.id === targetId);
+    if (rest?.hasTables === false) {
+      return [];
+    }
+    return (this.tables || []).filter((t) => t.restaurantId === targetId);
   }
 
   async getEmployees(restaurantId?: string) {
@@ -2178,21 +2182,43 @@ export class DineFlowApiClient {
   async createOrder(orderData: Partial<Order>) {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
+    const rest = this.restaurants.find((r) => r.id === restId);
+
+    const isNoTableFoodTruck = rest?.businessType === 'FOOD_TRUCK' && rest?.hasTables === false;
+    const isPickup = isNoTableFoodTruck || orderData.orderType === 'PICKUP' || orderData.tableNumber === 'COUNTER';
+
+    let dest: 'KITCHEN' | 'BAR' | 'MIXED' = orderData.targetDestination || 'KITCHEN';
+    if (orderData.items && orderData.items.length > 0) {
+      const hasFood = orderData.items.some((i) => i.targetDestination !== 'BAR');
+      const hasBar = orderData.items.some((i) => i.targetDestination === 'BAR');
+      if (hasFood && hasBar) dest = 'MIXED';
+      else if (hasBar) dest = 'BAR';
+      else dest = 'KITCHEN';
+    }
+
+    const orderSeq = (this.orders.filter((o) => o.restaurantId === restId).length + 101);
+    const prefix = isPickup ? (rest?.orderNumberPrefix || 'F') : (rest?.orderNumberPrefix || 'ORD');
+    const customOrderId = orderData.id || `${prefix.replace(/#/g, '')}${orderSeq}`;
+
     const newOrd: Order = {
-      id: `ord-${Date.now()}`,
+      id: customOrderId,
       restaurantId: restId,
-      tableNumber: orderData.tableNumber || 'Table 01',
+      tableNumber: isPickup ? 'COUNTER' : (orderData.tableNumber || 'Table 01'),
+      orderType: isPickup ? 'PICKUP' : 'DINE_IN',
       customerName: orderData.customerName || 'Guest',
+      customerPhone: orderData.customerPhone,
       items: orderData.items || [],
       totalAmount: orderData.totalAmount || 0,
       taxAmount: orderData.taxAmount || 0,
       tipAmount: orderData.tipAmount || 0,
       status: orderData.status || 'PENDING',
-      targetDestination: orderData.targetDestination || 'KITCHEN',
+      targetDestination: dest,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       paymentStatus: orderData.paymentStatus || 'UNPAID',
+      specialInstructions: orderData.specialInstructions,
     };
+
     this.orders.unshift(newOrd);
     this.saveDatabase();
     realtimeBus.emit('OrderCreated' as any, {
