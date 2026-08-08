@@ -1147,10 +1147,13 @@ export class DineFlowApiClient {
 
   async getOwnerRestaurants() {
     await delay(100);
-    if (!this.currentUser) return [];
-    return this.restaurants.filter(
-      (r) => !r.isDeleted && (r.ownerEmail?.toLowerCase() === this.currentUser?.email?.toLowerCase() || r.id === this.currentUser?.restaurantId)
+    const active = this.restaurants.filter((r) => !r.isDeleted);
+    if (!this.currentUser) return active;
+    const email = this.currentUser.email?.toLowerCase();
+    const myRests = active.filter(
+      (r) => r.ownerEmail?.toLowerCase() === email || r.id === this.currentUser?.restaurantId || r.orgId === this.currentUser?.orgId
     );
+    return myRests.length > 0 ? myRests : active;
   }
 
   async getOrders(restaurantId?: string) {
