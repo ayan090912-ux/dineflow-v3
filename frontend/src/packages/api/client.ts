@@ -763,6 +763,12 @@ export class DineFlowApiClient {
   async createRestaurantForOwner(restData: {
     name: string;
     cuisine?: string;
+    businessType?: BusinessType;
+    hasBar?: boolean;
+    hasTables?: boolean;
+    hasKitchen?: boolean;
+    hasWaiter?: boolean;
+    orderNumberPrefix?: string;
     address?: string;
     phone?: string;
     email?: string;
@@ -775,6 +781,12 @@ export class DineFlowApiClient {
     const id = `rest-${Date.now()}`;
     const slug = restData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const orgId = this.currentUser?.orgId || `org-${Date.now()}`;
+    const bType = restData.businessType || 'RESTAURANT';
+    const hasBar = restData.hasBar !== undefined ? restData.hasBar : (bType === 'BAR');
+    const hasTables = restData.hasTables !== undefined ? restData.hasTables : true;
+    const hasKitchen = restData.hasKitchen !== undefined ? restData.hasKitchen : true;
+    const hasWaiter = restData.hasWaiter !== undefined ? restData.hasWaiter : (hasTables !== false);
+    const orderPrefix = restData.orderNumberPrefix || (bType === 'FOOD_TRUCK' ? '#F' : '#ORD');
 
     const newRest: Restaurant = {
       id,
@@ -782,6 +794,12 @@ export class DineFlowApiClient {
       name: restData.name,
       slug,
       cuisine: restData.cuisine || 'Multi-Cuisine',
+      businessType: bType,
+      hasBar,
+      hasTables,
+      hasKitchen,
+      hasWaiter,
+      orderNumberPrefix: orderPrefix,
       address: restData.address || 'Main Street Center',
       phone: restData.phone || '+1 555-0100',
       email: restData.email || 'contact@dineflow.com',
@@ -793,7 +811,7 @@ export class DineFlowApiClient {
       status: 'CLOSED',
       rating: 5.0,
       activeOrdersCount: 0,
-      tablesCount: 8,
+      tablesCount: hasTables ? 8 : 0,
       submittedAt: new Date().toLocaleDateString(),
       theme: {
         restaurantId: id,
@@ -811,13 +829,13 @@ export class DineFlowApiClient {
       features: restData.features || {
         food_service: true,
         cafe: false,
-        bar: false,
+        bar: hasBar,
         bakery: false,
         desserts: true,
         takeaway: true,
         delivery: true,
-        reservations: true,
-        outdoor_seating: true,
+        reservations: hasTables,
+        outdoor_seating: hasTables,
         vip_rooms: false,
       },
     };
@@ -842,6 +860,12 @@ export class DineFlowApiClient {
     if (existing) {
       existing.name = setupData.restaurantName || setupData.name || existing.name;
       existing.cuisine = setupData.cuisine || existing.cuisine;
+      if (setupData.businessType) existing.businessType = setupData.businessType;
+      if (setupData.hasBar !== undefined) existing.hasBar = setupData.hasBar;
+      if (setupData.hasTables !== undefined) existing.hasTables = setupData.hasTables;
+      if (setupData.hasKitchen !== undefined) existing.hasKitchen = setupData.hasKitchen;
+      if (setupData.hasWaiter !== undefined) existing.hasWaiter = setupData.hasWaiter;
+      if (setupData.orderNumberPrefix) existing.orderNumberPrefix = setupData.orderNumberPrefix;
       existing.restaurantType = setupData.restaurantType || existing.restaurantType;
       existing.address = setupData.address || existing.address;
       existing.city = setupData.city || existing.city;
@@ -1138,16 +1162,40 @@ export class DineFlowApiClient {
     return this.restaurants.find((r) => !r.isDeleted)?.id || null;
   }
 
+  private ensureRestaurantDefaults(rest: Restaurant): Restaurant {
+    if (!rest.businessType) {
+      rest.businessType = rest.features?.bar ? 'BAR' : 'RESTAURANT';
+    }
+    if (rest.hasBar === undefined) {
+      rest.hasBar = rest.businessType === 'BAR' || Boolean(rest.features?.bar);
+    }
+    if (rest.hasKitchen === undefined) {
+      rest.hasKitchen = true;
+    }
+    if (rest.hasTables === undefined) {
+      rest.hasTables = true;
+    }
+    if (rest.hasWaiter === undefined) {
+      rest.hasWaiter = rest.hasTables !== false;
+    }
+    if (!rest.orderNumberPrefix) {
+      rest.orderNumberPrefix = rest.businessType === 'FOOD_TRUCK' ? '#F' : '#ORD';
+    }
+    return rest;
+  }
+
   async getRestaurantDetails(restaurantId?: string) {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return null;
-    return this.restaurants.find((r) => r.id === targetId && !r.isDeleted) || null;
+    const rest = this.restaurants.find((r) => r.id === targetId && !r.isDeleted);
+    if (!rest) return null;
+    return this.ensureRestaurantDefaults(rest);
   }
 
   async getOwnerRestaurants() {
     await delay(100);
-    const active = this.restaurants.filter((r) => !r.isDeleted);
+    const active = this.restaurants.filter((r) => !r.isDeleted).map((r) => this.ensureRestaurantDefaults(r));
     if (!this.currentUser) return active;
     const email = this.currentUser.email?.toLowerCase();
     const myRests = active.filter(

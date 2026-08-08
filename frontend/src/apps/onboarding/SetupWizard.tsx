@@ -42,14 +42,31 @@ interface SetupWizardProps {
   onFinishSetup: (setupData: any) => void;
 }
 
-const RESTAURANT_TYPES = [
-  { id: 'fine_dining', name: 'Fine Dining', icon: UtensilsCrossed, desc: 'Upscale seating with multi-course service' },
-  { id: 'cafe', name: 'Cafe & Bistro', icon: Coffee, desc: 'Coffee, pastries, and artisanal light dining' },
-  { id: 'cloud_kitchen', name: 'Cloud Kitchen', icon: Flame, desc: 'Delivery & takeaway optimized dark kitchen' },
-  { id: 'fast_food', name: 'Fast Food', icon: Store, desc: 'High-speed quick service & counter POS' },
-  { id: 'bakery', name: 'Bakery', icon: Coffee, desc: 'Fresh baked goods & custom orders' },
-  { id: 'bar', name: 'Bar & Lounge', icon: Wine, desc: 'Cocktails, beverages, and pub bites' },
-  { id: 'food_truck', name: 'Food Truck', icon: Truck, desc: 'Mobile POS with location dispatch' },
+const CORE_BUSINESS_TYPES = [
+  {
+    id: 'RESTAURANT',
+    name: 'Restaurant',
+    icon: UtensilsCrossed,
+    badge: 'Standard OS',
+    badgeVariant: 'brand' as const,
+    desc: 'Full-service restaurant OS with food menu, tables, waiter workflow & kitchen KDS.',
+  },
+  {
+    id: 'BAR',
+    name: 'Bar & Lounge',
+    icon: Wine,
+    badge: 'Restaurant + Bar Module',
+    badgeVariant: 'warning' as const,
+    desc: 'Full Restaurant OS PLUS Bar Menu, Bar KDS Terminal, mixology order routing & drink prep queue.',
+  },
+  {
+    id: 'FOOD_TRUCK',
+    name: 'Food Truck / Food Stall',
+    icon: Truck,
+    badge: 'Mobile / Counter OS',
+    badgeVariant: 'info' as const,
+    desc: 'Order OS for mobile food trucks & stalls. Supports counter QR ordering, pickup notifications & optional tables.',
+  },
 ];
 
 const BANNER_PRESETS = [
@@ -72,7 +89,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   // Step 1: Business Info & Owner Login Credentials
   const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || 'Lumiere Bistro');
   const [brandName, setBrandName] = useState('Lumiere Hospitality Group');
-  const [restaurantType, setRestaurantType] = useState('fine_dining');
+  const [businessType, setBusinessType] = useState<'RESTAURANT' | 'BAR' | 'FOOD_TRUCK'>('RESTAURANT');
+  const [foodTruckHasTables, setFoodTruckHasTables] = useState<boolean>(false);
   const [ownerName, setOwnerName] = useState(initialOwnerData?.ownerName || initialOwnerData?.name || '');
   const [ownerEmail, setOwnerEmail] = useState(initialOwnerData?.ownerEmail || initialOwnerData?.email || '');
   const [ownerPhone, setOwnerPhone] = useState(initialOwnerData?.phone || '+1 555-0100');
@@ -249,16 +267,30 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   ];
 
   const handleFinish = async () => {
+    const hasBar = businessType === 'BAR';
+    const hasKitchen = true;
+    const hasTables = businessType === 'FOOD_TRUCK' ? foodTruckHasTables : true;
+    const hasWaiter = hasTables;
+    const orderNumberPrefix = businessType === 'FOOD_TRUCK' ? '#F' : '#ORD';
+
     const finalData = {
       restaurantName,
       brandName,
-      restaurantType,
+      businessType,
+      hasBar,
+      hasKitchen,
+      hasTables,
+      hasWaiter,
+      orderNumberPrefix,
       address: `${address}, ${city}, ${state} ${pinCode}, ${country}`,
       timezone,
       currency,
       theme: { logo, banner, primaryColor, secondaryColor },
       tables: { total: totalTables, indoor: indoorTables, outdoor: outdoorTables, vip: vipTables },
-      features,
+      features: {
+        ...features,
+        bar: hasBar,
+      },
       employees,
       categories,
       menuItems,
@@ -279,13 +311,22 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
       const rest = await api.createRestaurantForOwner({
         name: restaurantName,
-        cuisine: restaurantType.replace('_', ' '),
+        cuisine: businessType === 'BAR' ? 'Bar & Lounge' : businessType === 'FOOD_TRUCK' ? 'Street Food & Truck' : 'Multi-Cuisine',
+        businessType,
+        hasBar,
+        hasKitchen,
+        hasTables,
+        hasWaiter,
+        orderNumberPrefix,
         address: `${address}, ${city}, ${state} ${pinCode}`,
         phone: ownerPhone || '+1 555-0100',
         email: ownerEmail || 'owner@restaurant.com',
         ownerName: ownerName || 'Restaurant Owner',
         ownerEmail: ownerEmail || 'owner@restaurant.com',
-        features,
+        features: {
+          ...features,
+          bar: hasBar,
+        },
         theme: {
           logo,
           bannerUrl: banner,
@@ -298,6 +339,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       await api.submitRestaurantLaunch({
         id: rest?.id,
         name: rest?.name || restaurantName,
+        businessType,
+        hasBar,
+        hasKitchen,
+        hasTables,
+        hasWaiter,
       });
 
       onFinishSetup(finalData);
@@ -433,25 +479,25 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3">
-              <label className="text-xs font-semibold text-slate-300">Select Venue Category / Concept *</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {RESTAURANT_TYPES.map((type) => {
+            <div className="space-y-4">
+              <label className="text-xs font-semibold text-slate-300">Select Business Type & Architecture *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {CORE_BUSINESS_TYPES.map((type) => {
                   const Icon = type.icon;
-                  const isSelected = restaurantType === type.id;
+                  const isSelected = businessType === type.id;
                   return (
                     <div
                       key={type.id}
-                      onClick={() => setRestaurantType(type.id)}
-                      className={`p-4 rounded-2xl border cursor-pointer transition-all space-y-2 ${
+                      onClick={() => setBusinessType(type.id as any)}
+                      className={`p-4 rounded-2xl border cursor-pointer transition-all space-y-2.5 ${
                         isSelected
                           ? 'bg-rose-600/10 border-rose-500 text-white shadow-lg shadow-rose-950/20'
                           : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <Icon className={`w-5 h-5 ${isSelected ? 'text-rose-400' : 'text-slate-500'}`} />
-                        {isSelected && <CheckCircle2 className="w-4 h-4 text-rose-500" />}
+                        <Icon className={`w-6 h-6 ${isSelected ? 'text-rose-400' : 'text-slate-500'}`} />
+                        <Badge variant={type.badgeVariant}>{type.badge}</Badge>
                       </div>
                       <h4 className="text-sm font-bold text-white">{type.name}</h4>
                       <p className="text-[11px] text-slate-400 leading-snug">{type.desc}</p>
@@ -459,6 +505,44 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   );
                 })}
               </div>
+
+              {/* Food Truck / Stall Table Configuration Question */}
+              {businessType === 'FOOD_TRUCK' && (
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-sky-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">Food Truck Table Configuration</h4>
+                  </div>
+                  <p className="text-xs text-slate-400">Do you have tables / seating at your Food Truck or Stall?</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFoodTruckHasTables(false)}
+                      className={`p-3 rounded-xl border text-left space-y-1 transition-all cursor-pointer ${
+                        !foodTruckHasTables
+                          ? 'bg-sky-500/10 border-sky-500 text-white font-bold'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-sky-400">NO (Takeaway / Counter Pickup Only)</div>
+                      <p className="text-[10px] text-slate-400 leading-tight">Customer orders via counter QR code & receives pickup order number (e.g. #F1024).</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFoodTruckHasTables(true)}
+                      className={`p-3 rounded-xl border text-left space-y-1 transition-all cursor-pointer ${
+                        foodTruckHasTables
+                          ? 'bg-emerald-500/10 border-emerald-500 text-white font-bold'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-emerald-400">YES (Outdoor / Stall Seating)</div>
+                      <p className="text-[10px] text-slate-400 leading-tight">Enable table QR codes, session management, and optional waiter workflow.</p>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         )}

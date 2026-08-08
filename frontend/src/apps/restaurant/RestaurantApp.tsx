@@ -85,7 +85,7 @@ interface RestaurantAppProps {
 
 export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLogout }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'theme' | 'waiter'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'theme' | 'waiter' | 'qr_pickup'>('dashboard');
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -964,59 +964,76 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
           {/* Navigation Links */}
           <nav className="space-y-1">
-            {[
-              { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-              {
-                id: 'waiter',
-                label: 'Waiter Terminal OS',
-                icon: <PhoneCall className="w-4 h-4 text-amber-400" />,
-                badge: 'LIVE',
-              },
-              {
-                id: 'orders',
-                label: 'POS Orders',
-                icon: <ShoppingBag className="w-4 h-4" />,
-                badge: orders.filter((o) => o.status !== 'COMPLETED').length,
-              },
-              { id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4" /> },
-              ...(currentRestaurant?.features?.bar !== false
-                ? [{ id: 'bar', label: 'Bar Terminal KDS', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
-                : []),
-              {
-                id: 'tables',
-                label: 'Table Floorplan',
-                icon: <Grid className="w-4 h-4" />,
-                badge: tables.filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length > 0 ? 'ALERT' : undefined,
-              },
-              { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
-              { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
-              { id: 'inventory', label: 'Inventory', icon: <Package className="w-4 h-4" /> },
-              { id: 'theme', label: 'Branding & Theme', icon: <Palette className="w-4 h-4" /> },
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  activeTab === item.id
-                    ? 'bg-[var(--brand-primary,#e11d48)]/20 text-white border border-[var(--brand-primary,#e11d48)]/40 shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  {item.icon}
-                  {item.label}
-                </div>
-                {item.badge && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      item.badge === 'ALERT' ? 'bg-amber-500 text-slate-950 animate-pulse' : 'bg-slate-800 text-slate-200 border border-slate-700'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            ))}
+            {(() => {
+              const hasBarModule = currentRestaurant?.hasBar ?? (currentRestaurant?.businessType === 'BAR' || currentRestaurant?.features?.bar !== false);
+              const hasTablesModule = currentRestaurant?.hasTables !== false;
+              const hasWaiterModule = (currentRestaurant?.hasWaiter !== false) && hasTablesModule;
+              const isFoodTruck = currentRestaurant?.businessType === 'FOOD_TRUCK';
+
+              const links = [
+                { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+                ...(hasWaiterModule
+                  ? [{ id: 'waiter', label: 'Waiter Terminal OS', icon: <PhoneCall className="w-4 h-4 text-amber-400" />, badge: 'LIVE' }]
+                  : []),
+                {
+                  id: 'orders',
+                  label: 'POS Orders',
+                  icon: <ShoppingBag className="w-4 h-4" />,
+                  badge: orders.filter((o) => o.status !== 'COMPLETED').length,
+                },
+                { id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> },
+                ...(hasBarModule
+                  ? [{ id: 'bar', label: 'Bar Terminal KDS', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
+                  : []),
+                ...(hasTablesModule
+                  ? [{
+                      id: 'tables',
+                      label: 'Table Floorplan',
+                      icon: <Grid className="w-4 h-4" />,
+                      badge: tables.filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length > 0 ? 'ALERT' : undefined,
+                    }]
+                  : []),
+                ...(isFoodTruck || !hasTablesModule
+                  ? [{ id: 'qr_pickup', label: 'QR Ordering / Pickup', icon: <QrCode className="w-4 h-4 text-sky-400" />, badge: 'PICKUP' }]
+                  : []),
+                { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
+                { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
+                { id: 'inventory', label: 'Inventory', icon: <Package className="w-4 h-4" /> },
+                { id: 'theme', label: 'Branding & Theme', icon: <Palette className="w-4 h-4" /> },
+              ];
+
+              return links.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as any)}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    activeTab === item.id
+                      ? 'bg-[var(--brand-primary,#e11d48)]/20 text-white border border-[var(--brand-primary,#e11d48)]/40 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {item.icon}
+                    {item.label}
+                  </div>
+                  {item.badge && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        item.badge === 'ALERT'
+                          ? 'bg-amber-500 text-slate-950 animate-pulse'
+                          : item.badge === 'BAR'
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                          : item.badge === 'PICKUP'
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                          : 'bg-slate-800 text-slate-200 border border-slate-700'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              ));
+            })()}
           </nav>
         </div>
 

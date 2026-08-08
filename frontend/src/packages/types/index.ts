@@ -85,12 +85,20 @@ export type RestaurantLifecycleStatus =
   | 'ARCHIVED'
   | 'DELETED';
 
+export type BusinessType = 'RESTAURANT' | 'BAR' | 'FOOD_TRUCK';
+
 export interface Restaurant {
   id: string;
   orgId: string;
   name: string;
   slug: string;
   cuisine: string;
+  businessType?: BusinessType;
+  hasBar?: boolean;
+  hasTables?: boolean;
+  hasKitchen?: boolean;
+  hasWaiter?: boolean;
+  orderNumberPrefix?: string;
   restaurantType?: string;
   description?: string;
   address: string;

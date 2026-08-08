@@ -644,6 +644,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
                     <div className="text-xs space-y-1.5 text-slate-300 bg-slate-950 p-3 rounded-xl border border-slate-800/80">
                       <p className="truncate"><span className="text-slate-500 font-semibold">Owner:</span> {rest.ownerName || 'Owner'} ({rest.ownerEmail || rest.email})</p>
+                      <p><span className="text-slate-500 font-semibold">Type & Flags:</span> <strong className="text-rose-400 font-bold">{rest.businessType || (rest.features?.bar ? 'BAR' : 'RESTAURANT')}</strong> • Bar: <strong className={rest.hasBar ? "text-purple-400" : "text-slate-400"}>{rest.hasBar ? 'YES' : 'NO'}</strong> • Tables: <strong className={rest.hasTables !== false ? "text-emerald-400" : "text-slate-400"}>{rest.hasTables !== false ? 'YES' : 'NO'}</strong></p>
                       <p><span className="text-slate-500 font-semibold">Phone:</span> {rest.phone}</p>
                       <p className="truncate"><span className="text-slate-500 font-semibold">Domain:</span> {rest.domain || `${rest.slug}.dineflow.app`}</p>
                     </div>

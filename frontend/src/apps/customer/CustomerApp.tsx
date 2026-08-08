@@ -401,7 +401,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       </div>
 
       {/* Food Menu ⇄ Bar Menu Switcher (If Bar Feature is Enabled) */}
-      {currentRestaurant?.features?.bar !== false && (
+      {(currentRestaurant?.hasBar || (currentRestaurant?.hasBar === undefined && currentRestaurant?.features?.bar !== false)) && (
         <div className="px-4 pt-3 pb-1">
           <div className="grid grid-cols-2 p-1 bg-slate-950 rounded-2xl border border-slate-800 text-xs font-bold shadow-inner">
             <button
