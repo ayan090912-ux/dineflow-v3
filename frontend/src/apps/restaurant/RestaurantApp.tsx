@@ -51,6 +51,7 @@ import {
   Phone,
   Wine,
   LogOut,
+  Truck,
 } from 'lucide-react';
 import {
   Button,
