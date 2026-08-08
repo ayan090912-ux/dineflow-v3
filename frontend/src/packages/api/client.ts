@@ -625,6 +625,58 @@ export class DineFlowApiClient {
     return { user: waiterUser, tokens, employee: emp, restaurant: rest };
   }
 
+  async loginBar(email: string, password?: string) {
+    await delay(350);
+    const normalizedEmail = email.trim().toLowerCase();
+    const emp = this.employees.find((e) => e.email.toLowerCase() === normalizedEmail);
+
+    if (!emp) {
+      throw new Error('No bar staff account found with this email. Ask your Restaurant Owner to add you in Staff Management.');
+    }
+
+    if (password && emp.password && emp.password !== password) {
+      throw new Error('Invalid password. Please check your credentials and try again.');
+    }
+
+    const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted);
+    if (!rest) {
+      throw new Error('Associated restaurant is inactive or deleted.');
+    }
+
+    emp.status = 'ON_CLOCK';
+    emp.lastLoginAt = new Date().toISOString();
+
+    let barUser = this.users.find((u) => u.email.toLowerCase() === normalizedEmail);
+    if (!barUser) {
+      barUser = {
+        id: `usr-${emp.id}`,
+        name: emp.name,
+        email: emp.email,
+        phone: emp.phone,
+        role: 'BARTENDER',
+        restaurantId: emp.restaurantId,
+        orgId: rest.orgId,
+        isEmailVerified: true,
+      };
+      this.users.push(barUser);
+    } else {
+      barUser.role = 'BARTENDER';
+      barUser.restaurantId = emp.restaurantId;
+    }
+
+    const tokens: AuthTokens = {
+      accessToken: `df_bar_jwt_${emp.id}_${Date.now()}`,
+      refreshToken: `df_bar_ref_${emp.id}_${Date.now()}`,
+      expiresIn: 86400,
+      tokenType: 'Bearer',
+    };
+
+    barUser.tokens = tokens;
+    this.saveSession(barUser, tokens, emp.restaurantId);
+    this.saveDatabase();
+    return { user: barUser, tokens, employee: emp, restaurant: rest };
+  }
+
   getCurrentUser(): User | null {
     return this.currentUser;
   }
