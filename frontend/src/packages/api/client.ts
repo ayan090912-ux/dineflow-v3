@@ -2112,19 +2112,73 @@ export class DineFlowApiClient {
     await delay(150);
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
-      order.status = 'PREPARING';
+      order.status = 'IN_KITCHEN';
       order.estimatedPrepTimeMinutes = prepTime;
+      order.acceptedAt = new Date().toISOString();
+      order.etaTargetTimestamp = new Date(Date.now() + prepTime * 60000).toISOString();
+      order.isTimerPaused = false;
       this.saveDatabase();
+
+      realtimeBus.emit('OrderAccepted' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
+
+      realtimeBus.emit('ETAUpdated' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
     }
     return order;
   }
 
-  async updateOrderETA(orderId: string, prepTimeMinutes: number, note?: string, updatedBy?: string) {
+  async updateOrderETA(orderId: string, deltaOrMins: number, reason?: string, note?: string) {
     await delay(100);
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
-      order.estimatedPrepTimeMinutes = prepTimeMinutes;
+      const currentMins = order.estimatedPrepTimeMinutes || 15;
+      let newMins = currentMins;
+
+      // Handle delta (+5 or -5) vs absolute value
+      if (deltaOrMins === 5 || deltaOrMins === -5) {
+        newMins = Math.max(1, currentMins + deltaOrMins);
+      } else {
+        newMins = Math.max(1, deltaOrMins);
+      }
+
+      order.estimatedPrepTimeMinutes = newMins;
+
+      // Recalculate target timestamp
+      const baseTime = order.etaTargetTimestamp ? new Date(order.etaTargetTimestamp).getTime() : Date.now();
+      if (deltaOrMins === 5 || deltaOrMins === -5) {
+        order.etaTargetTimestamp = new Date(baseTime + deltaOrMins * 60000).toISOString();
+      } else {
+        order.etaTargetTimestamp = new Date(Date.now() + newMins * 60000).toISOString();
+      }
+
+      if (reason || note) {
+        if (!order.etaHistory) order.etaHistory = [];
+        order.etaHistory.unshift({
+          timestamp: new Date().toISOString(),
+          previousMinutes: currentMins,
+          newMinutes: newMins,
+          reason: reason || note || 'Adjusted by Chef',
+          updatedBy: 'Kitchen Chef',
+        });
+      }
+
       this.saveDatabase();
+
+      realtimeBus.emit('ETAUpdated' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
     }
     return order;
   }
@@ -2132,6 +2186,18 @@ export class DineFlowApiClient {
   async toggleOrderTimer(orderId: string) {
     await delay(100);
     const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.isTimerPaused = !order.isTimerPaused;
+      order.updatedAt = new Date().toISOString();
+      this.saveDatabase();
+
+      realtimeBus.emit('ETAUpdated' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
+    }
     return order;
   }
 
@@ -2140,7 +2206,15 @@ export class DineFlowApiClient {
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
       order.status = 'READY';
+      order.readyAt = new Date().toISOString();
       this.saveDatabase();
+
+      realtimeBus.emit('OrderReady' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
     }
     return order;
   }
@@ -2245,7 +2319,12 @@ export class DineFlowApiClient {
 
   async getSmartETARecommendation(itemNames?: any) {
     await delay(100);
-    return { recommendedMinutes: 15, confidenceScore: 0.95 };
+    return {
+      recommendedMinutes: 15,
+      confidenceScore: 0.95,
+      kitchenLoadFactor: 'MODERATE',
+      reasons: ['Base recipe prep time: 12m', 'Current line volume: +3m'],
+    };
   }
 
   // Customer & Portal Helper APIs
