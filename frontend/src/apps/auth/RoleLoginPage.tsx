@@ -333,31 +333,56 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
         </Card>
 
         {/* Portal Switcher Footer */}
-        <div className="space-y-2 text-center">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            Select Portal
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            {[
-              { id: 'admin', path: '/admin/login', label: 'Admin', icon: <Building2 className="w-3.5 h-3.5" /> },
-              { id: 'restaurant', path: '/restaurant/login', label: 'Owner', icon: <Utensils className="w-3.5 h-3.5" /> },
-              { id: 'kitchen', path: '/kitchen/login', label: 'Kitchen', icon: <ChefHat className="w-3.5 h-3.5" /> },
-              { id: 'bar', path: '/bar/login', label: 'Bar Staff', icon: <Wine className="w-3.5 h-3.5" /> },
-              { id: 'waiter', path: '/waiter/login', label: 'Waiter', icon: <PhoneCall className="w-3.5 h-3.5" /> },
-            ].map((p) => (
-              <button
-                key={p.id}
-                onClick={() => onNavigate(p.path)}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-bold border transition-all ${
-                  portal === p.id
-                    ? 'bg-rose-600 text-white border-rose-500 shadow-md'
-                    : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }`}
-              >
-                {p.icon}
-                <span>{p.label}</span>
-              </button>
-            ))}
+        <div className="space-y-3 text-center bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80">
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+              Staff Terminals
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'kitchen', path: '/kitchen/login', label: 'Kitchen KDS', icon: <ChefHat className="w-3.5 h-3.5" /> },
+                { id: 'waiter', path: '/waiter/login', label: 'Waiter OS', icon: <PhoneCall className="w-3.5 h-3.5" /> },
+                { id: 'bar', path: '/bar/login', label: 'Bar Terminal', icon: <Wine className="w-3.5 h-3.5" /> },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => onNavigate(p.path)}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-bold border transition-all ${
+                    portal === p.id
+                      ? 'bg-amber-600 text-white border-amber-500 shadow-md'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  {p.icon}
+                  <span>{p.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5 pt-2 border-t border-slate-800">
+            <p className="text-[10px] font-mono font-bold text-rose-400 uppercase tracking-wider">
+              Management & Admin
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'restaurant', path: '/restaurant/login', label: 'Restaurant Owner OS', icon: <Utensils className="w-3.5 h-3.5" /> },
+                { id: 'admin', path: '/admin/login', label: 'Platform Admin', icon: <Building2 className="w-3.5 h-3.5" /> },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => onNavigate(p.path)}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-bold border transition-all ${
+                    portal === p.id
+                      ? 'bg-rose-600 text-white border-rose-500 shadow-md'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  {p.icon}
+                  <span>{p.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

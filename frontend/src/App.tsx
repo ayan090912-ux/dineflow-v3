@@ -99,32 +99,11 @@ export default function App() {
                   }`}
                 >
                   <Globe className="w-3.5 h-3.5" />
-                  <span>www.dineflow.com</span>
+                  <span>Main Website</span>
                 </button>
 
-                <button
-                  onClick={() => navigateTo('/admin/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                    currentPath.startsWith('/admin')
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>/admin/login</span>
-                </button>
-
-                <button
-                  onClick={() => navigateTo('/restaurant/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                    currentPath.startsWith('/restaurant')
-                      ? 'bg-rose-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Utensils className="w-3.5 h-3.5" />
-                  <span>/restaurant/login</span>
-                </button>
+                <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
+                <span className="text-[10px] font-mono text-amber-400 font-bold px-1.5 hidden md:block uppercase">Staff:</span>
 
                 <button
                   onClick={() => navigateTo('/kitchen/login')}
@@ -135,19 +114,7 @@ export default function App() {
                   }`}
                 >
                   <ChefHat className="w-3.5 h-3.5 text-amber-400" />
-                  <span>/kitchen/login</span>
-                </button>
-
-                <button
-                  onClick={() => navigateTo('/bar/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                    currentPath.startsWith('/bar')
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Wine className="w-3.5 h-3.5 text-purple-400" />
-                  <span>/bar/login</span>
+                  <span>Kitchen KDS</span>
                 </button>
 
                 <button
@@ -159,8 +126,49 @@ export default function App() {
                   }`}
                 >
                   <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>/waiter/login</span>
+                  <span>Waiter Terminal</span>
                 </button>
+
+                <button
+                  onClick={() => navigateTo('/bar/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/bar')
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Wine className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Bar Terminal</span>
+                </button>
+
+                <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
+                <span className="text-[10px] font-mono text-rose-400 font-bold px-1.5 hidden md:block uppercase">Management:</span>
+
+                <button
+                  onClick={() => navigateTo('/restaurant/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/restaurant')
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Utensils className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Owner OS</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('/admin/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/admin')
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Platform Admin</span>
+                </button>
+
+                <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
 
                 <button
                   onClick={() => navigateTo('/customer')}
@@ -171,7 +179,7 @@ export default function App() {
                   }`}
                 >
                   <Smartphone className="w-3.5 h-3.5" />
-                  <span>order.dineflow.com</span>
+                  <span>Customer Ordering</span>
                 </button>
               </div>
 

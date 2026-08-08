@@ -25,8 +25,10 @@ import {
   X,
   Laptop,
   LogOut,
+  ChefHat,
+  Wine,
 } from 'lucide-react';
-import { Button, Card, Badge, Input } from '../../packages/ui';
+import { Button, Card, Badge, Input, Modal } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 
 interface LandingWebsiteProps {
@@ -47,8 +49,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [contactSubmitted, setContactSubmitted] = useState(false);
 
-  // Showcase Active Tab
   const [showcaseTab, setShowcaseTab] = useState<'pos' | 'waiter' | 'kds' | 'customer'>('pos');
+  const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
 
   // Signup Form State
   const [signupForm, setSignupForm] = useState({
@@ -181,10 +183,11 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
           ) : (
             <>
               <button
-                onClick={onLogin}
-                className="text-xs font-bold text-slate-300 hover:text-white px-3 py-2 rounded-xl transition-all hover:bg-slate-900 cursor-pointer"
+                onClick={() => setIsPortalModalOpen(true)}
+                className="text-xs font-bold text-slate-300 hover:text-white px-3 py-2 rounded-xl transition-all hover:bg-slate-900 cursor-pointer flex items-center gap-1.5 border border-slate-800"
               >
-                Log In
+                <span>Log In</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
               <Button
                 variant="brand"
@@ -1099,6 +1102,105 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
           </div>
         </div>
       )}
+
+      {/* Sleek Role & Staff Portal Selector Modal */}
+      <Modal
+        isOpen={isPortalModalOpen}
+        onClose={() => setIsPortalModalOpen(false)}
+        title="Select Your Dedicated Role Portal"
+      >
+        <div className="space-y-5 text-slate-100 p-1">
+          <p className="text-xs text-slate-400">
+            Select your assigned staff terminal or operating portal to sign in:
+          </p>
+
+          {/* Section 1: Staff Operational Terminals */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+              Staff Operational Terminals
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                onClick={() => {
+                  setIsPortalModalOpen(false);
+                  window.location.pathname = '/kitchen/login';
+                }}
+                className="p-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
+              >
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+                  <ChefHat className="w-4 h-4 text-amber-400" />
+                  <span>Kitchen KDS</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">Kitchen prep queue & timers for chefs</p>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsPortalModalOpen(false);
+                  window.location.pathname = '/waiter/login';
+                }}
+                className="p-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
+              >
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                  <PhoneCall className="w-4 h-4 text-emerald-400" />
+                  <span>Waiter Terminal</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">Floor table dispatch & service calls</p>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsPortalModalOpen(false);
+                  window.location.pathname = '/bar/login';
+                }}
+                className="p-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-purple-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
+              >
+                <div className="flex items-center gap-2 text-purple-400 font-bold text-xs">
+                  <Wine className="w-4 h-4 text-purple-400" />
+                  <span>Bar Terminal</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">Mixology queue & drink fulfillment</p>
+              </button>
+            </div>
+          </div>
+
+          {/* Section 2: Management & System Control */}
+          <div className="space-y-2 pt-3 border-t border-slate-800">
+            <p className="text-[11px] font-mono font-bold text-rose-400 uppercase tracking-wider">
+              Management & Platform Administration
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                onClick={() => {
+                  setIsPortalModalOpen(false);
+                  onOpenApp('restaurant');
+                }}
+                className="p-3.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/50 rounded-2xl text-left space-y-1 transition-all group cursor-pointer"
+              >
+                <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
+                  <Utensils className="w-4 h-4 text-rose-400" />
+                  <span>Restaurant Owner OS</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">POS, menu pricing, staff roster & analytics</p>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsPortalModalOpen(false);
+                  onOpenApp('platform');
+                }}
+                className="p-3.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-2xl text-left space-y-1 transition-all group cursor-pointer"
+              >
+                <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
+                  <Building2 className="w-4 h-4 text-indigo-400" />
+                  <span>Platform Admin Control Plane</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">Isolated system admin & cloud verification</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
