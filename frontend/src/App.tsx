@@ -60,9 +60,10 @@ export default function App() {
   // Load orders for kitchen view
   useEffect(() => {
     if (currentPath === '/kitchen/dashboard') {
-      api.getOrders('rest-1').then((o) => setKitchenOrders(o));
+      const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
+      api.getOrders(restId).then((o) => setKitchenOrders(o));
     }
-  }, [currentPath]);
+  }, [currentPath, currentUser]);
 
   // Helper to check role authorization
   const checkRoleAccess = (allowedRoles: string[]) => {
@@ -174,13 +175,41 @@ export default function App() {
                 </button>
               </div>
 
-              <button
-                onClick={() => setShowDomainBar(false)}
-                className="text-[11px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded hover:bg-slate-900 transition-colors hidden md:block"
-                title="Hide domain switcher bar"
-              >
-                Hide Bar ✕
-              </button>
+              {/* Active User Badge & Explicit Logout / Login Control */}
+              <div className="flex items-center gap-2">
+                {currentUser ? (
+                  <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <div className="hidden sm:block text-[11px] leading-tight">
+                      <p className="font-bold text-white max-w-[120px] truncate">{currentUser.name || currentUser.email}</p>
+                      <p className="text-[9px] text-slate-400 font-mono uppercase">{currentUser.role || 'LOGGED IN'}</p>
+                    </div>
+                    <button
+                      onClick={() => handleLogout('/restaurant/login')}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 transition-all cursor-pointer"
+                      title="Explicitly sign out of active session"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span className="hidden md:inline">Log Out</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => navigateTo('/restaurant/login')}
+                    className="flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition-all cursor-pointer"
+                  >
+                    <span>Log In</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setShowDomainBar(false)}
+                  className="text-[11px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded hover:bg-slate-900 transition-colors hidden md:block"
+                  title="Hide domain switcher bar"
+                >
+                  Hide Bar ✕
+                </button>
+              </div>
             </header>
           ) : (
             <button
@@ -294,7 +323,10 @@ export default function App() {
               checkRoleAccess(['CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
                 <KitchenETADashboard
                   orders={kitchenOrders}
-                  onRefreshOrders={() => api.getOrders('rest-1').then(setKitchenOrders)}
+                  onRefreshOrders={() => {
+                    const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
+                    api.getOrders(restId).then(setKitchenOrders);
+                  }}
                   onLogout={() => handleLogout('/kitchen/login')}
                 />
               ) : (
@@ -322,7 +354,7 @@ export default function App() {
               )
             )}
 
-            {currentPath === '/waiter/dashboard' && (
+            {(currentPath === '/waiter' || currentPath === '/waiter/dashboard') && (
               checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
                 <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
               ) : (
@@ -330,7 +362,7 @@ export default function App() {
                   requiredRole="WAITER / FLOOR STAFF"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
-                  targetPath="/waiter/dashboard"
+                  targetPath="/waiter"
                   onNavigate={navigateTo}
                 />
               )

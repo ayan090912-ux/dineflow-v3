@@ -50,6 +50,7 @@ import {
   Unlink,
   Phone,
   Wine,
+  LogOut,
 } from 'lucide-react';
 import {
   Button,
@@ -70,7 +71,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api } from '../../packages/api/client';
-import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus } from '../../packages/types';
+import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus, MenuCategory, BarCategory } from '../../packages/types';
 import { MOCK_CATEGORIES } from '../../packages/data/mockData';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
@@ -93,12 +94,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  // Category Management State
+  const [foodCategories, setFoodCategories] = useState<MenuCategory[]>([]);
+  const [barCategories, setBarCategories] = useState<BarCategory[]>([]);
+  const [isManageCategoriesModalOpen, setIsManageCategoriesModalOpen] = useState(false);
+  const [categoryModalMode, setCategoryModalMode] = useState<'FOOD' | 'BAR'>('FOOD');
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [editingCategory, setEditingCategory] = useState<{ id: string; name: string } | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<{ id: string; name: string; type: 'FOOD' | 'BAR' } | null>(null);
+
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [newItem, setNewItem] = useState({
     name: '',
     description: '',
     price: '',
-    categoryId: 'cat-1',
+    categoryId: '',
+    isVegetarian: true,
     image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop&q=80',
   });
 
@@ -106,6 +117,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [menuCatalogMode, setMenuCatalogMode] = useState<'FOOD' | 'BAR'>('FOOD');
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('ALL');
+  const [dietaryFilter, setDietaryFilter] = useState<'ALL' | 'VEG' | 'NON_VEG'>('ALL');
 
   const [isEditItemModalOpen, setIsEditItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -116,13 +128,24 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     if (menuCatalogMode === 'BAR' && !isBarItem) return false;
     if (menuCatalogMode === 'FOOD' && isBarItem) return false;
 
-    const matchesCategory = selectedMenuCategory === 'ALL' || item.categoryId === selectedMenuCategory || item.barCategory === selectedMenuCategory;
+    const foodCatObj = foodCategories.find((c) => c.id === item.categoryId || c.name === item.categoryId);
+    const matchesCategory =
+      selectedMenuCategory === 'ALL' ||
+      item.categoryId === selectedMenuCategory ||
+      (foodCatObj && foodCatObj.name === selectedMenuCategory) ||
+      item.barCategory === selectedMenuCategory;
+
+    const matchesDietary =
+      dietaryFilter === 'ALL' ||
+      (dietaryFilter === 'VEG' && (item.isVegetarian === true || item.dietaryType === 'VEG')) ||
+      (dietaryFilter === 'NON_VEG' && (item.isVegetarian === false || item.dietaryType === 'NON_VEG'));
+
     const matchesSearch =
       item.name.toLowerCase().includes(menuSearchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(menuSearchQuery.toLowerCase()) ||
       (item.brand && item.brand.toLowerCase().includes(menuSearchQuery.toLowerCase())) ||
       item.price.toString().includes(menuSearchQuery);
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesDietary && matchesSearch;
   });
 
   const handleDuplicateItem = async (itemId: string) => {
@@ -415,16 +438,64 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       });
     }
 
-    const o = await api.getOrders(rest.id);
-    const m = await api.getMenuItems(rest.id);
-    const t = await api.getTables(rest.id);
-    const e = await api.getEmployees(rest.id);
-    const i = await api.getInventory(rest.id);
+    const o = await api.getOrders(rest?.id);
+    const m = await api.getMenuItems(rest?.id);
+    const t = await api.getTables(rest?.id);
+    const e = await api.getEmployees(rest?.id);
+    const i = await api.getInventory(rest?.id);
+    const fc = await api.getCategories(rest?.id);
+    const bc = await api.getBarCategories(rest?.id);
     setOrders(o);
     setMenuItems(m);
     setTables(t);
     setEmployees(e);
     setInventory(i);
+    setFoodCategories(fc);
+    setBarCategories(bc);
+  };
+
+  // Category CRUD Handlers
+  const handleAddCategory = async () => {
+    if (!newCategoryInput.trim()) {
+      addToast('error', 'Validation Error', 'Category name cannot be empty.');
+      return;
+    }
+    const restId = currentRestaurant?.id || 'rest-1';
+    if (categoryModalMode === 'FOOD') {
+      await api.addCategory({ restaurantId: restId, name: newCategoryInput.trim() });
+      addToast('success', 'Food Category Added 🍽️', `Added "${newCategoryInput.trim()}"`);
+    } else {
+      await api.addBarCategory({ restaurantId: restId, name: newCategoryInput.trim() });
+      addToast('success', 'Bar Category Added 🍸', `Added "${newCategoryInput.trim()}"`);
+    }
+    setNewCategoryInput('');
+    await loadData();
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!editingCategory || !editingCategory.name.trim()) return;
+    if (categoryModalMode === 'FOOD') {
+      await api.updateCategory(editingCategory.id, { name: editingCategory.name.trim() });
+      addToast('success', 'Category Renamed ✏️', `Updated to "${editingCategory.name.trim()}"`);
+    } else {
+      await api.updateBarCategory(editingCategory.id, { name: editingCategory.name.trim() });
+      addToast('success', 'Bar Category Renamed ✏️', `Updated to "${editingCategory.name.trim()}"`);
+    }
+    setEditingCategory(null);
+    await loadData();
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deletingCategory) return;
+    if (deletingCategory.type === 'FOOD') {
+      await api.deleteCategory(deletingCategory.id);
+      addToast('info', 'Category Deleted 🗑️', `Deleted category "${deletingCategory.name}"`);
+    } else {
+      await api.deleteBarCategory(deletingCategory.id);
+      addToast('info', 'Bar Category Deleted 🗑️', `Deleted category "${deletingCategory.name}"`);
+    }
+    setDeletingCategory(null);
+    await loadData();
   };
 
   const handleRequestLaunch = async () => {
@@ -468,6 +539,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     }
     const restId = currentRestaurant?.id || 'rest-1';
     const isBar = menuCatalogMode === 'BAR';
+    const isVeg = isBar ? false : newItem.isVegetarian;
+
     await api.addMenuItem({
       restaurantId: restId,
       categoryId: newItem.categoryId,
@@ -477,6 +550,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       price: parseFloat(newItem.price),
       image: newItem.image || (isBar ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600' : 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600'),
       isAvailable: true,
+      isVegetarian: isVeg,
+      dietaryType: isVeg ? 'VEG' : 'NON_VEG',
       targetDestination: isBar ? 'BAR' : 'KITCHEN',
       isAlcoholic: isBar,
       alcoholPercentage: isBar ? 40 : 0,
@@ -484,7 +559,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     });
     addToast('success', `${isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `${newItem.name} added to catalog`);
     setIsAddItemModalOpen(false);
-    setNewItem({ name: '', description: '', price: '', categoryId: isBar ? 'Cocktails' : 'cat-1', image: '' });
+    setNewItem({ name: '', description: '', price: '', categoryId: isBar ? 'Cocktails' : 'cat-1', isVegetarian: true, image: '' });
     loadData();
   };
 
@@ -498,12 +573,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Validation Failed', 'Item name and price are required');
       return;
     }
+    const isVeg = editingItem.isVegetarian !== undefined ? editingItem.isVegetarian : (editingItem.dietaryType === 'VEG');
     await api.updateMenuItem(editingItem.id, {
       name: editingItem.name,
       description: editingItem.description,
       price: typeof editingItem.price === 'string' ? parseFloat(editingItem.price) : editingItem.price,
       categoryId: editingItem.categoryId,
       barCategory: editingItem.barCategory,
+      isVegetarian: isVeg,
+      dietaryType: isVeg ? 'VEG' : 'NON_VEG',
       brand: editingItem.brand,
       alcoholPercentage: editingItem.alcoholPercentage,
       glassSize: editingItem.glassSize,
@@ -788,7 +866,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               variant="brand"
               onClick={async () => {
                 if (currentRestaurant) {
-                  await api.approveRestaurant(currentRestaurant.id);
+                  const approvedRest = await api.approveRestaurant(currentRestaurant.id);
+                  if (approvedRest) {
+                    setCurrentRestaurant({ ...approvedRest });
+                  }
                   addToast('success', 'Restaurant System Live! 🚀', 'Your restaurant is fully approved and active.');
                   await loadData();
                 }
@@ -940,7 +1021,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         </div>
 
         {/* Quick Footer */}
-        <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+        <div className="pt-4 border-t border-slate-800 space-y-3">
           <div className="flex items-center gap-2 overflow-hidden">
             <Avatar name={currentUser?.name || 'Restaurant Owner'} size="sm" status="online" />
             <div className="truncate">
@@ -948,6 +1029,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               <p className="text-[10px] text-slate-400 truncate">{currentUser?.email || 'owner@restaurant.com'}</p>
             </div>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              await api.logout();
+              if (onLogout) onLogout();
+              else window.location.href = '/restaurant/login';
+            }}
+            className="w-full text-xs border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center gap-1.5"
+          >
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span>Sign Out</span>
+          </Button>
         </div>
       </aside>
 
@@ -1660,6 +1755,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setCategoryModalMode(menuCatalogMode);
+                    setIsManageCategoriesModalOpen(true);
+                  }}
+                  className="border-slate-700 text-slate-200 hover:bg-slate-800 font-bold text-xs"
+                  icon={<Layers className="w-3.5 h-3.5 text-amber-400" />}
+                >
+                  Manage Categories 🏷️
+                </Button>
+
                 {menuCatalogMode === 'BAR' && (
                   <Button
                     variant="outline"
@@ -1675,7 +1783,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 <Button
                   variant="brand"
                   size="sm"
-                  onClick={() => setIsAddItemModalOpen(true)}
+                  onClick={() => {
+                    const firstCat = menuCatalogMode === 'BAR'
+                      ? (barCategories[0]?.name || 'Cocktails')
+                      : (foodCategories[0]?.id || foodCategories[0]?.name || 'cat-starters');
+                    setNewItem({ name: '', description: '', price: '', categoryId: firstCat, image: '' });
+                    setIsAddItemModalOpen(true);
+                  }}
                   icon={<Plus className="w-3.5 h-3.5" />}
                   className={menuCatalogMode === 'BAR' ? 'bg-purple-600 hover:bg-purple-500 font-bold' : ''}
                 >
@@ -1686,12 +1800,45 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
             {/* Filter & Search Toolbar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
-              <div className="w-full sm:w-72">
-                <SearchInput
-                  value={menuSearchQuery}
-                  onChange={setMenuSearchQuery}
-                  placeholder={menuCatalogMode === 'BAR' ? "Search cocktails, wine, brand..." : "Search dish, description, price..."}
-                />
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                <div className="w-full sm:w-64">
+                  <SearchInput
+                    value={menuSearchQuery}
+                    onChange={setMenuSearchQuery}
+                    placeholder={menuCatalogMode === 'BAR' ? "Search cocktails, wine, brand..." : "Search dish, description, price..."}
+                  />
+                </div>
+
+                {menuCatalogMode === 'FOOD' && (
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+                    <button
+                      onClick={() => setDietaryFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                        dietaryFilter === 'ALL' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setDietaryFilter('VEG')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                        dietaryFilter === 'VEG' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40 shadow' : 'text-slate-400 hover:text-emerald-400'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span>Veg</span>
+                    </button>
+                    <button
+                      onClick={() => setDietaryFilter('NON_VEG')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                        dietaryFilter === 'NON_VEG' ? 'bg-rose-950 text-rose-300 border border-rose-500/40 shadow' : 'text-slate-400 hover:text-rose-400'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                      <span>Non-Veg</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Category Pills */}
@@ -1707,25 +1854,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   All {menuCatalogMode === 'BAR' ? 'Drinks' : 'Items'} ({filteredMenuItems.length})
                 </button>
                 {(menuCatalogMode === 'BAR'
-                  ? [
-                      'Beer',
-                      'Wine',
-                      'Whiskey',
-                      'Vodka',
-                      'Rum',
-                      'Gin',
-                      'Cocktails',
-                      'Mocktails',
-                      'Champagne',
-                      'Tequila',
-                      'Premium Bottles',
-                      'Shots',
-                      'Signature Drinks',
-                    ]
-                  : MOCK_CATEGORIES.map((c) => c.name)
+                  ? (barCategories.length > 0
+                      ? barCategories.map((c) => c.name)
+                      : ['Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Gin', 'Cocktails', 'Mocktails', 'Champagne', 'Tequila', 'Shots', 'Signature Drinks'])
+                  : (foodCategories.length > 0
+                      ? foodCategories.map((c) => c.name)
+                      : ['Starters & Appetizers', 'Main Course', 'Gourmet Burgers', 'Wood-Fired Pizza', 'Fresh Salads & Bowls', 'Pasta & Risotto', 'Desserts & Sweets', 'Beverages & Shakes'])
                 ).map((catName) => {
+                  const foodCatObj = foodCategories.find((c) => c.name === catName);
                   const count = menuItems.filter(
-                    (i) => i.categoryId === catName || i.barCategory === catName
+                    (i) => i.categoryId === catName || (foodCatObj && i.categoryId === foodCatObj.id) || i.barCategory === catName
                   ).length;
                   return (
                     <button
@@ -1748,6 +1886,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredMenuItems.map((item) => {
                 const categoryObj = MOCK_CATEGORIES.find((c) => c.id === item.categoryId);
+                const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
                 return (
                   <Card key={item.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-all">
                     <div>
@@ -1770,10 +1909,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h4 className="font-bold text-white text-sm">{item.name}</h4>
+                          <div className="flex items-center gap-1.5">
+                            {!item.isAlcoholic && item.targetDestination !== 'BAR' && (
+                              <span
+                                className={`inline-flex items-center justify-center border p-0.5 rounded-[4px] shrink-0 ${
+                                  isVeg ? 'border-emerald-500 bg-emerald-950/60' : 'border-rose-500 bg-rose-950/60'
+                                }`}
+                                title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+                              >
+                                <span className={`w-2 h-2 rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                              </span>
+                            )}
+                            <h4 className="font-bold text-white text-sm">{item.name}</h4>
+                          </div>
                           {item.brand && <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>}
                         </div>
-                        <span className="font-mono font-bold text-rose-400 text-base">${item.price.toFixed(2)}</span>
+                        <span className="font-mono font-bold text-rose-400 text-base">{formatCurrency(item.price, theme.currency || 'INR (₹)')}</span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
                     </div>
@@ -2078,7 +2229,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
                 <span className="text-[11px] text-emerald-400 font-semibold uppercase">Total Inventory Value</span>
                 <p className="text-2xl font-black text-emerald-400">
-                  ${inventory.reduce((acc, item) => acc + item.quantity * item.costPerUnit, 0).toFixed(2)}
+                  {formatCurrency(inventory.reduce((acc, item) => acc + item.quantity * item.costPerUnit, 0), theme.currency || 'INR (₹)')}
                 </p>
                 <span className="text-[10px] text-slate-500">Valued at current cost</span>
               </Card>
@@ -2158,9 +2309,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                     header: 'Unit Cost & Value',
                     render: (i) => (
                       <div>
-                        <p className="font-mono text-xs text-white">${i.costPerUnit.toFixed(2)} / {i.unit}</p>
+                        <p className="font-mono text-xs text-white">{formatCurrency(i.costPerUnit, theme.currency || 'INR (₹)')} / {i.unit}</p>
                         <p className="font-mono text-[10px] text-emerald-400 font-bold">
-                          Total: ${(i.quantity * i.costPerUnit).toFixed(2)}
+                          Total: {formatCurrency(i.quantity * i.costPerUnit, theme.currency || 'INR (₹)')}
                         </p>
                       </div>
                     ),
@@ -2454,42 +2605,73 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 onChange={(e) => setNewItem({ ...newItem, categoryId: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
               >
-                {(menuCatalogMode === 'BAR'
-                  ? [
-                      'Beer',
-                      'Wine',
-                      'Whiskey',
-                      'Vodka',
-                      'Rum',
-                      'Gin',
-                      'Cocktails',
-                      'Mocktails',
-                      'Champagne',
-                      'Tequila',
-                      'Premium Bottles',
-                      'Shots',
-                      'Signature Drinks',
-                    ].map((c) => (
-                      <option key={c} value={c}>
-                        {c}
+                {menuCatalogMode === 'BAR'
+                  ? (barCategories.length > 0 ? barCategories : [
+                      { id: 'Beer', name: 'Beer' },
+                      { id: 'Wine', name: 'Wine' },
+                      { id: 'Whiskey', name: 'Whiskey' },
+                      { id: 'Cocktails', name: 'Cocktails' },
+                      { id: 'Mocktails', name: 'Mocktails' },
+                    ]).map((c: any) => (
+                      <option key={c.id || c.name} value={c.name || c.id}>
+                        {c.name}
                       </option>
                     ))
-                  : MOCK_CATEGORIES.map((cat) => (
+                  : (foodCategories.length > 0 ? foodCategories : [
+                      { id: 'cat-starters', name: 'Starters & Appetizers' },
+                      { id: 'cat-mains', name: 'Main Course' },
+                      { id: 'cat-burgers', name: 'Gourmet Burgers' },
+                      { id: 'cat-pizza', name: 'Wood-Fired Pizza' },
+                      { id: 'cat-desserts', name: 'Desserts & Sweets' },
+                    ]).map((cat: any) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
                       </option>
-                    )))}
+                    ))}
               </select>
             </div>
 
             <Input
-              label="Price ($ USD) *"
+              label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
               type="number"
-              placeholder="24.00"
+              placeholder="250.00"
               value={newItem.price}
               onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
             />
           </div>
+
+          {menuCatalogMode === 'FOOD' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Food Type (Dietary) *</label>
+              <div className="flex items-center gap-3 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setNewItem({ ...newItem, isVegetarian: true })}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    newItem.isVegetarian
+                      ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-950 shrink-0" />
+                  <span>🟢 Veg</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNewItem({ ...newItem, isVegetarian: false })}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    !newItem.isVegetarian
+                      ? 'bg-rose-950/90 text-rose-300 border border-rose-500/50 shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-rose-950 shrink-0" />
+                  <span>🔴 Non-Veg</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           <Input
             label="Description"
@@ -2535,21 +2717,72 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   onChange={(e) => setEditingItem({ ...editingItem, categoryId: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
                 >
-                  {MOCK_CATEGORIES.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
+                  {editingItem.targetDestination === 'BAR' || editingItem.isAlcoholic
+                    ? (barCategories.length > 0 ? barCategories : [
+                        { id: 'Beer', name: 'Beer' },
+                        { id: 'Wine', name: 'Wine' },
+                        { id: 'Whiskey', name: 'Whiskey' },
+                        { id: 'Cocktails', name: 'Cocktails' },
+                        { id: 'Mocktails', name: 'Mocktails' },
+                      ]).map((c: any) => (
+                        <option key={c.id || c.name} value={c.name || c.id}>
+                          {c.name}
+                        </option>
+                      ))
+                    : (foodCategories.length > 0 ? foodCategories : [
+                        { id: 'cat-starters', name: 'Starters & Appetizers' },
+                        { id: 'cat-mains', name: 'Main Course' },
+                        { id: 'cat-burgers', name: 'Gourmet Burgers' },
+                        { id: 'cat-pizza', name: 'Wood-Fired Pizza' },
+                        { id: 'cat-desserts', name: 'Desserts & Sweets' },
+                      ]).map((cat: any) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
                 </select>
               </div>
 
               <Input
-                label="Price ($ USD) *"
+                label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
                 type="number"
                 value={editingItem.price.toString()}
                 onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) || 0 })}
               />
             </div>
+
+            {!editingItem.isAlcoholic && editingItem.targetDestination !== 'BAR' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Food Type (Dietary) *</label>
+                <div className="flex items-center gap-3 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, isVegetarian: true, dietaryType: 'VEG' })}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                      editingItem.isVegetarian !== false && editingItem.dietaryType !== 'NON_VEG'
+                        ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-950 shrink-0" />
+                    <span>🟢 Veg</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, isVegetarian: false, dietaryType: 'NON_VEG' })}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                      editingItem.isVegetarian === false || editingItem.dietaryType === 'NON_VEG'
+                        ? 'bg-rose-950/90 text-rose-300 border border-rose-500/50 shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-rose-950 shrink-0" />
+                    <span>🔴 Non-Veg</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <Input
               label="Description"
@@ -2900,8 +3133,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               onChange={(e) => setNewInventory({ ...newInventory, minThreshold: e.target.value })}
             />
             <Input
-              label="Unit Cost ($)"
+              label={`Unit Cost (${getCurrencySymbol(theme.currency || 'INR (₹)')}) *`}
               type="number"
+              placeholder="150.00"
               value={newInventory.costPerUnit}
               onChange={(e) => setNewInventory({ ...newInventory, costPerUnit: e.target.value })}
             />
@@ -3365,6 +3599,169 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             Lock Table & Save Reservation
           </Button>
         </div>
+      </Modal>
+
+      {/* Manage Menu Categories Modal */}
+      <Modal
+        isOpen={isManageCategoriesModalOpen}
+        onClose={() => {
+          setIsManageCategoriesModalOpen(false);
+          setEditingCategory(null);
+          setDeletingCategory(null);
+        }}
+        title="Manage Menu Categories (Add, Edit, Delete)"
+      >
+        <div className="space-y-5">
+          {/* Mode Switcher */}
+          <div className="flex items-center justify-between p-1 bg-slate-950 rounded-xl border border-slate-800">
+            <button
+              onClick={() => setCategoryModalMode('FOOD')}
+              className={`w-1/2 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                categoryModalMode === 'FOOD'
+                  ? 'bg-rose-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <UtensilsCrossed className="w-3.5 h-3.5" /> Food Categories ({foodCategories.length})
+            </button>
+
+            <button
+              onClick={() => setCategoryModalMode('BAR')}
+              className={`w-1/2 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                categoryModalMode === 'BAR'
+                  ? 'bg-purple-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Wine className="w-3.5 h-3.5" /> Bar Categories ({barCategories.length})
+            </button>
+          </div>
+
+          {/* Add Category Input Box */}
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+            <label className="text-xs font-semibold text-slate-300">
+              Add New {categoryModalMode === 'FOOD' ? 'Food' : 'Bar'} Category Name
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder={categoryModalMode === 'FOOD' ? 'e.g. Seafood, Tacos, Vegan Delights...' : 'e.g. Craft Beer, Single Malt, Cocktails...'}
+                value={newCategoryInput}
+                onChange={(e) => setNewCategoryInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+              />
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={handleAddCategory}
+                className={categoryModalMode === 'BAR' ? 'bg-purple-600 hover:bg-purple-500 font-bold shrink-0' : 'shrink-0'}
+                icon={<Plus className="w-3.5 h-3.5" />}
+              >
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Categories List */}
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            <h4 className="text-xs font-mono font-bold text-slate-400 uppercase">Existing Categories</h4>
+            {(categoryModalMode === 'FOOD' ? foodCategories : barCategories).length === 0 ? (
+              <p className="text-xs text-slate-500 italic p-3 text-center">No custom categories created yet.</p>
+            ) : (
+              (categoryModalMode === 'FOOD' ? foodCategories : barCategories).map((cat) => {
+                const itemCount = menuItems.filter(
+                  (i) => i.categoryId === cat.id || i.categoryId === cat.name || i.barCategory === cat.name
+                ).length;
+
+                const isEditingThis = editingCategory?.id === cat.id;
+
+                return (
+                  <div
+                    key={cat.id}
+                    className="flex items-center justify-between p-3 bg-slate-900 border border-slate-800/80 rounded-xl text-xs"
+                  >
+                    {isEditingThis ? (
+                      <div className="flex items-center gap-2 flex-1 mr-2">
+                        <Input
+                          value={editingCategory.name}
+                          onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                          className="text-xs"
+                        />
+                        <Button variant="success" size="sm" onClick={handleUpdateCategory} icon={<Save className="w-3.5 h-3.5" />}>
+                          Save
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setEditingCategory(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{cat.name}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">
+                            {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingCategory({ id: cat.id, name: cat.name })}
+                            className="text-slate-400 hover:text-amber-300 px-2 py-1 text-xs"
+                            icon={<Edit className="w-3.5 h-3.5" />}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setDeletingCategory({ id: cat.id, name: cat.name, type: categoryModalMode });
+                            }}
+                            className="text-slate-500 hover:text-rose-400 px-2 py-1 text-xs"
+                            icon={<Trash2 className="w-3.5 h-3.5" />}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Category Confirmation Modal */}
+      <Modal
+        isOpen={!!deletingCategory}
+        onClose={() => setDeletingCategory(null)}
+        title="Confirm Category Deletion"
+      >
+        {deletingCategory && (
+          <div className="space-y-4">
+            <div className="p-4 bg-rose-950/40 border border-rose-800/50 rounded-2xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold text-rose-200 text-sm">Delete Category "{deletingCategory.name}"?</h4>
+                <p className="text-xs text-rose-300/80 mt-1">
+                  This will permanently remove the category. Any items assigned to this category will remain in your catalog.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setDeletingCategory(null)}>
+                Cancel
+              </Button>
+              <Button variant="danger" size="sm" onClick={handleDeleteCategory} icon={<Trash2 className="w-3.5 h-3.5" />}>
+                Delete Category
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

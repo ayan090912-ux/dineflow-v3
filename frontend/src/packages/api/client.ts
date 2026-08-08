@@ -96,6 +96,198 @@ export class DineFlowApiClient {
       this.users.unshift(defaultAdmin);
       this.saveDatabase();
     }
+
+    // Ensure default demo restaurant rest-1 exists with initial data if database is empty
+    if (this.restaurants.length === 0) {
+      const demoRest: Restaurant = {
+        id: 'rest-1',
+        orgId: 'org-1',
+        name: 'Lumière Bistro',
+        slug: 'lumiere-bistro',
+        cuisine: 'French Fine Dining',
+        address: '742 Evergreen Terrace',
+        city: 'New York',
+        phone: '+1 555-0199',
+        email: 'owner@lumiere.com',
+        ownerName: 'Marcus Vance',
+        ownerEmail: 'owner@lumiere.com',
+        isApproved: true,
+        status: 'OPEN',
+        lifecycleStatus: 'LIVE',
+        rating: 4.9,
+        activeOrdersCount: 2,
+        tablesCount: 8,
+        theme: {
+          restaurantId: 'rest-1',
+          restaurantName: 'Lumière Bistro',
+          logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
+          bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+          primaryColor: '#e11d48',
+          secondaryColor: '#475569',
+          accentColor: '#f59e0b',
+          backgroundColor: '#f8fafc',
+          textColor: '#0f172a',
+          fontFamily: 'sans',
+          borderRadius: 'lg',
+          currency: 'INR (₹)',
+        },
+      };
+      this.restaurants.push(demoRest);
+
+      if (this.employees.length === 0) {
+        this.employees.push(
+          {
+            id: 'emp-waiter-1',
+            restaurantId: 'rest-1',
+            name: 'Ayaan',
+            email: 'waiter@lumiere.com',
+            phone: '+1 555-0101',
+            role: 'WAITER',
+            status: 'OFF_CLOCK',
+            hourlyRate: 20,
+            password: 'waiter123',
+            joinedDate: '2025-01-10',
+          },
+          {
+            id: 'emp-chef-1',
+            restaurantId: 'rest-1',
+            name: 'Jean-Luc Picard',
+            email: 'chef@lumiere.com',
+            phone: '+1 555-0102',
+            role: 'CHEF',
+            status: 'ON_CLOCK',
+            hourlyRate: 28,
+            password: 'kitchen123',
+            joinedDate: '2025-01-10',
+          },
+          {
+            id: 'emp-owner-1',
+            restaurantId: 'rest-1',
+            name: 'Marcus Vance',
+            email: 'owner@lumiere.com',
+            phone: '+1 555-0100',
+            role: 'MANAGER',
+            status: 'ON_CLOCK',
+            hourlyRate: 50,
+            password: 'owner123',
+            joinedDate: '2025-01-01',
+          }
+        );
+      }
+
+      if (this.tables.length === 0) {
+        this.tables.push(
+          {
+            id: 'tbl-1',
+            restaurantId: 'rest-1',
+            tableNumber: 'Table 01',
+            capacity: 2,
+            status: 'AVAILABLE',
+            section: 'Main Dining',
+            shape: 'SQUARE',
+            qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://rest-1.dineflow.app/order?table=01',
+          },
+          {
+            id: 'tbl-2',
+            restaurantId: 'rest-1',
+            tableNumber: 'Table 02',
+            capacity: 4,
+            status: 'OCCUPIED',
+            assignedWaiterName: 'Ayaan',
+            section: 'Main Dining',
+            shape: 'RECTANGLE',
+            sessionStartedAt: new Date(Date.now() - 18 * 60000).toISOString(),
+            activeOrderId: 'ord-1043',
+            qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://rest-1.dineflow.app/order?table=02',
+          },
+          {
+            id: 'tbl-8',
+            restaurantId: 'rest-1',
+            tableNumber: 'Table 08',
+            capacity: 4,
+            status: 'OCCUPIED',
+            assignedWaiterName: 'Ayaan',
+            section: 'Patio',
+            shape: 'ROUND',
+            sessionStartedAt: new Date(Date.now() - 12 * 60000).toISOString(),
+            activeOrderId: 'ord-1042',
+            qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://rest-1.dineflow.app/order?table=08',
+          }
+        );
+      }
+
+      if (this.orders.length === 0) {
+        this.orders.push(
+          {
+            id: 'ord-1042',
+            restaurantId: 'rest-1',
+            tableNumber: 'Table 08',
+            customerName: 'Sarah Jenkins',
+            status: 'READY',
+            totalAmount: 32.50,
+            taxAmount: 3.25,
+            tipAmount: 5.00,
+            paymentStatus: 'UNPAID',
+            targetDestination: 'KITCHEN',
+            createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
+            updatedAt: new Date(Date.now() - 5 * 60000).toISOString(),
+            readyAt: new Date(Date.now() - 3 * 60000).toISOString(),
+            items: [
+              { id: 'oi-1', menuItemId: 'item-1', name: 'Chicken Pasta', price: 22.50, quantity: 1, targetDestination: 'KITCHEN' },
+              { id: 'oi-2', menuItemId: 'item-2', name: 'Garlic Bread', price: 10.00, quantity: 1, targetDestination: 'KITCHEN' },
+            ],
+          },
+          {
+            id: 'ord-1043',
+            restaurantId: 'rest-1',
+            tableNumber: 'Table 02',
+            customerName: 'Robert Vance',
+            status: 'PREPARING',
+            totalAmount: 26.00,
+            taxAmount: 2.60,
+            tipAmount: 4.00,
+            paymentStatus: 'UNPAID',
+            targetDestination: 'KITCHEN',
+            createdAt: new Date(Date.now() - 18 * 60000).toISOString(),
+            updatedAt: new Date(Date.now() - 10 * 60000).toISOString(),
+            items: [
+              { id: 'oi-3', menuItemId: 'item-3', name: 'Truffle Risotto', price: 26.00, quantity: 1, targetDestination: 'KITCHEN' },
+            ],
+          }
+        );
+      }
+
+      if (this.customerRequests.length === 0) {
+        this.customerRequests.push(
+          {
+            id: 'req-101',
+            restaurantId: 'rest-1',
+            tableNumber: 'Table 08',
+            requestType: 'WATER',
+            customTitle: 'Extra Water Pitcher',
+            priority: 'MEDIUM',
+            status: 'PENDING',
+            requestedAt: new Date(Date.now() - 4 * 60000).toISOString(),
+            assignedWaiterName: 'Ayaan',
+            customerNotes: 'Please bring extra ice',
+          },
+          {
+            id: 'req-102',
+            restaurantId: 'rest-1',
+            tableNumber: 'Table 02',
+            requestType: 'CALL_WAITER',
+            customTitle: 'Table Call',
+            priority: 'HIGH',
+            status: 'PENDING',
+            requestedAt: new Date(Date.now() - 2 * 60000).toISOString(),
+            assignedWaiterName: 'Ayaan',
+            customerNotes: 'Question about menu allergy options',
+          }
+        );
+      }
+
+      this.saveDatabase();
+    }
   }
 
   private saveDatabase() {
@@ -131,11 +323,13 @@ export class DineFlowApiClient {
         if (savedSession) {
           const parsed = JSON.parse(savedSession);
           if (parsed && parsed.user) {
-            // Find fresh user object in memory
-            const freshUser = this.users.find((u) => u.email.toLowerCase() === parsed.user.email?.toLowerCase()) || parsed.user;
-            this.currentUser = freshUser;
-            this.currentTokens = parsed.tokens || null;
-            this.currentRestaurantId = parsed.restaurantId || freshUser.restaurantId || null;
+            const freshUser = this.users.find((u) => u.email?.toLowerCase() === parsed.user.email?.toLowerCase());
+            const mergedUser = freshUser
+              ? { ...parsed.user, ...freshUser, restaurantId: parsed.restaurantId || freshUser.restaurantId || parsed.user.restaurantId }
+              : parsed.user;
+            this.currentUser = mergedUser;
+            this.currentTokens = parsed.tokens || mergedUser.tokens || null;
+            this.currentRestaurantId = parsed.restaurantId || mergedUser.restaurantId || null;
             return;
           }
         }
@@ -153,6 +347,17 @@ export class DineFlowApiClient {
     this.currentTokens = tokens;
     this.currentRestaurantId = restaurantId || user.restaurantId || null;
 
+    const existingIdx = this.users.findIndex((u) => u.email?.toLowerCase() === user.email?.toLowerCase());
+    if (existingIdx >= 0) {
+      this.users[existingIdx] = {
+        ...this.users[existingIdx],
+        ...user,
+        restaurantId: this.currentRestaurantId || this.users[existingIdx].restaurantId,
+      };
+    } else {
+      this.users.unshift(user);
+    }
+
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         localStorage.setItem(
@@ -168,6 +373,7 @@ export class DineFlowApiClient {
     } catch (e) {
       console.error('Failed to save session to localStorage', e);
     }
+    this.saveDatabase();
   }
 
   // --- Auth & Account APIs ---
@@ -375,21 +581,36 @@ export class DineFlowApiClient {
       throw new Error('No waiter staff account found with this email. Ask your Restaurant Owner to add you in Staff Management.');
     }
 
+    if (password && emp.password && emp.password !== password) {
+      throw new Error('Invalid password. Please check your credentials and try again.');
+    }
+
     const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted);
     if (!rest) {
       throw new Error('Associated restaurant is inactive or deleted.');
     }
 
-    const waiterUser: User = {
-      id: `usr-${emp.id}`,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.phone,
-      role: 'WAITER',
-      restaurantId: emp.restaurantId,
-      orgId: rest.orgId,
-      isEmailVerified: true,
-    };
+    // Set employee status to ON_CLOCK when waiter logs in (backend presence truth)
+    emp.status = 'ON_CLOCK';
+    emp.lastLoginAt = new Date().toISOString();
+
+    let waiterUser = this.users.find((u) => u.email.toLowerCase() === normalizedEmail);
+    if (!waiterUser) {
+      waiterUser = {
+        id: `usr-${emp.id}`,
+        name: emp.name,
+        email: emp.email,
+        phone: emp.phone,
+        role: 'WAITER',
+        restaurantId: emp.restaurantId,
+        orgId: rest.orgId,
+        isEmailVerified: true,
+      };
+      this.users.push(waiterUser);
+    } else {
+      waiterUser.role = 'WAITER';
+      waiterUser.restaurantId = emp.restaurantId;
+    }
 
     const tokens: AuthTokens = {
       accessToken: `df_waiter_jwt_${emp.id}_${Date.now()}`,
@@ -400,6 +621,7 @@ export class DineFlowApiClient {
 
     waiterUser.tokens = tokens;
     this.saveSession(waiterUser, tokens, emp.restaurantId);
+    this.saveDatabase();
     return { user: waiterUser, tokens, employee: emp, restaurant: rest };
   }
 
@@ -412,12 +634,22 @@ export class DineFlowApiClient {
   }
 
   async logout() {
+    if (this.currentUser) {
+      const userEmail = this.currentUser.email?.toLowerCase();
+      const emp = this.employees.find(
+        (e) => e.email?.toLowerCase() === userEmail || e.id === this.currentUser?.id?.replace(/^usr-/, '')
+      );
+      if (emp) {
+        emp.status = 'OFF_CLOCK';
+      }
+    }
     this.currentUser = null;
     this.currentTokens = null;
     this.currentRestaurantId = null;
     if (typeof window !== 'undefined' && window.localStorage) {
       localStorage.removeItem(SESSION_STORAGE_KEY);
     }
+    this.saveDatabase();
   }
 
   // --- Restaurant & Onboarding APIs ---
@@ -597,6 +829,15 @@ export class DineFlowApiClient {
       rest.status = 'OPEN';
       rest.lifecycleStatus = 'LIVE';
       rest.approvedAt = now;
+      rest.rejectionReason = undefined;
+      rest.requestedChanges = undefined;
+
+      // Update active tenant pointers and session
+      this.currentRestaurantId = rest.id;
+      if (this.currentUser) {
+        this.currentUser.restaurantId = rest.id;
+        this.saveSession(this.currentUser, this.currentUser.tokens || ({} as any), rest.id);
+      }
 
       // Ensure associated owner user is linked to this restaurant
       const user = this.users.find(
@@ -817,7 +1058,98 @@ export class DineFlowApiClient {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    return this.menuItems.filter((m) => m.restaurantId === targetId);
+    let items = this.menuItems.filter((m) => m.restaurantId === targetId);
+    if (items.length === 0) {
+      items = [
+        {
+          id: `item-${targetId}-1`,
+          restaurantId: targetId,
+          categoryId: `cat-${targetId}-1`,
+          name: 'Artisanal Burrata & Heirloom Tomato',
+          description: 'Creamy Puglia burrata, balsamic reduction, basil oil & toasted sourdough.',
+          price: 280.00,
+          image: 'https://images.unsplash.com/photo-1592417817098-8f3d6ef23a28?w=600',
+          isAvailable: true,
+          isVegetarian: true,
+          dietaryType: 'VEG',
+          prepTimeMinutes: 12,
+          targetDestination: 'KITCHEN',
+        },
+        {
+          id: `item-${targetId}-2`,
+          restaurantId: targetId,
+          categoryId: `cat-${targetId}-2`,
+          name: 'Wagyu Beef Ribeye Steak (8oz)',
+          description: 'A5 Japanese Wagyu steak served with truffle herb butter & roasted asparagus.',
+          price: 850.00,
+          image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
+          isAvailable: true,
+          isVegetarian: false,
+          dietaryType: 'NON_VEG',
+          prepTimeMinutes: 20,
+          targetDestination: 'KITCHEN',
+        },
+        {
+          id: `item-${targetId}-3`,
+          restaurantId: targetId,
+          categoryId: `cat-${targetId}-6`,
+          name: 'Black Truffle Wild Mushroom Tagliatelle',
+          description: 'Handcrafted egg pasta, porcini mushrooms, parmigiano reggiano & black truffle cream.',
+          price: 380.00,
+          image: 'https://images.unsplash.com/photo-1621996346565-e3d5d6281318?w=600',
+          isAvailable: true,
+          isVegetarian: true,
+          dietaryType: 'VEG',
+          prepTimeMinutes: 15,
+          targetDestination: 'KITCHEN',
+        },
+        {
+          id: `item-${targetId}-4`,
+          restaurantId: targetId,
+          categoryId: `cat-${targetId}-4`,
+          name: 'Wood-Fired Margherita Pizza',
+          description: 'San Marzano tomatoes, fresh mozzarella fior di latte & organic Genovese basil.',
+          price: 320.00,
+          image: 'https://images.unsplash.com/photo-1604382355076-af4b0eb60143?w=600',
+          isAvailable: true,
+          isVegetarian: true,
+          dietaryType: 'VEG',
+          prepTimeMinutes: 14,
+          targetDestination: 'KITCHEN',
+        },
+        {
+          id: `item-${targetId}-5`,
+          restaurantId: targetId,
+          categoryId: `cat-${targetId}-2`,
+          name: 'Pan-Seared Atlantic Salmon',
+          description: 'Crispy skin salmon, lemon dill emulsion, saffron quinoa & charred baby carrots.',
+          price: 620.00,
+          image: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600',
+          isAvailable: true,
+          isVegetarian: false,
+          dietaryType: 'NON_VEG',
+          prepTimeMinutes: 18,
+          targetDestination: 'KITCHEN',
+        },
+        {
+          id: `item-${targetId}-6`,
+          restaurantId: targetId,
+          categoryId: `cat-${targetId}-3`,
+          name: 'Smokey Bacon & Cheddar Gourmet Burger',
+          description: 'Prime Angus patty, applewood bacon, aged cheddar & house secret sauce on brioche.',
+          price: 350.00,
+          image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600',
+          isAvailable: true,
+          isVegetarian: false,
+          dietaryType: 'NON_VEG',
+          prepTimeMinutes: 15,
+          targetDestination: 'KITCHEN',
+        },
+      ];
+      this.menuItems.push(...items);
+      this.saveDatabase();
+    }
+    return items;
   }
 
   async getTables(restaurantId?: string) {
@@ -838,7 +1170,74 @@ export class DineFlowApiClient {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    return this.inventory.filter((i) => i.restaurantId === targetId);
+    let items = this.inventory.filter((i) => i.restaurantId === targetId);
+    if (items.length === 0) {
+      items = [
+        {
+          id: `inv-${targetId}-1`,
+          restaurantId: targetId,
+          name: 'Organic Extra Virgin Olive Oil',
+          category: 'Oils & Condiments',
+          quantity: 25,
+          unit: 'liters',
+          minThreshold: 5,
+          costPerUnit: 450.00,
+          supplierName: 'Verona Imports Ltd.',
+          supplierContact: '+91 98765 43210',
+          storageLocation: 'Pantry Shelf B2',
+          lastRestocked: new Date().toISOString().split('T')[0],
+          status: 'IN_STOCK',
+        },
+        {
+          id: `inv-${targetId}-2`,
+          restaurantId: targetId,
+          name: 'Prime Wagyu Beef Tenderloin',
+          category: 'Meat & Poultry',
+          quantity: 12,
+          unit: 'kg',
+          minThreshold: 4,
+          costPerUnit: 1200.00,
+          supplierName: 'Royal Meats & Co.',
+          supplierContact: '+91 98123 45678',
+          storageLocation: 'Cold Walk-in Freezer #1',
+          lastRestocked: new Date().toISOString().split('T')[0],
+          status: 'IN_STOCK',
+        },
+        {
+          id: `inv-${targetId}-3`,
+          restaurantId: targetId,
+          name: 'Fresh Puglia Burrata & Mozzarella',
+          category: 'Dairy & Cheese',
+          quantity: 18,
+          unit: 'kg',
+          minThreshold: 5,
+          costPerUnit: 320.00,
+          supplierName: 'Milano Artisan Dairy',
+          supplierContact: '+91 97654 32109',
+          storageLocation: 'Dairy Chiller #2',
+          lastRestocked: new Date().toISOString().split('T')[0],
+          status: 'IN_STOCK',
+        },
+        {
+          id: `inv-${targetId}-4`,
+          restaurantId: targetId,
+          name: 'Organic San Marzano Tomatoes',
+          category: 'Produce & Herbs',
+          quantity: 40,
+          unit: 'kg',
+          minThreshold: 10,
+          costPerUnit: 120.00,
+          supplierName: 'Green Earth Organics',
+          supplierContact: '+91 96543 21098',
+          storageLocation: 'Produce Pantry A1',
+          lastRestocked: new Date().toISOString().split('T')[0],
+          status: 'IN_STOCK',
+        },
+      ];
+      this.inventory.push(...items);
+      this.saveDatabase();
+    }
+    return items;
   }
 
   async updateRestaurantTheme(restaurantId: string, theme: ThemeConfig) {
@@ -934,7 +1333,8 @@ export class DineFlowApiClient {
         t.status = 'MERGED';
         t.isMerged = true;
         t.mergedGroupId = mergedId;
-        t.mergedLabel = label;
+        t.mergedGroupLabel = label;
+        t.mergedWithIds = tableIds.filter((x) => x !== t.id);
       }
     });
     this.saveDatabase();
@@ -947,21 +1347,19 @@ export class DineFlowApiClient {
         t.status = 'AVAILABLE';
         t.isMerged = false;
         t.mergedGroupId = undefined;
-        t.mergedLabel = undefined;
+        t.mergedGroupLabel = undefined;
+        t.mergedWithIds = undefined;
       }
     });
     this.saveDatabase();
   }
 
-  async reserveTable(tableId: string, reservationDetails: any) {
-    await delay(150);
+  async reserveTable(tableId: string, details: { reservedForName: string; reservedForPhone?: string; reservationTime: string; partySize: number; notes?: string }) {
+    await delay(200);
     const table = this.tables.find((t) => t.id === tableId);
     if (table) {
       table.status = 'RESERVED';
-      table.reservedForName = reservationDetails.reservedForName;
-      table.reservedForPhone = reservationDetails.reservedForPhone;
-      table.reservationTime = reservationDetails.reservationTime;
-      table.partySize = reservationDetails.partySize;
+      table.reservationDetails = details;
       this.saveDatabase();
     }
     return table;
@@ -972,10 +1370,7 @@ export class DineFlowApiClient {
     const table = this.tables.find((t) => t.id === tableId);
     if (table) {
       table.status = 'AVAILABLE';
-      table.reservedForName = undefined;
-      table.reservedForPhone = undefined;
-      table.reservationTime = undefined;
-      table.partySize = undefined;
+      table.reservationDetails = undefined;
       this.saveDatabase();
     }
     return table;
@@ -1015,6 +1410,7 @@ export class DineFlowApiClient {
   async addMenuItem(itemData: Partial<MenuItem>) {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
+    const isVeg = itemData.isVegetarian !== undefined ? itemData.isVegetarian : (itemData.dietaryType === 'VEG' || true);
     const newItem: MenuItem = {
       id: `item-${Date.now()}`,
       restaurantId: restId,
@@ -1024,7 +1420,8 @@ export class DineFlowApiClient {
       price: itemData.price || 9.99,
       image: itemData.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500',
       isAvailable: itemData.isAvailable !== false,
-      isVegetarian: itemData.isVegetarian || false,
+      isVegetarian: isVeg,
+      dietaryType: isVeg ? 'VEG' : 'NON_VEG',
       isSpicy: itemData.isSpicy || false,
       prepTimeMinutes: itemData.prepTimeMinutes || 15,
       targetDestination: itemData.targetDestination || 'KITCHEN',
@@ -1094,6 +1491,80 @@ export class DineFlowApiClient {
     await delay(150);
     this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
     this.saveDatabase();
+  }
+
+  // --- Dedicated Food Category APIs ---
+  async getCategories(restaurantId?: string) {
+    await delay(100);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    let cats = this.categories.filter((c) => c.restaurantId === targetId);
+    if (cats.length === 0) {
+      const defaultNames = [
+        'Starters & Appetizers',
+        'Main Course',
+        'Gourmet Burgers',
+        'Wood-Fired Pizza',
+        'Fresh Salads & Bowls',
+        'Pasta & Risotto',
+        'Desserts & Sweets',
+        'Chef Specials & Combos',
+        'Sides & Extras',
+        'Beverages & Shakes'
+      ];
+      cats = defaultNames.map((name, idx) => ({
+        id: `cat-${targetId}-${idx + 1}`,
+        restaurantId: targetId,
+        name,
+        order: idx + 1,
+        isEnabled: true,
+      }));
+      this.categories.push(...cats);
+      this.saveDatabase();
+    }
+    return cats.sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+
+  async addCategory(data: { restaurantId?: string; name: string; icon?: string }) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(data.restaurantId) || 'rest-1';
+    const newCat: MenuCategory = {
+      id: `cat-${Date.now()}`,
+      restaurantId: restId,
+      name: data.name,
+      icon: data.icon || 'Utensils',
+      order: this.categories.filter((c) => c.restaurantId === restId).length + 1,
+      isEnabled: true,
+    };
+    this.categories.push(newCat);
+    this.saveDatabase();
+    return newCat;
+  }
+
+  async updateCategory(id: string, updates: Partial<MenuCategory>) {
+    await delay(150);
+    const cat = this.categories.find((c) => c.id === id);
+    if (cat) {
+      Object.assign(cat, updates);
+      this.saveDatabase();
+    }
+    return cat;
+  }
+
+  async deleteCategory(id: string) {
+    await delay(150);
+    this.categories = this.categories.filter((c) => c.id !== id);
+    this.saveDatabase();
+  }
+
+  async toggleCategoryStatus(id: string) {
+    await delay(100);
+    const cat = this.categories.find((c) => c.id === id);
+    if (cat) {
+      cat.isEnabled = !cat.isEnabled;
+      this.saveDatabase();
+    }
+    return cat;
   }
 
   // --- Dedicated Bar Category APIs ---
@@ -1516,10 +1987,24 @@ export class DineFlowApiClient {
   async deliverOrder(orderId: string) {
     await delay(150);
     const order = this.orders.find((o) => o.id === orderId);
-    if (order) {
-      order.status = 'DELIVERED';
-      this.saveDatabase();
+    if (!order) {
+      throw new Error('Order not found.');
     }
+    if (order.status !== 'READY') {
+      throw new Error(`Invalid status transition: Only READY orders can be marked DELIVERED (current status: ${order.status}).`);
+    }
+    order.status = 'DELIVERED';
+    order.deliveredAt = new Date().toISOString();
+    order.updatedAt = new Date().toISOString();
+    this.saveDatabase();
+
+    realtimeBus.emit('OrderDelivered', {
+      orderId: order.id,
+      restaurantId: order.restaurantId,
+      tableNumber: order.tableNumber,
+      data: order,
+    });
+
     return order;
   }
 
@@ -1555,6 +2040,7 @@ export class DineFlowApiClient {
     this.saveDatabase();
     realtimeBus.emit('OrderCreated' as any, {
       orderId: newOrd.id,
+      restaurantId: restId,
       tableNumber: newOrd.tableNumber,
       data: newOrd,
     });
@@ -1563,9 +2049,12 @@ export class DineFlowApiClient {
 
   async getKitchenAnalytics(restaurantId?: string) {
     await delay(100);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const kitchenOrders = this.orders.filter((o) => o.restaurantId === targetId);
+    const completed = kitchenOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'READY');
     return {
       avgPrepTimeMinutes: 14,
-      totalOrdersPrepared: 42,
+      totalOrdersPrepared: completed.length || kitchenOrders.length || 0,
       onTimeDeliveryRate: 98.5,
       activeKitchenStations: 3,
     };
@@ -1579,9 +2068,10 @@ export class DineFlowApiClient {
   // Customer & Portal Helper APIs
   async requestBill(tableNumber: string, restaurantId?: string) {
     await delay(150);
+    const targetRestId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
     const req = {
       id: `req-${Date.now()}`,
-      restaurantId: restaurantId || this.currentRestaurantId || 'rest-1',
+      restaurantId: targetRestId,
       tableNumber,
       requestType: 'BILL',
       message: `Table ${tableNumber} requested the final bill.`,
@@ -1590,14 +2080,20 @@ export class DineFlowApiClient {
     };
     this.customerRequests.push(req as any);
     this.saveDatabase();
+    realtimeBus.emit('BillRequested', {
+      restaurantId: targetRestId,
+      tableNumber,
+      data: req,
+    });
     return req;
   }
 
   async callWaiter(tableNumber: string, reason: string, restaurantId?: string) {
     await delay(150);
+    const targetRestId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
     const req = {
       id: `req-${Date.now()}`,
-      restaurantId: restaurantId || this.currentRestaurantId || 'rest-1',
+      restaurantId: targetRestId,
       tableNumber,
       requestType: 'WATER',
       message: `Table ${tableNumber} called waiter: ${reason}`,
@@ -1606,14 +2102,20 @@ export class DineFlowApiClient {
     };
     this.customerRequests.push(req as any);
     this.saveDatabase();
+    realtimeBus.emit('WaiterCalled', {
+      restaurantId: targetRestId,
+      tableNumber,
+      data: req,
+    });
     return req;
   }
 
   async createCustomerOrder(orderData: any) {
     await delay(250);
+    const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
     const newOrder = {
       id: `ord-${Date.now()}`,
-      restaurantId: orderData.restaurantId || this.currentRestaurantId || 'rest-1',
+      restaurantId: restId,
       tableNumber: orderData.tableNumber || 'Table 01',
       items: orderData.items || [],
       subtotal: orderData.subtotal || 0,
@@ -1624,6 +2126,12 @@ export class DineFlowApiClient {
     };
     this.orders.unshift(newOrder as any);
     this.saveDatabase();
+    realtimeBus.emit('OrderCreated' as any, {
+      orderId: newOrder.id,
+      restaurantId: restId,
+      tableNumber: newOrder.tableNumber,
+      data: newOrder,
+    });
     return newOrder;
   }
 
@@ -1661,12 +2169,16 @@ export class DineFlowApiClient {
   // Waiter & Customer Request APIs
   async getCustomerRequests(restaurantId?: string) {
     await delay(100);
-    return [...this.customerRequests];
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    return this.customerRequests.filter((r) => r.restaurantId === targetId);
   }
 
   async getWaiterNotifications(restaurantId?: string) {
     await delay(100);
-    return [...this.notifications];
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    return this.notifications.filter((n) => !n.restaurantId || n.restaurantId === targetId);
   }
 
   async getWaiterShiftSummary() {
@@ -1679,32 +2191,55 @@ export class DineFlowApiClient {
     };
   }
 
-  async acceptCustomerRequest(reqId: string, waiterId?: string) {
+  async acceptCustomerRequest(reqId: string, waiterName?: string) {
     await delay(100);
     const req = this.customerRequests.find((r) => r.id === reqId);
     if (req) {
       req.status = 'ACCEPTED';
+      req.acceptedAt = new Date().toISOString();
+      if (waiterName) req.assignedWaiterName = waiterName;
       this.saveDatabase();
+
+      realtimeBus.emit('CustomerRequestUpdated', {
+        restaurantId: req.restaurantId,
+        tableNumber: req.tableNumber,
+        data: req,
+      });
     }
     return req;
   }
 
-  async rejectCustomerRequest(reqId: string, waiterId?: string) {
+  async rejectCustomerRequest(reqId: string, waiterName?: string) {
     await delay(100);
     const req = this.customerRequests.find((r) => r.id === reqId);
     if (req) {
       req.status = 'REJECTED';
       this.saveDatabase();
+
+      realtimeBus.emit('CustomerRequestUpdated', {
+        restaurantId: req.restaurantId,
+        tableNumber: req.tableNumber,
+        data: req,
+      });
     }
     return req;
   }
 
-  async updateCustomerRequestStatus(reqId: string, status: any) {
+  async updateCustomerRequestStatus(reqId: string, status: any, waiterName?: string) {
     await delay(100);
     const req = this.customerRequests.find((r) => r.id === reqId);
     if (req) {
       req.status = status;
+      if (waiterName) req.assignedWaiterName = waiterName;
+      if (status === 'ACCEPTED') req.acceptedAt = new Date().toISOString();
+      if (status === 'COMPLETED') req.completedAt = new Date().toISOString();
       this.saveDatabase();
+
+      realtimeBus.emit('CustomerRequestUpdated', {
+        restaurantId: req.restaurantId,
+        tableNumber: req.tableNumber,
+        data: req,
+      });
     }
     return req;
   }

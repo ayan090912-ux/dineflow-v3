@@ -46,6 +46,15 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     return () => clearInterval(interval);
   }, [restaurantId]);
 
+  useEffect(() => {
+    if (restaurant && (restaurant.isApproved || restaurant.lifecycleStatus === 'LIVE')) {
+      const timer = setTimeout(() => {
+        onNavigate('/restaurant/dashboard');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [restaurant, onNavigate]);
+
   const loadRestaurantData = async () => {
     setIsLoading(true);
     try {
@@ -69,7 +78,11 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await loadRestaurantData();
+    const rest = await api.getRestaurantDetails(restaurantId);
+    setRestaurant(rest);
+    if (rest && (rest.isApproved || rest.lifecycleStatus === 'LIVE')) {
+      onNavigate('/restaurant/dashboard');
+    }
     setTimeout(() => setIsRefreshing(false), 500);
   };
 

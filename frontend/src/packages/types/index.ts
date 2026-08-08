@@ -171,6 +171,7 @@ export interface MenuItem {
   image: string;
   isAvailable: boolean;
   isVegetarian?: boolean;
+  dietaryType?: 'VEG' | 'NON_VEG';
   isSpicy?: boolean;
   calories?: number;
   prepTimeMinutes?: number;
@@ -198,6 +199,7 @@ export interface MenuCategory {
   name: string;
   icon?: string;
   order: number;
+  isEnabled?: boolean;
 }
 
 export interface BarCategory {

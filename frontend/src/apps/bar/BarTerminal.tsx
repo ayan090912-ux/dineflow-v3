@@ -197,17 +197,19 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
 
-          {onLogout && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onLogout}
-              className="border-rose-900/50 text-rose-300 hover:bg-rose-950/40"
-              icon={<LogOut className="w-4 h-4" />}
-            >
-              Sign Out
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              await api.logout();
+              if (onLogout) onLogout();
+              else window.location.href = '/bar/login';
+            }}
+            className="border-rose-900/50 text-rose-300 hover:bg-rose-950/40"
+            icon={<LogOut className="w-4 h-4" />}
+          >
+            Sign Out
+          </Button>
         </div>
       </header>
 

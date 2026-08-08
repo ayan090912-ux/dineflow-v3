@@ -110,7 +110,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   onLogout,
 }) => {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [viewMode, setViewMode] = useState<'KDS' | 'WAITER' | 'ANALYTICS' | 'RECIPES'>(
+  const [viewMode, setViewMode] = useState<'KDS' | 'WAITER' | 'ANALYTICS'>(
     activeRole === 'WAITER' ? 'WAITER' : activeRole === 'OWNER' ? 'ANALYTICS' : 'KDS'
   );
 
@@ -120,8 +120,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   // Live Clock Time State
   const [currentTime, setCurrentTime] = useState<string>('');
 
-  // Station Filter & Search State
-  const [selectedStation, setSelectedStation] = useState<string>('ALL');
+  // Search Filter State
   const [searchQuery, setSearchQuery] = useState('');
 
   // Item Prep Checkboxes State (itemId -> boolean)
@@ -194,13 +193,18 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   // Load analytics when on analytics view
   useEffect(() => {
     if (viewMode === 'ANALYTICS') {
-      api.getKitchenAnalytics('rest-1').then(setAnalytics);
+      const restId = api.getCurrentRestaurantId() || undefined;
+      api.getKitchenAnalytics(restId).then(setAnalytics);
     }
   }, [viewMode]);
 
-  // Subscribe to Realtime Bus Events
+  // Subscribe to Realtime Bus Events (Scoped by restaurant_id)
   useEffect(() => {
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
+      const currentRestId = api.getCurrentRestaurantId();
+      if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
+        return;
+      }
       onRefreshOrders();
       if (!isMuted && (event.type === 'OrderCreated' || event.type === 'WaiterCalled')) {
         playKitchenChime('NEW_ORDER');
@@ -338,27 +342,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   // Filtered Orders Logic
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      // Station filter matching dish items
-      if (selectedStation !== 'ALL') {
-        if (selectedStation === 'GRILL') {
-          const hasGrill = order.items.some((i) => /steak|burger|grill|chicken|meat|bbq/i.test(i.name));
-          if (!hasGrill) return false;
-        } else if (selectedStation === 'APPETIZERS') {
-          const hasApp = order.items.some((i) => /salad|soup|wings|fries|dip|tartare/i.test(i.name));
-          if (!hasApp) return false;
-        } else if (selectedStation === 'PIZZA') {
-          const hasPizza = order.items.some((i) => /pizza|flatbread|bread|pasta/i.test(i.name));
-          if (!hasPizza) return false;
-        } else if (selectedStation === 'DESSERTS') {
-          const hasDessert = order.items.some((i) => /cake|ice|brownie|panna|tart|pie/i.test(i.name));
-          if (!hasDessert) return false;
-        } else if (selectedStation === 'OVERDUE') {
-          const rem = getRemainingTime(order);
-          if (!rem.isOverdue) return false;
-        }
-      }
-
-      // Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesId = order.id.toLowerCase().includes(q);
@@ -367,10 +350,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         const matchesItem = order.items.some((i) => i.name.toLowerCase().includes(q));
         return matchesId || matchesTable || matchesCustomer || matchesItem;
       }
-
       return true;
     });
-  }, [orders, selectedStation, searchQuery]);
+  }, [orders, searchQuery]);
 
   const pendingOrders = filteredOrders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED');
   const inKitchenOrders = filteredOrders.filter((o) => o.status === 'IN_KITCHEN');
@@ -471,16 +453,18 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               {currentTime}
             </div>
 
-            {onLogout && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onLogout}
-                className="border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 text-xs font-bold"
-              >
-                Logout
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await api.logout();
+                if (onLogout) onLogout();
+                else window.location.href = '/kitchen/login';
+              }}
+              className="border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 text-xs font-bold"
+            >
+              Logout
+            </Button>
           </div>
         </div>
 
@@ -489,14 +473,13 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 md:pb-0">
             {[
               { id: 'KDS', label: 'Live Bump Board', icon: <Flame className="w-4 h-4 text-rose-500" /> },
-              { id: 'WAITER', label: 'Pass Pickup', icon: <Bell className="w-4 h-4 text-amber-400" />, badge: readyOrders.length },
-              { id: 'ANALYTICS', label: 'Kitchen Analytics', icon: <BarChart2 className="w-4 h-4 text-sky-400" /> },
-              { id: 'RECIPES', label: 'Station Prep Guides', icon: <UtensilsCrossed className="w-4 h-4 text-emerald-400" /> },
+              { id: 'WAITER', label: 'Pass Pickup Window', icon: <Bell className="w-4 h-4 text-amber-400" />, badge: readyOrders.length },
+              { id: 'ANALYTICS', label: 'Kitchen Performance', icon: <BarChart2 className="w-4 h-4 text-sky-400" /> },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setViewMode(tab.id as any)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
                   viewMode === tab.id
                     ? 'bg-rose-600 text-white shadow-md'
                     : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
@@ -517,40 +500,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Filter table, ticket #, dish..."
+              placeholder="Search table #, ticket #, dish..."
               className="w-full text-xs"
             />
           </div>
         </div>
-
-        {/* Row 3: Station Filters */}
-        {viewMode === 'KDS' && (
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pt-1 border-t border-slate-800/40">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1 shrink-0">
-              <Layers className="w-3.5 h-3.5 text-rose-500" /> Station:
-            </span>
-            {[
-              { id: 'ALL', label: 'All Stations' },
-              { id: 'GRILL', label: '🔥 Grill & Mains' },
-              { id: 'APPETIZERS', label: '🥗 Appetizers' },
-              { id: 'PIZZA', label: '🍕 Pizza & Oven' },
-              { id: 'DESSERTS', label: '🍰 Desserts' },
-              { id: 'OVERDUE', label: `⚠️ Overdue (${overdueCount})` },
-            ].map((st) => (
-              <button
-                key={st.id}
-                onClick={() => setSelectedStation(st.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 ${
-                  selectedStation === st.id
-                    ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
-                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* MAIN CONTENT AREA */}
@@ -1000,39 +954,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 ))}
               </div>
             </Card>
-          </div>
-        )}
-
-        {/* VIEW 4: RECIPES & INGREDIENT PREP */}
-        {viewMode === 'RECIPES' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-base font-bold text-white">Station Prep Notes & Standard Recipes</h3>
-                <p className="text-xs text-slate-400">Quick plating guide and station prep checklists</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[
-                { name: 'Wagyu Ribeye Steak 300g', station: 'Grill', cookTime: '12-15m', temp: 'Sear 450°F', instructions: 'Rest 4 mins before slicing. Garnish with rosemary sea salt.' },
-                { name: 'Truffle Mushroom Tagliatelle', station: 'Pasta', cookTime: '8-10m', temp: 'Rolling Boil', instructions: 'Finishing butter, fresh shaved black truffle, parmigiano reggiano.' },
-                { name: 'Crispy Calamari Fritti', station: 'Fryer', cookTime: '4-5m', temp: 'Flash Fry 375°F', instructions: 'Lemon wedge, spicy garlic aioli, parsley sprig.' },
-                { name: 'Wood-fired Margherita Pizza', station: 'Oven', cookTime: '3-4m', temp: 'Stone 800°F', instructions: 'San Marzano tomatoes, fresh mozzarella, torn basil leaves.' },
-              ].map((recipe, idx) => (
-                <Card key={idx} className="bg-slate-900 border-slate-800 p-4 space-y-3 rounded-2xl">
-                  <div className="flex justify-between items-start">
-                    <h4 className="font-bold text-white text-sm">{recipe.name}</h4>
-                    <Badge variant="brand" className="text-[10px]">{recipe.station}</Badge>
-                  </div>
-                  <div className="text-xs text-slate-300 space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono">
-                    <p><span className="text-slate-500">Cook Time:</span> {recipe.cookTime}</p>
-                    <p><span className="text-slate-500">Target Temp:</span> {recipe.temp}</p>
-                  </div>
-                  <p className="text-xs text-slate-400 italic">"{recipe.instructions}"</p>
-                </Card>
-              ))}
-            </div>
           </div>
         )}
       </div>

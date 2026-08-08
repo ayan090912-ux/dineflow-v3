@@ -57,6 +57,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [dietaryFilter, setDietaryFilter] = useState<'ALL' | 'VEG' | 'NON_VEG'>('ALL');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -88,6 +89,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     loadInitialOrder();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
+      const restId = api.getCurrentRestaurantId() || currentRestaurant?.id;
+      if (event.restaurantId && restId && event.restaurantId !== restId) {
+        return;
+      }
+
       if (event.tableNumber === selectedTableNum && event.data) {
         setActiveOrder(event.data);
 
@@ -261,11 +267,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     if (currentMenuTab === 'FOOD' && isBarItem) return false;
 
     const matchesCat = activeCategory === 'all' || item.categoryId === activeCategory || item.barCategory === activeCategory;
+
+    const isVegItem = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
+    const matchesDietary =
+      dietaryFilter === 'ALL' ||
+      (dietaryFilter === 'VEG' && isVegItem) ||
+      (dietaryFilter === 'NON_VEG' && !isVegItem);
+
     const matchesQuery =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.brand && item.brand.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCat && matchesQuery;
+    return matchesCat && matchesDietary && matchesQuery;
   });
 
   // RESERVED TABLE BLOCK SCREEN
@@ -429,7 +442,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       )}
 
       {/* Menu Filter Tabs */}
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-3">
         {/* Search */}
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
@@ -444,6 +457,44 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           />
         </div>
 
+        {/* Dietary Veg/Non-Veg Quick Filter */}
+        {!isBarTheme && (
+          <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => setDietaryFilter('ALL')}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all text-center ${
+                dietaryFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              All Food 🍽️
+            </button>
+
+            <button
+              onClick={() => setDietaryFilter('VEG')}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                dietaryFilter === 'VEG'
+                  ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 shadow'
+                  : 'text-slate-400 hover:text-emerald-400'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span>🟢 Veg</span>
+            </button>
+
+            <button
+              onClick={() => setDietaryFilter('NON_VEG')}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                dietaryFilter === 'NON_VEG'
+                  ? 'bg-rose-950/90 text-rose-300 border border-rose-500/50 shadow'
+                  : 'text-slate-400 hover:text-rose-400'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+              <span>🔴 Non-Veg</span>
+            </button>
+          </div>
+        )}
+
         {/* Categories */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           <button
@@ -454,7 +505,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
             }`}
           >
-            All {isBarTheme ? 'Drinks 🍸' : 'Dishes 🍽️'}
+            All {isBarTheme ? 'Drinks 🍸' : 'Categories'}
           </button>
           {(isBarTheme
             ? [
@@ -489,42 +540,61 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
         {/* Menu Items List */}
         <div className="space-y-4">
-          {filteredItems.map((item) => (
-            <Card
-              key={item.id}
-              className={`p-3.5 flex gap-3.5 transition-all cursor-pointer rounded-2xl group ${
-                isBarTheme
-                  ? 'bg-slate-900/90 border-amber-500/30 hover:border-amber-400 shadow-xl shadow-amber-950/20'
-                  : 'bg-slate-800/80 border-slate-700/60 hover:border-slate-600'
-              }`}
-              onClick={() => {
-                setSelectedItem(item);
-                setQuantity(1);
-                setSelectedServingOption(item.servingOptions?.[0] || '');
-              }}
-            >
-              <div className="relative shrink-0">
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-24 h-24 rounded-xl object-cover border border-slate-700/80 group-hover:scale-105 transition-transform"
-                />
-                {item.isAlcoholic && (
-                  <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-950/90 text-purple-300 border border-purple-500/40">
-                    {item.alcoholPercentage || 40}% ABV
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-start justify-between gap-1">
-                    <h3 className="text-sm font-bold text-slate-100 truncate">{item.name}</h3>
-                    {item.isVegetarian && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
-                        Veg
+          {filteredItems.map((item) => {
+            const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
+            return (
+              <Card
+                key={item.id}
+                className={`p-3.5 flex gap-3.5 transition-all cursor-pointer rounded-2xl group ${
+                  isBarTheme
+                    ? 'bg-slate-900/90 border-amber-500/30 hover:border-amber-400 shadow-xl shadow-amber-950/20'
+                    : 'bg-slate-800/80 border-slate-700/60 hover:border-slate-600'
+                }`}
+                onClick={() => {
+                  setSelectedItem(item);
+                  setQuantity(1);
+                  setSelectedServingOption(item.servingOptions?.[0] || '');
+                }}
+              >
+                <div className="relative shrink-0">
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className="w-24 h-24 rounded-xl object-cover border border-slate-700/80 group-hover:scale-105 transition-transform"
+                  />
+                  {item.isAlcoholic && (
+                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-950/90 text-purple-300 border border-purple-500/40">
+                      {item.alcoholPercentage || 40}% ABV
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {!isBarTheme && !item.isAlcoholic && (
+                          <span
+                            className={`inline-flex items-center justify-center border p-0.5 rounded-[4px] shrink-0 ${
+                              isVeg ? 'border-emerald-500 bg-emerald-950/80' : 'border-rose-500 bg-rose-950/80'
+                            }`}
+                            title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          </span>
+                        )}
+                        <h3 className="text-sm font-bold text-slate-100 truncate">{item.name}</h3>
+                      </div>
+
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                          isVeg
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        }`}
+                      >
+                        {isVeg ? 'Veg' : 'Non-Veg'}
                       </span>
-                    )}
-                  </div>
+                    </div>
                   {item.brand && (
                     <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>
                   )}
@@ -552,7 +622,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 </div>
               </div>
             </Card>
-          ))}
+          );
+          })}
           {filteredItems.length === 0 && (
             <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-slate-400 text-xs">
               No items available in this category.

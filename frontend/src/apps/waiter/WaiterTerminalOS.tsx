@@ -4,51 +4,30 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Plus,
-  Trash2,
-  AlertTriangle,
   Flame,
-  DollarSign,
   Coffee,
   Sparkles,
   PhoneCall,
   Receipt,
-  Eye,
   Search,
   Filter,
   Volume2,
   VolumeX,
   LogOut,
-  UserCheck,
   Zap,
-  MapPin,
   Utensils,
   ChevronRight,
-  Send,
-  MessageSquare,
-  ShieldAlert,
-  Sparkle,
-  Layers,
   Activity,
-  Award,
-  TrendingUp,
   RefreshCw,
-  Users,
-  CheckSquare,
-  XCircle,
-  ArrowRightLeft,
-  HelpCircle,
-  Sparkles as SparklesIcon,
   Wine,
   FileText,
+  CheckSquare,
+  Sparkles as SparklesIcon,
 } from 'lucide-react';
 import {
   Button,
   Card,
   Badge,
-  Input,
-  Modal,
-  StatsCard,
   Avatar,
   SearchInput,
 } from '../../packages/ui';
@@ -60,24 +39,21 @@ import {
   CustomerRequestType,
   CustomerRequestStatus,
   WaiterNotification,
-  ShiftSummaryData,
-  Employee,
 } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 
-// Web Audio API Chime Synthesizer
+// Web Audio API Chime Synthesizer for notifications
 const playNotificationChime = () => {
   try {
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
     const ctx = new AudioContext();
-    
-    // First tone
+
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
     gain1.gain.setValueAtTime(0.15, ctx.currentTime);
     gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
     osc1.connect(gain1);
@@ -85,11 +61,10 @@ const playNotificationChime = () => {
     osc1.start();
     osc1.stop(ctx.currentTime + 0.25);
 
-    // Second tone (higher harmony)
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
+    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
     gain2.gain.setValueAtTime(0.2, ctx.currentTime + 0.12);
     gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
     osc2.connect(gain2);
@@ -97,7 +72,7 @@ const playNotificationChime = () => {
     osc2.start(ctx.currentTime + 0.12);
     osc2.stop(ctx.currentTime + 0.45);
   } catch (err) {
-    // Audio context play blocked or unsupported
+    // Audio context fallback
   }
 };
 
@@ -106,286 +81,289 @@ interface WaiterTerminalOSProps {
 }
 
 export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) => {
-  // Navigation & View state
   const { formatPrice } = useTheme();
+
+  // Navigation tab state - ONLY the 4 required views allowed in Waiter Terminal MVP
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'dispatch' | 'ready-orders' | 'floor-plan' | 'pending-calls' | 'table-sessions' | 'history' | 'profile' | 'settings'
+    'dashboard' | 'active-tables' | 'pending-calls' | 'ready-plates'
   >('dashboard');
 
-  // Audio mute preference
+  // Preferences & Status State
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
-
-  // Live Time state
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isErrorState, setIsErrorState] = useState<boolean>(false);
 
   // Core Data State
   const [requests, setRequests] = useState<CustomerRequest[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [notifications, setNotifications] = useState<WaiterNotification[]>([]);
-  const [shiftSummary, setShiftSummary] = useState<ShiftSummaryData | null>(null);
 
-  // UI Filters & Search
+  // Search filter
   const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'URGENT' | 'HIGH' | 'MEDIUM'>('ALL');
-  const [tableFilter, setTableFilter] = useState<'ALL' | 'OCCUPIED' | 'WAITING' | 'BILL' | 'VIP'>('ALL');
-
-  // Modals & Drawers
-  const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
-  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
-  const [selectedTableForSession, setSelectedTableForSession] = useState<Table | null>(null);
-  const [selectedRequestForDetail, setSelectedRequestForDetail] = useState<CustomerRequest | null>(null);
-  const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
-  const [broadcastMessageText, setBroadcastMessageText] = useState('');
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [transferRequestId, setTransferRequestId] = useState<string | null>(null);
-  const [targetWaiterName, setTargetWaiterName] = useState('Jessica Tanaka');
-  const [isReportProblemModalOpen, setIsReportProblemModalOpen] = useState(false);
-  const [reportProblemOrder, setReportProblemOrder] = useState<Order | null>(null);
-  const [problemDescription, setProblemDescription] = useState('');
 
   // Toast feedback state
-  const [toastMessage, setToastMessage] = useState<{ title: string; desc: string; type: 'info' | 'success' | 'warning' } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{
+    title: string;
+    desc: string;
+    type: 'info' | 'success' | 'warning';
+  } | null>(null);
 
-  const showToast = (title: string, desc: string, type: 'info' | 'success' | 'warning' = 'info') => {
+  const showToast = (
+    title: string,
+    desc: string,
+    type: 'info' | 'success' | 'warning' = 'info'
+  ) => {
     setToastMessage({ title, desc, type });
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Clock tick
+  // Authenticated user & restaurant resolution
+  const currentUser = api.getCurrentUser();
+  const currentRestaurantId = api.getCurrentRestaurantId() || currentUser?.restaurantId || 'rest-1';
+  const waiterName = currentUser?.name || 'Ayaan';
+
+  // Live Clock Tick
   useEffect(() => {
     const updateClock = () => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setCurrentTime(
+        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
     };
     updateClock();
     const interval = setInterval(updateClock, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch initial data
+  // Fetch data strictly for authenticated employee's restaurant
   const loadData = async () => {
     try {
-      const [reqData, ordData, tblData, notifData, shiftData] = await Promise.all([
-        api.getCustomerRequests('rest-1'),
-        api.getOrders('rest-1'),
-        api.getTables('rest-1'),
-        api.getWaiterNotifications(),
-        api.getWaiterShiftSummary(),
+      setIsErrorState(false);
+      const targetRestId = currentRestaurantId;
+
+      const [reqData, ordData, tblData, notifData] = await Promise.all([
+        api.getCustomerRequests(targetRestId),
+        api.getOrders(targetRestId),
+        api.getTables(targetRestId),
+        api.getWaiterNotifications(targetRestId),
       ]);
+
       setRequests(reqData);
       setOrders(ordData);
       setTables(tblData);
       setNotifications(notifData);
-      setShiftSummary(shiftData);
     } catch (err) {
-      console.error('Failed to load Waiter Terminal OS data:', err);
+      console.error('Failed to load Waiter Terminal data:', err);
+      setIsErrorState(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Setup Real-time WebSockets / Event Bus Listener
+  // Setup Real-time WebSockets / Event Bus Listener (Scoped by restaurant_id)
   useEffect(() => {
     loadData();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
+      // Filter events strictly by restaurantId for multi-tenant isolation
+      if (event.restaurantId && event.restaurantId !== currentRestaurantId) {
+        return;
+      }
+
       loadData();
 
       if (!isAudioMuted) {
         playNotificationChime();
       }
 
-      if (event.type === 'CustomerRequestCreated') {
-        showToast('New Customer Dispatch 🛎️', `${event.tableNumber} requested ${event.data?.requestType || 'Assistance'}`, 'warning');
+      if (event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
+        showToast(
+          'Customer Service Call 🛎️',
+          `${event.tableNumber || 'Table'} requested assistance`,
+          'warning'
+        );
       } else if (event.type === 'OrderReady') {
-        showToast('Kitchen Order Plated 🔥', `Order #${event.orderId} for ${event.tableNumber} is ready for pickup`, 'success');
-      } else if (event.type === 'WaiterCalled') {
-        showToast('Table Service Call 🔔', `${event.tableNumber} called waiter`, 'warning');
+        showToast(
+          'Order Plated & Ready 🔥',
+          `Order #${event.orderId} for ${event.tableNumber} is ready for pickup`,
+          'success'
+        );
       } else if (event.type === 'BillRequested') {
-        showToast('Bill Request 🧾', `${event.tableNumber} requested final check`, 'info');
-      } else if (event.type === 'ETAUpdated') {
-        showToast('Kitchen ETA Adjusted ⏱️', `Order #${event.orderId} prep set to ${event.estimatedPrepTimeMinutes} mins`, 'info');
-      } else if (event.type === 'TableMerged') {
-        showToast('Tables Merged for Event 🔗', `${event.data?.mergedGroupLabel || 'Tables combined for gathering'}`, 'info');
-      } else if (event.type === 'TableUnmerged') {
-        showToast('Tables Unmerged 🔓', 'Table seating restored to individual layouts.', 'info');
-      } else if (event.type === 'TableReserved') {
-        showToast('Table Reserved 🔒', `${event.tableNumber} locked for ${event.data?.reservedForName || 'Guest'}`, 'info');
-      } else if (event.type === 'BroadcastMessage') {
-        showToast(`Floor Broadcast: ${event.actor}`, `${event.reason}`, 'info');
+        showToast(
+          'Bill Check Request 🧾',
+          `${event.tableNumber || 'Table'} requested final bill`,
+          'info'
+        );
+      } else if (event.type === 'TableStatusChanged') {
+        showToast('Table Session Updated 🪑', `Status updated for ${event.tableNumber}`, 'info');
       }
     });
 
     return () => unsubscribe();
-  }, [isAudioMuted]);
+  }, [isAudioMuted, currentRestaurantId]);
 
-  // Request Action Handlers
+  // Request Actions (Workflow: PENDING -> ACCEPT -> IN_PROGRESS -> COMPLETE)
   const handleAcceptRequest = async (requestId: string) => {
     try {
-      await api.acceptCustomerRequest(requestId, 'Mateo Rossi');
-      showToast('Request Accepted ✅', 'Assigned to your shift queue.', 'success');
+      await api.acceptCustomerRequest(requestId, waiterName);
+      showToast('Request Accepted ✅', 'Customer request accepted.', 'success');
       loadData();
     } catch (err) {
       showToast('Error', 'Failed to accept request', 'warning');
     }
   };
 
-  const handleRejectRequest = async (requestId: string) => {
+  const handleCompleteRequest = async (requestId: string) => {
     try {
-      await api.rejectCustomerRequest(requestId, 'Staff Busy - Rerouted to Floor Lead');
-      showToast('Request Rerouted ⚠️', 'Notified floor manager.', 'info');
+      await api.updateCustomerRequestStatus(requestId, 'COMPLETED', waiterName);
+      showToast('Request Completed ✅', 'Request fulfilled and cleared.', 'success');
       loadData();
     } catch (err) {
-      showToast('Error', 'Failed to reject request', 'warning');
+      showToast('Error', 'Failed to complete request', 'warning');
     }
   };
 
-  const handleUpdateStatus = async (requestId: string, status: CustomerRequestStatus) => {
-    try {
-      await api.updateCustomerRequestStatus(requestId, status);
-      showToast('Status Updated 🚀', `Request marked as ${status.replace('_', ' ')}`, 'success');
-      loadData();
-    } catch (err) {
-      showToast('Error', 'Failed to update request status', 'warning');
-    }
-  };
-
-  const handleConfirmTransfer = async () => {
-    if (!transferRequestId) return;
-    try {
-      await api.transferCustomerRequest(transferRequestId, targetWaiterName);
-      showToast('Request Transferred 🔄', `Reassigned to ${targetWaiterName}`, 'success');
-      setIsTransferModalOpen(false);
-      setTransferRequestId(null);
-      loadData();
-    } catch (err) {
-      showToast('Error', 'Failed to transfer request', 'warning');
-    }
-  };
-
-  // Deliver Order Handler
+  // Order Delivery Handler (Valid transition: READY -> DELIVERED)
   const handleDeliverOrder = async (orderId: string) => {
     try {
-      await api.updateOrderStatus(orderId, 'DELIVERED');
-      showToast('Order Delivered 🎉', `Order #${orderId} delivered to table`, 'success');
+      await api.deliverOrder(orderId);
+      showToast('Order Delivered 🎉', `Order #${orderId} delivered to customer`, 'success');
       loadData();
-    } catch (err) {
-      showToast('Error', 'Failed to deliver order', 'warning');
+    } catch (err: any) {
+      showToast('Delivery Error ⚠️', err.message || 'Failed to deliver order', 'warning');
     }
   };
 
-  const handleSendBroadcast = async () => {
-    if (!broadcastMessageText.trim()) return;
-    try {
-      await api.sendWaiterBroadcast(broadcastMessageText, 'Mateo Rossi');
-      showToast('Broadcast Sent 📢', 'Message broadcasted to floor team', 'success');
-      setBroadcastMessageText('');
-      setIsBroadcastModalOpen(false);
-      loadData();
-    } catch (err) {
-      showToast('Error', 'Failed to send broadcast', 'warning');
-    }
+  // Computed data collections
+  const activeTablesList = useMemo(() => {
+    return tables.filter((t) => {
+      // Find matching order
+      const tableOrder = orders.find(
+        (o) => o.tableNumber === t.tableNumber && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+      );
+      const isActive =
+        t.status === 'OCCUPIED' ||
+        t.status === 'WAITER_CALLED' ||
+        t.status === 'BILL_REQUESTED' ||
+        t.status === 'WAITING_FOR_SERVICE' ||
+        Boolean(tableOrder);
+
+      if (!isActive) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          t.tableNumber.toLowerCase().includes(q) ||
+          (t.assignedWaiterName && t.assignedWaiterName.toLowerCase().includes(q)) ||
+          (tableOrder && tableOrder.id.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [tables, orders, searchQuery]);
+
+  const pendingCallsList = useMemo(() => {
+    return requests.filter((r) => {
+      const isPendingOrActive = r.status === 'PENDING' || r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS';
+      if (!isPendingOrActive) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          r.tableNumber.toLowerCase().includes(q) ||
+          r.requestType.toLowerCase().includes(q) ||
+          (r.customTitle && r.customTitle.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [requests, searchQuery]);
+
+  const readyPlatesList = useMemo(() => {
+    return orders.filter((o) => {
+      if (o.status !== 'READY') return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          o.id.toLowerCase().includes(q) ||
+          o.tableNumber.toLowerCase().includes(q) ||
+          o.items.some((i) => i.name.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [orders, searchQuery]);
+
+  // Helper for Occupied Duration
+  const getOccupiedDuration = (sessionStart?: string, orderCreated?: string) => {
+    const timestamp = sessionStart || orderCreated;
+    if (!timestamp) return '12 min';
+    const diffMs = Date.now() - new Date(timestamp).getTime();
+    const mins = Math.max(1, Math.floor(diffMs / 60000));
+    return `${mins} min`;
   };
 
-  const handleReportProblem = async () => {
-    if (!reportProblemOrder) return;
-    showToast('Problem Reported ⚠️', `Notified Chef Antoine regarding Order #${reportProblemOrder.id}`, 'warning');
-    setIsReportProblemModalOpen(false);
-    setProblemDescription('');
-    setReportProblemOrder(null);
+  // Helper for Request Time Elapsed
+  const getTimeElapsed = (timestamp?: string) => {
+    if (!timestamp) return 'Just now';
+    const diffMs = Date.now() - new Date(timestamp).getTime();
+    const mins = Math.max(0, Math.floor(diffMs / 60000));
+    return mins === 0 ? 'Just now' : `${mins} min ago`;
   };
 
-  const handleTableStatusChange = async (tableId: string, newStatus: Table['status']) => {
-    try {
-      await api.updateTableStatus(tableId, newStatus, 'Mateo Rossi');
-      showToast('Table Updated 🪑', `Table status changed to ${newStatus}`, 'success');
-      loadData();
-    } catch (err) {
-      showToast('Error', 'Failed to update table status', 'warning');
-    }
-  };
-
-  // Filtered Collections
-  const pendingRequests = useMemo(() => {
-    return requests.filter((r) => r.status === 'PENDING');
-  }, [requests]);
-
-  const assignedRequests = useMemo(() => {
-    return requests.filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS');
-  }, [requests]);
-
-  const readyOrders = useMemo(() => {
-    return orders.filter((o) => o.status === 'READY');
-  }, [orders]);
-
-  const unreadNotifCount = useMemo(() => {
-    return notifications.filter((n) => !n.isRead).length;
-  }, [notifications]);
-
-  // Request Type Helpers
+  // Request Badge Helper
   const getRequestBadge = (type: CustomerRequestType, title?: string) => {
     switch (type) {
       case 'WATER':
         return <Badge variant="info" className="flex items-center gap-1"><Wine className="w-3 h-3" /> Water</Badge>;
       case 'BILL':
-        return <Badge variant="warning" className="flex items-center gap-1"><Receipt className="w-3 h-3" /> Bill Check</Badge>;
+        return <Badge variant="warning" className="flex items-center gap-1"><Receipt className="w-3 h-3" /> Bill</Badge>;
       case 'EXTRA_SPOON':
       case 'EXTRA_PLATE':
       case 'CUTLERY':
-        return <Badge variant="outline" className="flex items-center gap-1 border-amber-500/50 text-amber-300"><Utensils className="w-3 h-3" /> Cutlery</Badge>;
+        return <Badge variant="outline" className="flex items-center gap-1 border-amber-500/50 text-amber-300"><Utensils className="w-3 h-3" /> Spoon / Cutlery</Badge>;
       case 'TISSUE':
       case 'NAPKINS':
-        return <Badge variant="outline" className="flex items-center gap-1 border-purple-500/50 text-purple-300"><FileText className="w-3 h-3" /> Napkins/Tissue</Badge>;
+        return <Badge variant="outline" className="flex items-center gap-1 border-purple-500/50 text-purple-300"><FileText className="w-3 h-3" /> Tissue</Badge>;
       case 'CALL_WAITER':
-        return <Badge variant="danger" className="flex items-center gap-1 animate-pulse"><PhoneCall className="w-3 h-3" /> Waiter Call</Badge>;
+        return <Badge variant="danger" className="flex items-center gap-1 animate-pulse"><PhoneCall className="w-3 h-3" /> Call Waiter</Badge>;
       case 'CUSTOM':
       default:
         return <Badge variant="brand" className="flex items-center gap-1"><SparklesIcon className="w-3 h-3" /> {title || 'Custom'}</Badge>;
     }
   };
 
-  const getPriorityBadge = (priority: CustomerRequest['priority']) => {
-    switch (priority) {
-      case 'URGENT':
-        return <Badge variant="danger" className="animate-pulse font-mono uppercase">URGENT</Badge>;
-      case 'HIGH':
-        return <Badge variant="warning" className="font-mono uppercase">HIGH</Badge>;
-      case 'MEDIUM':
-        return <Badge variant="info" className="font-mono uppercase">MEDIUM</Badge>;
-      case 'LOW':
-      default:
-        return <Badge variant="outline" className="font-mono uppercase">LOW</Badge>;
-    }
-  };
-
-  const getTableStatusColor = (status: Table['status']) => {
+  const getTableStatusBadge = (status: Table['status']) => {
     switch (status) {
       case 'OCCUPIED':
-        return 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400';
-      case 'AVAILABLE':
-        return 'bg-slate-800/60 border-slate-700/60 text-slate-400';
-      case 'RESERVED':
-        return 'bg-amber-500/10 border-amber-500/40 text-amber-400';
-      case 'CLEANING':
-        return 'bg-sky-500/10 border-sky-500/40 text-sky-400';
-      case 'WAITING_FOR_SERVICE':
-      case 'WAITER_CALLED':
+        return <Badge variant="success">OCCUPIED</Badge>;
       case 'BILL_REQUESTED':
-        return 'bg-rose-500/10 border-rose-500/50 text-rose-400 animate-pulse';
+        return <Badge variant="warning" className="animate-pulse">BILL REQUESTED</Badge>;
+      case 'WAITER_CALLED':
+      case 'WAITING_FOR_SERVICE':
+        return <Badge variant="danger" className="animate-pulse">CALL WAITER</Badge>;
       default:
-        return 'bg-slate-800 border-slate-700 text-slate-300';
+        return <Badge variant="outline">OCCUPIED</Badge>;
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-rose-500 selection:text-white">
-      {/* Toast Overlay */}
+      {/* Toast Feedback Overlay */}
       {toastMessage && (
         <div className="fixed top-20 right-6 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className={`p-4 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 min-w-[320px] ${
-            toastMessage.type === 'success' ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-100' :
-            toastMessage.type === 'warning' ? 'bg-rose-950/90 border-rose-500/50 text-rose-100' :
-            'bg-slate-900/90 border-sky-500/50 text-sky-100'
-          }`}>
+          <div
+            className={`p-4 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 min-w-[320px] ${
+              toastMessage.type === 'success'
+                ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-100'
+                : toastMessage.type === 'warning'
+                ? 'bg-rose-950/90 border-rose-500/50 text-rose-100'
+                : 'bg-slate-900/90 border-sky-500/50 text-sky-100'
+            }`}
+          >
             <Sparkles className="w-5 h-5 text-amber-400 animate-spin" />
             <div>
               <p className="text-sm font-bold">{toastMessage.title}</p>
@@ -397,861 +375,580 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
       {/* HEADER BAR */}
       <header className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40 px-4 lg:px-6 py-3 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
-        {/* Brand & Branch */}
+        {/* Brand Header */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-amber-500 p-0.5 shadow-lg shadow-rose-950/50 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-amber-500 p-0.5 shadow-lg shadow-emerald-950/50 flex items-center justify-center">
             <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <Utensils className="w-5 h-5 text-rose-400" />
+              <PhoneCall className="w-5 h-5 text-emerald-400" />
             </div>
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-black text-white tracking-tight">Lumière Modern Bistro</h1>
-              <Badge variant="brand" className="text-[10px] py-0 px-1.5 font-mono">Downtown Flagship</Badge>
+              <h1 className="text-base font-black text-white tracking-tight">Waiter Terminal OS</h1>
+              <Badge variant="success" className="text-[10px] py-0 px-1.5 font-mono">MVP</Badge>
             </div>
             <p className="text-xs text-slate-400 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-              <span className="text-emerald-400 font-semibold">ONLINE & DISPATCH READY</span>
+              <span className="text-emerald-400 font-semibold">ONLINE & REALTIME DISPATCH</span>
             </p>
           </div>
         </div>
 
-        {/* Waiter Profile & Current Shift info */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300">
-          <div className="hidden sm:flex items-center gap-3 bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800">
-            <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" name="Mateo Rossi" size="sm" />
+        {/* Authenticated Staff Info & Actions */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+          <div className="flex items-center gap-3 bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800">
+            <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" name={waiterName} size="sm" />
             <div>
               <p className="font-bold text-white flex items-center gap-1">
-                Mateo Rossi
-                <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1 rounded">WTR-8842</span>
+                <span>{waiterName}</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400" title="Online Status: ON_CLOCK" />
               </p>
-              <p className="text-[11px] text-slate-400">Evening Shift (4 PM - 12 AM)</p>
+              <p className="text-[10px] text-emerald-400 font-mono">🟢 ONLINE</p>
             </div>
           </div>
 
-          {/* Live Clock */}
+          {/* Clock */}
           <div className="bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800 flex items-center gap-2 font-mono text-amber-400 font-bold">
             <Clock className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-            <span>{currentTime || '08:42:15 PM'}</span>
+            <span>{currentTime || '08:42 PM'}</span>
           </div>
 
           {/* Audio Chime Toggle */}
           <button
-            onClick={() => {
-              setIsAudioMuted(!isAudioMuted);
-              showToast(isAudioMuted ? 'Audio Alerts Enabled 🔔' : 'Audio Muted 🔇', isAudioMuted ? 'Sound chimes on new dispatch' : 'Muted audio notifications', 'info');
-            }}
+            onClick={() => setIsAudioMuted(!isAudioMuted)}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white transition-all border border-slate-700/50"
             title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
           >
             {isAudioMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
           </button>
 
-          {/* Notification Bell */}
-          <button
-            onClick={() => setIsNotificationDrawerOpen(true)}
-            className="relative p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white transition-all border border-slate-700/50"
-          >
-            <Bell className="w-4 h-4 text-slate-200" />
-            {unreadNotifCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white font-bold text-[10px] rounded-full flex items-center justify-center animate-bounce shadow-md">
-                {unreadNotifCount}
-              </span>
-            )}
-          </button>
-
-          {/* Shift Summary / Clock Out Button */}
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setIsShiftModalOpen(true)}
-            className="text-xs bg-slate-900 border-slate-700 hover:bg-slate-800 text-slate-200 flex items-center gap-1.5"
+            onClick={async () => {
+              await api.logout();
+              if (onLogout) onLogout();
+              else window.location.href = '/waiter/login';
+            }}
+            className="text-xs bg-slate-900 border-slate-700 hover:bg-rose-500/10 text-slate-300 hover:text-rose-400 flex items-center gap-1.5"
           >
-            <UserCheck className="w-3.5 h-3.5 text-rose-400" />
-            Shift Summary
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span>Logout</span>
           </Button>
-
-          {onLogout && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onLogout}
-              className="text-xs bg-slate-900 border-slate-700 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 flex items-center gap-1.5"
-            >
-              <LogOut className="w-3.5 h-3.5 text-rose-400" />
-              Logout
-            </Button>
-          )}
         </div>
       </header>
 
-      {/* MAIN CONTAINER WITH SIDEBAR & CONTENT */}
+      {/* ERROR / RECONNECT BANNER */}
+      {isErrorState && (
+        <div className="bg-rose-950/90 border-b border-rose-800 px-4 py-3 text-xs text-rose-200 flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>Unable to connect to restaurant server. Realtime events may be paused.</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadData} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1">
+            <RefreshCw className="w-3 h-3" />
+            <span>RETRY</span>
+          </Button>
+        </div>
+      )}
+
+      {/* MAIN LAYOUT */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* SIDEBAR NAVIGATION */}
+        {/* SIDEBAR NAVIGATION - CONTAINS ONLY REQUIRED 4 MODULES */}
         <aside className="w-full lg:w-64 bg-slate-900/60 border-r border-slate-800/80 p-3 flex lg:flex-col justify-between shrink-0 overflow-x-auto lg:overflow-y-auto scrollbar-none">
-          <div className="flex lg:flex-col gap-1 w-full min-w-[600px] lg:min-w-0">
+          <div className="flex lg:flex-col gap-1.5 w-full min-w-[500px] lg:min-w-0">
             <div className="px-3 py-2 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider hidden lg:block">
-              Operations Center
+              Waiter Terminal Navigation
             </div>
 
+            {/* Tab 1: Dashboard Overview */}
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
                 activeTab === 'dashboard'
-                  ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-lg shadow-rose-950/40'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
-              <Activity className="w-4 h-4" />
+              <Activity className="w-4.5 h-4.5 text-emerald-300" />
               <span>Dashboard Overview</span>
             </button>
 
+            {/* Tab 2: Active Tables */}
             <button
-              onClick={() => setActiveTab('dispatch')}
-              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full ${
-                activeTab === 'dispatch'
-                  ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-lg shadow-rose-950/40'
+              onClick={() => setActiveTab('active-tables')}
+              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
+                activeTab === 'active-tables'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
-              <div className="flex items-center gap-2.5">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span>Live Dispatch</span>
+              <div className="flex items-center gap-3">
+                <Utensils className="w-4.5 h-4.5 text-sky-400" />
+                <span>Active Tables</span>
               </div>
-              {pendingRequests.length > 0 && (
-                <Badge variant="danger" className="text-[10px] py-0 px-1.5 animate-pulse">
-                  {pendingRequests.length}
-                </Badge>
-              )}
+              <Badge variant="outline" className="text-[10px] py-0.5 px-2 border-sky-500/40 text-sky-300">
+                {activeTablesList.length}
+              </Badge>
             </button>
 
-            <button
-              onClick={() => setActiveTab('ready-orders')}
-              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full ${
-                activeTab === 'ready-orders'
-                  ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-lg shadow-rose-950/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Flame className="w-4 h-4 text-emerald-400" />
-                <span>Ready Orders</span>
-              </div>
-              {readyOrders.length > 0 && (
-                <Badge variant="success" className="text-[10px] py-0 px-1.5">
-                  {readyOrders.length}
-                </Badge>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('floor-plan')}
-              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full ${
-                activeTab === 'floor-plan'
-                  ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-lg shadow-rose-950/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <Layers className="w-4 h-4 text-sky-400" />
-              <span>Floor Tables Map</span>
-            </button>
-
+            {/* Tab 3: Pending Calls */}
             <button
               onClick={() => setActiveTab('pending-calls')}
-              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full ${
+              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
                 activeTab === 'pending-calls'
-                  ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-lg shadow-rose-950/40'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
-              <div className="flex items-center gap-2.5">
-                <PhoneCall className="w-4 h-4 text-rose-400" />
-                <span>Assigned Requests</span>
+              <div className="flex items-center gap-3">
+                <PhoneCall className="w-4.5 h-4.5 text-amber-400" />
+                <span>Pending Calls</span>
               </div>
-              {assignedRequests.length > 0 && (
-                <Badge variant="info" className="text-[10px] py-0 px-1.5">
-                  {assignedRequests.length}
+              {pendingCallsList.length > 0 && (
+                <Badge variant="warning" className="text-[10px] py-0.5 px-2 animate-pulse">
+                  {pendingCallsList.length}
                 </Badge>
               )}
             </button>
 
+            {/* Tab 4: Ready Plates */}
             <button
-              onClick={() => setActiveTab('table-sessions')}
-              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full ${
-                activeTab === 'table-sessions'
-                  ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-lg shadow-rose-950/40'
+              onClick={() => setActiveTab('ready-plates')}
+              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
+                activeTab === 'ready-plates'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
-              <Receipt className="w-4 h-4 text-indigo-400" />
-              <span>Table Sessions</span>
-            </button>
-
-            <div className="px-3 py-2 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider hidden lg:block mt-4">
-              Staff & Support
-            </div>
-
-            <button
-              onClick={() => setIsBroadcastModalOpen(true)}
-              className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full text-amber-400 hover:bg-amber-500/10 border border-amber-500/20"
-            >
-              <MessageSquare className="w-4 h-4 text-amber-400" />
-              <span>Broadcast Msg</span>
-            </button>
-
-            <button
-              onClick={() => showToast('Manager Alerted 🚨', 'Floor Manager Claire Dubois notified.', 'warning')}
-              className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left w-full text-rose-400 hover:bg-rose-500/10 border border-rose-500/20"
-            >
-              <ShieldAlert className="w-4 h-4 text-rose-400" />
-              <span>Manager Panic</span>
-            </button>
-          </div>
-
-          <div className="hidden lg:block pt-4 border-t border-slate-800/80">
-            <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-medium">Shift Target</span>
-                <span className="font-bold text-emerald-400">92% Met</span>
+              <div className="flex items-center gap-3">
+                <Flame className="w-4.5 h-4.5 text-rose-400" />
+                <span>Ready Plates</span>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-gradient-to-r from-rose-500 to-emerald-400 h-full w-[92%]" />
-              </div>
-              <p className="text-[10px] text-slate-400">Avg response time 1.8m (Goal &lt; 3m)</p>
-            </div>
+              {readyPlatesList.length > 0 && (
+                <Badge variant="success" className="text-[10px] py-0.5 px-2">
+                  {readyPlatesList.length}
+                </Badge>
+              )}
+            </button>
           </div>
         </aside>
 
         {/* MAIN DISPLAY AREA */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 bg-slate-950/80">
-          {/* SEARCH & QUICK FILTERS BAR */}
+          {/* SEARCH & REFRESH BAR */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
             <div className="flex-1 min-w-[240px]">
               <SearchInput
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search table, order #, dish or customer request..."
+                placeholder="Search table #, order #, or customer request..."
               />
             </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1">
-                <Filter className="w-3.5 h-3.5 text-slate-400" /> Priority:
-              </span>
-              {(['ALL', 'URGENT', 'HIGH', 'MEDIUM'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPriorityFilter(p)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                    priorityFilter === p
-                      ? 'bg-rose-600 text-white shadow-md'
-                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadData}
+              disabled={isLoading}
+              className="text-xs bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </Button>
           </div>
 
-          {/* TOP 8 METRIC CARDS */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-slate-400 uppercase">Active Tables</span>
-              <p className="text-lg font-black text-white">
-                {tables.filter((t) => t.status === 'OCCUPIED' || t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length} / {tables.length}
-              </p>
-              <p className="text-[10px] text-emerald-400 font-medium">75% Capacity</p>
+          {/* COUNTERS HEADER */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card
+              onClick={() => setActiveTab('active-tables')}
+              className="bg-slate-900/90 border-slate-800 p-4 space-y-1.5 cursor-pointer hover:border-sky-500/50 transition-all shadow-xl group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-sky-400 uppercase tracking-wider">Active Tables</span>
+                <Utensils className="w-5 h-5 text-sky-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <p className="text-2xl font-black text-white font-mono">{activeTablesList.length}</p>
+              <p className="text-xs text-slate-400">Currently occupied or requiring service</p>
             </Card>
 
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-amber-400 uppercase">Pending Calls</span>
-              <p className="text-lg font-black text-amber-400">{pendingRequests.length}</p>
-              <p className="text-[10px] text-slate-400">Needs Dispatch</p>
+            <Card
+              onClick={() => setActiveTab('pending-calls')}
+              className="bg-slate-900/90 border-slate-800 p-4 space-y-1.5 cursor-pointer hover:border-amber-500/50 transition-all shadow-xl group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">Pending Calls</span>
+                <PhoneCall className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <p className="text-2xl font-black text-amber-400 font-mono">{pendingCallsList.length}</p>
+              <p className="text-xs text-slate-400">Customer requests waiting for service</p>
             </Card>
 
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-emerald-400 uppercase">Ready Plated</span>
-              <p className="text-lg font-black text-emerald-400">{readyOrders.length}</p>
-              <p className="text-[10px] text-slate-400">At Kitchen Pass</p>
-            </Card>
-
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-sky-400 uppercase">Delivered</span>
-              <p className="text-lg font-black text-sky-400">
-                {orders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED').length + 24}
-              </p>
-              <p className="text-[10px] text-slate-400">Today</p>
-            </Card>
-
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-indigo-400 uppercase">Avg Response</span>
-              <p className="text-lg font-black text-indigo-400">1.8m</p>
-              <p className="text-[10px] text-emerald-400">Fast Speed</p>
-            </Card>
-
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-rose-400 uppercase">Shift Tips</span>
-              <p className="text-lg font-black text-rose-400">$184.50</p>
-              <p className="text-[10px] text-slate-400">Collected</p>
-            </Card>
-
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-amber-300 uppercase">Rating</span>
-              <p className="text-lg font-black text-amber-300">4.9 ★</p>
-              <p className="text-[10px] text-slate-400">24 Reviews</p>
-            </Card>
-
-            <Card className="bg-slate-900/90 border-slate-800 p-3.5 space-y-1">
-              <span className="text-[10px] font-mono text-slate-400 uppercase">Shift Hours</span>
-              <p className="text-lg font-black text-white">5.5h</p>
-              <p className="text-[10px] text-slate-400">On Clock</p>
+            <Card
+              onClick={() => setActiveTab('ready-plates')}
+              className="bg-slate-900/90 border-slate-800 p-4 space-y-1.5 cursor-pointer hover:border-emerald-500/50 transition-all shadow-xl group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">Ready Plates</span>
+                <Flame className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <p className="text-2xl font-black text-emerald-400 font-mono">{readyPlatesList.length}</p>
+              <p className="text-xs text-slate-400">Plated orders ready at kitchen pass</p>
             </Card>
           </div>
-
-          {/* TAB CONTENT RENDER */}
 
           {/* TAB 1: DASHBOARD OVERVIEW */}
           {activeTab === 'dashboard' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left 2 Cols: Live Dispatch Feed & Kitchen Pass */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Live Customer Dispatch Queue */}
-                <Card className="bg-slate-900 border-slate-800 p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-5 h-5 text-amber-400 animate-bounce" />
-                      <h3 className="text-base font-bold text-white">Live Customer Requests Dispatch</h3>
-                      <Badge variant="warning">{pendingRequests.length} Pending</Badge>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setActiveTab('dispatch')} className="text-xs">
-                      View All Dispatch
-                    </Button>
+            <div className="space-y-6">
+              {/* Quick Section 1: Active Tables Preview */}
+              <Card className="bg-slate-900/90 border-slate-800 p-5 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Utensils className="w-5 h-5 text-sky-400" />
+                    <h2 className="text-base font-bold text-white">Active Floor Tables</h2>
+                    <Badge variant="outline" className="border-sky-500/40 text-sky-300">
+                      {activeTablesList.length} Active
+                    </Badge>
                   </div>
+                  <Button variant="outline" size="sm" onClick={() => setActiveTab('active-tables')} className="text-xs">
+                    <span>View Active Tables</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
 
-                  {pendingRequests.length === 0 ? (
-                    <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
-                      <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                      <p className="text-sm font-bold text-slate-300">No Pending Requests</p>
-                      <p className="text-xs text-slate-400">All customer assistance calls have been dispatched and handled.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {pendingRequests.map((req) => (
+                {activeTablesList.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
+                    <Utensils className="w-8 h-8 text-slate-600 mx-auto" />
+                    <p className="text-sm font-bold text-slate-300">No active tables right now.</p>
+                    <p className="text-xs text-slate-400">Tables will show up when customer sessions begin or orders are placed.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {activeTablesList.slice(0, 6).map((table) => {
+                      const tableOrder = orders.find(
+                        (o) => o.tableNumber === table.tableNumber && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
+                      );
+                      const itemCount = tableOrder ? tableOrder.items.reduce((sum, i) => sum + i.quantity, 0) : 0;
+
+                      return (
                         <div
-                          key={req.id}
-                          className="bg-slate-950 p-4 rounded-2xl border border-amber-500/30 hover:border-amber-500/60 transition-all space-y-3 shadow-lg"
+                          key={table.id}
+                          className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all space-y-3 shadow-lg"
                         >
                           <div className="flex justify-between items-start">
                             <div>
-                              <span className="text-lg font-black text-white font-mono">{req.tableNumber}</span>
-                              <div className="mt-1 flex items-center gap-2">
-                                {getRequestBadge(req.requestType, req.customTitle)}
-                                {getPriorityBadge(req.priority)}
-                              </div>
+                              <h3 className="text-lg font-black text-white font-mono tracking-tight">{table.tableNumber}</h3>
+                              <div className="mt-1">{getTableStatusBadge(table.status)}</div>
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded-md">
-                              {new Date(req.requestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-lg">
+                              ⏱️ {getOccupiedDuration(table.sessionStartedAt, tableOrder?.createdAt)}
                             </span>
                           </div>
 
-                          {req.customerNotes && (
-                            <p className="text-xs text-slate-300 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 italic">
-                              "{req.customerNotes}"
+                          <div className="space-y-1 text-xs text-slate-300 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                            <p className="font-semibold text-white">
+                              {tableOrder ? `Order #${tableOrder.id}` : 'No active order'}
                             </p>
-                          )}
+                            <p className="text-slate-400 flex items-center justify-between">
+                              <span>Item count:</span>
+                              <span className="font-bold text-slate-200">{itemCount} items</span>
+                            </p>
+                            <p className="text-slate-400 flex items-center justify-between">
+                              <span>Assigned waiter:</span>
+                              <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
 
-                          <div className="flex items-center gap-2 pt-1">
+              {/* Quick Section 2: Pending Calls Preview */}
+              <Card className="bg-slate-900/90 border-slate-800 p-5 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <PhoneCall className="w-5 h-5 text-amber-400 animate-bounce" />
+                    <h2 className="text-base font-bold text-white">Pending Customer Requests</h2>
+                    <Badge variant="warning">{pendingCallsList.length} Pending</Badge>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setActiveTab('pending-calls')} className="text-xs">
+                    <span>View Pending Calls</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+
+                {pendingCallsList.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                    <p className="text-sm font-bold text-slate-300">No pending customer requests.</p>
+                    <p className="text-xs text-slate-400">All table requests have been handled.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {pendingCallsList.slice(0, 4).map((req) => (
+                      <div
+                        key={req.id}
+                        className="bg-slate-950 p-4 rounded-2xl border border-amber-500/30 hover:border-amber-500/60 transition-all space-y-3 shadow-lg"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-lg font-black text-white font-mono">{req.tableNumber}</span>
+                            <div className="mt-1">{getRequestBadge(req.requestType, req.customTitle)}</div>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded-md">
+                            {getTimeElapsed(req.requestedAt)}
+                          </span>
+                        </div>
+
+                        {req.customerNotes && (
+                          <p className="text-xs text-slate-300 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 italic">
+                            "{req.customerNotes}"
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-2 pt-1">
+                          {req.status === 'PENDING' ? (
                             <Button
                               variant="brand"
                               size="sm"
-                              className="flex-1 text-xs font-bold"
+                              className="w-full text-xs font-bold"
                               onClick={() => handleAcceptRequest(req.id)}
                             >
-                              Accept & Serve
+                              ACCEPT
                             </Button>
+                          ) : (
                             <Button
-                              variant="outline"
+                              variant="success"
                               size="sm"
-                              className="text-xs border-slate-700 hover:bg-slate-800"
-                              onClick={() => handleRejectRequest(req.id)}
+                              className="w-full text-xs font-bold"
+                              onClick={() => handleCompleteRequest(req.id)}
                             >
-                              Reject
+                              COMPLETE
                             </Button>
-                          </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-
-                {/* Ready Food Pass Queue */}
-                <Card className="bg-slate-900 border-slate-800 p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-emerald-400 animate-pulse" />
-                      <h3 className="text-base font-bold text-white">Kitchen Pass: Ready for Pickup</h3>
-                      <Badge variant="success">{readyOrders.length} Plated</Badge>
-                    </div>
+                      </div>
+                    ))}
                   </div>
+                )}
+              </Card>
 
-                  {readyOrders.length === 0 ? (
-                    <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
-                      <Coffee className="w-8 h-8 text-slate-400 mx-auto" />
-                      <p className="text-sm font-bold text-slate-300">Kitchen Pass Clear</p>
-                      <p className="text-xs text-slate-400">Chefs are currently preparing active orders.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {readyOrders.map((ord) => (
-                        <div
-                          key={ord.id}
-                          className="bg-slate-950 p-4 rounded-2xl border border-emerald-500/40 space-y-3 shadow-lg"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span className="text-xs font-mono font-bold text-emerald-400">Order #{ord.id}</span>
-                              <h4 className="text-base font-black text-white">{ord.tableNumber}</h4>
-                              {ord.customerName && <p className="text-xs text-slate-400">{ord.customerName}</p>}
+              {/* Quick Section 3: Ready Plates Preview */}
+              <Card className="bg-slate-900/90 border-slate-800 p-5 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-emerald-400 animate-pulse" />
+                    <h2 className="text-base font-bold text-white">Kitchen Ready Plates Pass</h2>
+                    <Badge variant="success">{readyPlatesList.length} Ready</Badge>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setActiveTab('ready-plates')} className="text-xs">
+                    <span>View Ready Plates</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+
+                {readyPlatesList.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
+                    <Coffee className="w-8 h-8 text-slate-500 mx-auto" />
+                    <p className="text-sm font-bold text-slate-300">No ready plates right now.</p>
+                    <p className="text-xs text-slate-400">Kitchen staff will mark orders READY when prep completes.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {readyPlatesList.slice(0, 4).map((order) => (
+                      <div
+                        key={order.id}
+                        className="bg-slate-950 p-4 rounded-2xl border border-emerald-500/40 hover:border-emerald-500/70 transition-all space-y-3 shadow-lg"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-xs font-mono text-emerald-400 font-bold block">ORDER #{order.id}</span>
+                            <h3 className="text-lg font-black text-white font-mono">{order.tableNumber}</h3>
+                          </div>
+                          <Badge variant="success">READY</Badge>
+                        </div>
+
+                        <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                          {order.items.map((item) => (
+                            <div key={item.id} className="flex justify-between items-center text-xs text-slate-200">
+                              <span className="font-semibold">{item.name}</span>
+                              <span className="font-mono text-emerald-400 font-bold">×{item.quantity}</span>
                             </div>
-                            <Badge variant="success">READY PLATED</Badge>
-                          </div>
-
-                          <div className="space-y-1 text-xs text-slate-300 border-y border-slate-800 py-2">
-                            {ord.items.map((i) => (
-                              <div key={i.id} className="flex justify-between font-bold">
-                                <span>{i.quantity}x {i.name}</span>
-                                <span className="text-slate-400">${(i.price * i.quantity).toFixed(2)}</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="flex items-center gap-2 pt-1">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                              onClick={() => handleDeliverOrder(ord.id)}
-                            >
-                              Deliver to Table
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs border-slate-700 hover:bg-slate-800 text-rose-400"
-                              onClick={() => {
-                                setReportProblemOrder(ord);
-                                setIsReportProblemModalOpen(true);
-                              }}
-                            >
-                              Report Issue
-                            </Button>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              </div>
 
-              {/* Right Col: Quick Actions & Live Operations Timeline */}
-              <div className="space-y-6">
-                {/* Quick Tactile Actions */}
-                <Card className="bg-slate-900 border-slate-800 p-5 space-y-4">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400" /> Waiter Quick Actions
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => showToast('Kitchen Pinged 🛎️', 'Chefs notified to expedite Section A orders.', 'info')}
-                      className="p-3 bg-slate-950 hover:bg-slate-800 rounded-xl border border-slate-800 text-left space-y-1 transition-all group"
-                    >
-                      <PhoneCall className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-                      <p className="text-xs font-bold text-white">Call Kitchen</p>
-                      <p className="text-[10px] text-slate-400">Direct hotline ping</p>
-                    </button>
-
-                    <button
-                      onClick={() => setIsBroadcastModalOpen(true)}
-                      className="p-3 bg-slate-950 hover:bg-slate-800 rounded-xl border border-slate-800 text-left space-y-1 transition-all group"
-                    >
-                      <MessageSquare className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                      <p className="text-xs font-bold text-white">Broadcast Msg</p>
-                      <p className="text-[10px] text-slate-400">Announce to team</p>
-                    </button>
-
-                    <button
-                      onClick={() => showToast('Cleaning Tagged 🧹', 'Table 08 flagged for busboy cleaning.', 'info')}
-                      className="p-3 bg-slate-950 hover:bg-slate-800 rounded-xl border border-slate-800 text-left space-y-1 transition-all group"
-                    >
-                      <Layers className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
-                      <p className="text-xs font-bold text-white">Mark Cleaning</p>
-                      <p className="text-[10px] text-slate-400">Notify bus staff</p>
-                    </button>
-
-                    <button
-                      onClick={() => showToast('Manager Panic 🚨', 'Emergency alert dispatched to Manager Claire Dubois.', 'warning')}
-                      className="p-3 bg-slate-950 hover:bg-slate-800 rounded-xl border border-slate-800 text-left space-y-1 transition-all group"
-                    >
-                      <ShieldAlert className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform" />
-                      <p className="text-xs font-bold text-white">Manager Panic</p>
-                      <p className="text-[10px] text-slate-400">Immediate assist</p>
-                    </button>
+                        <Button
+                          variant="success"
+                          size="sm"
+                          className="w-full text-xs font-bold py-2.5 shadow-lg"
+                          onClick={() => handleDeliverOrder(order.id)}
+                        >
+                          DELIVER
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                </Card>
-
-                {/* Operations Activity Feed */}
-                <Card className="bg-slate-900 border-slate-800 p-5 space-y-4">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-sky-400" /> Recent Activity Timeline
-                  </h3>
-                  <div className="space-y-3 text-xs">
-                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-start gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-white">Table 01 — Order #ord-101 Delivered</p>
-                        <p className="text-[10px] text-slate-400">2 min ago • Mateo Rossi</p>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-start gap-2">
-                      <Wine className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-white">Table 03 — Sparkling Water Served</p>
-                        <p className="text-[10px] text-slate-400">4 min ago • Mateo Rossi</p>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-start gap-2">
-                      <Receipt className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-white">Table 02 — Bill Check Printed ($123.00)</p>
-                        <p className="text-[10px] text-slate-400">6 min ago • Mateo Rossi</p>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </div>
+                )}
+              </Card>
             </div>
           )}
 
-          {/* TAB 2: LIVE DISPATCH */}
-          {activeTab === 'dispatch' && (
-            <div className="space-y-6">
+          {/* TAB 2: ACTIVE TABLES */}
+          {activeTab === 'active-tables' && (
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-amber-400" /> Live Customer Dispatch Center
-                  </h3>
-                  <p className="text-xs text-slate-400">Real-time incoming table service calls and requests</p>
+                  <h2 className="text-xl font-black text-white tracking-tight">Active Floor Tables</h2>
+                  <p className="text-xs text-slate-400">Real-time table status and active customer orders</p>
                 </div>
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={async () => {
-                    await api.createCustomerRequest({
-                      tableNumber: 'Table 04',
-                      requestType: 'WATER',
-                      priority: 'URGENT',
-                      customerNotes: 'Test sparkling water request',
-                    });
-                    showToast('Test Request Created 🧪', 'Emitted real-time request to dispatch.', 'info');
-                    loadData();
-                  }}
-                  className="text-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Simulate Customer Request
-                </Button>
+                <Badge variant="outline" className="border-sky-500/40 text-sky-300 font-mono">
+                  {activeTablesList.length} Active
+                </Badge>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {requests.map((req) => (
-                  <Card
-                    key={req.id}
-                    className={`p-5 space-y-4 bg-slate-900 border transition-all ${
-                      req.status === 'PENDING'
-                        ? 'border-amber-500/50 shadow-xl shadow-amber-950/20'
-                        : req.status === 'ACCEPTED'
-                        ? 'border-sky-500/40'
-                        : 'border-slate-800 opacity-70'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="text-xl font-black text-white font-mono">{req.tableNumber}</span>
-                        <div className="mt-1 flex items-center gap-2">
-                          {getRequestBadge(req.requestType, req.customTitle)}
-                          {getPriorityBadge(req.priority)}
-                        </div>
-                      </div>
-                      <Badge
-                        variant={
-                          req.status === 'PENDING'
-                            ? 'warning'
-                            : req.status === 'ACCEPTED'
-                            ? 'info'
-                            : req.status === 'COMPLETED'
-                            ? 'success'
-                            : 'outline'
-                        }
-                      >
-                        {req.status}
-                      </Badge>
-                    </div>
-
-                    {req.customerNotes && (
-                      <p className="text-xs text-slate-300 bg-slate-950 p-3 rounded-xl border border-slate-800 italic">
-                        "{req.customerNotes}"
-                      </p>
-                    )}
-
-                    <div className="text-[11px] text-slate-400 space-y-1 font-mono">
-                      <p>Requested: {new Date(req.requestedAt).toLocaleTimeString()}</p>
-                      {req.assignedWaiterName && <p className="text-sky-300 font-bold">Assigned: {req.assignedWaiterName}</p>}
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-                      {req.status === 'PENDING' && (
-                        <>
-                          <Button
-                            variant="brand"
-                            size="sm"
-                            className="flex-1 text-xs"
-                            onClick={() => handleAcceptRequest(req.id)}
-                          >
-                            Accept Request
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs border-slate-700 hover:bg-slate-800"
-                            onClick={() => handleRejectRequest(req.id)}
-                          >
-                            Reject
-                          </Button>
-                        </>
-                      )}
-
-                      {req.status === 'ACCEPTED' && (
-                        <>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                            onClick={() => handleUpdateStatus(req.id, 'COMPLETED')}
-                          >
-                            Mark Completed
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs border-slate-700 hover:bg-slate-800 text-amber-400"
-                            onClick={() => {
-                              setTransferRequestId(req.id);
-                              setIsTransferModalOpen(true);
-                            }}
-                          >
-                            Transfer
-                          </Button>
-                        </>
-                      )}
-
-                      {req.status === 'COMPLETED' && (
-                        <div className="w-full text-center py-1 text-xs font-bold text-emerald-400 bg-emerald-950/40 rounded-xl border border-emerald-500/20">
-                          ✓ Fulfilled & Served
-                        </div>
-                      )}
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: READY ORDERS & LIVE ETA */}
-          {activeTab === 'ready-orders' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Flame className="w-5 h-5 text-emerald-400 animate-pulse" /> Kitchen Pass Ready Orders & ETA
-                  </h3>
-                  <p className="text-xs text-slate-400">Live order readiness stream synchronized with Kitchen KDS</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {orders.map((ord) => (
-                  <Card key={ord.id} className="bg-slate-900 border-slate-800 p-5 space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="text-xs font-mono font-bold text-slate-400">#{ord.id}</span>
-                        <h4 className="text-lg font-black text-white">{ord.tableNumber}</h4>
-                        {ord.customerName && <p className="text-xs text-slate-400">{ord.customerName}</p>}
-                      </div>
-                      <Badge
-                        variant={
-                          ord.status === 'READY'
-                            ? 'success'
-                            : ord.status === 'IN_KITCHEN'
-                            ? 'warning'
-                            : ord.status === 'DELIVERED'
-                            ? 'info'
-                            : 'outline'
-                        }
-                      >
-                        {ord.status}
-                      </Badge>
-                    </div>
-
-                    {/* Items Breakdown */}
-                    <div className="space-y-1.5 border-y border-slate-800 py-3 text-xs text-slate-200">
-                      {ord.items.map((i) => (
-                        <div key={i.id} className="flex justify-between font-bold">
-                          <span>{i.quantity}x {i.name}</span>
-                          <span className="text-slate-400">${(i.price * i.quantity).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Live Countdown ETA */}
-                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
-                      <span className="text-slate-400 font-medium flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-amber-400" /> Kitchen Prep ETA
-                      </span>
-                      <span className="font-mono font-black text-amber-400 text-sm">
-                        {ord.status === 'READY' ? 'PLATED NOW' : `${ord.estimatedPrepTimeMinutes || 12} mins`}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      {ord.status === 'READY' ? (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="w-full text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                          onClick={() => handleDeliverOrder(ord.id)}
-                        >
-                          Mark Delivered to Table
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full text-xs border-slate-700 hover:bg-slate-800 text-slate-300"
-                          onClick={() => showToast('In Cooking 🔥', `Order #${ord.id} is on station grill.`, 'info')}
-                        >
-                          Check Cooking Status
-                        </Button>
-                      )}
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: FLOOR TABLES MAP */}
-          {activeTab === 'floor-plan' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Layers className="w-5 h-5 text-sky-400" /> Interactive Restaurant Floor Plan
-                  </h3>
-                  <p className="text-xs text-slate-400">Real-time occupancy status, active bills, and table calls</p>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs flex-wrap">
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Occupied</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-600" /> Vacant</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Reserved</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-sky-500" /> Cleaning</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" /> Call/Bill</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {tables.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedTableForSession(t)}
-                    className={`p-5 rounded-3xl border text-left transition-all hover:scale-[1.02] space-y-3 relative overflow-hidden ${getTableStatusColor(
-                      t.status
-                    )}`}
-                  >
-                    {t.isVip && (
-                      <span className="absolute top-2 right-2 bg-amber-500 text-slate-950 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
-                        VIP
-                      </span>
-                    )}
-
-                    <div className="space-y-0.5">
-                      <span className="text-lg font-black text-white font-mono block">{t.tableNumber}</span>
-                      <p className="text-[11px] font-medium opacity-80">{t.capacity} Guests Capacity</p>
-                    </div>
-
-                    <div className="text-[11px] font-mono space-y-1">
-                      <p className="font-bold uppercase tracking-wider">{t.status.replace('_', ' ')}</p>
-                      {t.assignedWaiterName && <p className="text-slate-300">Staff: {t.assignedWaiterName}</p>}
-                    </div>
-
-                    <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs font-bold text-white">
-                      <span>View Session</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: ASSIGNED REQUESTS & CALLS */}
-          {activeTab === 'pending-calls' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <PhoneCall className="w-5 h-5 text-rose-400" /> My Assigned Service Queue
-                </h3>
-                <p className="text-xs text-slate-400">Accepted customer calls currently in service</p>
-              </div>
-
-              {assignedRequests.length === 0 ? (
-                <Card className="bg-slate-900 border-slate-800 p-8 text-center space-y-2">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                  <p className="text-sm font-bold text-slate-200">Queue Empty</p>
-                  <p className="text-xs text-slate-400">Accept pending requests from Live Dispatch to serve guests.</p>
+              {activeTablesList.length === 0 ? (
+                <Card className="bg-slate-900 border-slate-800 p-12 text-center space-y-3 rounded-3xl">
+                  <Utensils className="w-12 h-12 text-slate-600 mx-auto" />
+                  <h3 className="text-base font-bold text-white">No active tables right now.</h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    All tables are currently clear. When customers scan table QR codes or open table sessions, active tables will be listed here in real-time.
+                  </p>
                 </Card>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {assignedRequests.map((req) => (
-                    <Card key={req.id} className="bg-slate-900 border-sky-500/40 p-5 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="text-lg font-black text-white font-mono">{req.tableNumber}</span>
-                          <div className="mt-1 flex items-center gap-2">
-                            {getRequestBadge(req.requestType, req.customTitle)}
-                            {getPriorityBadge(req.priority)}
+                  {activeTablesList.map((table) => {
+                    const tableOrder = orders.find(
+                      (o) => o.tableNumber === table.tableNumber && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
+                    );
+                    const itemCount = tableOrder ? tableOrder.items.reduce((sum, i) => sum + i.quantity, 0) : 0;
+
+                    return (
+                      <Card
+                        key={table.id}
+                        className="bg-slate-900/90 border-slate-800/90 p-5 space-y-4 rounded-3xl shadow-xl hover:border-slate-700 transition-all"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-2xl font-black text-white font-mono tracking-tight">
+                              {table.tableNumber}
+                            </span>
+                            <div className="mt-1">{getTableStatusBadge(table.status)}</div>
+                          </div>
+                          <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-3 py-1 rounded-xl">
+                            ⏱️ {getOccupiedDuration(table.sessionStartedAt, tableOrder?.createdAt)}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2 bg-slate-950/80 p-4 rounded-2xl border border-slate-800 text-xs">
+                          <div className="flex justify-between items-center pb-1.5 border-b border-slate-800/80">
+                            <span className="text-slate-400 font-medium">Current Order</span>
+                            <span className="font-bold text-white font-mono">
+                              {tableOrder ? `Order #${tableOrder.id}` : 'No order'}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-1">
+                            <span className="text-slate-400 font-medium">Item Count</span>
+                            <span className="font-bold text-slate-200 font-mono">{itemCount} items</span>
+                          </div>
+
+                          <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
+                            <span className="text-slate-400 font-medium">Assigned Waiter</span>
+                            <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
                           </div>
                         </div>
-                        <Badge variant="info">IN SERVICE</Badge>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: PENDING CALLS */}
+          {activeTab === 'pending-calls' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-white tracking-tight">Pending Customer Requests</h2>
+                  <p className="text-xs text-slate-400">Floor assistance, cutlery, water calls and bill check requests</p>
+                </div>
+                <Badge variant="warning" className="font-mono">
+                  {pendingCallsList.length} Pending
+                </Badge>
+              </div>
+
+              {pendingCallsList.length === 0 ? (
+                <Card className="bg-slate-900 border-slate-800 p-12 text-center space-y-3 rounded-3xl">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
+                  <h3 className="text-base font-bold text-white">No pending customer requests.</h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    There are no pending assistance calls right now. New customer requests will pop up in real-time.
+                  </p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingCallsList.map((req) => (
+                    <Card
+                      key={req.id}
+                      className="bg-slate-900/90 border-amber-500/30 p-5 space-y-4 rounded-3xl shadow-xl hover:border-amber-500/60 transition-all"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-2xl font-black text-white font-mono tracking-tight">{req.tableNumber}</span>
+                          <div className="mt-1">{getRequestBadge(req.requestType, req.customTitle)}</div>
+                        </div>
+                        <span className="text-xs font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800">
+                          {getTimeElapsed(req.requestedAt)}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Status</span>
+                          <Badge
+                            variant={req.status === 'ACCEPTED' || req.status === 'IN_PROGRESS' ? 'info' : 'warning'}
+                            className="font-mono"
+                          >
+                            {req.status}
+                          </Badge>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <span className="text-slate-400">Assigned Waiter</span>
+                          <span className="font-bold text-emerald-400">
+                            {req.assignedWaiterName || waiterName}
+                          </span>
+                        </div>
                       </div>
 
                       {req.customerNotes && (
-                        <p className="text-xs text-slate-300 bg-slate-950 p-3 rounded-xl border border-slate-800 italic">
+                        <p className="text-xs text-slate-300 bg-slate-950 p-3 rounded-2xl border border-slate-800 italic">
                           "{req.customerNotes}"
                         </p>
                       )}
 
-                      <div className="flex items-center gap-2 pt-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="w-full text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                          onClick={() => handleUpdateStatus(req.id, 'COMPLETED')}
-                        >
-                          Mark Served & Complete
-                        </Button>
+                      <div className="pt-1">
+                        {req.status === 'PENDING' ? (
+                          <Button
+                            variant="brand"
+                            size="sm"
+                            className="w-full text-xs font-bold py-2.5 shadow-lg"
+                            onClick={() => handleAcceptRequest(req.id)}
+                          >
+                            ACCEPT
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="success"
+                            size="sm"
+                            className="w-full text-xs font-bold py-2.5 shadow-lg"
+                            onClick={() => handleCompleteRequest(req.id)}
+                          >
+                            COMPLETE
+                          </Button>
+                        )}
                       </div>
                     </Card>
                   ))}
@@ -1260,295 +957,82 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             </div>
           )}
 
-          {/* TAB 6: TABLE SESSIONS */}
-          {activeTab === 'table-sessions' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Receipt className="w-5 h-5 text-indigo-400" /> Table Sessions & Billing Overview
-                </h3>
-                <p className="text-xs text-slate-400">Deep dive into current open guest sessions and tab totals</p>
+          {/* TAB 4: READY PLATES */}
+          {activeTab === 'ready-plates' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-white tracking-tight">Ready Kitchen Plates Pass</h2>
+                  <p className="text-xs text-slate-400">Orders marked READY by Kitchen waiting for floor delivery</p>
+                </div>
+                <Badge variant="success" className="font-mono">
+                  {readyPlatesList.length} Ready
+                </Badge>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {tables
-                  .filter((t) => t.status !== 'AVAILABLE')
-                  .map((t) => {
-                    const activeOrd = orders.find((o) => o.id === t.activeOrderId || o.tableNumber === t.tableNumber);
-                    return (
-                      <Card key={t.id} className="bg-slate-900 border-slate-800 p-5 space-y-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-xl font-black text-white font-mono">{t.tableNumber}</span>
-                            <p className="text-xs text-slate-400">Staff: {t.assignedWaiterName || 'Mateo Rossi'}</p>
-                          </div>
-                          <Badge variant="info">{t.status}</Badge>
+              {readyPlatesList.length === 0 ? (
+                <Card className="bg-slate-900 border-slate-800 p-12 text-center space-y-3 rounded-3xl">
+                  <Coffee className="w-12 h-12 text-slate-500 mx-auto" />
+                  <h3 className="text-base font-bold text-white">No ready plates right now.</h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    The kitchen pass is clear. Plated dishes marked READY by chefs will appear here immediately for delivery.
+                  </p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {readyPlatesList.map((order) => (
+                    <Card
+                      key={order.id}
+                      className="bg-slate-900/90 border-emerald-500/40 p-5 space-y-4 rounded-3xl shadow-xl hover:border-emerald-500/70 transition-all"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-xs font-mono font-bold text-emerald-400 block">ORDER #{order.id}</span>
+                          <h3 className="text-2xl font-black text-white font-mono tracking-tight">{order.tableNumber}</h3>
                         </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge variant="success" className="font-mono">READY</Badge>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {getTimeElapsed(order.readyAt || order.updatedAt)}
+                          </span>
+                        </div>
+                      </div>
 
-                        {activeOrd ? (
-                          <div className="space-y-3 bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs">
-                            <div className="flex justify-between text-slate-300">
-                              <span>Order Code:</span>
-                              <span className="font-mono font-bold text-white">#{activeOrd.id}</span>
+                      {/* Food Items & Quantity */}
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block border-b border-slate-800 pb-1">
+                          Food Items & Quantities
+                        </span>
+                        <div className="space-y-1.5">
+                          {order.items.map((item) => (
+                            <div key={item.id} className="flex justify-between items-center text-xs text-slate-200">
+                              <span className="font-semibold">{item.name}</span>
+                              <span className="font-mono text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-lg">
+                                ×{item.quantity}
+                              </span>
                             </div>
-                            <div className="flex justify-between text-slate-300">
-                              <span>Items Count:</span>
-                              <span className="font-bold text-white">{activeOrd.items.length} dishes</span>
-                            </div>
-                            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-2 font-bold">
-                              <span>Current Bill Total:</span>
-                              <span className="text-emerald-400 text-sm font-mono">${activeOrd.totalAmount.toFixed(2)}</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500 italic">No active order logged yet for this table.</p>
-                        )}
+                          ))}
+                        </div>
+                      </div>
 
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full text-xs"
-                          onClick={() => setSelectedTableForSession(t)}
-                        >
-                          Manage Session Details
-                        </Button>
-                      </Card>
-                    );
-                  })}
-              </div>
+                      {/* DELIVER Action */}
+                      <Button
+                        variant="success"
+                        size="sm"
+                        className="w-full text-xs font-bold py-3 shadow-lg flex items-center justify-center gap-2"
+                        onClick={() => handleDeliverOrder(order.id)}
+                      >
+                        <CheckSquare className="w-4 h-4" />
+                        <span>DELIVER</span>
+                      </Button>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </main>
       </div>
-
-      {/* NOTIFICATION DRAWER */}
-      {isNotificationDrawerOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex justify-end">
-          <div className="w-full max-w-md bg-slate-900 h-full border-l border-slate-800 p-6 flex flex-col justify-between space-y-6 shadow-2xl animate-in slide-in-from-right duration-300">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-4">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-lg font-bold text-white">Waiter Notifications</h3>
-                </div>
-                <button
-                  onClick={() => setIsNotificationDrawerOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                >
-                  <XCircle className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-180px)] pr-1">
-                {notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5 hover:border-slate-700 transition-all"
-                  >
-                    <div className="flex justify-between items-start">
-                      <span className="text-xs font-bold text-white">{n.title}</span>
-                      <span className="text-[10px] text-slate-500 font-mono">{n.timestamp}</span>
-                    </div>
-                    <p className="text-xs text-slate-300">{n.message}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              onClick={async () => {
-                await api.markAllNotificationsRead();
-                loadData();
-                setIsNotificationDrawerOpen(false);
-              }}
-              className="w-full"
-            >
-              Mark All Read & Dismiss
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* TABLE SESSION DRAWER MODAL */}
-      {selectedTableForSession && (
-        <Modal
-          isOpen={!!selectedTableForSession}
-          onClose={() => setSelectedTableForSession(null)}
-          title={`Table Session: ${selectedTableForSession.tableNumber}`}
-          size="lg"
-        >
-          <div className="space-y-6">
-            <div className="flex items-center justify-between bg-slate-950 p-4 rounded-2xl border border-slate-800">
-              <div>
-                <span className="text-xs text-slate-400">Current Status</span>
-                <p className="text-sm font-bold text-white">{selectedTableForSession.status}</p>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400">Assigned Staff</span>
-                <p className="text-sm font-bold text-sky-400">{selectedTableForSession.assignedWaiterName || 'Mateo Rossi'}</p>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400">Capacity</span>
-                <p className="text-sm font-bold text-amber-400">{selectedTableForSession.capacity} Guests</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                className="text-xs border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-400"
-                onClick={() => {
-                  handleTableStatusChange(selectedTableForSession.id, 'AVAILABLE');
-                  setSelectedTableForSession(null);
-                }}
-              >
-                Mark Table Vacant & Cleared
-              </Button>
-              <Button
-                variant="outline"
-                className="text-xs border-sky-500/40 hover:bg-sky-500/10 text-sky-400"
-                onClick={() => {
-                  handleTableStatusChange(selectedTableForSession.id, 'CLEANING');
-                  setSelectedTableForSession(null);
-                }}
-              >
-                Mark Ready For Cleaning
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* SHIFT SUMMARY MODAL */}
-      {isShiftModalOpen && shiftSummary && (
-        <Modal
-          isOpen={isShiftModalOpen}
-          onClose={() => setIsShiftModalOpen(false)}
-          title="Waiter Shift Summary & Performance"
-          size="md"
-        >
-          <div className="space-y-5">
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 border border-rose-500/30 space-y-1">
-              <span className="text-[10px] font-mono text-rose-400 uppercase font-bold">Evening Shift Statistics</span>
-              <h4 className="text-xl font-black text-white">Mateo Rossi (WTR-8842)</h4>
-              <p className="text-xs text-slate-400">{shiftSummary.assignedSection}</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-400">Hours Worked</span>
-                <p className="text-base font-black text-white">{shiftSummary.hoursWorked} Hours</p>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-400">Tables Served</span>
-                <p className="text-base font-black text-emerald-400">{shiftSummary.tablesServed} Tables</p>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-400">Orders Delivered</span>
-                <p className="text-base font-black text-sky-400">{shiftSummary.ordersDelivered} Orders</p>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-400">Avg Response Speed</span>
-                <p className="text-base font-black text-amber-400">{shiftSummary.avgResponseTimeMinutes} Mins</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex justify-between items-center">
-              <div>
-                <span className="text-xs text-slate-400">Today's Shift Tips</span>
-                <p className="text-xl font-black text-rose-400 font-mono">{formatPrice(shiftSummary.totalTipsCollected)}</p>
-              </div>
-              <Badge variant="success">Rating: {shiftSummary.customerRating} ★</Badge>
-            </div>
-
-            <Button
-              variant="brand"
-              onClick={() => {
-                showToast('Clocked Out 🕒', 'Shift summary saved & submitted to manager.', 'success');
-                setIsShiftModalOpen(false);
-              }}
-              className="w-full"
-            >
-              Clock Out & Save Shift Log
-            </Button>
-          </div>
-        </Modal>
-      )}
-
-      {/* BROADCAST MODAL */}
-      {isBroadcastModalOpen && (
-        <Modal
-          isOpen={isBroadcastModalOpen}
-          onClose={() => setIsBroadcastModalOpen(false)}
-          title="Floor Broadcast Message"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <p className="text-xs text-slate-400">
-              Send a real-time broadcast message to all waiters, kitchen chefs, and floor managers on duty.
-            </p>
-            <Input
-              label="Broadcast Text"
-              value={broadcastMessageText}
-              onChange={(e) => setBroadcastMessageText(e.target.value)}
-              placeholder="e.g. Table 05 requesting wine pairing assistance!"
-            />
-            <Button variant="brand" onClick={handleSendBroadcast} className="w-full">
-              Send Broadcast
-            </Button>
-          </div>
-        </Modal>
-      )}
-
-      {/* TRANSFER REQUEST MODAL */}
-      {isTransferModalOpen && (
-        <Modal
-          isOpen={isTransferModalOpen}
-          onClose={() => setIsTransferModalOpen(false)}
-          title="Transfer Customer Request"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <p className="text-xs text-slate-400">Select waiter staff member to reassign this customer request:</p>
-            <select
-              value={targetWaiterName}
-              onChange={(e) => setTargetWaiterName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-rose-500"
-            >
-              <option value="Jessica Tanaka">Jessica Tanaka (Floor B)</option>
-              <option value="Marco Silva">Marco Silva (Bar Counter)</option>
-              <option value="Claire Dubois">Claire Dubois (Floor Manager)</option>
-            </select>
-            <Button variant="brand" onClick={handleConfirmTransfer} className="w-full">
-              Confirm Transfer
-            </Button>
-          </div>
-        </Modal>
-      )}
-
-      {/* REPORT PROBLEM MODAL */}
-      {isReportProblemModalOpen && reportProblemOrder && (
-        <Modal
-          isOpen={isReportProblemModalOpen}
-          onClose={() => setIsReportProblemModalOpen(false)}
-          title={`Report Issue for Order #${reportProblemOrder.id}`}
-          size="sm"
-        >
-          <div className="space-y-4">
-            <p className="text-xs text-slate-400">Select issue description to notify Kitchen Station Chef:</p>
-            <Input
-              label="Issue Notes"
-              value={problemDescription}
-              onChange={(e) => setProblemDescription(e.target.value)}
-              placeholder="e.g. Medium rare steak overcooked, needs remake."
-            />
-            <Button variant="danger" onClick={handleReportProblem} className="w-full">
-              Submit Issue to Kitchen Pass
-            </Button>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 };

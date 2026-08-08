@@ -85,7 +85,7 @@ const PORTAL_CONFIGS: Record<PortalType, {
     icon: <PhoneCall className="w-6 h-6 text-emerald-400" />,
     demoEmail: 'waiter@lumiere.com',
     demoPass: 'waiter123',
-    targetDashboard: '/waiter/dashboard',
+    targetDashboard: '/waiter',
     accentGradient: 'from-emerald-500 to-teal-600',
     description: 'Handheld terminal for floor staff to receive customer calls, deliver ready orders, process bills, and manage tables.',
   },
@@ -164,6 +164,8 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
     }
   };
 
+  const currentUser = api.getCurrentUser();
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
       {/* Dynamic Background Glow Elements */}
@@ -190,6 +192,47 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
 
         {/* Login Card */}
         <Card className="bg-slate-900/90 border-slate-800/90 p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6 rounded-3xl">
+          {/* Active Session Status */}
+          {currentUser && (
+            <div className="p-4 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-semibold">Active Logged-In User:</span>
+                <span className="font-bold text-emerald-400 flex items-center gap-1.5 truncate max-w-[180px]">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  {currentUser.name || currentUser.email}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => {
+                    const dashboard = currentUser.role === 'PLATFORM_ADMIN' ? '/admin/dashboard' :
+                                      currentUser.role === 'RESTAURANT_OWNER' ? '/restaurant/dashboard' :
+                                      currentUser.role === 'CHEF' ? '/kitchen/dashboard' :
+                                      currentUser.role === 'WAITER' ? '/waiter' : '/restaurant/dashboard';
+                    onNavigate(dashboard);
+                  }}
+                  className="flex-1 text-xs py-2 font-bold"
+                >
+                  Go to Active Dashboard
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await api.logout();
+                    onLoginSuccess('', null);
+                    onNavigate(window.location.pathname);
+                  }}
+                  className="text-xs border-rose-500/40 text-rose-400 hover:bg-rose-500/10 py-2 font-bold"
+                >
+                  Log Out
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Portal Info Banner */}
           <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-2xl flex items-start gap-3">
             <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />

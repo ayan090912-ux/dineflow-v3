@@ -24,8 +24,10 @@ import {
   Check,
   X,
   Laptop,
+  LogOut,
 } from 'lucide-react';
 import { Button, Card, Badge, Input } from '../../packages/ui';
+import { api } from '../../packages/api/client';
 
 interface LandingWebsiteProps {
   onStartTrial: (ownerData?: any) => void;
@@ -148,21 +150,53 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-3">
-          <button
-            onClick={onLogin}
-            className="text-xs font-bold text-slate-300 hover:text-white px-3 py-2 rounded-xl transition-all hover:bg-slate-900"
-          >
-            Log In
-          </button>
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={() => setShowSignupModal(true)}
-            icon={<Sparkles className="w-3.5 h-3.5" />}
-            className="shadow-lg shadow-rose-950/40"
-          >
-            Create Restaurant
-          </Button>
+          {api.getCurrentUser() ? (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => {
+                  const u = api.getCurrentUser();
+                  if (u?.role === 'PLATFORM_ADMIN') onOpenApp('platform');
+                  else if (u?.role === 'WAITER') onOpenApp('waiter');
+                  else onOpenApp('restaurant');
+                }}
+                className="text-xs font-bold"
+              >
+                Go to My Dashboard
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await api.logout();
+                  window.location.reload();
+                }}
+                className="text-xs border-rose-500/40 text-rose-400 hover:bg-rose-500/10"
+                icon={<LogOut className="w-3.5 h-3.5" />}
+              >
+                Log Out
+              </Button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={onLogin}
+                className="text-xs font-bold text-slate-300 hover:text-white px-3 py-2 rounded-xl transition-all hover:bg-slate-900 cursor-pointer"
+              >
+                Log In
+              </button>
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => setShowSignupModal(true)}
+                icon={<Sparkles className="w-3.5 h-3.5" />}
+                className="shadow-lg shadow-rose-950/40"
+              >
+                Create Restaurant
+              </Button>
+            </>
+          )}
         </div>
       </nav>
 

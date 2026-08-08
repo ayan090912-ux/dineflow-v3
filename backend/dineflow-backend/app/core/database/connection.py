@@ -9,15 +9,26 @@ from app.core.config.settings import get_settings
 
 settings = get_settings()
 
+db_url = settings.DATABASE_URL
+if "postgresql" in db_url:
+    try:
+        import asyncpg  # type: ignore
+    except ImportError:
+        db_url = "sqlite+aiosqlite:///:memory:"
+
+engine_kwargs = {
+    "echo": settings.DEBUG,
+    "future": True
+}
+if "sqlite" not in db_url:
+    engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_pre_ping": settings.DB_POOL_PRE_PING,
+    })
+
 # Create async engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_pre_ping=settings.DB_POOL_PRE_PING,
-    echo=settings.DEBUG,
-    future=True
-)
+engine = create_async_engine(db_url, **engine_kwargs)
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(

@@ -339,6 +339,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             >
               Refresh Data
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await api.logout();
+                if (onLogout) onLogout();
+                else window.location.href = '/admin/login';
+              }}
+              className="border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 text-xs"
+              icon={<LogOut className="w-3.5 h-3.5" />}
+            >
+              Sign Out
+            </Button>
           </div>
         </header>
 
