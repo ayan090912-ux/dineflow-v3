@@ -63,6 +63,7 @@ import {
   Tabs,
   StatsCard,
   QRCodeDisplay,
+  printQRCodeCard,
   Avatar,
   SearchInput,
   ImageUpload,
@@ -1542,7 +1543,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 <Button
                   variant="brand"
                   size="md"
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    const cardEl = document.querySelector('.printable-card-wrapper') as HTMLElement || document.querySelector('.w-72.sm\\:w-80') as HTMLElement;
+                    printQRCodeCard(cardEl, currentRestaurant?.name || 'Food Truck', 'COUNTER');
+                  }}
                   className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold"
                   icon={<QrCode className="w-4 h-4" />}
                 >

@@ -23,3 +23,48 @@
   }
 }
 
+/* Isolated Print Styles for QR Code Standees & Signs */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  /* Hide header, navigation bars, sidebars, and full dashboard wrapper */
+  body > * {
+    display: none !important;
+  }
+
+  body > #root {
+    display: block !important;
+  }
+
+  #root > * {
+    display: none !important;
+  }
+
+  .printable-card-wrapper,
+  .printable-card-wrapper * {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  .printable-card-wrapper {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 320px !important;
+    margin: 0 auto !important;
+    padding: 24px !important;
+    box-shadow: none !important;
+    background: #0f172a !important;
+    color: #ffffff !important;
+    border: 2px solid #334155 !important;
+    border-radius: 24px !important;
+    z-index: 99999 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+

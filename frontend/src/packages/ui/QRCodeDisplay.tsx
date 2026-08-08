@@ -33,6 +33,88 @@ export interface QRCodeDisplayProps {
 
 export type QRDesignPreset = 'SIMPLE' | 'ACRYLIC_DARK' | 'GOLD_LUXE' | 'WOOD_BISTRO' | 'NEON_CYBER';
 
+export const printQRCodeCard = (
+  element: HTMLElement | null,
+  restaurantName: string = 'Restaurant',
+  tableNumber: string = 'COUNTER'
+) => {
+  if (!element) {
+    window.print();
+    return;
+  }
+
+  const printWin = window.open('', '_blank', 'width=750,height=900');
+  if (!printWin) {
+    window.print();
+    return;
+  }
+
+  const cardHtml = element.innerHTML;
+  const cardBgColor = element.style.backgroundColor || '#0f172a';
+  const cardTextColor = element.style.color || '#ffffff';
+  const cardBorderColor = element.style.borderColor || 'rgba(255,255,255,0.1)';
+
+  printWin.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Print QR Standee - ${restaurantName} (${tableNumber})</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .printable-card-wrapper {
+            width: 340px;
+            padding: 28px;
+            border-radius: 28px;
+            text-align: center;
+            background-color: ${cardBgColor} !important;
+            color: ${cardTextColor} !important;
+            border: 2px solid ${cardBorderColor} !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            margin: auto;
+          }
+          .printable-card-wrapper img {
+            max-width: 100%;
+            height: auto;
+          }
+          .hidden { display: none !important; }
+          @media print {
+            body { background: transparent !important; padding: 0 !important; }
+            .printable-card-wrapper { box-shadow: none !important; margin: 0 auto !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="printable-card-wrapper">
+          ${cardHtml}
+        </div>
+        <script>
+          setTimeout(() => {
+            window.focus();
+            window.print();
+            window.close();
+          }, 350);
+        </script>
+      </body>
+    </html>
+  `);
+  printWin.document.close();
+};
+
 export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   url,
   value,
@@ -237,9 +319,9 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
     }
   };
 
-  // Print Standee Card
+  // Dedicated Print Standee Card
   const handlePrintCard = () => {
-    window.print();
+    printQRCodeCard(printAreaRef.current, safeRestName, safeTableNum);
   };
 
   return (
@@ -462,17 +544,28 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
             </div>
           </div>
 
-          {/* Download Action Buttons */}
+          {/* Download & Print Action Buttons */}
           <div className="space-y-2">
-            <Button
-              variant="brand"
-              className="w-full py-2.5 text-xs font-bold shadow-lg shadow-rose-950/40"
-              onClick={handleDownloadCustomCardPNG}
-              disabled={isDownloading}
-              icon={<Download className="w-4 h-4" />}
-            >
-              {isDownloading ? 'Generating High-Res PNG...' : 'Download Cool Standee Card (PNG)'}
-            </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button
+                variant="brand"
+                className="py-2.5 text-xs font-bold shadow-lg shadow-rose-950/40"
+                onClick={handleDownloadCustomCardPNG}
+                disabled={isDownloading}
+                icon={<Download className="w-4 h-4" />}
+              >
+                {isDownloading ? 'Generating...' : 'Download PNG'}
+              </Button>
+
+              <Button
+                variant="outline"
+                className="py-2.5 text-xs font-bold border-rose-500/50 text-rose-300 hover:bg-rose-500/10"
+                onClick={handlePrintCard}
+                icon={<Printer className="w-4 h-4 text-rose-400" />}
+              >
+                Print Standee Sign
+              </Button>
+            </div>
 
             <div className="grid grid-cols-2 gap-2">
               <Button
