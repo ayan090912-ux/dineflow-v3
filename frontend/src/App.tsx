@@ -292,13 +292,22 @@ export default function App() {
             {currentPath === '/admin/dashboard' && (
               checkRoleAccess(['PLATFORM_ADMIN', 'SUPER_ADMIN']) ? (
                 <PlatformApp onLogout={() => handleLogout('/admin/login')} />
-              ) : (
+              ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="PLATFORM_ADMIN"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/admin/dashboard"
                   onNavigate={navigateTo}
+                />
+              ) : (
+                <RoleLoginPage
+                  portal="admin"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/admin/dashboard');
+                  }}
                 />
               )
             )}
@@ -309,13 +318,22 @@ export default function App() {
                   onEditSetup={() => navigateTo('/wizard')}
                   onLogout={() => handleLogout('/restaurant/login')}
                 />
-              ) : (
+              ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="RESTAURANT_OWNER"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/restaurant/dashboard"
                   onNavigate={navigateTo}
+                />
+              ) : (
+                <RoleLoginPage
+                  portal="restaurant"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/restaurant/dashboard');
+                  }}
                 />
               )
             )}
@@ -337,7 +355,7 @@ export default function App() {
                   }}
                   onLogout={() => handleLogout('/kitchen/login')}
                 />
-              ) : (
+              ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="CHEF / KITCHEN STAFF"
                   userRole={currentUser?.role}
@@ -345,13 +363,22 @@ export default function App() {
                   targetPath="/kitchen/dashboard"
                   onNavigate={navigateTo}
                 />
+              ) : (
+                <RoleLoginPage
+                  portal="kitchen"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/kitchen/dashboard');
+                  }}
+                />
               )
             )}
 
             {currentPath === '/bar/dashboard' && (
               checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
                 <BarTerminal onLogout={() => handleLogout('/bar/login')} />
-              ) : (
+              ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="BARTENDER / BAR STAFF"
                   userRole={currentUser?.role}
@@ -359,19 +386,37 @@ export default function App() {
                   targetPath="/bar/dashboard"
                   onNavigate={navigateTo}
                 />
+              ) : (
+                <RoleLoginPage
+                  portal="bar"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/bar/dashboard');
+                  }}
+                />
               )
             )}
 
             {(currentPath === '/waiter' || currentPath === '/waiter/dashboard') && (
               checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
                 <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
-              ) : (
+              ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="WAITER / FLOOR STAFF"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/waiter"
                   onNavigate={navigateTo}
+                />
+              ) : (
+                <RoleLoginPage
+                  portal="waiter"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/waiter');
+                  }}
                 />
               )
             )}

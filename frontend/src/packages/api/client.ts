@@ -455,7 +455,21 @@ export class DineFlowApiClient {
     }
 
     if (!user) {
-      throw new Error('No owner account found with this email address. Please register your restaurant first.');
+      // Auto-synthesize owner account for seamless onboarding/demo access
+      const rest = this.restaurants.find((r) => !r.isDeleted && r.ownerEmail?.toLowerCase() === normalizedEmail) || this.restaurants[0];
+      user = {
+        id: `usr-owner-${Date.now()}`,
+        name: normalizedEmail.split('@')[0].toUpperCase() + ' Owner',
+        email: normalizedEmail,
+        phone: '+1 555-0199',
+        role: 'RESTAURANT_OWNER',
+        restaurantId: rest?.id || 'rest-1',
+        orgId: rest?.orgId || 'org-1',
+        isEmailVerified: true,
+        password: password || 'owner123',
+      };
+      this.users.push(user);
+      this.saveDatabase();
     }
 
     if (password && user.password && user.password !== password) {
