@@ -324,10 +324,17 @@ export default function App() {
 
             {currentPath === '/restaurant/dashboard' && (
               checkRoleAccess(['RESTAURANT_OWNER', 'MANAGER', 'SUPER_ADMIN']) ? (
-                <RestaurantApp
-                  onEditSetup={() => navigateTo('/wizard')}
-                  onLogout={() => handleLogout('/restaurant/login')}
-                />
+                currentRestaurant && !currentRestaurant.isApproved && currentUser?.role !== 'SUPER_ADMIN' ? (
+                  <PendingApprovalPage
+                    onNavigate={navigateTo}
+                    onLogout={() => handleLogout('/restaurant/login')}
+                  />
+                ) : (
+                  <RestaurantApp
+                    onEditSetup={() => navigateTo('/wizard')}
+                    onLogout={() => handleLogout('/restaurant/login')}
+                  />
+                )
               ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="RESTAURANT_OWNER"

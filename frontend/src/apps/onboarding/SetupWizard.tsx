@@ -87,13 +87,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [currentStep, setCurrentStep] = useState(1);
 
   // Step 1: Business Info & Owner Login Credentials
-  const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || 'Lumiere Bistro');
-  const [brandName, setBrandName] = useState('Lumiere Hospitality Group');
+  const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || '');
+  const [brandName, setBrandName] = useState('');
   const [businessType, setBusinessType] = useState<'RESTAURANT' | 'BAR' | 'FOOD_TRUCK'>('RESTAURANT');
   const [foodTruckHasTables, setFoodTruckHasTables] = useState<boolean>(false);
   const [ownerName, setOwnerName] = useState(initialOwnerData?.ownerName || initialOwnerData?.name || '');
   const [ownerEmail, setOwnerEmail] = useState(initialOwnerData?.ownerEmail || initialOwnerData?.email || '');
-  const [ownerPhone, setOwnerPhone] = useState(initialOwnerData?.phone || '+1 555-0100');
+  const [ownerPhone, setOwnerPhone] = useState(initialOwnerData?.phone || '');
   const [ownerPassword, setOwnerPassword] = useState(initialOwnerData?.password || '');
   const [ownerConfirmPassword, setOwnerConfirmPassword] = useState(initialOwnerData?.password || '');
 
