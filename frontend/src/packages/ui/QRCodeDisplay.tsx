@@ -43,7 +43,7 @@ export const printQRCodeCard = (
     return;
   }
 
-  const printWin = window.open('', '_blank', 'width=750,height=900');
+  const printWin = window.open('', '_blank', 'width=800,height=950');
   if (!printWin) {
     window.print();
     return;
@@ -62,7 +62,7 @@ export const printQRCodeCard = (
         <style>
           @page {
             size: A4 portrait;
-            margin: 10mm;
+            margin: 15mm;
           }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
@@ -77,7 +77,7 @@ export const printQRCodeCard = (
             print-color-adjust: exact !important;
           }
           .printable-card-wrapper {
-            width: 340px;
+            width: 320px;
             padding: 28px;
             border-radius: 28px;
             text-align: center;
@@ -91,9 +91,15 @@ export const printQRCodeCard = (
             max-width: 100%;
             height: auto;
           }
+          .printable-card-wrapper svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+          }
           .hidden { display: none !important; }
           @media print {
-            body { background: transparent !important; padding: 0 !important; }
+            body { background: #ffffff !important; padding: 0 !important; }
             .printable-card-wrapper { box-shadow: none !important; margin: 0 auto !important; }
           }
         </style>
@@ -103,11 +109,13 @@ export const printQRCodeCard = (
           ${cardHtml}
         </div>
         <script>
-          setTimeout(() => {
-            window.focus();
-            window.print();
-            window.close();
-          }, 350);
+          window.onload = function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+              window.close();
+            }, 250);
+          };
         </script>
       </body>
     </html>
@@ -443,24 +451,27 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
           </div>
 
           {/* QR Code Container Badge */}
-          <div className="p-4 bg-white rounded-2xl shadow-xl my-4 border border-slate-100 relative group">
-            <QRCodeCanvas
-              ref={qrCanvasRef}
+          <div className="p-3 bg-white rounded-2xl shadow-xl my-4 border border-slate-100 flex items-center justify-center mx-auto w-48 h-48 sm:w-52 sm:h-52">
+            <QRCodeSVG
+              id={`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`}
               value={qrUrl}
-              size={size}
+              size={180}
               level="H"
               marginSize={2}
               bgColor="#ffffff"
               fgColor="#0f172a"
+              className="w-full h-full object-contain"
             />
-            {/* Hidden SVG for Vector Downloads */}
+            {/* Hidden Canvas for PNG Downloads */}
             <div className="hidden">
-              <QRCodeSVG
-                id={`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`}
+              <QRCodeCanvas
+                ref={qrCanvasRef}
                 value={qrUrl}
-                size={size}
+                size={600}
                 level="H"
-                includeMargin={true}
+                marginSize={2}
+                bgColor="#ffffff"
+                fgColor="#0f172a"
               />
             </div>
           </div>
