@@ -75,8 +75,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [cart, setCart] = useState<{ item: MenuItem; quantity: number; notes?: string; servingOption?: string }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Active Live Order
-  const [activeOrder, setActiveOrder] = useState<Order | null>(null);
+  // Active Live Orders
+  const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   useEffect(() => {
@@ -94,8 +94,20 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         return;
       }
 
-      if (event.tableNumber === selectedTableNum && event.data) {
-        setActiveOrder(event.data);
+      if (event.tableNumber?.toLowerCase() === selectedTableNum?.toLowerCase()) {
+        if (event.type === 'OrderCreated' && event.data) {
+          setCustomerOrders((prev) => {
+            const exists = prev.some((o) => o.id === event.data.id);
+            if (exists) return prev.map((o) => (o.id === event.data.id ? event.data : o));
+            return [event.data, ...prev];
+          });
+        } else if (event.orderId && event.data) {
+          setCustomerOrders((prev) =>
+            prev.map((o) => (o.id === event.orderId ? { ...o, ...event.data } : o))
+          );
+        } else {
+          loadInitialOrder();
+        }
 
         if (event.type === 'ETAUpdated') {
           addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
@@ -169,10 +181,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const loadInitialOrder = async () => {
     const restId = api.getCurrentRestaurantId() || undefined;
     const allOrders = await api.getOrders(restId);
-    const tableOrd = allOrders.find((o) => o.tableNumber === tableNumber && o.status !== 'DELIVERED');
-    if (tableOrd) {
-      setActiveOrder(tableOrd);
-    }
+    const tableOrds = allOrders.filter(
+      (o) => o.tableNumber.toLowerCase() === selectedTableNum.toLowerCase() || o.tableNumber.toLowerCase() === tableNumber.toLowerCase()
+    );
+    tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setCustomerOrders(tableOrds);
   };
 
   const addToast = (type: ToastMessage['type'], title: string, message?: string) => {
@@ -248,7 +261,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       paymentStatus: 'UNPAID',
     });
 
-    setActiveOrder(newOrd);
+    setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
     setCart([]);
     setIsCartOpen(false);
     addToast('success', 'Order Transmitted! 🎉', `Order #${newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`);
@@ -452,10 +465,71 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
-      {/* Live Order Status & ETA Tracker */}
-      {activeOrder && (
-        <CustomerLiveTracker order={activeOrder} onUpdateOrder={setActiveOrder} />
-      )}
+      {/* Live Order Status & ETA Trackers */}
+      {(() => {
+        const activeOrders = customerOrders.filter(
+          (o) => o.status !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+        );
+        const previousOrders = customerOrders.filter(
+          (o) => o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'CANCELLED'
+        );
+
+        return (
+          <>
+            {activeOrders.length > 0 && (
+              <div className="space-y-3 px-1 my-2">
+                <div className="px-4 flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Flame className="w-4 h-4 text-rose-500" />
+                    Active Table Orders ({activeOrders.length})
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Live Sync</span>
+                </div>
+                {activeOrders.map((ord) => (
+                  <CustomerLiveTracker
+                    key={ord.id}
+                    order={ord}
+                    onUpdateOrder={(updated) =>
+                      setCustomerOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
+                    }
+                  />
+                ))}
+              </div>
+            )}
+
+            {previousOrders.length > 0 && (
+              <div className="px-4 my-2">
+                <details className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300">
+                  <summary className="font-bold cursor-pointer flex items-center justify-between text-slate-300 hover:text-white">
+                    <span className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      Order History / Past Orders ({previousOrders.length})
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
+                      Completed
+                    </span>
+                  </summary>
+                  <div className="mt-3 space-y-2 pt-2 border-t border-slate-800">
+                    {previousOrders.map((pOrd) => (
+                      <div key={pOrd.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-white font-mono">Order #{pOrd.id}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {pOrd.items.length} items • ₹{pOrd.totalAmount.toFixed(2)}
+                          </p>
+                        </div>
+                        <Badge variant="success" className="text-[10px] font-mono">
+                          {pOrd.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Menu Filter Tabs */}
       <div className="p-4 space-y-3">

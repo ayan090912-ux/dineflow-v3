@@ -624,10 +624,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {activeTablesList.slice(0, 6).map((table) => {
-                      const tableOrder = orders.find(
-                        (o) => o.tableNumber === table.tableNumber && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
+                      const tableOrders = orders.filter(
+                        (o) => o.tableNumber.toLowerCase() === table.tableNumber.toLowerCase() && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
                       );
-                      const itemCount = tableOrder ? tableOrder.items.reduce((sum, i) => sum + i.quantity, 0) : 0;
+                      const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
+                      const latestOrder = tableOrders[0];
 
                       return (
                         <div
@@ -640,13 +641,17 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                               <div className="mt-1">{getTableStatusBadge(table.status)}</div>
                             </div>
                             <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-lg">
-                              ⏱️ {getOccupiedDuration(table.sessionStartedAt, tableOrder?.createdAt)}
+                              ⏱️ {getOccupiedDuration(table.sessionStartedAt, latestOrder?.createdAt)}
                             </span>
                           </div>
 
                           <div className="space-y-1 text-xs text-slate-300 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                             <p className="font-semibold text-white">
-                              {tableOrder ? `Order #${tableOrder.id}` : 'No active order'}
+                              {tableOrders.length > 1
+                                ? `${tableOrders.length} Active Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
+                                : latestOrder
+                                ? `Order #${latestOrder.id}`
+                                : 'No active order'}
                             </p>
                             <p className="text-slate-400 flex items-center justify-between">
                               <span>Item count:</span>
@@ -818,10 +823,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {activeTablesList.map((table) => {
-                    const tableOrder = orders.find(
-                      (o) => o.tableNumber === table.tableNumber && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
+                    const tableOrders = orders.filter(
+                      (o) => o.tableNumber.toLowerCase() === table.tableNumber.toLowerCase() && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
                     );
-                    const itemCount = tableOrder ? tableOrder.items.reduce((sum, i) => sum + i.quantity, 0) : 0;
+                    const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
+                    const latestOrder = tableOrders[0];
 
                     return (
                       <Card
@@ -836,15 +842,19 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                             <div className="mt-1">{getTableStatusBadge(table.status)}</div>
                           </div>
                           <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-3 py-1 rounded-xl">
-                            ⏱️ {getOccupiedDuration(table.sessionStartedAt, tableOrder?.createdAt)}
+                            ⏱️ {getOccupiedDuration(table.sessionStartedAt, latestOrder?.createdAt)}
                           </span>
                         </div>
 
                         <div className="space-y-2 bg-slate-950/80 p-4 rounded-2xl border border-slate-800 text-xs">
                           <div className="flex justify-between items-center pb-1.5 border-b border-slate-800/80">
-                            <span className="text-slate-400 font-medium">Current Order</span>
+                            <span className="text-slate-400 font-medium">Active Orders</span>
                             <span className="font-bold text-white font-mono">
-                              {tableOrder ? `Order #${tableOrder.id}` : 'No order'}
+                              {tableOrders.length > 1
+                                ? `${tableOrders.length} Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
+                                : latestOrder
+                                ? `Order #${latestOrder.id}`
+                                : 'No active order'}
                             </span>
                           </div>
 
