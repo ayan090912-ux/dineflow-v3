@@ -196,8 +196,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           `${event.tableNumber || 'Table'} requested final bill`,
           'info'
         );
-      } else if (event.type === 'TableStatusChanged') {
-        showToast('Table Session Updated 🪑', `Status updated for ${event.tableNumber}`, 'info');
+      } else if (event.type === 'TableStatusChanged' || event.type === 'TableStatusUpdated') {
+        showToast('Table Session Updated 🪑', `Status updated for ${event.tableNumber || 'Table'}`, 'info');
       }
     });
 
@@ -239,16 +239,17 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   // Computed data collections
   const activeTablesList = useMemo(() => {
     return tables.filter((t) => {
-      // Find matching order
-      const tableOrder = orders.find(
-        (o) => o.tableNumber === t.tableNumber && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+      // Find matching orders
+      const tableOrders = orders.filter(
+        (o) => t.tableNumber && o.tableNumber && o.tableNumber.toLowerCase() === t.tableNumber.toLowerCase() && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
       );
       const isActive =
         t.status === 'OCCUPIED' ||
         t.status === 'WAITER_CALLED' ||
         t.status === 'BILL_REQUESTED' ||
         t.status === 'WAITING_FOR_SERVICE' ||
-        Boolean(tableOrder);
+        t.isOccupied === true ||
+        tableOrders.length > 0;
 
       if (!isActive) return false;
 

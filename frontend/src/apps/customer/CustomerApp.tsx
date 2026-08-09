@@ -149,6 +149,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     );
     if (tbl) {
       setCurrentTable(tbl);
+      if (tbl.status === 'AVAILABLE') {
+        const updated = await api.updateTableStatus(tbl.id, 'OCCUPIED');
+        if (updated) {
+          setCurrentTable(updated);
+        }
+      }
     }
   };
 

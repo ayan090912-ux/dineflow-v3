@@ -1305,10 +1305,32 @@ export class DineFlowApiClient {
 
   async updateTableStatus(tableId: string, status: any, updatedBy?: any) {
     await delay(100);
-    const table = this.tables.find((t) => t.id === tableId);
+    const table = this.tables.find((t) => t.id === tableId || t.tableNumber?.toLowerCase() === tableId.toLowerCase());
     if (table) {
       table.status = status;
+      if (status === 'OCCUPIED') {
+        table.isOccupied = true;
+        table.sessionStartedAt = table.sessionStartedAt || new Date().toISOString();
+      } else if (status === 'AVAILABLE') {
+        table.isOccupied = false;
+        table.sessionStartedAt = undefined;
+        table.reservationDetails = undefined;
+      }
       this.saveDatabase();
+      realtimeBus.emit('TableStatusUpdated' as any, {
+        tableId: table.id,
+        restaurantId: table.restaurantId,
+        tableNumber: table.tableNumber,
+        status: table.status,
+        data: table,
+      });
+      realtimeBus.emit('TableStatusChanged' as any, {
+        tableId: table.id,
+        restaurantId: table.restaurantId,
+        tableNumber: table.tableNumber,
+        status: table.status,
+        data: table,
+      });
     }
     return table;
   }
@@ -2013,6 +2035,33 @@ export class DineFlowApiClient {
     };
 
     this.orders.unshift(newOrd);
+
+    // Auto-occupy matching table in database if it was available
+    if (!isPickup && newOrd.tableNumber) {
+      const table = this.tables.find(
+        (t) => t.restaurantId === restId && t.tableNumber.toLowerCase() === newOrd.tableNumber.toLowerCase()
+      );
+      if (table && table.status === 'AVAILABLE') {
+        table.status = 'OCCUPIED';
+        table.isOccupied = true;
+        table.sessionStartedAt = table.sessionStartedAt || new Date().toISOString();
+        realtimeBus.emit('TableStatusUpdated' as any, {
+          tableId: table.id,
+          restaurantId: restId,
+          tableNumber: table.tableNumber,
+          status: 'OCCUPIED',
+          data: table,
+        });
+        realtimeBus.emit('TableStatusChanged' as any, {
+          tableId: table.id,
+          restaurantId: restId,
+          tableNumber: table.tableNumber,
+          status: 'OCCUPIED',
+          data: table,
+        });
+      }
+    }
+
     this.saveDatabase();
     realtimeBus.emit('OrderCreated' as any, {
       orderId: newOrd.id,
