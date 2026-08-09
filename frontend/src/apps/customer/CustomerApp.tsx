@@ -481,76 +481,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
-      {/* Live Order Status & ETA Trackers */}
-      {(() => {
-        const activeOrders = customerOrders.filter(
-          (o) => o.status !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
-        );
-        const previousOrders = customerOrders.filter(
-          (o) => o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'CANCELLED'
-        );
 
-        return (
-          <>
-            {activeOrders.length > 0 && (
-              <div
-                id="active-orders-section"
-                className={`space-y-3 px-1 my-2 transition-all duration-500 rounded-3xl ${
-                  highlightActiveOrders ? 'ring-2 ring-rose-500 bg-rose-500/10 p-2 shadow-2xl shadow-rose-950/50' : ''
-                }`}
-              >
-                <div className="px-4 flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Flame className="w-4 h-4 text-rose-500" />
-                    Active Table Orders ({activeOrders.length})
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">Live Sync</span>
-                </div>
-                {activeOrders.map((ord) => (
-                  <CustomerLiveTracker
-                    key={ord.id}
-                    order={ord}
-                    onUpdateOrder={(updated) =>
-                      setCustomerOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
-                    }
-                  />
-                ))}
-              </div>
-            )}
-
-            {previousOrders.length > 0 && (
-              <div className="px-4 my-2">
-                <details className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300">
-                  <summary className="font-bold cursor-pointer flex items-center justify-between text-slate-300 hover:text-white">
-                    <span className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                      Order History / Past Orders ({previousOrders.length})
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                      Completed
-                    </span>
-                  </summary>
-                  <div className="mt-3 space-y-2 pt-2 border-t border-slate-800">
-                    {previousOrders.map((pOrd) => (
-                      <div key={pOrd.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-white font-mono">Order #{pOrd.id}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            {pOrd.items.length} items • ₹{pOrd.totalAmount.toFixed(2)}
-                          </p>
-                        </div>
-                        <Badge variant="success" className="text-[10px] font-mono">
-                          {pOrd.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              </div>
-            )}
-          </>
-        );
-      })()}
 
       {/* Menu Filter Tabs */}
       <div className="p-4 space-y-3">
@@ -742,6 +673,79 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           )}
         </div>
       </div>
+
+      {/* Dedicated Bottom Order Status Section */}
+      {(() => {
+        const activeOrders = customerOrders.filter(
+          (o) => o.status !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+        );
+        const previousOrders = customerOrders.filter(
+          (o) => o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'CANCELLED'
+        );
+
+        if (activeOrders.length === 0 && previousOrders.length === 0) return null;
+
+        return (
+          <div className="p-4 space-y-4 pt-6 border-t border-slate-800/80 mt-6">
+            {activeOrders.length > 0 && (
+              <div
+                id="active-orders-section"
+                className={`space-y-3 px-1 transition-all duration-500 rounded-3xl ${
+                  highlightActiveOrders ? 'ring-2 ring-rose-500 bg-rose-500/10 p-2 shadow-2xl shadow-rose-950/50' : ''
+                }`}
+              >
+                <div className="px-1 flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Flame className="w-4 h-4 text-rose-500" />
+                    Active Table Orders ({activeOrders.length})
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Live Sync</span>
+                </div>
+                {activeOrders.map((ord) => (
+                  <CustomerLiveTracker
+                    key={ord.id}
+                    order={ord}
+                    onUpdateOrder={(updated) =>
+                      setCustomerOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
+                    }
+                  />
+                ))}
+              </div>
+            )}
+
+            {previousOrders.length > 0 && (
+              <div className="my-2">
+                <details className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300">
+                  <summary className="font-bold cursor-pointer flex items-center justify-between text-slate-300 hover:text-white">
+                    <span className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      Order History / Past Orders ({previousOrders.length})
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
+                      Completed
+                    </span>
+                  </summary>
+                  <div className="mt-3 space-y-2 pt-2 border-t border-slate-800">
+                    {previousOrders.map((pOrd) => (
+                      <div key={pOrd.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-white font-mono">Order #{pOrd.id}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {pOrd.items.length} items • ₹{pOrd.totalAmount.toFixed(2)}
+                          </p>
+                        </div>
+                        <Badge variant="success" className="text-[10px] font-mono">
+                          {pOrd.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Floating Cart Sticky Footer */}
       {totalCartCount > 0 && (
