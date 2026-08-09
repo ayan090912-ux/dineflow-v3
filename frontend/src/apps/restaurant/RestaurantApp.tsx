@@ -610,38 +610,45 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
   // Staff CRUD Handlers
   const handleAddStaff = async () => {
-    if (!newStaff.name) {
-      addToast('error', 'Validation Failed', 'Staff member name is required');
+    if (!newStaff.name.trim()) {
+      addToast('error', 'Validation Failed', 'Staff member name is required.');
       return;
     }
-    const restId = currentRestaurant?.id || 'rest-1';
-    const initialPass = newStaffPassword || (newStaff.role === 'CHEF' ? 'kitchen123' : newStaff.role === 'WAITER' ? 'waiter123' : 'staff123');
-    await api.addEmployee({
-      restaurantId: restId,
-      name: newStaff.name,
-      role: newStaff.role,
-      email: newStaff.email || `${newStaff.name.toLowerCase().replace(/\s+/g, '')}@dineflow.com`,
-      phone: newStaff.phone || '+1 555-0100',
-      status: 'ON_CLOCK',
-      shift: newStaff.shift,
-      assignedSection: newStaff.assignedSection,
-      hourlyRate: parseFloat(newStaff.hourlyRate) || 18,
-      password: initialPass,
-      isAccountDisabled: false,
-    });
-    addToast('success', 'Staff Member & Login Credentials Created', `${newStaff.name} can now log in with password: ${initialPass}`);
-    setIsAddStaffModalOpen(false);
-    setNewStaff({
-      name: '',
-      role: 'WAITER',
-      email: '',
-      phone: '',
-      shift: 'Evening (4PM - 12AM)',
-      assignedSection: 'Front Floor & POS',
-      hourlyRate: '18.50',
-    });
-    setNewStaffPassword('');
-    loadData();
+    try {
+      const restId = currentRestaurant?.id || 'rest-1';
+      const initialPass = newStaffPassword || (newStaff.role === 'CHEF' ? 'kitchen123' : newStaff.role === 'WAITER' ? 'waiter123' : 'staff123');
+      const created = await api.addEmployee({
+        restaurantId: restId,
+        name: newStaff.name,
+        role: newStaff.role,
+        email: newStaff.email || `${newStaff.name.toLowerCase().replace(/\s+/g, '')}@dineflow.com`,
+        phone: newStaff.phone || '+1 555-0100',
+        status: 'OFF_CLOCK',
+        shift: newStaff.shift,
+        assignedSection: newStaff.assignedSection,
+        hourlyRate: parseFloat(newStaff.hourlyRate) || 18,
+        password: initialPass,
+        isAccountDisabled: false,
+      });
+
+      if (created) {
+        addToast('success', 'Staff Member Created 🎉', `${created.name} (${created.role}) can now log in with password: ${initialPass}`);
+        setIsAddStaffModalOpen(false);
+        setNewStaff({
+          name: '',
+          role: 'WAITER',
+          email: '',
+          phone: '',
+          shift: 'Evening (4PM - 12AM)',
+          assignedSection: 'Front Floor & POS',
+          hourlyRate: '18.50',
+        });
+        setNewStaffPassword('');
+        await loadData();
+      }
+    } catch (err: any) {
+      addToast('error', 'Employee Creation Failed ❌', err.message || 'Error persisting employee record to database.');
+    }
   };
 
   const handleSaveEditStaff = async () => {
@@ -2642,16 +2649,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   onClick={async () => {
                     if (currentRestaurant) {
                       await api.updateRestaurantTheme(currentRestaurant.id, theme);
+                      await api.updateRestaurantDetails(currentRestaurant.id, {
+                        name: theme.restaurantName || currentRestaurant.name,
+                        logo: theme.logo || currentRestaurant.logo,
+                        bannerUrl: theme.bannerUrl || currentRestaurant.bannerUrl,
+                        currency: theme.currency || currentRestaurant.currency,
+                      });
                     }
                     addToast(
                       'success',
-                      'Branding & Currency Published! 🎨',
-                      `Base currency updated to ${theme.currency || 'INR (₹)'}. Live customer QR apps synced!`
+                      'Settings & Branding Saved! 🎨',
+                      `Base currency updated to ${theme.currency || 'INR (₹)'}. Database and live customer apps synced!`
                     );
+                    await loadData();
                   }}
                   className="px-6 py-2.5 font-bold text-sm"
                 >
-                  Save & Publish Theme Engine
+                  Save & Publish Settings & Theme Engine
                 </Button>
               </div>
             </Card>

@@ -357,35 +357,27 @@ export class DineFlowApiClient {
     return { user: adminUser, tokens };
   }
 
-  async loginKitchen(email: string, password?: string) {
+  async loginKitchen(identifier: string, password?: string) {
     await delay(350);
-    const normalizedEmail = email.trim().toLowerCase();
-    let emp = this.employees.find((e) => e.email.toLowerCase() === normalizedEmail);
+    const input = identifier.trim().toLowerCase();
+    let emp = this.employees.find(
+      (e) => !e.isAccountDisabled && (e.email.toLowerCase() === input || e.id.toLowerCase() === input || (e.name && e.name.toLowerCase() === input))
+    );
 
     if (!emp) {
-      if (normalizedEmail.includes('chef') || normalizedEmail.includes('kitchen') || normalizedEmail === 'chef@lumiere.com') {
-        emp = {
-          id: 'emp-chef-1',
-          restaurantId: 'rest-1',
-          name: 'Jean-Luc Picard',
-          email: normalizedEmail,
-          phone: '+1 555-0102',
-          role: 'CHEF',
-          status: 'ON_CLOCK',
-          hourlyRate: 28,
-          password: password || 'kitchen123',
-          joinedDate: '2025-01-10',
-        };
-        this.employees.push(emp);
-        this.saveDatabase();
-      } else {
-        throw new Error('No kitchen staff account found with this email. Ask your Restaurant Owner to add you in Staff Management.');
-      }
+      throw new Error(`No active kitchen staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
+    }
+
+    if (password && emp.password && emp.password !== password) {
+      throw new Error('Invalid password. Please check your credentials and try again.');
     }
 
     const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
 
-    const kitchenUser: User = {
+    emp.status = 'ON_CLOCK';
+    emp.lastLoginAt = new Date().toISOString();
+
+    let kitchenUser: User = {
       id: `usr-${emp.id}`,
       name: emp.name,
       email: emp.email,
@@ -405,33 +397,19 @@ export class DineFlowApiClient {
 
     kitchenUser.tokens = tokens;
     this.saveSession(kitchenUser, tokens, emp.restaurantId);
+    this.saveDatabase();
     return { user: kitchenUser, tokens, employee: emp, restaurant: rest };
   }
 
-  async loginWaiter(email: string, password?: string) {
+  async loginWaiter(identifier: string, password?: string) {
     await delay(350);
-    const normalizedEmail = email.trim().toLowerCase();
-    let emp = this.employees.find((e) => e.email.toLowerCase() === normalizedEmail);
+    const input = identifier.trim().toLowerCase();
+    let emp = this.employees.find(
+      (e) => !e.isAccountDisabled && (e.email.toLowerCase() === input || e.id.toLowerCase() === input || (e.name && e.name.toLowerCase() === input))
+    );
 
     if (!emp) {
-      if (normalizedEmail.includes('waiter') || normalizedEmail.includes('server') || normalizedEmail === 'waiter@lumiere.com') {
-        emp = {
-          id: 'emp-waiter-1',
-          restaurantId: 'rest-1',
-          name: 'Ayaan',
-          email: normalizedEmail,
-          phone: '+1 555-0101',
-          role: 'WAITER',
-          status: 'OFF_CLOCK',
-          hourlyRate: 20,
-          password: password || 'waiter123',
-          joinedDate: '2025-01-10',
-        };
-        this.employees.push(emp);
-        this.saveDatabase();
-      } else {
-        throw new Error('No waiter staff account found with this email. Ask your Restaurant Owner to add you in Staff Management.');
-      }
+      throw new Error(`No active waiter staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
     }
 
     if (password && emp.password && emp.password !== password) {
@@ -440,11 +418,10 @@ export class DineFlowApiClient {
 
     const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
 
-    // Set employee status to ON_CLOCK when waiter logs in (backend presence truth)
     emp.status = 'ON_CLOCK';
     emp.lastLoginAt = new Date().toISOString();
 
-    let waiterUser = this.users.find((u) => u.email.toLowerCase() === normalizedEmail);
+    let waiterUser = this.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
     if (!waiterUser) {
       waiterUser = {
         id: `usr-${emp.id}`,
@@ -475,30 +452,15 @@ export class DineFlowApiClient {
     return { user: waiterUser, tokens, employee: emp, restaurant: rest };
   }
 
-  async loginBar(email: string, password?: string) {
+  async loginBar(identifier: string, password?: string) {
     await delay(350);
-    const normalizedEmail = email.trim().toLowerCase();
-    let emp = this.employees.find((e) => e.email.toLowerCase() === normalizedEmail);
+    const input = identifier.trim().toLowerCase();
+    let emp = this.employees.find(
+      (e) => !e.isAccountDisabled && (e.email.toLowerCase() === input || e.id.toLowerCase() === input || (e.name && e.name.toLowerCase() === input))
+    );
 
     if (!emp) {
-      if (normalizedEmail.includes('bar') || normalizedEmail.includes('bartender') || normalizedEmail === 'bartender@lumiere.com') {
-        emp = {
-          id: 'emp-bar-1',
-          restaurantId: 'rest-1',
-          name: 'Carlos Mendez',
-          email: normalizedEmail,
-          phone: '+1 555-0103',
-          role: 'BARTENDER',
-          status: 'ON_CLOCK',
-          hourlyRate: 24,
-          password: password || 'bar123',
-          joinedDate: '2025-01-10',
-        };
-        this.employees.push(emp);
-        this.saveDatabase();
-      } else {
-        throw new Error('No bar staff account found with this email. Ask your Restaurant Owner to add you in Staff Management.');
-      }
+      throw new Error(`No active bar staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
     }
 
     if (password && emp.password && emp.password !== password) {
@@ -507,10 +469,14 @@ export class DineFlowApiClient {
 
     const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
 
+    if (rest && rest.hasBar === false) {
+      throw new Error(`Bar module is disabled for ${rest.name}.`);
+    }
+
     emp.status = 'ON_CLOCK';
     emp.lastLoginAt = new Date().toISOString();
 
-    let barUser = this.users.find((u) => u.email.toLowerCase() === normalizedEmail);
+    let barUser = this.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
     if (!barUser) {
       barUser = {
         id: `usr-${emp.id}`,
@@ -519,7 +485,7 @@ export class DineFlowApiClient {
         phone: emp.phone,
         role: 'BARTENDER',
         restaurantId: emp.restaurantId,
-        orgId: rest.orgId,
+        orgId: rest ? rest.orgId : 'org-1',
         isEmailVerified: true,
       };
       this.users.push(barUser);
@@ -1001,6 +967,18 @@ export class DineFlowApiClient {
     const rest = this.restaurants.find((r) => r.id === targetId && !r.isDeleted);
     if (!rest) return null;
     return this.ensureRestaurantDefaults(rest);
+  }
+
+  async updateRestaurantDetails(restaurantId: string, updates: Partial<Restaurant>) {
+    await delay(200);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const rest = this.restaurants.find((r) => r.id === targetId && !r.isDeleted);
+    if (rest) {
+      Object.assign(rest, updates);
+      this.ensureRestaurantDefaults(rest);
+      this.saveDatabase();
+    }
+    return rest;
   }
 
   async getOwnerRestaurants() {
@@ -1732,19 +1710,32 @@ export class DineFlowApiClient {
   async addEmployee(empData: Partial<Employee>) {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(empData.restaurantId) || 'rest-1';
+    
+    if (empData.email) {
+      const existing = this.employees.find(
+        (e) => e.restaurantId === restId && e.email.toLowerCase() === (empData.email || '').toLowerCase()
+      );
+      if (existing) {
+        throw new Error(`An employee with email '${empData.email}' already exists in this restaurant.`);
+      }
+    }
+
     const newEmp: Employee = {
-      id: `emp-${Date.now()}`,
+      id: empData.id || `emp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       restaurantId: restId,
       name: empData.name || 'Staff Member',
-      email: empData.email || 'staff@restaurant.com',
+      email: empData.email || `staff_${Date.now()}@restaurant.com`,
       phone: empData.phone || '+1 555-0100',
       role: empData.role || 'WAITER',
       status: 'OFF_CLOCK',
-      hourlyRate: empData.hourlyRate || 18,
+      hourlyRate: typeof empData.hourlyRate === 'number' ? empData.hourlyRate : parseFloat(empData.hourlyRate as any) || 18,
+      password: empData.password || 'staff123',
       joinedDate: new Date().toISOString().split('T')[0],
       isAccountDisabled: false,
+      shift: empData.shift || 'Evening (4PM - 12AM)',
+      assignedSection: empData.assignedSection || 'Main Dining Floor',
     };
-    this.employees.push(newEmp);
+    this.employees.unshift(newEmp);
     this.saveDatabase();
     return newEmp;
   }
