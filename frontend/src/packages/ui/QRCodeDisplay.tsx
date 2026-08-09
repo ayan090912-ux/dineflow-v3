@@ -59,14 +59,18 @@ export const printQRCodeCard = (
     <html>
       <head>
         <title>Print QR Standee - ${restaurantName} (${tableNumber})</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
         <style>
           @page {
             size: A4 portrait;
-            margin: 15mm;
+            margin: 10mm;
           }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #ffffff;
             display: flex;
             align-items: center;
@@ -77,7 +81,7 @@ export const printQRCodeCard = (
             print-color-adjust: exact !important;
           }
           .printable-card-wrapper {
-            width: 320px;
+            width: 330px;
             padding: 28px;
             border-radius: 28px;
             text-align: center;
@@ -114,7 +118,7 @@ export const printQRCodeCard = (
               window.focus();
               window.print();
               window.close();
-            }, 250);
+            }, 400);
           };
         </script>
       </body>
@@ -196,51 +200,34 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
       // 1. Draw Background & Frame based on Preset
       if (preset === 'SIMPLE') {
-        // Clean Minimal White
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-        // Border frame
         ctx.strokeStyle = '#e2e8f0';
         ctx.lineWidth = 16;
         ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
-
-        ctx.fillStyle = '#0f172a';
       } else if (preset === 'GOLD_LUXE') {
-        // Royal Gold & Black
-        ctx.fillStyle = '#0b0f19';
+        ctx.fillStyle = '#1e1b4b';
         ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-        // Gold outer frame
-        ctx.strokeStyle = '#d97706';
-        ctx.lineWidth = 24;
-        ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
-
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 6;
-        ctx.strokeRect(60, 60, cardWidth - 120, cardHeight - 120);
-      } else if (preset === 'WOOD_BISTRO') {
-        // Warm Walnut Wood
-        const grad = ctx.createLinearGradient(0, 0, cardWidth, cardHeight);
-        grad.addColorStop(0, '#1c1917');
-        grad.addColorStop(1, '#292524');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-        ctx.strokeStyle = '#78350f';
+        ctx.strokeStyle = '#fbbf24';
         ctx.lineWidth = 20;
         ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
-      } else if (preset === 'NEON_CYBER') {
-        // Neon Cyber
+      } else if (preset === 'WOOD_BISTRO') {
         const grad = ctx.createLinearGradient(0, 0, cardWidth, cardHeight);
-        grad.addColorStop(0, '#090d16');
-        grad.addColorStop(0.5, '#111827');
-        grad.addColorStop(1, '#1e1b4b');
+        grad.addColorStop(0, '#291e10');
+        grad.addColorStop(1, '#1c1309');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-        ctx.strokeStyle = '#06b6d4';
-        ctx.lineWidth = 12;
+        ctx.strokeStyle = '#d97706';
+        ctx.lineWidth = 16;
+        ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
+      } else if (preset === 'NEON_CYBER') {
+        const grad = ctx.createLinearGradient(0, 0, cardWidth, cardHeight);
+        grad.addColorStop(0, '#020617');
+        grad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, cardWidth, cardHeight);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 16;
         ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
       } else {
         // ACRYLIC DARK (Default)
@@ -249,30 +236,60 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
         grad.addColorStop(1, '#020617');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-        // Accent border glow
         ctx.strokeStyle = accentColor;
         ctx.lineWidth = 14;
         ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
       }
 
-      // 2. Draw Header Restaurant Name
       ctx.textAlign = 'center';
-      ctx.font = 'bold 54px sans-serif';
+      let currentY = 140;
+
+      // Draw Logo Image if enabled
+      if (showLogo && restaurantLogo) {
+        try {
+          const logoImg = new Image();
+          logoImg.crossOrigin = 'anonymous';
+          logoImg.src = restaurantLogo;
+          await new Promise((resolve) => {
+            logoImg.onload = resolve;
+            logoImg.onerror = resolve;
+          });
+          if (logoImg.complete && logoImg.naturalWidth) {
+            const logoSize = 110;
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect((cardWidth - logoSize) / 2, currentY, logoSize, logoSize, 24);
+            ctx.clip();
+            ctx.drawImage(logoImg, (cardWidth - logoSize) / 2, currentY, logoSize, logoSize);
+            ctx.restore();
+            currentY += 140;
+          }
+        } catch (e) {
+          // ignore logo load fallback
+        }
+      } else {
+        currentY += 40;
+      }
+
+      // 2. Draw Header Restaurant Name
+      ctx.font = '900 52px sans-serif';
       ctx.fillStyle = preset === 'SIMPLE' ? '#0f172a' : preset === 'GOLD_LUXE' ? '#fbbf24' : '#ffffff';
-      ctx.fillText(restaurantName.toUpperCase(), cardWidth / 2, 180);
+      ctx.fillText(safeRestName.toUpperCase(), cardWidth / 2, currentY);
+      currentY += 50;
 
       // Subheader Section
-      ctx.font = '500 32px sans-serif';
-      ctx.fillStyle = preset === 'SIMPLE' ? '#64748b' : preset === 'GOLD_LUXE' ? '#d97706' : '#94a3b8';
-      ctx.fillText(`${section} • ${tableNumber}`, cardWidth / 2, 230);
+      if (safeTableNum !== 'COUNTER' && !isPickup) {
+        ctx.font = '500 30px sans-serif';
+        ctx.fillStyle = preset === 'SIMPLE' ? '#64748b' : preset === 'GOLD_LUXE' ? '#f59e0b' : '#94a3b8';
+        ctx.fillText(`${section} • ${capacity} Seats`, cardWidth / 2, currentY);
+        currentY += 40;
+      }
 
       // 3. Draw QR Code Container
-      const qrBoxSize = 620;
+      const qrBoxSize = 600;
       const qrBoxX = (cardWidth - qrBoxSize) / 2;
-      const qrBoxY = 320;
+      const qrBoxY = currentY + 30;
 
-      // QR White Background Card
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 36);
@@ -288,7 +305,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
         await new Promise((resolve) => {
           qrImage.onload = resolve;
         });
-        const qrSize = 520;
+        const qrSize = 500;
         ctx.drawImage(qrImage, (cardWidth - qrSize) / 2, qrBoxY + 50, qrSize, qrSize);
       }
 
@@ -296,29 +313,31 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
       const ctaY = qrBoxY + qrBoxSize + 110;
       ctx.fillStyle = preset === 'SIMPLE' ? '#0f172a' : accentColor;
       ctx.beginPath();
-      ctx.roundRect(140, ctaY - 50, cardWidth - 280, 100, 50);
+      ctx.roundRect(140, ctaY - 50, cardWidth - 280, 96, 48);
       ctx.fill();
 
-      ctx.font = 'bold 38px sans-serif';
+      ctx.font = '900 36px sans-serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(ctaText, cardWidth / 2, ctaY + 14);
+      ctx.fillText(ctaText, cardWidth / 2, ctaY + 12);
 
       // 5. Large Table Number Badge
-      const tableY = ctaY + 180;
-      ctx.font = 'black 84px sans-serif';
+      const tableY = ctaY + 170;
+      ctx.font = '900 84px sans-serif';
       ctx.fillStyle = preset === 'SIMPLE' ? '#0f172a' : preset === 'GOLD_LUXE' ? '#f59e0b' : '#ffffff';
-      ctx.fillText(tableNumber, cardWidth / 2, tableY);
+      ctx.fillText(safeTableNum, cardWidth / 2, tableY);
 
       // 6. Footer Info
-      ctx.font = '400 28px sans-serif';
-      ctx.fillStyle = preset === 'SIMPLE' ? '#64748b' : '#64748b';
-      ctx.fillText(showWifi ? '📶 Free Guest Wi-Fi Available • Touchless Ordering' : 'Touchless Ordering • DineFlow OS', cardWidth / 2, cardHeight - 120);
+      if (showWifi) {
+        ctx.font = '400 28px sans-serif';
+        ctx.fillStyle = preset === 'SIMPLE' ? '#64748b' : '#94a3b8';
+        ctx.fillText('📶 Free Guest Wi-Fi Available • Touchless Ordering', cardWidth / 2, cardHeight - 100);
+      }
 
       // Trigger Download
       const dataUrl = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = dataUrl;
-      a.download = `QR_StandCard_${tableNumber.replace(/\s+/g, '_')}_${preset}.png`;
+      a.download = `QR_StandCard_${safeTableNum.replace(/\s+/g, '_')}_${preset}.png`;
       a.click();
     } catch (err) {
       console.error('Error generating card image:', err);

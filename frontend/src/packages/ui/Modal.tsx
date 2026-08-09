@@ -63,9 +63,9 @@ export const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className={`relative w-full ${widthClasses[maxWidth]} bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-10 p-6`}
+            className={`relative w-full ${widthClasses[maxWidth]} max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-10 p-6`}
           >
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start justify-between mb-3 shrink-0">
               <div>
                 {title && <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{title}</h3>}
                 {description && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{description}</p>}
@@ -75,9 +75,9 @@ export const Modal: React.FC<ModalProps> = ({
               </Button>
             </div>
 
-            <div className="py-2 text-slate-700 dark:text-slate-300">{children}</div>
+            <div className="py-2 text-slate-700 dark:text-slate-300 overflow-y-auto max-h-[calc(92vh-90px)] pr-1">{children}</div>
 
-            {footer && <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">{footer}</div>}
+            {footer && <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2 shrink-0">{footer}</div>}
           </motion.div>
         </div>
       )}
