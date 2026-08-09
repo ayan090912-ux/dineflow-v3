@@ -142,8 +142,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const restId = api.getCurrentRestaurantId() || undefined;
     const tbls = await api.getTables(restId);
     setAllRestaurantTables(tbls);
+    const targetTable = (selectedTableNum || 'Table 01').toLowerCase();
     const tbl = tbls.find(
-      (t) => t.tableNumber.toLowerCase() === selectedTableNum.toLowerCase() || t.id === selectedTableNum
+      (t) => (t.tableNumber && t.tableNumber.toLowerCase() === targetTable) || t.id === selectedTableNum
     );
     if (tbl) {
       setCurrentTable(tbl);
@@ -194,8 +195,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const loadInitialOrder = async () => {
     const restId = api.getCurrentRestaurantId() || undefined;
     const allOrders = await api.getOrders(restId);
-    const tableOrds = allOrders.filter(
-      (o) => o.tableNumber.toLowerCase() === selectedTableNum.toLowerCase() || o.tableNumber.toLowerCase() === tableNumber.toLowerCase()
+    const targetTable = (selectedTableNum || tableNumber || 'Table 01').toLowerCase();
+    const tableOrds = (allOrders || []).filter(
+      (o) => o.tableNumber && o.tableNumber.toLowerCase() === targetTable
     );
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setCustomerOrders(tableOrds);
