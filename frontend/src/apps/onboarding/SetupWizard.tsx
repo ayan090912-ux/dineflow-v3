@@ -257,13 +257,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
   const stepsList = [
     { num: 1, name: 'Business Info', icon: Building },
-    { num: 2, name: 'Address', icon: MapPin },
+    { num: 2, name: 'Address & Currency', icon: MapPin },
     { num: 3, name: 'Branding', icon: Palette },
-    { num: 4, name: 'Tables & QR', icon: QrCode },
-    { num: 5, name: 'Restaurant Features', icon: Wine },
-    { num: 6, name: 'Staff Onboarding', icon: Users },
-    { num: 7, name: 'Initial Menu', icon: UtensilsCrossed },
-    { num: 8, name: 'Review & Launch', icon: Sparkles },
+    { num: 4, name: 'Dining & Floorplan', icon: QrCode },
+    { num: 5, name: 'Review & Launch', icon: Sparkles },
   ];
 
   const handleFinish = async () => {
@@ -804,70 +801,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           </Card>
         )}
 
-        {/* STEP 5: RESTAURANT FEATURES & SERVICES */}
-        {currentStep === 5 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div>
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-black text-white flex items-center gap-2">
-                  <Wine className="w-5 h-5 text-rose-500" /> Step 5: Restaurant Services & Feature Flags
-                </h3>
-                <Badge variant="brand">Modular Architecture</Badge>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Select which services your restaurant offers. Only enabled modules will be displayed to your staff and customers.
-              </p>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { key: 'food_service', name: 'Food Service', desc: 'Full-course dining, ala carte, and kitchen KDS routing', icon: UtensilsCrossed, badge: 'Core' },
-                { key: 'cafe', name: 'Cafe & Coffee', desc: 'Coffee, espresso bar, pastries, and quick counter service', icon: Coffee, badge: 'Beverage' },
-                { key: 'bar', name: 'Bar & Alcohol', desc: 'Dedicated Bar Terminal, alcohol menu, age confirmation & drink queue', icon: Wine, badge: 'Bar Module' },
-                { key: 'bakery', name: 'Bakery', desc: 'Fresh baked goods, customized cakes, and pastry orders', icon: Store, badge: 'Bakery' },
-                { key: 'desserts', name: 'Desserts', desc: 'Sweets, ice creams, dessert counter & confectioneries', icon: Sparkles, badge: 'Sweets' },
-                { key: 'takeaway', name: 'Takeaway / Pickup', desc: 'Self-pickup orders, counter dispatch & takeaway packing', icon: Truck, badge: 'Logistics' },
-                { key: 'delivery', name: 'Delivery Service', desc: 'Home delivery order dispatch, courier tracking & address maps', icon: Truck, badge: 'Delivery' },
-                { key: 'reservations', name: 'Reservations', desc: 'Table pre-booking, guest party size management & holds', icon: Clock, badge: 'Bookings' },
-                { key: 'outdoor_seating', name: 'Outdoor Seating', desc: 'Patio, rooftop, and outdoor garden table management', icon: Store, badge: 'Seating' },
-                { key: 'vip_rooms', name: 'VIP Rooms', desc: 'Private dining rooms, VIP suite bookings & custom party dining', icon: Flame, badge: 'VIP' },
-              ].map((item) => {
-                const isEnabled = features[item.key as keyof typeof features];
-                const IconComp = item.icon;
-                return (
-                  <div
-                    key={item.key}
-                    onClick={() => toggleFeature(item.key as keyof typeof features)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
-                      isEnabled
-                        ? 'bg-rose-500/10 border-rose-500 text-white ring-1 ring-rose-500/40 shadow-lg'
-                        : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`p-2.5 rounded-xl ${isEnabled ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                        <IconComp className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400">
-                            {item.badge}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.desc}</p>
-                      </div>
-                    </div>
-
-                    <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-1 shrink-0 ${isEnabled ? 'bg-rose-600' : 'bg-slate-800'}`}>
-                      <div className={`w-4 h-4 rounded-full bg-white transition-transform ${isEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
 
         {/* STEP 6: EMPLOYEES & SHIFTS */}
         {currentStep === 6 && (

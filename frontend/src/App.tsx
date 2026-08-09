@@ -33,6 +33,12 @@ export default function App() {
   const [showDomainBar, setShowDomainBar] = useState(true);
   const [kitchenOrders, setKitchenOrders] = useState<any[]>([]);
 
+  const [currentRestaurant, setCurrentRestaurant] = useState<any>(null);
+
+  useEffect(() => {
+    api.getRestaurantDetails().then((r) => setCurrentRestaurant(r));
+  }, [currentPath, currentUser]);
+
   // Sync state with browser location & popstate
   useEffect(() => {
     const handleLocationChange = () => {
@@ -117,29 +123,33 @@ export default function App() {
                   <span>Kitchen KDS</span>
                 </button>
 
-                <button
-                  onClick={() => navigateTo(currentUser ? '/waiter' : '/waiter/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                    currentPath.startsWith('/waiter')
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Waiter Terminal</span>
-                </button>
+                {(currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) && (
+                  <button
+                    onClick={() => navigateTo(currentUser ? '/waiter' : '/waiter/login')}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                      currentPath.startsWith('/waiter')
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Waiter Terminal</span>
+                  </button>
+                )}
 
-                <button
-                  onClick={() => navigateTo(currentUser ? '/bar/dashboard' : '/bar/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                    currentPath.startsWith('/bar')
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Wine className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Bar Terminal</span>
-                </button>
+                {(currentRestaurant?.hasBar !== false && (currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR')) && (
+                  <button
+                    onClick={() => navigateTo(currentUser ? '/bar/dashboard' : '/bar/login')}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                      currentPath.startsWith('/bar')
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Wine className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Bar Terminal</span>
+                  </button>
+                )}
 
                 <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
                 <span className="text-[10px] font-mono text-rose-400 font-bold px-1.5 hidden md:block uppercase">Management:</span>
@@ -376,47 +386,67 @@ export default function App() {
             )}
 
             {currentPath === '/bar/dashboard' && (
-              checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-                <BarTerminal onLogout={() => handleLogout('/bar/login')} />
-              ) : currentUser ? (
+              (currentRestaurant?.hasBar !== false && (currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR')) ? (
+                checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                  <BarTerminal onLogout={() => handleLogout('/bar/login')} />
+                ) : currentUser ? (
+                  <UnauthorizedPage
+                    requiredRole="BARTENDER / BAR STAFF"
+                    userRole={currentUser?.role}
+                    userEmail={currentUser?.email}
+                    targetPath="/bar/dashboard"
+                    onNavigate={navigateTo}
+                  />
+                ) : (
+                  <RoleLoginPage
+                    portal="bar"
+                    onNavigate={navigateTo}
+                    onLoginSuccess={(_, user) => {
+                      setCurrentUser(user);
+                      navigateTo('/bar/dashboard');
+                    }}
+                  />
+                )
+              ) : (
                 <UnauthorizedPage
-                  requiredRole="BARTENDER / BAR STAFF"
+                  requiredRole="BAR MODULE (Disabled for this Business Type)"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/bar/dashboard"
                   onNavigate={navigateTo}
                 />
-              ) : (
-                <RoleLoginPage
-                  portal="bar"
-                  onNavigate={navigateTo}
-                  onLoginSuccess={(_, user) => {
-                    setCurrentUser(user);
-                    navigateTo('/bar/dashboard');
-                  }}
-                />
               )
             )}
 
             {(currentPath === '/waiter' || currentPath === '/waiter/dashboard') && (
-              checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-                <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
-              ) : currentUser ? (
+              (currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) ? (
+                checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                  <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
+                ) : currentUser ? (
+                  <UnauthorizedPage
+                    requiredRole="WAITER / FLOOR STAFF"
+                    userRole={currentUser?.role}
+                    userEmail={currentUser?.email}
+                    targetPath="/waiter"
+                    onNavigate={navigateTo}
+                  />
+                ) : (
+                  <RoleLoginPage
+                    portal="waiter"
+                    onNavigate={navigateTo}
+                    onLoginSuccess={(_, user) => {
+                      setCurrentUser(user);
+                      navigateTo('/waiter');
+                    }}
+                  />
+                )
+              ) : (
                 <UnauthorizedPage
-                  requiredRole="WAITER / FLOOR STAFF"
+                  requiredRole="WAITER & TABLE MODULE (Disabled for Tableless Venues)"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/waiter"
                   onNavigate={navigateTo}
-                />
-              ) : (
-                <RoleLoginPage
-                  portal="waiter"
-                  onNavigate={navigateTo}
-                  onLoginSuccess={(_, user) => {
-                    setCurrentUser(user);
-                    navigateTo('/waiter');
-                  }}
                 />
               )
             )}
