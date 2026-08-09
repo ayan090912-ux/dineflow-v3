@@ -27,6 +27,7 @@ import {
   Users,
   Wine,
   ShieldCheck,
+  BellRing,
 } from 'lucide-react';
 import {
   Button,
