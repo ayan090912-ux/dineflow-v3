@@ -215,6 +215,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [selectedTableQR, setSelectedTableQR] = useState<Table | null>(null);
 
   // Table Management & Reservation State
+  const [selectedFloorplanSection, setSelectedFloorplanSection] = useState<string>('ALL');
   const [isCreateTableModalOpen, setIsCreateTableModalOpen] = useState(false);
   const [newTableData, setNewTableData] = useState({
     tableNumber: '',
@@ -3457,6 +3458,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               >
                 <option value="Main Hall">Main Hall</option>
                 <option value="Patio Deck">Patio Deck</option>
+                <option value="Rooftop">Rooftop Lounge / Terrace</option>
                 <option value="VIP Lounge">VIP Lounge</option>
                 <option value="Garden Court">Garden Court</option>
                 <option value="Bar Counter">Bar Counter</option>
@@ -3529,6 +3531,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 >
                   <option value="Main Hall">Main Hall</option>
                   <option value="Patio Deck">Patio Deck</option>
+                  <option value="Rooftop">Rooftop Lounge / Terrace</option>
                   <option value="VIP Lounge">VIP Lounge</option>
                   <option value="Garden Court">Garden Court</option>
                   <option value="Bar Counter">Bar Counter</option>

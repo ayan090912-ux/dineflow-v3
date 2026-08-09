@@ -1025,98 +1025,66 @@ export class DineFlowApiClient {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    let items = this.menuItems.filter((m) => m.restaurantId === targetId);
-    if (items.length === 0) {
-      items = [
-        {
-          id: `item-${targetId}-1`,
-          restaurantId: targetId,
-          categoryId: `cat-${targetId}-1`,
-          name: 'Artisanal Burrata & Heirloom Tomato',
-          description: 'Creamy Puglia burrata, balsamic reduction, basil oil & toasted sourdough.',
-          price: 280.00,
-          image: 'https://images.unsplash.com/photo-1592417817098-8f3d6ef23a28?w=600',
-          isAvailable: true,
-          isVegetarian: true,
-          dietaryType: 'VEG',
-          prepTimeMinutes: 12,
-          targetDestination: 'KITCHEN',
-        },
-        {
-          id: `item-${targetId}-2`,
-          restaurantId: targetId,
-          categoryId: `cat-${targetId}-2`,
-          name: 'Wagyu Beef Ribeye Steak (8oz)',
-          description: 'A5 Japanese Wagyu steak served with truffle herb butter & roasted asparagus.',
-          price: 850.00,
-          image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
-          isAvailable: true,
-          isVegetarian: false,
-          dietaryType: 'NON_VEG',
-          prepTimeMinutes: 20,
-          targetDestination: 'KITCHEN',
-        },
-        {
-          id: `item-${targetId}-3`,
-          restaurantId: targetId,
-          categoryId: `cat-${targetId}-6`,
-          name: 'Black Truffle Wild Mushroom Tagliatelle',
-          description: 'Handcrafted egg pasta, porcini mushrooms, parmigiano reggiano & black truffle cream.',
-          price: 380.00,
-          image: 'https://images.unsplash.com/photo-1621996346565-e3d5d6281318?w=600',
-          isAvailable: true,
-          isVegetarian: true,
-          dietaryType: 'VEG',
-          prepTimeMinutes: 15,
-          targetDestination: 'KITCHEN',
-        },
-        {
-          id: `item-${targetId}-4`,
-          restaurantId: targetId,
-          categoryId: `cat-${targetId}-4`,
-          name: 'Wood-Fired Margherita Pizza',
-          description: 'San Marzano tomatoes, fresh mozzarella fior di latte & organic Genovese basil.',
-          price: 320.00,
-          image: 'https://images.unsplash.com/photo-1604382355076-af4b0eb60143?w=600',
-          isAvailable: true,
-          isVegetarian: true,
-          dietaryType: 'VEG',
-          prepTimeMinutes: 14,
-          targetDestination: 'KITCHEN',
-        },
-        {
-          id: `item-${targetId}-5`,
-          restaurantId: targetId,
-          categoryId: `cat-${targetId}-2`,
-          name: 'Pan-Seared Atlantic Salmon',
-          description: 'Crispy skin salmon, lemon dill emulsion, saffron quinoa & charred baby carrots.',
-          price: 620.00,
-          image: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600',
-          isAvailable: true,
-          isVegetarian: false,
-          dietaryType: 'NON_VEG',
-          prepTimeMinutes: 18,
-          targetDestination: 'KITCHEN',
-        },
-        {
-          id: `item-${targetId}-6`,
-          restaurantId: targetId,
-          categoryId: `cat-${targetId}-3`,
-          name: 'Smokey Bacon & Cheddar Gourmet Burger',
-          description: 'Prime Angus patty, applewood bacon, aged cheddar & house secret sauce on brioche.',
-          price: 350.00,
-          image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600',
-          isAvailable: true,
-          isVegetarian: false,
-          dietaryType: 'NON_VEG',
-          prepTimeMinutes: 15,
-          targetDestination: 'KITCHEN',
-        },
-      ];
-      this.menuItems.push(...items);
+    return (this.menuItems || []).filter((m) => m.restaurantId === targetId);
+  }
+
+  async addMenuItem(itemData: Partial<MenuItem>) {
+    return this.createMenuItem(itemData);
+  }
+
+  async createMenuItem(itemData: Partial<MenuItem>) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
+    const newItem: MenuItem = {
+      id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      restaurantId: restId,
+      name: itemData.name || 'New Menu Item',
+      description: itemData.description || '',
+      price: typeof itemData.price === 'number' ? itemData.price : parseFloat(itemData.price as any) || 0,
+      categoryId: itemData.categoryId || 'cat-mains',
+      barCategory: itemData.barCategory,
+      brand: itemData.brand,
+      isAvailable: itemData.isAvailable !== false,
+      isVegetarian: itemData.isVegetarian !== false,
+      dietaryType: itemData.isVegetarian ? 'VEG' : 'NON_VEG',
+      image: itemData.image || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
+      targetDestination: itemData.targetDestination || 'KITCHEN',
+      isAlcoholic: !!itemData.isAlcoholic,
+      prepTimeMinutes: itemData.prepTimeMinutes || 15,
+    };
+    this.menuItems.unshift(newItem);
+    this.saveDatabase();
+    return newItem;
+  }
+
+  async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
+    await delay(150);
+    const item = this.menuItems.find((m) => m.id === itemId);
+    if (item) {
+      Object.assign(item, updates);
+      if (updates.isVegetarian !== undefined) {
+        item.dietaryType = updates.isVegetarian ? 'VEG' : 'NON_VEG';
+      }
       this.saveDatabase();
     }
-    return items;
+    return item;
+  }
+
+  async deleteMenuItem(itemId: string) {
+    await delay(150);
+    this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
+    this.saveDatabase();
+    return true;
+  }
+
+  async toggleMenuItemAvailability(itemId: string) {
+    await delay(100);
+    const item = this.menuItems.find((m) => m.id === itemId);
+    if (item) {
+      item.isAvailable = !item.isAvailable;
+      this.saveDatabase();
+    }
+    return item;
   }
 
   async getTables(restaurantId?: string) {
@@ -1367,51 +1335,7 @@ export class DineFlowApiClient {
     return table;
   }
 
-  // Menu APIs
-  async toggleMenuItemAvailability(itemId: string) {
-    await delay(100);
-    const item = this.menuItems.find((m) => m.id === itemId);
-    if (item) {
-      item.isAvailable = !item.isAvailable;
-      this.saveDatabase();
-    }
-    return item;
-  }
-
-  async addMenuItem(itemData: Partial<MenuItem>) {
-    await delay(150);
-    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
-    const isVeg = itemData.isVegetarian !== undefined ? itemData.isVegetarian : (itemData.dietaryType === 'VEG' || true);
-    const newItem: MenuItem = {
-      id: `item-${Date.now()}`,
-      restaurantId: restId,
-      categoryId: itemData.categoryId || 'cat-1',
-      name: itemData.name || 'New Item',
-      description: itemData.description || '',
-      price: itemData.price || 9.99,
-      image: itemData.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500',
-      isAvailable: itemData.isAvailable !== false,
-      isVegetarian: isVeg,
-      dietaryType: isVeg ? 'VEG' : 'NON_VEG',
-      isSpicy: itemData.isSpicy || false,
-      prepTimeMinutes: itemData.prepTimeMinutes || 15,
-      targetDestination: itemData.targetDestination || 'KITCHEN',
-    };
-    this.menuItems.push(newItem);
-    this.saveDatabase();
-    return newItem;
-  }
-
-  async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
-    await delay(150);
-    const item = this.menuItems.find((m) => m.id === itemId);
-    if (item) {
-      Object.assign(item, updates);
-      this.saveDatabase();
-    }
-    return item;
-  }
-
+  // Menu Helper APIs
   async duplicateMenuItem(itemId: string) {
     await delay(150);
     const original = this.menuItems.find((m) => m.id === itemId);
@@ -1456,12 +1380,6 @@ export class DineFlowApiClient {
       alcoholSalesRatioPercent: 42,
       peakBarHours: '8:00 PM - 11:00 PM',
     };
-  }
-
-  async deleteMenuItem(itemId: string) {
-    await delay(150);
-    this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
-    this.saveDatabase();
   }
 
   // --- Dedicated Food Category APIs ---

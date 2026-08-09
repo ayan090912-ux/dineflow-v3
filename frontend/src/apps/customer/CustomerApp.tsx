@@ -129,10 +129,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const restId = api.getCurrentRestaurantId() || undefined;
     const rests = await api.getRestaurants();
     const r = rests.find((x) => x.id === restId) || rests[0];
-    if (r) setCurrentRestaurant(r);
-
-    const items = await api.getMenuItems(r?.id || restId);
-    setMenuItems(items);
+    if (r) {
+      setCurrentRestaurant(r);
+      const items = await api.getMenuItems(r.id);
+      setMenuItems(items);
+    } else {
+      const items = await api.getMenuItems(restId);
+      setMenuItems(items);
+    }
   };
 
   const handleCheckInAndUnlockTable = async () => {
