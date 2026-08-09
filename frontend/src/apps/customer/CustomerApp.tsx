@@ -78,6 +78,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   // Active Live Orders
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [highlightActiveOrders, setHighlightActiveOrders] = useState(false);
+  const [isRecentStatusPulse, setIsRecentStatusPulse] = useState(false);
+
+  const handleScrollToActiveOrders = () => {
+    const el = document.getElementById('active-orders-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setHighlightActiveOrders(true);
+      setTimeout(() => setHighlightActiveOrders(false), 2000);
+    }
+  };
 
   useEffect(() => {
     const savedAge = typeof window !== 'undefined' && sessionStorage.getItem('dineflow_bar_age_verified');
@@ -95,6 +106,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
 
       if (event.tableNumber?.toLowerCase() === selectedTableNum?.toLowerCase()) {
+        setIsRecentStatusPulse(true);
+        setTimeout(() => setIsRecentStatusPulse(false), 3500);
         if (event.type === 'OrderCreated' && event.data) {
           setCustomerOrders((prev) => {
             const exists = prev.some((o) => o.id === event.data.id);
@@ -477,7 +490,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         return (
           <>
             {activeOrders.length > 0 && (
-              <div className="space-y-3 px-1 my-2">
+              <div
+                id="active-orders-section"
+                className={`space-y-3 px-1 my-2 transition-all duration-500 rounded-3xl ${
+                  highlightActiveOrders ? 'ring-2 ring-rose-500 bg-rose-500/10 p-2 shadow-2xl shadow-rose-950/50' : ''
+                }`}
+              >
                 <div className="px-4 flex items-center justify-between">
                   <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Flame className="w-4 h-4 text-rose-500" />
@@ -741,6 +759,62 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           </button>
         </div>
       )}
+
+      {/* Sticky Order Access Bar */}
+      {(() => {
+        const activeOrders = customerOrders.filter(
+          (o) => o.status !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+        );
+        if (activeOrders.length === 0) return null;
+
+        const latestOrd = activeOrders[0];
+
+        return (
+          <div
+            className={`fixed left-4 right-4 z-40 max-w-md mx-auto transition-all duration-300 ${
+              totalCartCount > 0 ? 'bottom-20' : 'bottom-4'
+            }`}
+          >
+            <div
+              onClick={handleScrollToActiveOrders}
+              className={`w-full p-3 rounded-2xl shadow-2xl border flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all backdrop-blur-md ${
+                isRecentStatusPulse
+                  ? 'bg-rose-950/95 border-rose-500 text-white ring-2 ring-rose-400 shadow-rose-950/80 animate-pulse'
+                  : 'bg-slate-900/95 border-slate-700/80 text-white hover:border-slate-600 shadow-slate-950/80'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30">
+                  <BellRing className="w-4 h-4 text-rose-400 animate-pulse" />
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white">
+                    {activeOrders.length}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs font-black text-white flex items-center gap-1.5">
+                    {activeOrders.length === 1 ? '1 Active Order' : `${activeOrders.length} Active Orders`}
+                    {latestOrd && (
+                      <span className="text-[10px] text-rose-400 font-normal font-mono">
+                        (#{latestOrd.id} • {latestOrd.status})
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-slate-400">Tap to track live preparation</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Track active orders"
+                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1 shadow-md transition-colors shrink-0"
+              >
+                <span>{activeOrders.length === 1 ? 'Track Order' : `Track ${activeOrders.length} Orders`}</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Item Selection & Customization Modal */}
       <Modal
