@@ -357,17 +357,17 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <Badge variant="brand">Step {currentStep} of 7</Badge>
+                <Badge variant="brand">Step {currentStep} of 5</Badge>
                 <span className="text-xs font-mono text-slate-400">Merchant Setup Wizard</span>
               </div>
               <h2 className="text-2xl font-black text-white mt-1">Configure {restaurantName || 'Your Restaurant'}</h2>
             </div>
             <div className="text-right hidden sm:block">
-              <span className="text-xs text-slate-400 font-mono">Progress: {Math.round((currentStep / 7) * 100)}%</span>
+              <span className="text-xs text-slate-400 font-mono">Progress: {Math.round((currentStep / 5) * 100)}%</span>
               <div className="w-36 h-2 bg-slate-800 rounded-full overflow-hidden mt-1">
                 <div
                   className="h-full bg-gradient-to-r from-rose-600 to-amber-500 transition-all duration-300"
-                  style={{ width: `${(currentStep / 7) * 100}%` }}
+                  style={{ width: `${(currentStep / 5) * 100}%` }}
                 />
               </div>
             </div>
@@ -1015,8 +1015,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           </Card>
         )}
 
-        {/* STEP 8: REVIEW & FINISH */}
-        {currentStep === 8 && (
+        {/* STEP 5: REVIEW & FINISH */}
+        {currentStep === 5 && (
           <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
             <div className="text-center max-w-xl mx-auto space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
@@ -1032,7 +1032,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 <div>
                   <p className="font-bold text-amber-300">Platform Approval Workflow</p>
                   <p className="text-[11px] text-amber-200/80 mt-0.5">
-                    Your restaurant status will change to <strong>Pending Approval</strong>. You will be able to access your dashboard preview while our team verifies your table floorplan and menu details.
+                    Your restaurant status will change to <strong>Pending Approval</strong>. All configured tables with QR codes will be immediately populated in your Owner OS. You can add staff and menu items anytime after setup.
                   </p>
                 </div>
               </div>
@@ -1054,28 +1054,20 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 </h4>
                 <p className="text-slate-200 font-bold">{totalTables} Tables Configured</p>
                 <p className="text-slate-400">Indoor: {indoorTables} | Outdoor: {outdoorTables} | VIP: {vipTables}</p>
-                <p className="text-emerald-400 font-mono">QR Codes generated</p>
+                <p className="text-emerald-400 font-mono">Auto Table Generation & QR Codes Enabled</p>
               </Card>
 
-              <Card className="bg-slate-950 border-slate-800 p-4 space-y-2">
+              <Card className="bg-slate-950 border-slate-800 p-4 space-y-2 md:col-span-2">
                 <h4 className="font-bold text-indigo-400 flex items-center gap-1.5">
                   <Wine className="w-4 h-4" /> Enabled Services
                 </h4>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5 pt-1">
                   {Object.entries(features)
                     .filter(([_, v]) => v)
                     .map(([k]) => (
-                      <Badge key={k} variant="brand" className="text-[9px] uppercase">{k.replace('_', ' ')}</Badge>
+                      <Badge key={k} variant="brand" className="text-[10px] uppercase">{k.replace('_', ' ')}</Badge>
                     ))}
                 </div>
-              </Card>
-
-              <Card className="bg-slate-950 border-slate-800 p-4 space-y-2">
-                <h4 className="font-bold text-emerald-400 flex items-center gap-1.5">
-                  <UtensilsCrossed className="w-4 h-4" /> Initial Menu & Team
-                </h4>
-                <p className="text-slate-200 font-bold">{employees.length} Team Members, {menuItems.length} Dishes</p>
-                <p className="text-slate-400">High-res images and prep times linked</p>
               </Card>
             </div>
           </Card>
@@ -1092,10 +1084,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             <ChevronLeft className="w-4 h-4 mr-1" /> Previous Step
           </Button>
 
-          {currentStep < 8 ? (
+          {currentStep < 5 ? (
             <Button
               variant="brand"
-              onClick={() => setCurrentStep(Math.min(8, currentStep + 1))}
+              onClick={() => setCurrentStep(Math.min(5, currentStep + 1))}
               className="text-xs font-bold px-6 shadow-lg shadow-rose-950/40"
             >
               Next Step <ChevronRight className="w-4 h-4 ml-1" />

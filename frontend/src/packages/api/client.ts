@@ -182,10 +182,11 @@ export class DineFlowApiClient {
 
   private restoreSession() {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const savedSession = localStorage.getItem(SESSION_STORAGE_KEY);
-        if (savedSession) {
-          const parsed = JSON.parse(savedSession);
+      if (typeof window !== 'undefined') {
+        // Tab-isolated session storage check first
+        const tabSession = sessionStorage.getItem(SESSION_STORAGE_KEY);
+        if (tabSession) {
+          const parsed = JSON.parse(tabSession);
           if (parsed && parsed.user) {
             const freshUser = this.users.find((u) => u.email?.toLowerCase() === parsed.user.email?.toLowerCase());
             const mergedUser = freshUser
@@ -197,9 +198,26 @@ export class DineFlowApiClient {
             return;
           }
         }
+
+        if (window.localStorage) {
+          const savedSession = localStorage.getItem(SESSION_STORAGE_KEY);
+          if (savedSession) {
+            const parsed = JSON.parse(savedSession);
+            if (parsed && parsed.user) {
+              const freshUser = this.users.find((u) => u.email?.toLowerCase() === parsed.user.email?.toLowerCase());
+              const mergedUser = freshUser
+                ? { ...parsed.user, ...freshUser, restaurantId: parsed.restaurantId || freshUser.restaurantId || parsed.user.restaurantId }
+                : parsed.user;
+              this.currentUser = mergedUser;
+              this.currentTokens = parsed.tokens || mergedUser.tokens || null;
+              this.currentRestaurantId = parsed.restaurantId || mergedUser.restaurantId || null;
+              return;
+            }
+          }
+        }
       }
     } catch (e) {
-      console.error('Failed to restore session from localStorage', e);
+      console.error('Failed to restore session', e);
     }
 
     this.currentUser = null;
@@ -223,19 +241,21 @@ export class DineFlowApiClient {
     }
 
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem(
-          SESSION_STORAGE_KEY,
-          JSON.stringify({
-            user,
-            tokens,
-            restaurantId: this.currentRestaurantId,
-            orgId: user.orgId,
-          })
-        );
+      if (typeof window !== 'undefined') {
+        const payload = JSON.stringify({
+          user,
+          tokens,
+          restaurantId: this.currentRestaurantId,
+          orgId: user.orgId,
+        });
+        sessionStorage.setItem(SESSION_STORAGE_KEY, payload);
+        if (window.localStorage) {
+          localStorage.setItem(SESSION_STORAGE_KEY, payload);
+          localStorage.setItem(`${SESSION_STORAGE_KEY}_${user.role}`, payload);
+        }
       }
     } catch (e) {
-      console.error('Failed to save session to localStorage', e);
+      console.error('Failed to save session', e);
     }
     this.saveDatabase();
   }
@@ -1311,7 +1331,66 @@ export class DineFlowApiClient {
     if (rest?.hasTables === false) {
       return [];
     }
-    return (this.tables || []).filter((t) => t.restaurantId === targetId);
+
+    let restTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
+    if (restTables.length === 0) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const indoorCount = rest?.indoorTablesCount || 10;
+      const outdoorCount = rest?.outdoorTablesCount || 4;
+      const vipCount = rest?.vipTablesCount || 2;
+
+      let tableNum = 1;
+      // Indoor Tables
+      for (let i = 0; i < indoorCount; i++) {
+        const tName = `Table ${String(tableNum).padStart(2, '0')}`;
+        this.tables.push({
+          id: `tbl-${targetId}-${tableNum}`,
+          restaurantId: targetId,
+          tableNumber: tName,
+          capacity: 4,
+          section: 'Main Dining Room',
+          shape: 'RECTANGLE',
+          status: 'AVAILABLE',
+          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
+        });
+        tableNum++;
+      }
+      // Outdoor Tables
+      for (let i = 0; i < outdoorCount; i++) {
+        const tName = `Table ${String(tableNum).padStart(2, '0')}`;
+        this.tables.push({
+          id: `tbl-${targetId}-${tableNum}`,
+          restaurantId: targetId,
+          tableNumber: tName,
+          capacity: 4,
+          section: 'Patio & Outdoor',
+          shape: 'ROUND',
+          status: 'AVAILABLE',
+          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
+        });
+        tableNum++;
+      }
+      // VIP Tables
+      for (let i = 0; i < vipCount; i++) {
+        const tName = `VIP Table ${String(i + 1).padStart(2, '0')}`;
+        this.tables.push({
+          id: `tbl-${targetId}-${tableNum}`,
+          restaurantId: targetId,
+          tableNumber: tName,
+          capacity: 6,
+          section: 'VIP Lounge',
+          shape: 'RECTANGLE',
+          status: 'AVAILABLE',
+          isVip: true,
+          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
+        });
+        tableNum++;
+      }
+      this.saveDatabase();
+      restTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
+    }
+
+    return restTables;
   }
 
   async getEmployees(restaurantId?: string) {
