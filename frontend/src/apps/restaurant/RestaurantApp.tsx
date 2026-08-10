@@ -45,6 +45,7 @@ import {
   Store,
   Layers,
   Calendar,
+  History,
   UserCheck,
   Link,
   Unlink,
