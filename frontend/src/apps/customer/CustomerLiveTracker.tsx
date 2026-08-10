@@ -142,6 +142,24 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
         </div>
       )}
 
+      {/* Dual Station Badges */}
+      {(currentOrder.kitchenStatus || currentOrder.barStatus) && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {currentOrder.kitchenStatus && (
+            <span className="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 shadow-sm">
+              <span>🍳 Kitchen:</span>
+              <strong className="text-white font-mono uppercase">{currentOrder.kitchenStatus.replace('_', ' ')}</strong>
+            </span>
+          )}
+          {currentOrder.barStatus && (
+            <span className="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1.5 shadow-sm">
+              <span>🍸 Bar:</span>
+              <strong className="text-white font-mono uppercase">{currentOrder.barStatus.replace('_', ' ')}</strong>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Progress Stepper Bar */}
       <div className="space-y-2">
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Order Progress</p>
