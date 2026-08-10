@@ -205,6 +205,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
         return;
       }
+      if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station === 'BAR') {
+        return; // Ignore Bar-only ticket updates in Kitchen KDS
+      }
       onRefreshOrders();
       if (!isMuted && (event.type === 'OrderCreated' || event.type === 'WaiterCalled')) {
         playKitchenChime('NEW_ORDER');

@@ -40,20 +40,34 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
   const [customEtaInput, setCustomEtaInput] = useState('10');
 
   useEffect(() => {
-    loadBarOrders();
+    loadBarOrders(true);
 
-    const unsubscribe = realtimeBus.subscribe((event) => {
+    const unsubscribe = realtimeBus.subscribe((event: any) => {
+      const currentRestId = api.getCurrentRestaurantId();
+      if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
+        return;
+      }
+
+      // Ignore updates for other stations to prevent unnecessary re-fetches
+      if (event.type === 'FulfillmentTicketUpdated' && event.station && event.station !== 'BAR') {
+        return;
+      }
+
       if (
         event.type === 'OrderCreated' ||
         event.type === 'OrderAccepted' ||
         event.type === 'OrderReady' ||
         event.type === 'BarStatusUpdated' ||
-        event.type === 'FulfillmentTicketUpdated'
+        (event.type === 'FulfillmentTicketUpdated' && event.station === 'BAR')
       ) {
-        loadBarOrders();
-        setLastNotification(`New Drink Activity on ${event.tableNumber || 'Bar'}`);
-        if (soundEnabled) {
-          playNotificationSound();
+        loadBarOrders(false);
+
+        // Only alert on newly created drink orders
+        if (event.type === 'OrderCreated' || (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')) {
+          setLastNotification(`New Drink Order #${event.orderId || event.parentOrderId || ''} for Table ${event.tableNumber || 'Bar'} 🍸`);
+          if (soundEnabled) {
+            playNotificationSound();
+          }
         }
       }
     });
@@ -78,8 +92,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     } catch (e) {}
   };
 
-  const loadBarOrders = async () => {
-    setIsLoading(true);
+  const loadBarOrders = async (showLoading = false) => {
+    if (showLoading) setIsLoading(true);
     try {
       const restId = api.getCurrentRestaurantId() || undefined;
       const barTickets = await api.getFulfillmentTickets(restId, 'BAR');
@@ -112,7 +126,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       const stationStatus = newStatus === 'READY' ? 'READY' : newStatus === 'PREPARING' || newStatus === 'PREPARING_DRINKS' ? 'PREPARING' : 'COMPLETED';
       await api.updateFulfillmentTicketStatus(orderId, stationStatus, 'BAR');
       await api.updateBarStatus(orderId, stationStatus);
-      await loadBarOrders();
+      await loadBarOrders(false);
     } catch (err) {
       console.error('Failed to update drink order status:', err);
     }
