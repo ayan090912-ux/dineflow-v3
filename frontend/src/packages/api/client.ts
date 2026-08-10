@@ -1499,23 +1499,28 @@ export class DineFlowApiClient {
   async getCurrentBusinessDay(restaurantId?: string) {
     await delay(50);
     const restId = this.resolveTenantRestaurantId(restaurantId);
-    let openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
-
-    if (!openDay) {
-      const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-      openDay = {
-        id: `bday-${restId}-${Date.now()}`,
-        restaurantId: restId,
-        date: todayStr,
-        status: 'OPEN',
-        openedAt: new Date().toISOString(),
-        openedBy: 'System Auto',
-      };
-      this.businessDays.unshift(openDay);
-      this.saveDatabase();
+    const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+    if (openDay) {
+      return openDay;
     }
 
-    return openDay;
+    const restDays = this.businessDays.filter((b) => b.restaurantId === restId);
+    if (restDays.length > 0) {
+      return restDays[0];
+    }
+
+    const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const initialDay: BusinessDay = {
+      id: `bday-${restId}-${Date.now()}`,
+      restaurantId: restId,
+      date: todayStr,
+      status: 'OPEN',
+      openedAt: new Date().toISOString(),
+      openedBy: 'System Auto',
+    };
+    this.businessDays.unshift(initialDay);
+    this.saveDatabase();
+    return initialDay;
   }
 
   async openBusinessDay(restaurantId?: string, openedBy?: string) {
@@ -1565,8 +1570,8 @@ export class DineFlowApiClient {
     const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
     const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
 
-    const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
-    const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+    const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED' || o.items.some((i) => i.targetDestination !== 'BAR'));
+    const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR' || o.items.some((i) => i.targetDestination === 'BAR' || i.isAlcoholic));
 
     let foodSales = 0;
     let barSales = 0;
@@ -1601,6 +1606,24 @@ export class DineFlowApiClient {
     openDay.closedAt = new Date().toISOString();
     openDay.closedBy = closedBy || 'Owner';
     openDay.summary = summary;
+
+    // Close any active table sessions when ending the business day
+    this.tableSessions.forEach((s) => {
+      if (s.restaurantId === restId && s.status === 'ACTIVE') {
+        s.status = 'CLOSED';
+        s.sessionClosedAt = new Date().toISOString();
+        s.closedByWaiterName = closedBy || 'System Day Close';
+      }
+    });
+
+    this.tables.forEach((tbl) => {
+      if (tbl.restaurantId === restId) {
+        tbl.status = 'AVAILABLE';
+        tbl.isOccupied = false;
+        tbl.activeSessionId = undefined;
+        tbl.sessionStartedAt = undefined;
+      }
+    });
 
     this.saveDatabase();
 

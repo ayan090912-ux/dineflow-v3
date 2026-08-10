@@ -416,6 +416,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         addToast('success', 'Bill Request Received 🧾', `Table ${event.tableNumber} requested final check.`);
       } else if (event.type === 'ETAUpdated') {
         addToast('info', 'ETA Adjusted ⏱️', `Order #${event.orderId} ETA set to ${event.estimatedPrepTimeMinutes}m`);
+      } else if (event.type === 'BusinessDayClosed') {
+        addToast('warning', 'Business Day Closed 🌅', 'Daily closing summary archived in history.');
+      } else if (event.type === 'BusinessDayOpened') {
+        addToast('success', 'New Business Day Opened ☀️', 'Now recording orders for new business day.');
       }
     });
 
