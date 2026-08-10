@@ -387,6 +387,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             >
               I am {currentTable.reservationDetails?.reservedForName || 'the Reserved Guest'} (Check In)
             </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isSessionEnded) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative font-sans">
