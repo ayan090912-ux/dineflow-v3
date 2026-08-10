@@ -216,7 +216,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       if (activeSessionId) {
         return o.tableSessionId === activeSessionId;
       }
-      return false;
+      return o.status !== 'PAID' && o.status !== 'CANCELLED';
     });
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setCustomerOrders(tableOrds);
@@ -698,18 +698,15 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Dedicated Bottom Order Status Section */}
       {(() => {
-        const activeOrders = customerOrders.filter(
-          (o) => o.status !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
-        );
-        const previousOrders = customerOrders.filter(
-          (o) => o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'CANCELLED'
-        );
+        // Show ALL orders belonging to the active table session until the waiter closes the session
+        const sessionOrders = customerOrders.filter((o) => o.status !== 'CANCELLED');
+        const cancelledOrders = customerOrders.filter((o) => o.status === 'CANCELLED');
 
-        if (activeOrders.length === 0 && previousOrders.length === 0) return null;
+        if (sessionOrders.length === 0 && cancelledOrders.length === 0) return null;
 
         return (
           <div className="p-4 space-y-4 pt-6 border-t border-slate-800/80 mt-6">
-            {activeOrders.length > 0 && (
+            {sessionOrders.length > 0 && (
               <div
                 id="active-orders-section"
                 className={`space-y-3 px-1 transition-all duration-500 rounded-3xl ${
@@ -719,11 +716,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 <div className="px-1 flex items-center justify-between">
                   <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Flame className="w-4 h-4 text-rose-500" />
-                    Active Table Orders ({activeOrders.length})
+                    Active Table Session Orders ({sessionOrders.length})
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">Live Sync</span>
+                  <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    Session Active
+                  </span>
                 </div>
-                {activeOrders.map((ord) => (
+                {sessionOrders.map((ord) => (
                   <CustomerLiveTracker
                     key={ord.id}
                     order={ord}
@@ -735,20 +735,20 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               </div>
             )}
 
-            {previousOrders.length > 0 && (
+            {cancelledOrders.length > 0 && (
               <div className="my-2">
                 <details className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300">
                   <summary className="font-bold cursor-pointer flex items-center justify-between text-slate-300 hover:text-white">
                     <span className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                      Order History / Past Orders ({previousOrders.length})
+                      <Clock className="w-3.5 h-3.5 text-rose-400" />
+                      Cancelled Orders ({cancelledOrders.length})
                     </span>
-                    <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                      Completed
+                    <span className="text-[10px] text-rose-400 font-mono font-bold bg-rose-950/60 border border-rose-800/60 px-2 py-0.5 rounded-full">
+                      Cancelled
                     </span>
                   </summary>
                   <div className="mt-3 space-y-2 pt-2 border-t border-slate-800">
-                    {previousOrders.map((pOrd) => (
+                    {cancelledOrders.map((pOrd) => (
                       <div key={pOrd.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
                         <div>
                           <p className="font-bold text-white font-mono">Order #{pOrd.id}</p>
@@ -756,8 +756,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                             {pOrd.items.length} items • ₹{pOrd.totalAmount.toFixed(2)}
                           </p>
                         </div>
-                        <Badge variant="success" className="text-[10px] font-mono">
-                          {pOrd.status}
+                        <Badge variant="danger" className="text-[10px] font-mono">
+                          CANCELLED
                         </Badge>
                       </div>
                     ))}
@@ -1055,6 +1055,43 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           );
         }}
       />
+
+      {/* STICKY FLOATING ACTIVE SESSION ORDER STATUS BAR */}
+      {currentTableSession && customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
+        <div className="fixed bottom-4 left-4 right-4 max-w-md mx-auto z-40 animate-in slide-in-from-bottom duration-300">
+          <div
+            onClick={() => {
+              const el = document.getElementById('active-orders-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+              else window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            }}
+            className="bg-gradient-to-r from-slate-950 via-slate-900 to-rose-950 border-2 border-rose-500/60 p-3 rounded-2xl shadow-2xl backdrop-blur-xl flex items-center justify-between cursor-pointer group hover:border-rose-400 transition-all"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-300 font-black text-xs shrink-0">
+                📍 {selectedTableNum}
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black text-white">Table Session #{currentTableSession.id}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                </div>
+                <p className="text-[11px] text-slate-300 font-mono">
+                  {customerOrders.filter((o) => o.status !== 'CANCELLED').length} Live {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} • Total: ₹
+                  {customerOrders.filter((o) => o.status !== 'CANCELLED').reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50 group-hover:scale-105 transition-transform flex items-center gap-1">
+                <span>View Tracker</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
