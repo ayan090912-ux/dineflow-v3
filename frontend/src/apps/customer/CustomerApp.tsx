@@ -92,6 +92,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     }
   };
 
+  const [isSessionEnded, setIsSessionEnded] = useState(false);
+
   useEffect(() => {
     const savedAge = typeof window !== 'undefined' && sessionStorage.getItem('dineflow_bar_age_verified');
     if (savedAge === 'true') {
@@ -107,9 +109,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
 
       if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
-        setCurrentTableSession(null);
-        setCustomerOrders([]);
-        loadTableInfo();
+        if (!event.tableNumber || event.tableNumber.toLowerCase() === selectedTableNum?.toLowerCase()) {
+          setIsSessionEnded(true);
+          setCurrentTableSession(null);
+          setCustomerOrders([]);
+        }
       }
 
       if (event.tableNumber?.toLowerCase() === selectedTableNum?.toLowerCase()) {
@@ -382,6 +386,48 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               icon={<UserCheck className="w-4 h-4" />}
             >
               I am {currentTable.reservationDetails?.reservedForName || 'the Reserved Guest'} (Check In)
+            </Button>
+  if (isSessionEnded) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative font-sans">
+        <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
+
+        <div className="space-y-6 text-center my-auto">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center shadow-2xl shadow-emerald-950/40">
+            <CheckCircle2 className="w-10 h-10 text-emerald-400 animate-pulse" />
+          </div>
+
+          <div className="space-y-2">
+            <span className="px-3.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              ✓ Table Session Closed
+            </span>
+            <h2 className="text-2xl font-black text-white">Thank You for Dining with Us!</h2>
+            <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
+              Your session for <strong className="text-white">{selectedTableNum}</strong> has been closed by floor staff. We hope you enjoyed your meal!
+            </p>
+          </div>
+
+          <Card className="bg-slate-900 border-slate-800 p-5 space-y-3 text-left">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+              <Sparkles className="w-4 h-4" />
+              Start New Visit
+            </div>
+            <p className="text-xs text-slate-300">
+              To place a new order or start a new dining session, tap below to refresh or re-scan the QR code.
+            </p>
+          </Card>
+
+          <div className="space-y-3 pt-2">
+            <Button
+              variant="brand"
+              className="w-full py-3.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50"
+              onClick={async () => {
+                setIsSessionEnded(false);
+                await loadTableInfo();
+              }}
+              icon={<RefreshCw className="w-4 h-4" />}
+            >
+              Start New Dining Session 🚀
             </Button>
           </div>
         </div>

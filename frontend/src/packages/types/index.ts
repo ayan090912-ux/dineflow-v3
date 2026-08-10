@@ -258,10 +258,12 @@ export interface TableSession {
   tableId: string;
   tableNumber: string;
   status: 'ACTIVE' | 'CLOSED';
+  customerSessionId?: string;
   sessionStartedAt: string;
   sessionClosedAt?: string;
   closedByWaiterName?: string;
   businessDayId?: string;
+  paymentStatus?: 'UNPAID' | 'PAYMENT_PENDING' | 'PAID';
 }
 
 export interface DailySummaryData {

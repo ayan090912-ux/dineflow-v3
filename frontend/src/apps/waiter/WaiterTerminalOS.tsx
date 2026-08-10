@@ -30,11 +30,13 @@ import {
   Badge,
   Avatar,
   SearchInput,
+  Modal,
 } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import {
   Order,
   Table,
+  TableSession,
   CustomerRequest,
   CustomerRequestType,
   CustomerRequestStatus,
@@ -47,9 +49,9 @@ import { useTheme } from '../../packages/theme/ThemeEngine';
 // Web Audio API Chime Synthesizer for notifications
 const playNotificationChime = () => {
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
 
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -65,16 +67,14 @@ const playNotificationChime = () => {
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
-    gain2.gain.setValueAtTime(0.2, ctx.currentTime + 0.12);
-    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+    gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
-    osc2.start(ctx.currentTime + 0.12);
-    osc2.stop(ctx.currentTime + 0.45);
-  } catch (err) {
-    // Audio context fallback
-  }
+    osc2.start(ctx.currentTime + 0.1);
+    osc2.stop(ctx.currentTime + 0.35);
+  } catch (e) {}
 };
 
 interface WaiterTerminalOSProps {
@@ -104,6 +104,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Table Modal States
+  const [selectedTableForView, setSelectedTableForView] = useState<Table | null>(null);
+  const [selectedTableForClose, setSelectedTableForClose] = useState<Table | null>(null);
+  const [isClosingTableLoading, setIsClosingTableLoading] = useState(false);
 
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<{
@@ -893,18 +898,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                             <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
                           </div>
 
-                          <div className="pt-2 border-t border-slate-800/80">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full text-xs font-bold py-2 bg-slate-900 border-slate-800 hover:bg-slate-800 text-sky-300"
+                              onClick={() => setSelectedTableForView(table)}
+                            >
+                              <span>VIEW TABLE</span>
+                            </Button>
                             <Button
                               variant="danger"
                               size="sm"
                               className="w-full text-xs font-bold py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-200"
-                              onClick={async () => {
-                                await api.closeTableSession(table.id, waiterName);
-                                showToast('Table Session Closed 🧹', `${table.tableNumber} is now available for new guests`, 'success');
-                                loadData();
-                              }}
+                              onClick={() => setSelectedTableForClose(table)}
                             >
-                              <span>CLOSE TABLE / END SESSION 🧹</span>
+                              <span>CLOSE TABLE</span>
                             </Button>
                           </div>
                         </div>
@@ -1083,6 +1092,203 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           )}
         </main>
       </div>
+
+      {/* VIEW TABLE DETAILS MODAL */}
+      {selectedTableForView && (
+        <Modal
+          isOpen={Boolean(selectedTableForView)}
+          onClose={() => setSelectedTableForView(null)}
+          title={`Table Details — ${selectedTableForView.tableNumber}`}
+          maxWidth="lg"
+        >
+          {(() => {
+            const activeSession = activeSessions.find(
+              (s) => s.tableId === selectedTableForView.id && s.status === 'ACTIVE'
+            );
+            const sessionOrders = orders.filter(
+              (o) => activeSession ? o.tableSessionId === activeSession.id : o.tableNumber.toLowerCase() === selectedTableForView.tableNumber.toLowerCase()
+            );
+            const sessionTotal = sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+            const tableRequests = requests.filter(
+              (r) => r.tableNumber.toLowerCase() === selectedTableForView.tableNumber.toLowerCase() && r.status !== 'COMPLETED'
+            );
+
+            return (
+              <div className="space-y-4 font-sans text-slate-100">
+                {/* Header Metadata */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs font-mono">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Session ID:</span>
+                    <strong className="text-amber-300">{activeSession ? `#${activeSession.id}` : 'No Session'}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Status:</span>
+                    <strong className="text-emerald-400">ACTIVE</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Orders Count:</span>
+                    <strong className="text-white">{sessionOrders.length} Orders</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Total Amount:</span>
+                    <strong className="text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</strong>
+                  </div>
+                </div>
+
+                {/* Session Orders List */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Session Orders ({sessionOrders.length})
+                  </h4>
+                  {sessionOrders.length === 0 ? (
+                    <div className="p-6 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 text-xs text-slate-500">
+                      No orders placed yet for this active table session.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                      {sessionOrders.map((ord) => (
+                        <div key={ord.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-2 text-xs">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold font-mono text-white">Order #{ord.id}</span>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={ord.paymentStatus === 'PAID' ? 'success' : 'warning'} className="text-[10px]">
+                                {ord.paymentStatus || 'UNPAID'}
+                              </Badge>
+                              <Badge variant="outline" className="text-[10px]">
+                                {ord.status}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 py-1 border-y border-slate-900">
+                            {ord.items.map((it, idx) => (
+                              <div key={idx} className="flex justify-between text-slate-300">
+                                <span>{it.quantity}x {it.name}</span>
+                                <span className="font-mono font-bold text-slate-200">₹{(it.price * it.quantity).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Customer Requests */}
+                {tableRequests.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <PhoneCall className="w-3.5 h-3.5" /> Pending Service Requests ({tableRequests.length})
+                    </h4>
+                    <div className="space-y-1.5">
+                      {tableRequests.map((r) => (
+                        <div key={r.id} className="p-2.5 bg-amber-950/40 border border-amber-800/50 rounded-xl flex justify-between items-center text-xs">
+                          <span className="text-amber-200 font-medium">{r.requestType.replace('_', ' ')}</span>
+                          <Button size="sm" variant="brand" className="text-[10px] py-1" onClick={() => handleCompleteRequest(r.id)}>
+                            Mark Done ✓
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-2">
+                  <Button variant="outline" onClick={() => setSelectedTableForView(null)} className="border-slate-800 text-slate-300">
+                    Close Window
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
+
+      {/* CLOSE TABLE CONFIRMATION MODAL */}
+      {selectedTableForClose && (
+        <Modal
+          isOpen={Boolean(selectedTableForClose)}
+          onClose={() => setSelectedTableForClose(null)}
+          title={`Close Table ${selectedTableForClose.tableNumber} Confirmation`}
+          maxWidth="md"
+        >
+          {(() => {
+            const activeSession = activeSessions.find(
+              (s) => s.tableId === selectedTableForClose.id && s.status === 'ACTIVE'
+            );
+            const sessionOrders = orders.filter(
+              (o) => activeSession ? o.tableSessionId === activeSession.id : o.tableNumber.toLowerCase() === selectedTableForClose.tableNumber.toLowerCase()
+            );
+            const sessionTotal = sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+            const allPaid = sessionOrders.every((o) => o.paymentStatus === 'PAID' || o.status === 'COMPLETED');
+
+            return (
+              <div className="space-y-4 font-sans text-slate-100">
+                <div className="p-4 bg-rose-950/50 border border-rose-800/60 rounded-2xl space-y-1 text-rose-200">
+                  <h4 className="font-black text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400" /> Confirm Session Closure & Reset
+                  </h4>
+                  <p className="text-xs text-rose-300/80">
+                    Closing <strong className="text-white">{selectedTableForClose.tableNumber}</strong> will mark the table <strong>VACANT</strong> and reset the customer session. Session history will remain stored safely in database archives.
+                  </p>
+                </div>
+
+                <div className="space-y-2 bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs font-mono">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                    <span className="text-slate-400">Session ID:</span>
+                    <span className="font-bold text-amber-300">{activeSession ? `#${activeSession.id}` : 'ACTIVE'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-400">Total Orders Placed:</span>
+                    <span className="font-bold text-white">{sessionOrders.length} Orders</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-400">Payment Status:</span>
+                    <Badge variant={allPaid ? 'success' : 'warning'} className="text-[10px]">
+                      {allPaid ? 'PAID' : 'PAYMENT PENDING / UNPAID'}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-sm">
+                    <span className="font-bold text-white">TOTAL BILL AMOUNT:</span>
+                    <span className="font-black text-emerald-400 text-base">₹{sessionTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedTableForClose(null)}
+                    disabled={isClosingTableLoading}
+                    className="border-slate-800 text-slate-300"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={isClosingTableLoading}
+                    onClick={async () => {
+                      setIsClosingTableLoading(true);
+                      try {
+                        await api.closeTableSession(selectedTableForClose.id, waiterName);
+                        showToast('Table Session Closed 🧹', `${selectedTableForClose.tableNumber} is now available for new guests`, 'success');
+                        setSelectedTableForClose(null);
+                        await loadData();
+                      } catch (err: any) {
+                        showToast('Error', err.message || 'Failed to close table session', 'warning');
+                      } finally {
+                        setIsClosingTableLoading(false);
+                      }
+                    }}
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                  >
+                    {isClosingTableLoading ? 'Closing Session...' : 'Close & Reset Table 🧹'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
     </div>
   );
 };

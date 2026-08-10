@@ -41,9 +41,9 @@ import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
 // Web Audio API Synthesizer for Kitchen Chimes & Overdue Alerts
 const playKitchenChime = (type: 'NEW_ORDER' | 'OVERDUE' | 'BUMP') => {
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
 
     if (type === 'NEW_ORDER') {
       const osc1 = ctx.createOscillator();
