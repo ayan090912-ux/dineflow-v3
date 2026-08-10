@@ -245,6 +245,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
   const [currentRestaurant, setCurrentRestaurant] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
 
   // Business Day & Daily Closing State
   const [currentBusinessDay, setCurrentBusinessDay] = useState<BusinessDay | null>(null);
@@ -452,15 +453,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       });
     }
 
-    const o = await api.getOrders(rest?.id);
-    const m = await api.getMenuItems(rest?.id);
-    const t = await api.getTables(rest?.id);
-    const e = await api.getEmployees(rest?.id);
-    const i = await api.getInventory(rest?.id);
-    const fc = await api.getCategories(rest?.id);
-    const bc = await api.getBarCategories(rest?.id);
-    const bDay = await api.getCurrentBusinessDay(rest?.id);
-    const bHistory = await api.getBusinessDayHistory(rest?.id);
+    const [o, m, t, e, i, fc, bc, bDay, bHistory, activeSess] = await Promise.all([
+      api.getOrders(rest?.id),
+      api.getMenuItems(rest?.id),
+      api.getTables(rest?.id),
+      api.getEmployees(rest?.id),
+      api.getInventory(rest?.id),
+      api.getCategories(rest?.id),
+      api.getBarCategories(rest?.id),
+      api.getCurrentBusinessDay(rest?.id),
+      api.getBusinessDayHistory(rest?.id),
+      api.getActiveTableSessions(rest?.id),
+    ]);
 
     setOrders(o);
     setMenuItems(m);
@@ -471,6 +475,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     setBarCategories(bc);
     setCurrentBusinessDay(bDay);
     setBusinessDayHistory(bHistory);
+    setActiveSessions(activeSess || []);
   };
 
   // Category CRUD Handlers
@@ -1701,8 +1706,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             {/* Interactive Floorplan Table Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {tables.map((tbl) => {
-                const isReserved = tbl.status === 'RESERVED' || !!tbl.reservationDetails;
+                const isReserved = tbl.status === 'RESERVED' || Boolean(tbl.reservationDetails);
                 const isMerged = tbl.isMerged || tbl.status === 'MERGED';
+
+                const activeSess = activeSessions.find(
+                  (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
+                );
+                const tableOrders = activeSess
+                  ? orders.filter((o) => o.tableSessionId === activeSess.id)
+                  : orders.filter((o) => o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase() && o.status !== 'COMPLETED' && o.status !== 'CANCELLED');
+                const sessionTotal = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
                 return (
                   <Card
@@ -1712,8 +1725,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                         ? 'border-amber-500/60 shadow-lg shadow-amber-950/20'
                         : isMerged
                         ? 'border-sky-500/60 shadow-lg shadow-sky-950/20'
-                        : tbl.status === 'OCCUPIED'
-                        ? 'border-rose-500/40'
+                        : (tbl.status === 'OCCUPIED' || activeSess)
+                        ? 'border-rose-500/40 shadow-lg shadow-rose-950/20'
                         : 'border-slate-800'
                     }`}
                   >
@@ -1736,18 +1749,37 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
                         <Badge
                           variant={
-                            tbl.status === 'AVAILABLE'
-                              ? 'success'
+                            activeSess || tbl.status === 'OCCUPIED'
+                              ? 'danger'
                               : isReserved
                               ? 'warning'
                               : isMerged
                               ? 'info'
-                              : 'danger'
+                              : 'success'
                           }
                         >
-                          {tbl.status}
+                          {activeSess || tbl.status === 'OCCUPIED' ? 'OCCUPIED' : tbl.status}
                         </Badge>
                       </div>
+
+                      {/* Active Table Session Banner */}
+                      {activeSess && (
+                        <div className="mt-3 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs space-y-1.5 font-mono">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                              Session #{activeSess.id}
+                            </span>
+                            <span className="text-[10px] text-rose-300 font-bold bg-rose-900/60 px-2 py-0.5 rounded-md">
+                              ● ACTIVE
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-slate-300 text-[11px]">
+                            <span>Orders: <strong className="text-white">{tableOrders.length}</strong></span>
+                            <span>Total Bill: <strong className="text-emerald-400">₹{sessionTotal.toFixed(2)}</strong></span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Merged Banner */}
                       {isMerged && (

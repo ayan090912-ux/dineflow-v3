@@ -247,13 +247,29 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
   // Computed data collections
   const activeTablesList = useMemo(() => {
-    // Requirements 2 & 12: Source of truth for active tables is an ACTIVE TableSession!
-    const activeTableIdSet = new Set(activeSessions.filter((s) => s.status === 'ACTIVE').map((s) => s.tableId));
+    const activeTableIdSet = new Set<string>();
+    const activeTableNumSet = new Set<string>();
+
+    activeSessions.forEach((s) => {
+      if (s.status === 'ACTIVE') {
+        if (s.tableId) activeTableIdSet.add(s.tableId);
+        if (s.tableNumber) activeTableNumSet.add(s.tableNumber.toLowerCase());
+      }
+    });
+
+    const activeOrderTableNums = new Set(
+      orders
+        .filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')
+        .map((o) => o.tableNumber.toLowerCase())
+    );
 
     return tables.filter((t) => {
-      // Must have an active table session!
-      const isActiveSession = activeTableIdSet.has(t.id);
-      if (!isActiveSession) return false;
+      const isSessionActive = activeTableIdSet.has(t.id) || activeTableNumSet.has(t.tableNumber.toLowerCase());
+      const isStatusOccupied = t.status === 'OCCUPIED' || t.status === 'MERGED' || Boolean(t.isOccupied);
+      const hasActiveOrder = activeOrderTableNums.has(t.tableNumber.toLowerCase());
+
+      const isActive = isSessionActive || isStatusOccupied || hasActiveOrder;
+      if (!isActive) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -264,7 +280,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       }
       return true;
     });
-  }, [tables, activeSessions, searchQuery]);
+  }, [tables, activeSessions, orders, searchQuery]);
 
   const pendingCallsList = useMemo(() => {
     return requests.filter((r) => {
@@ -825,8 +841,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {activeTablesList.map((table) => {
-                    const activeSession = activeSessions.find((s) => s.tableId === table.id && s.status === 'ACTIVE');
-                    const tableOrders = orders.filter((o) => activeSession ? o.tableSessionId === activeSession.id : false);
+                    const activeSession = activeSessions.find((s) => s.status === 'ACTIVE' && (s.tableId === table.id || s.tableNumber.toLowerCase() === table.tableNumber.toLowerCase()));
+                    const tableOrders = orders.filter((o) => {
+                      if (activeSession && o.tableSessionId === activeSession.id) return true;
+                      return o.tableNumber.toLowerCase() === table.tableNumber.toLowerCase() && o.status !== 'COMPLETED' && o.status !== 'CANCELLED';
+                    });
                     const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
                     const latestOrder = tableOrders[0];
 

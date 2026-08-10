@@ -1671,10 +1671,18 @@ export class DineFlowApiClient {
     if (!tbl) return null;
 
     let activeSession = this.tableSessions.find(
-      (s) => s.restaurantId === restId && s.tableId === tbl.id && s.status === 'ACTIVE'
+      (s) => s.restaurantId === restId && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && s.status === 'ACTIVE'
     );
 
-    if (!activeSession) {
+    if (activeSession) {
+      if (tbl.status !== 'OCCUPIED' || !tbl.isOccupied) {
+        tbl.status = 'OCCUPIED';
+        tbl.isOccupied = true;
+        tbl.activeSessionId = activeSession.id;
+        tbl.sessionStartedAt = tbl.sessionStartedAt || activeSession.sessionStartedAt;
+        this.saveDatabase();
+      }
+    } else {
       const currentBday = await this.getCurrentBusinessDay(restId);
       const sessionSeq = (this.tableSessions.filter((s) => s.restaurantId === restId).length + 1);
       const newSessionId = `S${String(sessionSeq).padStart(3, '0')}`;
