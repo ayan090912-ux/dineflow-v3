@@ -20,6 +20,7 @@ import {
   BusinessDay,
   DailySummaryData,
   getFulfillmentStation,
+  FulfillmentTicket,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -38,6 +39,7 @@ export class DineFlowApiClient {
   private barCategories: BarCategory[] = [];
   private barMenuItems: BarMenuItem[] = [];
   private orders: Order[] = [];
+  private fulfillmentTickets: FulfillmentTicket[] = [];
   private tables: Table[] = [];
   private tableSessions: TableSession[] = [];
   private businessDays: BusinessDay[] = [];
@@ -72,6 +74,7 @@ export class DineFlowApiClient {
           this.barCategories = db.barCategories || [];
           this.barMenuItems = db.barMenuItems || [];
           this.orders = db.orders || [];
+          this.fulfillmentTickets = db.fulfillmentTickets || [];
           this.tables = db.tables || [];
           this.tableSessions = db.tableSessions || [];
           this.businessDays = db.businessDays || [];
@@ -159,6 +162,7 @@ export class DineFlowApiClient {
           barCategories: this.barCategories,
           barMenuItems: this.barMenuItems,
           orders: this.orders,
+          fulfillmentTickets: this.fulfillmentTickets,
           tables: this.tables,
           tableSessions: this.tableSessions,
           businessDays: this.businessDays,
@@ -1049,6 +1053,142 @@ export class DineFlowApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
     return this.orders.filter((o) => o.restaurantId === targetId);
+  }
+
+  async getFulfillmentTickets(restaurantId?: string, station?: 'KITCHEN' | 'BAR') {
+    await delay(100);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+
+    this.ensureFulfillmentTickets(targetId);
+
+    return this.fulfillmentTickets.filter(
+      (t) => t.restaurantId === targetId && (!station || t.station === station)
+    );
+  }
+
+  private ensureFulfillmentTickets(restaurantId: string) {
+    const ordersForRest = this.orders.filter((o) => o.restaurantId === restaurantId);
+    ordersForRest.forEach((o) => {
+      const kitchenItems = o.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN');
+      const barItems = o.items.filter((i) => getFulfillmentStation(i) === 'BAR');
+
+      if (kitchenItems.length > 0) {
+        const existingK = this.fulfillmentTickets.find(
+          (t) => t.parentOrderId === o.id && t.station === 'KITCHEN'
+        );
+        if (!existingK) {
+          this.fulfillmentTickets.push({
+            id: `K-TICKET-${o.id}`,
+            parentOrderId: o.id,
+            restaurantId: o.restaurantId,
+            tableNumber: o.tableNumber,
+            tableSessionId: o.tableSessionId,
+            station: 'KITCHEN',
+            status: (o.kitchenStatus as any) || (o.status === 'READY' ? 'READY' : o.status === 'PREPARING' ? 'PREPARING' : 'PENDING'),
+            items: kitchenItems,
+            createdAt: o.createdAt,
+            updatedAt: o.updatedAt,
+            customerName: o.customerName,
+            orderType: o.orderType,
+          });
+        }
+      }
+
+      if (barItems.length > 0) {
+        const existingB = this.fulfillmentTickets.find(
+          (t) => t.parentOrderId === o.id && t.station === 'BAR'
+        );
+        if (!existingB) {
+          this.fulfillmentTickets.push({
+            id: `B-TICKET-${o.id}`,
+            parentOrderId: o.id,
+            restaurantId: o.restaurantId,
+            tableNumber: o.tableNumber,
+            tableSessionId: o.tableSessionId,
+            station: 'BAR',
+            status: (o.barStatus as any) || (o.status === 'READY' ? 'READY' : o.status === 'PREPARING' ? 'PREPARING' : 'PENDING'),
+            items: barItems,
+            createdAt: o.createdAt,
+            updatedAt: o.updatedAt,
+            customerName: o.customerName,
+            orderType: o.orderType,
+          });
+        }
+      }
+    });
+    this.saveDatabase();
+  }
+
+  async updateFulfillmentTicketStatus(
+    ticketId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED'
+  ) {
+    await delay(100);
+    const ticket = this.fulfillmentTickets.find((t) => t.id === ticketId || t.parentOrderId === ticketId);
+    if (!ticket) return null;
+
+    ticket.status = status;
+    ticket.updatedAt = new Date().toISOString();
+    if (status === 'COMPLETED') {
+      ticket.completedAt = new Date().toISOString();
+    }
+
+    const parentOrder = this.orders.find((o) => o.id === ticket.parentOrderId);
+    if (parentOrder) {
+      if (ticket.station === 'KITCHEN') {
+        parentOrder.kitchenStatus = status;
+        if (status === 'COMPLETED') parentOrder.kitchenCompletedAt = new Date().toISOString();
+      } else if (ticket.station === 'BAR') {
+        parentOrder.barStatus = status;
+        if (status === 'COMPLETED') parentOrder.barCompletedAt = new Date().toISOString();
+      }
+
+      const orderTickets = this.fulfillmentTickets.filter((t) => t.parentOrderId === parentOrder.id);
+      const allReady = orderTickets.every((t) => t.status === 'READY' || t.status === 'COMPLETED');
+      const allCompleted = orderTickets.every((t) => t.status === 'COMPLETED');
+
+      if (allCompleted) {
+        parentOrder.status = 'COMPLETED';
+      } else if (allReady) {
+        parentOrder.status = 'READY';
+        parentOrder.readyAt = new Date().toISOString();
+      } else if (orderTickets.some((t) => t.status === 'PREPARING' || t.status === 'ACCEPTED')) {
+        if (parentOrder.status !== 'READY' && parentOrder.status !== 'DELIVERED' && parentOrder.status !== 'COMPLETED') {
+          parentOrder.status = 'PREPARING';
+        }
+      }
+      parentOrder.updatedAt = new Date().toISOString();
+    }
+
+    this.saveDatabase();
+
+    realtimeBus.emit('FulfillmentTicketUpdated' as any, {
+      ticketId: ticket.id,
+      parentOrderId: ticket.parentOrderId,
+      restaurantId: ticket.restaurantId,
+      station: ticket.station,
+      status: ticket.status,
+      data: ticket,
+    });
+
+    if (ticket.station === 'BAR') {
+      realtimeBus.emit('BarStatusUpdated' as any, {
+        orderId: ticket.parentOrderId,
+        restaurantId: ticket.restaurantId,
+        barStatus: status,
+        data: parentOrder,
+      });
+    } else {
+      realtimeBus.emit('KitchenStatusUpdated' as any, {
+        orderId: ticket.parentOrderId,
+        restaurantId: ticket.restaurantId,
+        kitchenStatus: status,
+        data: parentOrder,
+      });
+    }
+
+    return ticket;
   }
 
   async getMenuItems(restaurantId?: string) {
@@ -2508,6 +2648,43 @@ export class DineFlowApiClient {
     };
 
     this.orders.unshift(newOrd);
+
+    const kitchenItems = processedItems.filter((i) => i.targetDestination === 'KITCHEN');
+    const barItems = processedItems.filter((i) => i.targetDestination === 'BAR');
+
+    if (kitchenItems.length > 0) {
+      this.fulfillmentTickets.unshift({
+        id: `K-TICKET-${customOrderId}`,
+        parentOrderId: customOrderId,
+        restaurantId: restId,
+        tableNumber: newOrd.tableNumber,
+        tableSessionId,
+        station: 'KITCHEN',
+        status: 'PENDING',
+        items: kitchenItems,
+        createdAt: newOrd.createdAt,
+        updatedAt: newOrd.updatedAt,
+        customerName: newOrd.customerName,
+        orderType: newOrd.orderType,
+      });
+    }
+
+    if (barItems.length > 0) {
+      this.fulfillmentTickets.unshift({
+        id: `B-TICKET-${customOrderId}`,
+        parentOrderId: customOrderId,
+        restaurantId: restId,
+        tableNumber: newOrd.tableNumber,
+        tableSessionId,
+        station: 'BAR',
+        status: 'PENDING',
+        items: barItems,
+        createdAt: newOrd.createdAt,
+        updatedAt: newOrd.updatedAt,
+        customerName: newOrd.customerName,
+        orderType: newOrd.orderType,
+      });
+    }
 
     // Auto-occupy matching table in database if it was available
     if (!isPickup && newOrd.tableNumber) {

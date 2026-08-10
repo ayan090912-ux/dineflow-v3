@@ -43,7 +43,13 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     loadBarOrders();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      if (event.type === 'OrderCreated' || event.type === 'OrderAccepted' || event.type === 'OrderReady') {
+      if (
+        event.type === 'OrderCreated' ||
+        event.type === 'OrderAccepted' ||
+        event.type === 'OrderReady' ||
+        event.type === 'BarStatusUpdated' ||
+        event.type === 'FulfillmentTicketUpdated'
+      ) {
         loadBarOrders();
         setLastNotification(`New Drink Activity on ${event.tableNumber || 'Bar'}`);
         if (soundEnabled) {
@@ -76,11 +82,19 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     setIsLoading(true);
     try {
       const restId = api.getCurrentRestaurantId() || undefined;
+      const barTickets = await api.getFulfillmentTickets(restId, 'BAR');
       const allOrders = await api.getOrders(restId);
-      // Filter orders containing BAR items strictly using getFulfillmentStation
-      const barOrders = allOrders.filter((o) =>
-        o.items.some((i) => getFulfillmentStation(i) === 'BAR')
-      );
+
+      const barOrders = allOrders
+        .filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'))
+        .map((o) => {
+          const ticket = barTickets.find((t) => t.parentOrderId === o.id);
+          return {
+            ...o,
+            barStatus: ticket ? ticket.status : o.barStatus || 'PENDING',
+          };
+        });
+
       setOrders(barOrders);
     } catch (err) {
       console.error('Failed to load bar orders:', err);
@@ -91,7 +105,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      const stationStatus = newStatus === 'READY' ? 'READY' : newStatus === 'PREPARING_DRINKS' ? 'PREPARING' : 'COMPLETED';
+      const stationStatus = newStatus === 'READY' ? 'READY' : newStatus === 'PREPARING' || newStatus === 'PREPARING_DRINKS' ? 'PREPARING' : 'COMPLETED';
+      await api.updateFulfillmentTicketStatus(orderId, stationStatus);
       await api.updateBarStatus(orderId, stationStatus);
       await loadBarOrders();
     } catch (err) {

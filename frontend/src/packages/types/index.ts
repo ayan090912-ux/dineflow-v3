@@ -442,6 +442,22 @@ export interface Order {
   }[];
 }
 
+export interface FulfillmentTicket {
+  id: string;
+  parentOrderId: string;
+  restaurantId: string;
+  tableNumber: string;
+  tableSessionId?: string;
+  station: 'KITCHEN' | 'BAR';
+  status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
+  items: OrderItem[];
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  customerName?: string;
+  orderType?: 'DINE_IN' | 'PICKUP';
+}
+
 export function getFulfillmentStation(item: {
   targetDestination?: string;
   isAlcoholic?: boolean;

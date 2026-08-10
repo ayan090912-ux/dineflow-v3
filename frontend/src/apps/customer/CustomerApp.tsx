@@ -283,7 +283,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const hasKitchenItems = orderItems.some((i) => i.targetDestination === 'KITCHEN');
     const targetDest = hasBarItems && hasKitchenItems ? 'MIXED' : hasBarItems ? 'BAR' : 'KITCHEN';
 
-    const restId = api.getCurrentRestaurantId() || 'rest-1';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
     const isNoTable = currentRestaurant?.hasTables === false;
 
     const newOrd = await api.createOrder({
