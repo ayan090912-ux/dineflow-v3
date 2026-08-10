@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   Copy,
   Share2,
+  Globe,
 } from 'lucide-react';
 
 export interface QRCodeDisplayProps {
@@ -149,9 +150,14 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
-  const qrUrl = url || value || 'https://dineflow.app';
   const safeTableNum = (tableNumber || (isPickup ? 'COUNTER' : 'Table 01')).trim();
   const safeRestName = restaurantName || 'DineFlow Venue';
+
+  const defaultOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  const defaultUrl = isPickup || safeTableNum === 'COUNTER'
+    ? `${defaultOrigin}/customer`
+    : `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}`;
+  const qrUrl = url || value || defaultUrl;
 
   // Copy link to clipboard
   const handleCopyLink = () => {
@@ -521,6 +527,32 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
         {/* Customization & Quick Actions Sidebar */}
         <div className="w-full md:w-72 space-y-4">
+          {/* Encoded Target URL Display Banner */}
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl space-y-1.5 text-left font-mono">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-sans uppercase font-bold">
+              <span className="flex items-center gap-1.5 text-sky-400">
+                <Globe className="w-3.5 h-3.5" /> Encoded Target URL
+              </span>
+              <span className="text-[9px] text-slate-500 font-mono">Live Ordering Link</span>
+            </div>
+            <div className="flex items-center gap-1.5 pt-0.5">
+              <input
+                type="text"
+                readOnly
+                value={qrUrl}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-sky-300 font-mono select-all focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="px-2.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-bold transition-colors shrink-0 flex items-center gap-1"
+                title="Copy URL to clipboard"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+
           <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
             <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
               <Palette className="w-3.5 h-3.5 text-rose-400" /> Standee Customizer
@@ -634,7 +666,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
                 variant="ghost"
                 size="sm"
                 className="text-[11px] text-slate-300 hover:text-white"
-                onClick={() => window.open(url, '_blank')}
+                onClick={() => window.open(qrUrl, '_blank')}
                 icon={<ExternalLink className="w-3.5 h-3.5" />}
               >
                 Open Live View

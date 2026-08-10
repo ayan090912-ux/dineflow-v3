@@ -2682,7 +2682,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       >
         {selectedTableQR && (
           <QRCodeDisplay
-            url={selectedTableQR.qrCodeUrl}
+            url={
+              selectedTableQR.qrCodeUrl ||
+              (typeof window !== 'undefined'
+                ? `${window.location.origin}/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}`
+                : `https://dineflow.app/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}`)
+            }
             tableNumber={selectedTableQR.tableNumber}
             restaurantName={theme.restaurantName || 'Lumière Bistro'}
             restaurantLogo={theme.logo}
