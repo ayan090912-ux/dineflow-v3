@@ -2986,8 +2986,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       <Modal
         isOpen={!!selectedTableQR}
         onClose={() => setSelectedTableQR(null)}
-        title={`Custom QR Standee & Download for ${selectedTableQR?.tableNumber}`}
-        maxWidth="2xl"
+        title={`Custom QR Standee & Studio for ${selectedTableQR?.tableNumber}`}
+        maxWidth="5xl"
       >
         {selectedTableQR && (
           <QRCodeDisplay
@@ -2998,8 +2998,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 : `https://dineflow.app/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}`)
             }
             tableNumber={selectedTableQR.tableNumber}
-            restaurantName={theme.restaurantName || 'Lumière Bistro'}
+            restaurantName={currentRestaurant?.name || theme.restaurantName || 'Lumière Bistro'}
             restaurantLogo={theme.logo}
+            restaurantId={currentRestaurant?.id}
             section={selectedTableQR.section}
             capacity={selectedTableQR.capacity}
           />

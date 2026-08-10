@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { Card } from './Card';
 import { Button } from './Button';
+import { Badge } from './Badge';
 import {
   Download,
   ExternalLink,
@@ -11,13 +12,13 @@ import {
   Check,
   QrCode,
   Wifi,
-  Utensils,
-  Crown,
   Layers,
-  Image as ImageIcon,
   Copy,
-  Share2,
   Globe,
+  Eye,
+  CheckCircle2,
+  Utensils,
+  Smartphone,
 } from 'lucide-react';
 
 export interface QRCodeDisplayProps {
@@ -26,71 +27,83 @@ export interface QRCodeDisplayProps {
   tableNumber?: string;
   restaurantName?: string;
   restaurantLogo?: string;
+  restaurantId?: string;
   section?: string;
   capacity?: number;
   size?: number;
   isPickup?: boolean;
 }
 
-export type QRDesignPreset = 'SIMPLE' | 'ACRYLIC_DARK' | 'GOLD_LUXE' | 'WOOD_BISTRO' | 'NEON_CYBER';
+export type QRDesignPreset = 'ACRYLIC_DARK' | 'GOLD_LUXE' | 'WOOD_BISTRO' | 'NEON_CYBER' | 'SIMPLE';
 
 export const printQRCodeCard = (
-  element: HTMLElement | null,
+  printContainerHtml: string,
   restaurantName: string = 'Restaurant',
-  tableNumber: string = 'COUNTER'
+  tableNumber: string = 'COUNTER',
+  preset: QRDesignPreset = 'ACRYLIC_DARK',
+  accentColor: string = '#f43f5e'
 ) => {
-  if (!element) {
-    window.print();
-    return;
-  }
-
-  const printWin = window.open('', '_blank', 'width=800,height=950');
+  const printWin = window.open('', '_blank', 'width=850,height=1050');
   if (!printWin) {
     window.print();
     return;
   }
 
-  const cardHtml = element.innerHTML;
-  const cardBgColor = element.style.backgroundColor || '#0f172a';
-  const cardTextColor = element.style.color || '#ffffff';
-  const cardBorderColor = element.style.borderColor || 'rgba(255,255,255,0.1)';
+  const getPresetStyles = () => {
+    switch (preset) {
+      case 'GOLD_LUXE':
+        return { bg: '#1e1b4b', text: '#ffffff', border: '#fbbf24', subtext: '#f59e0b' };
+      case 'WOOD_BISTRO':
+        return { bg: '#291e10', text: '#fef3c7', border: '#d97706', subtext: '#b45309' };
+      case 'NEON_CYBER':
+        return { bg: '#020617', text: '#ffffff', border: '#38bdf8', subtext: '#38bdf8' };
+      case 'SIMPLE':
+        return { bg: '#ffffff', text: '#0f172a', border: '#cbd5e1', subtext: '#64748b' };
+      case 'ACRYLIC_DARK':
+      default:
+        return { bg: '#0f172a', text: '#ffffff', border: accentColor, subtext: '#94a3b8' };
+    }
+  };
+
+  const style = getPresetStyles();
 
   printWin.document.write(`
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Print QR Standee - ${restaurantName} (${tableNumber})</title>
+        <title>Print Tabletop QR Standee - ${restaurantName} (${tableNumber})</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
           @page {
             size: A4 portrait;
-            margin: 10mm;
+            margin: 0;
           }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
-            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: #ffffff;
+            font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
             display: flex;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            padding: 20px;
+            padding: 40px;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
           .printable-card-wrapper {
-            width: 330px;
-            padding: 28px;
-            border-radius: 28px;
+            width: 380px;
+            padding: 36px 30px;
+            border-radius: 36px;
             text-align: center;
-            background-color: ${cardBgColor} !important;
-            color: ${cardTextColor} !important;
-            border: 2px solid ${cardBorderColor} !important;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            background-color: ${style.bg} !important;
+            color: ${style.text} !important;
+            border: 3px solid ${style.border} !important;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
             margin: auto;
+            position: relative;
           }
           .printable-card-wrapper img {
             max-width: 100%;
@@ -102,16 +115,15 @@ export const printQRCodeCard = (
             max-width: 100%;
             height: auto;
           }
-          .hidden { display: none !important; }
           @media print {
             body { background: #ffffff !important; padding: 0 !important; }
-            .printable-card-wrapper { box-shadow: none !important; margin: 0 auto !important; }
+            .printable-card-wrapper { box-shadow: none !important; margin: 0 auto !important; page-break-inside: avoid; }
           }
         </style>
       </head>
       <body>
         <div class="printable-card-wrapper">
-          ${cardHtml}
+          ${printContainerHtml}
         </div>
         <script>
           window.onload = function() {
@@ -119,7 +131,7 @@ export const printQRCodeCard = (
               window.focus();
               window.print();
               window.close();
-            }, 400);
+            }, 500);
           };
         </script>
       </body>
@@ -134,36 +146,56 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   tableNumber,
   restaurantName,
   restaurantLogo = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
-  section = 'Main Dining Hall',
+  restaurantId,
+  section = 'Main Dining',
   capacity = 4,
   size = 200,
   isPickup = false,
 }) => {
   const [preset, setPreset] = useState<QRDesignPreset>('ACRYLIC_DARK');
-  const [ctaText, setCtaText] = useState(isPickup || tableNumber === 'COUNTER' ? 'Scan to Order & Collect at Counter' : 'Scan to View Menu & Order Live');
+  const [ctaText, setCtaText] = useState(
+    isPickup || tableNumber === 'COUNTER' ? 'SCAN TO ORDER & COLLECT' : 'SCAN TO ORDER FROM TABLE'
+  );
+  const [customTableLabel, setCustomTableLabel] = useState('');
   const [showLogo, setShowLogo] = useState(true);
   const [showWifi, setShowWifi] = useState(true);
+  const [wifiName, setWifiName] = useState('Guest_Free_WiFi');
   const [accentColor, setAccentColor] = useState('#f43f5e'); // Rose 500
   const [copied, setCopied] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [logoLoadError, setLogoLoadError] = useState(false);
 
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
-  const safeTableNum = (tableNumber || (isPickup ? 'COUNTER' : 'Table 01')).trim();
-  const safeRestName = restaurantName || 'DineFlow Venue';
+  // Safe Resolution of Table Number & Identifiers
+  const safeTableNum = (customTableLabel || tableNumber || (isPickup ? 'COUNTER' : 'Table 01')).trim();
+  const safeRestName = (restaurantName || 'DineFlow Restaurant').trim();
 
+  // Requirement 1 & 3: Construct the EXACT Destination URL
   const defaultOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-  const defaultUrl = isPickup || safeTableNum === 'COUNTER'
-    ? `${defaultOrigin}/customer`
-    : `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}`;
+  let defaultUrl = '';
+  if (isPickup || safeTableNum.toUpperCase() === 'COUNTER') {
+    defaultUrl = `${defaultOrigin}/customer${restaurantId ? `?restaurant=${restaurantId}` : ''}`;
+  } else {
+    defaultUrl = `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}${
+      restaurantId ? `&restaurant=${restaurantId}` : ''
+    }`;
+  }
+
+  // Exact encoded URL (must match display, QR code, copy link, and live view)
   const qrUrl = url || value || defaultUrl;
 
   // Copy link to clipboard
   const handleCopyLink = () => {
     navigator.clipboard.writeText(qrUrl);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2200);
+  };
+
+  // Open exact URL in live new tab
+  const handleOpenLiveView = () => {
+    window.open(qrUrl, '_blank');
   };
 
   // Download simple QR code image only
@@ -177,26 +209,94 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
     a.click();
   };
 
-  // Download SVG file
+  // Requirement 10: Complete Vector SVG Export
   const handleDownloadSVG = () => {
-    const svgElement = document.getElementById(`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`);
-    if (!svgElement) return;
-    const svgData = new XMLSerializer().serializeToString(svgElement);
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const svgUrl = URL.createObjectURL(svgBlob);
-    const a = document.createElement('a');
-    a.href = svgUrl;
-    a.download = `QR_Code_${safeTableNum.replace(/\s+/g, '_')}.svg`;
-    a.click();
-    URL.revokeObjectURL(svgUrl);
+    try {
+      const qrSvgElement = document.getElementById(`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`);
+      const qrInnerSvg = qrSvgElement ? qrSvgElement.innerHTML : '';
+
+      const svgWidth = 600;
+      const svgHeight = 900;
+
+      let bgColor = '#0f172a';
+      let textColor = '#ffffff';
+      let strokeColor = accentColor;
+      let subtextColor = '#94a3b8';
+
+      if (preset === 'GOLD_LUXE') {
+        bgColor = '#1e1b4b';
+        strokeColor = '#fbbf24';
+        subtextColor = '#f59e0b';
+      } else if (preset === 'WOOD_BISTRO') {
+        bgColor = '#291e10';
+        textColor = '#fef3c7';
+        strokeColor = '#d97706';
+        subtextColor = '#b45309';
+      } else if (preset === 'NEON_CYBER') {
+        bgColor = '#020617';
+        strokeColor = '#38bdf8';
+        subtextColor = '#38bdf8';
+      } else if (preset === 'SIMPLE') {
+        bgColor = '#ffffff';
+        textColor = '#0f172a';
+        strokeColor = '#cbd5e1';
+        subtextColor = '#64748b';
+      }
+
+      const fullSvgString = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="${svgWidth}" height="${svgHeight}">
+  <defs>
+    <style>
+      .title { font-family: 'Outfit', system-ui, sans-serif; font-weight: 900; font-size: 38px; fill: ${textColor}; text-anchor: middle; text-transform: uppercase; letter-spacing: 1px; }
+      .subtitle { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; font-size: 18px; fill: ${subtextColor}; text-anchor: middle; }
+      .cta-text { font-family: 'Outfit', system-ui, sans-serif; font-weight: 800; font-size: 22px; fill: #ffffff; text-anchor: middle; letter-spacing: 1px; }
+      .table-text { font-family: 'Outfit', system-ui, sans-serif; font-weight: 900; font-size: 56px; fill: ${textColor}; text-anchor: middle; letter-spacing: 2px; }
+      .footer-text { font-family: 'Inter', system-ui, sans-serif; font-weight: 500; font-size: 16px; fill: ${subtextColor}; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <!-- Background Frame -->
+  <rect width="${svgWidth}" height="${svgHeight}" rx="48" fill="${bgColor}" stroke="${strokeColor}" stroke-width="12"/>
+
+  <!-- Header Restaurant Name -->
+  <text x="300" y="110" class="title">${safeRestName}</text>
+  <text x="300" y="145" class="subtitle">TOUCHLESS DIGITAL MENU &amp; ORDERING</text>
+
+  <!-- QR Code Container Box -->
+  <rect x="120" y="190" width="360" height="360" rx="32" fill="#ffffff" stroke="#e2e8f0" stroke-width="4"/>
+  <g transform="translate(150, 220)">
+    ${qrInnerSvg}
+  </g>
+
+  <!-- CTA Pill -->
+  <rect x="80" y="590" width="440" height="64" rx="32" fill="${preset === 'SIMPLE' ? '#0f172a' : accentColor}"/>
+  <text x="300" y="630" class="cta-text">${ctaText.toUpperCase()}</text>
+
+  <!-- Table Number -->
+  <text x="300" y="730" class="table-text">${safeTableNum.toUpperCase()}</text>
+
+  <!-- Footer -->
+  ${showWifi ? `<text x="300" y="820" class="footer-text">📶 Wi-Fi: ${wifiName} • Powered by DineFlow</text>` : ''}
+</svg>`;
+
+      const svgBlob = new Blob([fullSvgString], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const a = document.createElement('a');
+      a.href = svgUrl;
+      a.download = `QR_StandCard_${safeTableNum.replace(/\s+/g, '_')}_Vector.svg`;
+      a.click();
+      URL.revokeObjectURL(svgUrl);
+    } catch (err) {
+      console.error('Error generating vector SVG standee:', err);
+    }
   };
 
-  // High-Resolution Custom Tabletop Card Canvas Export (300 DPI 4x6 print quality)
+  // Requirement 8: High-Resolution 300 DPI Custom Standee PNG Export
   const handleDownloadCustomCardPNG = async () => {
     setIsDownloading(true);
     try {
       const cardWidth = 1200;
-      const cardHeight = 1600;
+      const cardHeight = 1800;
 
       const canvas = document.createElement('canvas');
       canvas.width = cardWidth;
@@ -204,54 +304,50 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // 1. Draw Background & Frame based on Preset
-      if (preset === 'SIMPLE') {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, cardWidth, cardHeight);
-        ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = 16;
-        ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
-      } else if (preset === 'GOLD_LUXE') {
-        ctx.fillStyle = '#1e1b4b';
-        ctx.fillRect(0, 0, cardWidth, cardHeight);
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 20;
-        ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
+      // 1. Background & Border Styling based on Preset
+      let bgColor = '#0f172a';
+      let textColor = '#ffffff';
+      let strokeColor = accentColor;
+      let subtextColor = '#94a3b8';
+
+      if (preset === 'GOLD_LUXE') {
+        bgColor = '#1e1b4b';
+        textColor = '#ffffff';
+        strokeColor = '#fbbf24';
+        subtextColor = '#f59e0b';
       } else if (preset === 'WOOD_BISTRO') {
-        const grad = ctx.createLinearGradient(0, 0, cardWidth, cardHeight);
-        grad.addColorStop(0, '#291e10');
-        grad.addColorStop(1, '#1c1309');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, cardWidth, cardHeight);
-        ctx.strokeStyle = '#d97706';
-        ctx.lineWidth = 16;
-        ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
+        bgColor = '#291e10';
+        textColor = '#fef3c7';
+        strokeColor = '#d97706';
+        subtextColor = '#b45309';
       } else if (preset === 'NEON_CYBER') {
-        const grad = ctx.createLinearGradient(0, 0, cardWidth, cardHeight);
-        grad.addColorStop(0, '#020617');
-        grad.addColorStop(1, '#0f172a');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, cardWidth, cardHeight);
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 16;
-        ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
-      } else {
-        // ACRYLIC DARK (Default)
-        const grad = ctx.createLinearGradient(0, 0, cardWidth, cardHeight);
-        grad.addColorStop(0, '#0f172a');
-        grad.addColorStop(1, '#020617');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, cardWidth, cardHeight);
-        ctx.strokeStyle = accentColor;
-        ctx.lineWidth = 14;
-        ctx.strokeRect(40, 40, cardWidth - 80, cardHeight - 80);
+        bgColor = '#020617';
+        textColor = '#ffffff';
+        strokeColor = '#38bdf8';
+        subtextColor = '#38bdf8';
+      } else if (preset === 'SIMPLE') {
+        bgColor = '#ffffff';
+        textColor = '#0f172a';
+        strokeColor = '#cbd5e1';
+        subtextColor = '#64748b';
       }
 
-      ctx.textAlign = 'center';
-      let currentY = 140;
+      // Draw Main Background Card
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, cardWidth, cardHeight, 72);
+      ctx.fill();
 
-      // Draw Logo Image if enabled
-      if (showLogo && restaurantLogo) {
+      // Outer Border
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 18;
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      let currentY = 160;
+
+      // 2. Draw Logo Image if enabled
+      if (showLogo && restaurantLogo && !logoLoadError) {
         try {
           const logoImg = new Image();
           logoImg.crossOrigin = 'anonymous';
@@ -261,85 +357,89 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
             logoImg.onerror = resolve;
           });
           if (logoImg.complete && logoImg.naturalWidth) {
-            const logoSize = 110;
+            const logoSize = 130;
             ctx.save();
             ctx.beginPath();
-            ctx.roundRect((cardWidth - logoSize) / 2, currentY, logoSize, logoSize, 24);
+            ctx.roundRect((cardWidth - logoSize) / 2, currentY, logoSize, logoSize, 32);
             ctx.clip();
             ctx.drawImage(logoImg, (cardWidth - logoSize) / 2, currentY, logoSize, logoSize);
             ctx.restore();
-            currentY += 140;
+
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 4;
+            ctx.strokeRect((cardWidth - logoSize) / 2, currentY, logoSize, logoSize);
+
+            currentY += 170;
           }
         } catch (e) {
-          // ignore logo load fallback
+          currentY += 40;
         }
       } else {
-        currentY += 40;
+        currentY += 60;
       }
 
-      // 2. Draw Header Restaurant Name
-      ctx.font = '900 52px sans-serif';
-      ctx.fillStyle = preset === 'SIMPLE' ? '#0f172a' : preset === 'GOLD_LUXE' ? '#fbbf24' : '#ffffff';
+      // 3. Draw Header Restaurant Name
+      ctx.font = '900 64px "Outfit", sans-serif';
+      ctx.fillStyle = textColor;
       ctx.fillText(safeRestName.toUpperCase(), cardWidth / 2, currentY);
-      currentY += 50;
+      currentY += 56;
 
       // Subheader Section
-      if (safeTableNum !== 'COUNTER' && !isPickup) {
-        ctx.font = '500 30px sans-serif';
-        ctx.fillStyle = preset === 'SIMPLE' ? '#64748b' : preset === 'GOLD_LUXE' ? '#f59e0b' : '#94a3b8';
-        ctx.fillText(`${section} • ${capacity} Seats`, cardWidth / 2, currentY);
-        currentY += 40;
-      }
+      ctx.font = '600 32px "Inter", sans-serif';
+      ctx.fillStyle = subtextColor;
+      ctx.fillText('TOUCHLESS MENU & ORDERING', cardWidth / 2, currentY);
+      currentY += 60;
 
-      // 3. Draw QR Code Container
-      const qrBoxSize = 600;
+      // 4. Draw QR Code Box Container
+      const qrBoxSize = 680;
       const qrBoxX = (cardWidth - qrBoxSize) / 2;
-      const qrBoxY = currentY + 30;
+      const qrBoxY = currentY;
 
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 36);
+      ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 48);
       ctx.fill();
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 8;
       ctx.stroke();
 
-      // Draw QR Canvas content onto the card
+      // Draw QR Canvas onto the card
       if (qrCanvasRef.current) {
         const qrImage = new Image();
         qrImage.src = qrCanvasRef.current.toDataURL('image/png');
         await new Promise((resolve) => {
           qrImage.onload = resolve;
         });
-        const qrSize = 500;
+        const qrSize = 580;
         ctx.drawImage(qrImage, (cardWidth - qrSize) / 2, qrBoxY + 50, qrSize, qrSize);
       }
 
-      // 4. Call To Action Badge Below QR
-      const ctaY = qrBoxY + qrBoxSize + 110;
+      currentY = qrBoxY + qrBoxSize + 130;
+
+      // 5. Call To Action Badge Below QR
       ctx.fillStyle = preset === 'SIMPLE' ? '#0f172a' : accentColor;
       ctx.beginPath();
-      ctx.roundRect(140, ctaY - 50, cardWidth - 280, 96, 48);
+      ctx.roundRect(140, currentY - 60, cardWidth - 280, 110, 55);
       ctx.fill();
 
-      ctx.font = '900 36px sans-serif';
+      ctx.font = '900 42px "Outfit", sans-serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(ctaText, cardWidth / 2, ctaY + 12);
+      ctx.fillText(ctaText.toUpperCase(), cardWidth / 2, currentY + 12);
+      currentY += 180;
 
-      // 5. Large Table Number Badge
-      const tableY = ctaY + 170;
-      ctx.font = '900 84px sans-serif';
-      ctx.fillStyle = preset === 'SIMPLE' ? '#0f172a' : preset === 'GOLD_LUXE' ? '#f59e0b' : '#ffffff';
-      ctx.fillText(safeTableNum, cardWidth / 2, tableY);
+      // 6. Large Table Number Badge
+      ctx.font = '900 100px "Outfit", sans-serif';
+      ctx.fillStyle = textColor;
+      ctx.fillText(safeTableNum.toUpperCase(), cardWidth / 2, currentY);
 
-      // 6. Footer Info
+      // 7. Footer Info
       if (showWifi) {
-        ctx.font = '400 28px sans-serif';
-        ctx.fillStyle = preset === 'SIMPLE' ? '#64748b' : '#94a3b8';
-        ctx.fillText('📶 Free Guest Wi-Fi Available • Touchless Ordering', cardWidth / 2, cardHeight - 100);
+        ctx.font = '500 32px "Inter", sans-serif';
+        ctx.fillStyle = subtextColor;
+        ctx.fillText(`📶 Wi-Fi: ${wifiName} • Powered by DineFlow`, cardWidth / 2, cardHeight - 110);
       }
 
-      // Trigger Download
+      // Download High-Res PNG
       const dataUrl = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = dataUrl;
@@ -352,276 +452,363 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
     }
   };
 
-  // Dedicated Print Standee Card
+  // Requirement 9: Dedicated Print Standee Action
   const handlePrintCard = () => {
-    printQRCodeCard(printAreaRef.current, safeRestName, safeTableNum);
+    if (!printAreaRef.current) {
+      window.print();
+      return;
+    }
+    printQRCodeCard(printAreaRef.current.innerHTML, safeRestName, safeTableNum, preset, accentColor);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Design Preset Selector Tabs */}
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-rose-400" />
-            Select QR Standee Aesthetic Style
-          </span>
-          <span className="text-[10px] text-slate-400 font-mono">5 Styles Available</span>
-        </label>
+    <div className="space-y-6 max-w-5xl mx-auto text-slate-100 font-sans">
+      {/* Top Banner: EXACT QR Destination URL & Testing Actions */}
+      <div className="p-4 bg-slate-900 border border-slate-800 rounded-3xl space-y-3 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="p-2 bg-sky-500/20 text-sky-400 rounded-2xl border border-sky-500/30">
+              <Globe className="w-4 h-4" />
+            </span>
+            <div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wide">QR DESTINATION URL</h4>
+              <p className="text-[10px] text-slate-400">
+                This exact link is encoded inside the QR code below. Scan or test live.
+              </p>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          <button
-            onClick={() => setPreset('ACRYLIC_DARK')}
-            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col justify-between ${
-              preset === 'ACRYLIC_DARK'
-                ? 'bg-rose-500/20 border-rose-500 text-white font-bold ring-1 ring-rose-500'
-                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-            }`}
-          >
-            <span>🖤 Modern Dark</span>
-            <span className="text-[9px] text-slate-400 mt-1">Acrylic & Glass</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyLink}
+              className="text-xs font-bold border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+              icon={copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            >
+              {copied ? 'Link Copied!' : 'Copy Link'}
+            </Button>
 
-          <button
-            onClick={() => setPreset('GOLD_LUXE')}
-            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col justify-between ${
-              preset === 'GOLD_LUXE'
-                ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold ring-1 ring-amber-500'
-                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-            }`}
-          >
-            <span>✨ Gold Luxe</span>
-            <span className="text-[9px] text-slate-400 mt-1">Royal Onyx</span>
-          </button>
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={handleOpenLiveView}
+              className="text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-md"
+              icon={<ExternalLink className="w-3.5 h-3.5" />}
+            >
+              Open Live View
+            </Button>
+          </div>
+        </div>
 
-          <button
-            onClick={() => setPreset('WOOD_BISTRO')}
-            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col justify-between ${
-              preset === 'WOOD_BISTRO'
-                ? 'bg-amber-900/30 border-amber-600 text-amber-200 font-bold ring-1 ring-amber-600'
-                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-            }`}
-          >
-            <span>🌿 Wood Bistro</span>
-            <span className="text-[9px] text-slate-400 mt-1">Rustic Organic</span>
-          </button>
-
-          <button
-            onClick={() => setPreset('NEON_CYBER')}
-            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col justify-between ${
-              preset === 'NEON_CYBER'
-                ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 font-bold ring-1 ring-cyan-400'
-                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-            }`}
-          >
-            <span>⚡ Neon Cyber</span>
-            <span className="text-[9px] text-slate-400 mt-1">Nightlife Vibe</span>
-          </button>
-
-          <button
-            onClick={() => setPreset('SIMPLE')}
-            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col justify-between col-span-2 sm:col-span-1 ${
-              preset === 'SIMPLE'
-                ? 'bg-slate-100 text-slate-900 font-bold border-white'
-                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-            }`}
-          >
-            <span>⚪ Minimal</span>
-            <span className="text-[9px] text-slate-400 mt-1">Clean Printable</span>
-          </button>
+        <div className="flex items-center gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+          <input
+            type="text"
+            readOnly
+            value={qrUrl}
+            className="w-full bg-transparent text-xs font-mono text-sky-300 select-all focus:outline-none tracking-tight"
+          />
         </div>
       </div>
 
-      {/* Live Tabletop Stand Preview Card */}
-      <div className="flex flex-col md:flex-row gap-6 items-center md:items-start justify-center">
-        {/* Visual Stand Card Container */}
-        <div
-          ref={printAreaRef}
-          className="w-72 sm:w-80 p-6 rounded-3xl text-center space-y-4 shadow-2xl relative transition-all duration-300 border shrink-0"
-          style={{
-            backgroundColor:
-              preset === 'ACRYLIC_DARK'
-                ? '#0f172a'
-                : preset === 'GOLD_LUXE'
-                ? '#1e1b4b'
-                : preset === 'WOOD_BISTRO'
-                ? '#291e10'
-                : preset === 'NEON_CYBER'
-                ? '#020617'
-                : '#ffffff',
-            color: preset === 'SIMPLE' ? '#0f172a' : '#ffffff',
-            borderColor:
-              preset === 'GOLD_LUXE'
-                ? '#fbbf24'
-                : preset === 'NEON_CYBER'
-                ? '#38bdf8'
-                : 'rgba(255,255,255,0.1)',
-          }}
-        >
-          {/* Header Branding */}
-          <div className="space-y-1 my-1">
-            {showLogo && restaurantLogo && (
-              <img
-                src={restaurantLogo}
-                alt={safeRestName}
-                className="w-12 h-12 mx-auto rounded-2xl object-cover border-2 border-white/20 shadow-md mb-2"
-              />
-            )}
-            <h3 className="font-black text-lg tracking-tight uppercase">{safeRestName}</h3>
-            {safeTableNum !== 'COUNTER' && !isPickup && (
-              <p className="text-[11px] opacity-75 font-mono">
-                {section} • {capacity} Seats
-              </p>
-            )}
+      {/* Main Studio Editor: Left (Standee Live Preview) | Right (Customizer & Export) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* LEFT COLUMN: Premium Tabletop Standee Preview */}
+        <div className="lg:col-span-6 flex flex-col items-center justify-center space-y-3">
+          <div className="flex items-center justify-between w-full max-w-sm px-2 text-xs font-bold text-slate-400">
+            <span className="flex items-center gap-1.5 text-rose-400">
+              <Eye className="w-4 h-4" /> Standee Live Preview
+            </span>
+            <Badge variant="outline" className="border-slate-800 font-mono text-[10px]">
+              4x6 Portrait
+            </Badge>
           </div>
 
-          {/* QR Code Container Badge */}
-          <div className="p-3 bg-white rounded-2xl shadow-xl my-4 border border-slate-100 flex items-center justify-center mx-auto w-48 h-48 sm:w-52 sm:h-52">
-            <QRCodeSVG
-              id={`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`}
-              value={qrUrl}
-              size={180}
-              level="H"
-              marginSize={2}
-              bgColor="#ffffff"
-              fgColor="#0f172a"
-              className="w-full h-full object-contain"
-            />
-            {/* Hidden Canvas for PNG Downloads */}
-            <div className="hidden">
-              <QRCodeCanvas
-                ref={qrCanvasRef}
+          {/* Standee Visual Card Box */}
+          <div
+            ref={printAreaRef}
+            className="w-full max-w-sm p-8 rounded-[36px] text-center space-y-5 shadow-2xl relative transition-all duration-300 border border-slate-800 shrink-0"
+            style={{
+              backgroundColor:
+                preset === 'ACRYLIC_DARK'
+                  ? '#0f172a'
+                  : preset === 'GOLD_LUXE'
+                  ? '#1e1b4b'
+                  : preset === 'WOOD_BISTRO'
+                  ? '#291e10'
+                  : preset === 'NEON_CYBER'
+                  ? '#020617'
+                  : '#ffffff',
+              color: preset === 'SIMPLE' ? '#0f172a' : '#ffffff',
+              borderColor:
+                preset === 'GOLD_LUXE'
+                  ? '#fbbf24'
+                  : preset === 'NEON_CYBER'
+                  ? '#38bdf8'
+                  : preset === 'WOOD_BISTRO'
+                  ? '#d97706'
+                  : accentColor,
+            }}
+          >
+            {/* Header Branding */}
+            <div className="space-y-1">
+              {showLogo && restaurantLogo && !logoLoadError ? (
+                <img
+                  src={restaurantLogo}
+                  alt={safeRestName}
+                  onError={() => setLogoLoadError(true)}
+                  className="w-14 h-14 mx-auto rounded-2xl object-cover border-2 border-white/20 shadow-md mb-2"
+                />
+              ) : (
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-black text-lg flex items-center justify-center mb-2 shadow-inner">
+                  {safeRestName.charAt(0)}
+                </div>
+              )}
+              <h3 className="font-black text-xl tracking-tight uppercase font-sans">{safeRestName}</h3>
+              <p className="text-[11px] opacity-75 font-mono">TOUCHLESS MENU & ORDERING</p>
+            </div>
+
+            {/* QR Code Container Badge */}
+            <div className="p-4 bg-white rounded-3xl shadow-xl my-4 border border-slate-200 flex items-center justify-center mx-auto w-56 h-56 sm:w-60 sm:h-60 relative">
+              <QRCodeSVG
+                id={`qr-svg-${safeTableNum.replace(/\s+/g, '_')}`}
                 value={qrUrl}
-                size={600}
+                size={210}
                 level="H"
                 marginSize={2}
                 bgColor="#ffffff"
                 fgColor="#0f172a"
+                className="w-full h-full object-contain"
               />
+              {/* Hidden Canvas for High-Res PNG Exports */}
+              <div className="hidden">
+                <QRCodeCanvas
+                  ref={qrCanvasRef}
+                  value={qrUrl}
+                  size={600}
+                  level="H"
+                  marginSize={2}
+                  bgColor="#ffffff"
+                  fgColor="#0f172a"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Call to Action Badge */}
-          <div
-            className="px-4 py-2 rounded-full font-black text-xs shadow-md mb-3 transition-colors"
-            style={{
-              backgroundColor: preset === 'SIMPLE' ? '#0f172a' : accentColor,
-              color: '#ffffff',
-            }}
-          >
-            {ctaText}
-          </div>
+            {/* Call to Action Badge */}
+            <div
+              className="px-5 py-2.5 rounded-full font-black text-xs shadow-md tracking-wider uppercase transition-colors"
+              style={{
+                backgroundColor: preset === 'SIMPLE' ? '#0f172a' : accentColor,
+                color: '#ffffff',
+              }}
+            >
+              {ctaText}
+            </div>
 
-          {/* Table Badge */}
-          <div className="space-y-0.5">
-            <span className="text-2xl font-black font-mono tracking-wider">{safeTableNum}</span>
-          </div>
+            {/* Large Table Number */}
+            <div className="pt-1">
+              <span className="text-3xl font-black font-sans tracking-tight">{safeTableNum}</span>
+            </div>
 
-          {/* Footer Wi-Fi Tag */}
-          {showWifi && (
-            <p className="text-[10px] opacity-60 mt-4 pt-3 border-t border-white/10 flex items-center justify-center gap-1 font-mono">
-              <Wifi className="w-3 h-3" /> Free Guest Wi-Fi • DineFlow Touchless
-            </p>
-          )}
+            {/* Footer Wi-Fi Tag */}
+            {showWifi && (
+              <p className="text-[10px] opacity-70 mt-3 pt-3 border-t border-white/10 flex items-center justify-center gap-1.5 font-mono">
+                <Wifi className="w-3.5 h-3.5" /> Wi-Fi: {wifiName} • Touchless Table Service
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Customization & Quick Actions Sidebar */}
-        <div className="w-full md:w-72 space-y-4">
-          {/* Encoded Target URL Display Banner */}
-          <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl space-y-1.5 text-left font-mono">
-            <div className="flex items-center justify-between text-[10px] text-slate-400 font-sans uppercase font-bold">
-              <span className="flex items-center gap-1.5 text-sky-400">
-                <Globe className="w-3.5 h-3.5" /> Encoded Target URL
-              </span>
-              <span className="text-[9px] text-slate-500 font-mono">Live Ordering Link</span>
+        {/* RIGHT COLUMN: Preset Selector, Customizer & Export Tools */}
+        <div className="lg:col-span-6 space-y-6">
+          {/* Aesthetic Style Selector */}
+          <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl space-y-3 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wide">
+                <Sparkles className="w-4 h-4 text-rose-400" /> Choose Standee Aesthetic
+              </h4>
+              <span className="text-[10px] font-mono text-slate-400">5 Themes</span>
             </div>
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <input
-                type="text"
-                readOnly
-                value={qrUrl}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-sky-300 font-mono select-all focus:outline-none"
-              />
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-sans">
               <button
                 type="button"
-                onClick={handleCopyLink}
-                className="px-2.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-bold transition-colors shrink-0 flex items-center gap-1"
-                title="Copy URL to clipboard"
+                onClick={() => setPreset('ACRYLIC_DARK')}
+                className={`p-3 rounded-2xl border text-left transition-all text-xs flex flex-col justify-between ${
+                  preset === 'ACRYLIC_DARK'
+                    ? 'bg-rose-500/20 border-rose-500 text-white font-bold ring-1 ring-rose-500'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>🖤 Dark Acrylic</span>
+                <span className="text-[9px] text-slate-400 mt-1">Modern Luxury</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPreset('GOLD_LUXE')}
+                className={`p-3 rounded-2xl border text-left transition-all text-xs flex flex-col justify-between ${
+                  preset === 'GOLD_LUXE'
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold ring-1 ring-amber-500'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <span>✨ Gold Luxe</span>
+                <span className="text-[9px] text-slate-400 mt-1">Fine Dining</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPreset('WOOD_BISTRO')}
+                className={`p-3 rounded-2xl border text-left transition-all text-xs flex flex-col justify-between ${
+                  preset === 'WOOD_BISTRO'
+                    ? 'bg-amber-900/30 border-amber-600 text-amber-200 font-bold ring-1 ring-amber-600'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <span>🌿 Wood Bistro</span>
+                <span className="text-[9px] text-slate-400 mt-1">Rustic Organic</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPreset('NEON_CYBER')}
+                className={`p-3 rounded-2xl border text-left transition-all text-xs flex flex-col justify-between ${
+                  preset === 'NEON_CYBER'
+                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 font-bold ring-1 ring-cyan-400'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <span>⚡ Cyber Neon</span>
+                <span className="text-[9px] text-slate-400 mt-1">Lounge Vibe</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPreset('SIMPLE')}
+                className={`p-3 rounded-2xl border text-left transition-all text-xs flex flex-col justify-between col-span-2 sm:col-span-2 ${
+                  preset === 'SIMPLE'
+                    ? 'bg-slate-100 text-slate-900 font-bold border-white'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <span>⚪ Minimal Editorial</span>
+                <span className="text-[9px] text-slate-400 mt-1">Clean White Printable</span>
               </button>
             </div>
           </div>
 
-          <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
-            <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-              <Palette className="w-3.5 h-3.5 text-rose-400" /> Standee Customizer
+          {/* Standee Customizer Controls */}
+          <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 shadow-xl text-xs">
+            <h4 className="font-bold text-white flex items-center gap-2 uppercase tracking-wide">
+              <Palette className="w-4 h-4 text-rose-400" /> Customization Controls
             </h4>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-300">Call To Action Heading</label>
-              <input
-                type="text"
-                value={ctaText}
-                onChange={(e) => setCtaText(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-rose-500"
-                placeholder="Scan to Order & Pay"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-300">Accent Color</label>
-              <div className="flex gap-2">
-                {['#f43f5e', '#d97706', '#10b981', '#06b6d4', '#8b5cf6', '#0f172a'].map((col) => (
-                  <button
-                    key={col}
-                    onClick={() => setAccentColor(col)}
-                    className={`w-6 h-6 rounded-full border-2 transition-all ${
-                      accentColor === col ? 'border-white scale-110 shadow-md' : 'border-transparent opacity-80'
-                    }`}
-                    style={{ backgroundColor: col }}
-                  />
-                ))}
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Call To Action Text
+                </label>
+                <input
+                  type="text"
+                  value={ctaText}
+                  onChange={(e) => setCtaText(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-rose-500"
+                  placeholder="SCAN TO ORDER FROM TABLE"
+                />
               </div>
-            </div>
 
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-slate-300">Show Restaurant Logo</span>
-              <input
-                type="checkbox"
-                checked={showLogo}
-                onChange={(e) => setShowLogo(e.target.checked)}
-                className="w-4 h-4 accent-rose-500 rounded cursor-pointer"
-              />
-            </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Table Label Display Override
+                </label>
+                <input
+                  type="text"
+                  value={customTableLabel}
+                  onChange={(e) => setCustomTableLabel(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-rose-500 font-mono"
+                  placeholder={tableNumber || 'Table 01'}
+                />
+              </div>
 
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-300">Show Guest Wi-Fi Tag</span>
-              <input
-                type="checkbox"
-                checked={showWifi}
-                onChange={(e) => setShowWifi(e.target.checked)}
-                className="w-4 h-4 accent-rose-500 rounded cursor-pointer"
-              />
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1.5">
+                  Accent Color Pill
+                </label>
+                <div className="flex gap-2.5">
+                  {['#f43f5e', '#d97706', '#10b981', '#06b6d4', '#8b5cf6', '#0f172a'].map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => setAccentColor(col)}
+                      className={`w-7 h-7 rounded-full border-2 transition-all ${
+                        accentColor === col ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-75 hover:opacity-100'
+                      }`}
+                      style={{ backgroundColor: col }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-800/80">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-slate-300">Show Restaurant Logo</span>
+                  <input
+                    type="checkbox"
+                    checked={showLogo}
+                    onChange={(e) => setShowLogo(e.target.checked)}
+                    className="w-4 h-4 accent-rose-500 rounded"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-slate-300">Show Wi-Fi Footer</span>
+                  <input
+                    type="checkbox"
+                    checked={showWifi}
+                    onChange={(e) => setShowWifi(e.target.checked)}
+                    className="w-4 h-4 accent-rose-500 rounded"
+                  />
+                </label>
+              </div>
+
+              {showWifi && (
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                    Wi-Fi Network Name
+                  </label>
+                  <input
+                    type="text"
+                    value={wifiName}
+                    onChange={(e) => setWifiName(e.target.value)}
+                    className="w-full px-3.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 font-mono focus:outline-none focus:border-rose-500"
+                    placeholder="Guest_Free_WiFi"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Download & Print Action Buttons */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Export & Printing Action Hub */}
+          <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl space-y-3 shadow-xl">
+            <h4 className="text-xs font-bold text-white uppercase tracking-wide flex items-center gap-2">
+              <Download className="w-4 h-4 text-emerald-400" /> Export &amp; Print Options
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <Button
                 variant="brand"
-                className="py-2.5 text-xs font-bold shadow-lg shadow-rose-950/40"
+                className="py-3 text-xs font-bold shadow-lg bg-rose-600 hover:bg-rose-500 text-white"
                 onClick={handleDownloadCustomCardPNG}
                 disabled={isDownloading}
                 icon={<Download className="w-4 h-4" />}
               >
-                {isDownloading ? 'Generating...' : 'Download PNG'}
+                {isDownloading ? 'Exporting HD PNG...' : 'Download PNG (300 DPI)'}
               </Button>
 
               <Button
                 variant="outline"
-                className="py-2.5 text-xs font-bold border-rose-500/50 text-rose-300 hover:bg-rose-500/10"
+                className="py-3 text-xs font-bold border-rose-500/50 text-rose-300 hover:bg-rose-500/10"
                 onClick={handlePrintCard}
                 icon={<Printer className="w-4 h-4 text-rose-400" />}
               >
@@ -629,11 +816,11 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <Button
                 variant="outline"
                 size="sm"
-                className="text-[11px] border-slate-700 text-slate-200 hover:bg-slate-800"
+                className="text-[11px] border-slate-800 text-slate-300 hover:bg-slate-800"
                 onClick={handleDownloadSimpleQR}
                 icon={<QrCode className="w-3.5 h-3.5 text-amber-400" />}
               >
@@ -643,33 +830,11 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                className="text-[11px] border-slate-700 text-slate-200 hover:bg-slate-800"
+                className="text-[11px] border-slate-800 text-slate-300 hover:bg-slate-800"
                 onClick={handleDownloadSVG}
                 icon={<Layers className="w-3.5 h-3.5 text-sky-400" />}
               >
-                Vector SVG
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-[11px] text-slate-300 hover:text-white"
-                onClick={handleCopyLink}
-                icon={copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              >
-                {copied ? 'Link Copied!' : 'Copy Direct Link'}
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-[11px] text-slate-300 hover:text-white"
-                onClick={() => window.open(qrUrl, '_blank')}
-                icon={<ExternalLink className="w-3.5 h-3.5" />}
-              >
-                Open Live View
+                Vector SVG (Scalable)
               </Button>
             </div>
           </div>
