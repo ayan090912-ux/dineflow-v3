@@ -183,8 +183,14 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
     }`;
   }
 
-  // Exact encoded URL (must match display, QR code, copy link, and live view)
-  const qrUrl = url || value || defaultUrl;
+  // Exact encoded customer destination URL (single source of truth for display, QR code, copy link, and live view)
+  const rawUrl =
+    url && !url.includes('qrserver.com') && !url.includes('.dineflow.app')
+      ? url
+      : value && !value.includes('qrserver.com') && !value.includes('.dineflow.app')
+      ? value
+      : '';
+  const qrUrl = rawUrl || defaultUrl;
 
   // Copy link to clipboard
   const handleCopyLink = () => {

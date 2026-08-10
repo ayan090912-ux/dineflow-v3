@@ -2992,10 +2992,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         {selectedTableQR && (
           <QRCodeDisplay
             url={
-              selectedTableQR.qrCodeUrl ||
-              (typeof window !== 'undefined'
-                ? `${window.location.origin}/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}`
-                : `https://dineflow.app/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}`)
+              (selectedTableQR.qrCodeUrl && !selectedTableQR.qrCodeUrl.includes('qrserver.com') && !selectedTableQR.qrCodeUrl.includes('.dineflow.app'))
+                ? selectedTableQR.qrCodeUrl
+                : (typeof window !== 'undefined'
+                  ? `${window.location.origin}/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`
+                  : `http://localhost:3000/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`)
             }
             tableNumber={selectedTableQR.tableNumber}
             restaurantName={currentRestaurant?.name || theme.restaurantName || 'Lumière Bistro'}

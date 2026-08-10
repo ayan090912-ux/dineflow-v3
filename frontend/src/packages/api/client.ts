@@ -126,7 +126,11 @@ export class DineFlowApiClient {
       }
     });
 
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
     this.tables.forEach((tbl) => {
+      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dineflow.app')) {
+        tbl.qrCodeUrl = `${origin}/customer?table=${encodeURIComponent(tbl.tableNumber)}${tbl.restaurantId ? `&restaurant=${tbl.restaurantId}` : ''}`;
+      }
       const activeSession = this.tableSessions.find((s) => s.tableId === tbl.id && s.status === 'ACTIVE');
       if (activeSession) {
         tbl.status = 'OCCUPIED';
@@ -1256,15 +1260,17 @@ export class DineFlowApiClient {
   async createTable(tableData: Partial<Table>) {
     await delay(150);
     const targetRestId = this.resolveTenantRestaurantId(tableData.restaurantId);
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const tblNum = tableData.tableNumber || `Table ${this.tables.length + 1}`;
     const newTable: Table = {
       id: `tbl-${Date.now()}`,
       restaurantId: targetRestId || 'rest-1',
-      tableNumber: tableData.tableNumber || `Table ${this.tables.length + 1}`,
+      tableNumber: tblNum,
       capacity: tableData.capacity || 4,
       section: tableData.section || 'Main Hall',
       shape: tableData.shape || 'RECTANGLE',
       status: 'AVAILABLE',
-      qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://${targetRestId}.dineflow.app/order?table=${tableData.tableNumber}`,
+      qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tblNum)}${targetRestId ? `&restaurant=${targetRestId}` : ''}`,
       isVip: tableData.isVip || false,
     };
     this.tables.push(newTable);
