@@ -1055,7 +1055,44 @@ export class DineFlowApiClient {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    return (this.menuItems || []).filter((m) => m.restaurantId === targetId);
+
+    const foodItems = (this.menuItems || [])
+      .filter((m) => m.restaurantId === targetId)
+      .map((m) => {
+        const station = getFulfillmentStation(m);
+        return {
+          ...m,
+          targetDestination: m.targetDestination || station,
+          isAlcoholic: m.isAlcoholic || station === 'BAR',
+        };
+      });
+
+    const barItems = (this.barMenuItems || [])
+      .filter((bm) => bm.restaurantId === targetId)
+      .map((bm) => ({
+        id: bm.id,
+        restaurantId: bm.restaurantId,
+        name: bm.name,
+        description: bm.description,
+        price: bm.price,
+        categoryId: bm.categoryId,
+        barCategory: bm.categoryId as any,
+        brand: bm.brand,
+        image: bm.image || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600',
+        isAvailable: bm.isAvailable !== false,
+        isVegetarian: true,
+        dietaryType: 'VEG' as const,
+        targetDestination: 'BAR' as const,
+        isAlcoholic: bm.isAlcoholic !== false,
+        alcoholPercentage: bm.alcoholPercentage,
+        bottleSize: bm.bottleSize,
+        prepTimeMinutes: bm.prepTimeMinutes || 5,
+      }));
+
+    const foodItemIds = new Set(foodItems.map((f) => f.id));
+    const uniqueBarItems = barItems.filter((b) => !foodItemIds.has(b.id));
+
+    return [...foodItems, ...uniqueBarItems];
   }
 
   async addMenuItem(itemData: Partial<MenuItem>) {

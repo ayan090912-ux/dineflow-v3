@@ -469,7 +469,15 @@ export function getFulfillmentStation(item: {
     name.includes('whiskey') ||
     name.includes('cocktail') ||
     name.includes('vodka') ||
-    name.includes('rum')
+    name.includes('rum') ||
+    name.includes('gin') ||
+    name.includes('brandy') ||
+    name.includes('coke') ||
+    name.includes('pepsi') ||
+    name.includes('sprite') ||
+    name.includes('soda') ||
+    name.includes('juice') ||
+    name.includes('mocktail')
   ) {
     return 'BAR';
   }

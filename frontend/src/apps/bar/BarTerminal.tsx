@@ -120,15 +120,15 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     await loadBarOrders();
   };
 
-  // Divide orders into Bar Pipeline stages based on barStatus / status
+  // Divide orders into Bar Pipeline stages based strictly on barStatus
   const pendingOrders = orders.filter(
-    (o) => (o.barStatus === 'PENDING' || (!o.barStatus && o.status === 'PENDING')) && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
+    (o) => (o.barStatus === 'PENDING' || !o.barStatus) && o.barStatus !== 'PREPARING' && o.barStatus !== 'ACCEPTED' && o.barStatus !== 'READY' && o.barStatus !== 'COMPLETED' && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
   );
   const preparingOrders = orders.filter(
-    (o) => o.barStatus === 'PREPARING' || o.barStatus === 'ACCEPTED' || (!o.barStatus && (o.status === 'PREPARING_DRINKS' || o.status === 'PREPARING'))
+    (o) => o.barStatus === 'PREPARING' || o.barStatus === 'ACCEPTED'
   );
-  const readyOrders = orders.filter((o) => o.barStatus === 'READY' || (!o.barStatus && o.status === 'READY'));
-  const completedOrders = orders.filter((o) => o.barStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'COMPLETED');
+  const readyOrders = orders.filter((o) => o.barStatus === 'READY');
+  const completedOrders = orders.filter((o) => o.barStatus === 'COMPLETED' || (o.status === 'DELIVERED' && o.barStatus === 'READY') || (o.status === 'COMPLETED' && o.barStatus === 'READY'));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
@@ -216,10 +216,10 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
       {/* BAR TODAY Operational Statistics Bar */}
       {(() => {
-        const received = orders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED').length;
-        const preparing = orders.filter((o) => o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION' || o.status === 'PREPARING_DRINKS').length;
-        const ready = orders.filter((o) => o.status === 'READY').length;
-        const completed = orders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED').length;
+        const received = pendingOrders.length;
+        const preparing = preparingOrders.length;
+        const ready = readyOrders.length;
+        const completed = completedOrders.length;
 
         return (
           <div className="bg-slate-900/90 border-b border-slate-800/80 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">

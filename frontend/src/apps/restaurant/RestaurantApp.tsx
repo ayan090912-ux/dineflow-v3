@@ -74,7 +74,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api } from '../../packages/api/client';
-import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus, MenuCategory, BarCategory } from '../../packages/types';
+import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus, MenuCategory, BarCategory, getFulfillmentStation } from '../../packages/types';
 import { MOCK_CATEGORIES } from '../../packages/data/mockData';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
@@ -1278,8 +1278,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
               const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
 
-              const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
-              const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+              const foodOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
+              const barOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'));
 
               let foodSales = 0;
               let barSales = 0;
@@ -1288,7 +1288,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 if (o.status !== 'CANCELLED') {
                   o.items.forEach((item) => {
                     const itemTotal = item.price * item.quantity;
-                    if (item.targetDestination === 'BAR' || item.isAlcoholic) {
+                    if (getFulfillmentStation(item) === 'BAR') {
                       barSales += itemTotal;
                     } else {
                       foodSales += itemTotal;
@@ -2741,8 +2741,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               );
               const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
               const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
-              const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
-              const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+              const foodOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
+              const barOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'));
 
               let foodSales = 0;
               let barSales = 0;
@@ -2750,7 +2750,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 if (o.status !== 'CANCELLED') {
                   o.items.forEach((item) => {
                     const itemTotal = item.price * item.quantity;
-                    if (item.targetDestination === 'BAR' || item.isAlcoholic) barSales += itemTotal;
+                    if (getFulfillmentStation(item) === 'BAR') barSales += itemTotal;
                     else foodSales += itemTotal;
                   });
                 }
@@ -2908,8 +2908,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             );
             const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
             const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
-            const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
-            const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+            const foodOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
+            const barOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'));
 
             let foodSales = 0;
             let barSales = 0;
@@ -2917,7 +2917,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               if (o.status !== 'CANCELLED') {
                 o.items.forEach((item) => {
                   const itemTotal = item.price * item.quantity;
-                  if (item.targetDestination === 'BAR' || item.isAlcoholic) barSales += itemTotal;
+                  if (getFulfillmentStation(item) === 'BAR') barSales += itemTotal;
                   else foodSales += itemTotal;
                 });
               }

@@ -600,30 +600,37 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                     {/* Dish Items list with check toggles */}
                     <div className="space-y-1.5 border-y border-slate-800/80 py-2.5">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dish Items ({order.items.length}):</p>
-                      {order.items.map((item) => {
-                        const isChecked = checkedItems[item.id] || false;
+                      {(() => {
+                        const kitchenItems = order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN');
                         return (
-                          <div
-                            key={item.id}
-                            onClick={() => toggleItemCheck(item.id)}
-                            className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-all border ${
-                              isChecked
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 line-through'
-                                : 'bg-slate-950/80 border-slate-800 text-white hover:border-slate-700'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2 font-semibold">
-                              <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] font-bold ${isChecked ? 'bg-emerald-500 text-slate-950 border-emerald-400' : 'border-slate-600'}`}>
-                                {isChecked && '✓'}
-                              </span>
-                              <span>
-                                <strong className="text-amber-400 font-black">{item.quantity}x</strong> {item.name}
-                              </span>
-                            </span>
-                          </div>
+                          <>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dish Items ({kitchenItems.length}):</p>
+                            {kitchenItems.map((item) => {
+                              const isChecked = checkedItems[item.id] || false;
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() => toggleItemCheck(item.id)}
+                                  className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-all border ${
+                                    isChecked
+                                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 line-through'
+                                      : 'bg-slate-950/80 border-slate-800 text-white hover:border-slate-700'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-2 font-semibold">
+                                    <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] font-bold ${isChecked ? 'bg-emerald-500 text-slate-950 border-emerald-400' : 'border-slate-600'}`}>
+                                      {isChecked && '✓'}
+                                    </span>
+                                    <span>
+                                      <strong className="text-amber-400 font-black">{item.quantity}x</strong> {item.name}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </>
                         );
-                      })}
+                      })()}
 
                       {order.specialInstructions && (
                         <div className="mt-2 text-xs bg-rose-500/15 text-rose-300 p-2.5 rounded-xl border border-rose-500/30 flex items-start gap-2">
@@ -851,7 +858,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                     <div className="text-xs text-slate-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1">
                       <p className="font-bold text-slate-200 mb-1">Items Ready to Serve:</p>
-                      {order.items.map((i) => (
+                      {order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
                         <div key={i.id} className="text-slate-300 flex justify-between font-semibold">
                           <span>• {i.quantity}x {i.name}</span>
                           <span className="text-emerald-400 text-[10px]">Plated ✓</span>
@@ -909,7 +916,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                   <div className="space-y-2 border-y border-slate-800 py-3">
                     <p className="text-xs font-bold text-slate-400">Plated Items:</p>
-                    {order.items.map((i) => (
+                    {order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
                       <div key={i.id} className="flex justify-between text-xs text-white font-bold">
                         <span>{i.quantity}x {i.name}</span>
                       </div>
