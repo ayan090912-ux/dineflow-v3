@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Modal } from '../../packages/ui';
 import { api } from '../../packages/api/client';
-import { Order, OrderItem, OrderStatus } from '../../packages/types';
+import { Order, OrderItem, OrderStatus, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
 
 interface BarTerminalProps {
