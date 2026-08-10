@@ -39,6 +39,7 @@ import {
   CustomerRequestType,
   CustomerRequestStatus,
   WaiterNotification,
+  getFulfillmentStation,
 } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
 import { useTheme } from '../../packages/theme/ThemeEngine';
@@ -857,6 +858,35 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                             <span className="text-slate-400 font-medium">Item Count</span>
                             <span className="font-bold text-slate-200 font-mono">{itemCount} items</span>
                           </div>
+
+                          {latestOrder && (
+                            <div className="flex flex-col gap-1.5 py-2 border-t border-b border-slate-800/80">
+                              {latestOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN') && (
+                                <div className="flex justify-between items-center text-[11px]">
+                                  <span className="text-slate-400">Kitchen Status:</span>
+                                  <span className={`font-bold font-mono px-2 py-0.5 rounded-full text-[10px] ${
+                                    latestOrder.kitchenStatus === 'READY' || (!latestOrder.kitchenStatus && latestOrder.status === 'READY')
+                                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  }`}>
+                                    {latestOrder.kitchenStatus === 'READY' ? '✓ READY' : latestOrder.kitchenStatus || 'PREPARING'}
+                                  </span>
+                                </div>
+                              )}
+                              {latestOrder.items.some((i) => getFulfillmentStation(i) === 'BAR') && (
+                                <div className="flex justify-between items-center text-[11px]">
+                                  <span className="text-slate-400">Bar Status:</span>
+                                  <span className={`font-bold font-mono px-2 py-0.5 rounded-full text-[10px] ${
+                                    latestOrder.barStatus === 'READY' || (!latestOrder.barStatus && latestOrder.status === 'READY')
+                                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  }`}>
+                                    {latestOrder.barStatus === 'READY' ? '✓ READY' : latestOrder.barStatus || 'PREPARING'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
                             <span className="text-slate-400 font-medium">Assigned Waiter</span>

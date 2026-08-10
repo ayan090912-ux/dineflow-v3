@@ -43,7 +43,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CallWaiterModal } from './CallWaiterModal';
 import { api } from '../../packages/api/client';
-import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant } from '../../packages/types';
+import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, getFulfillmentStation } from '../../packages/types';
 import { MOCK_CATEGORIES } from '../../packages/data/mockData';
 import { CustomerLiveTracker } from './CustomerLiveTracker';
 import { realtimeBus } from '../../packages/api/realtime';
@@ -232,9 +232,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const handleAddToCart = () => {
     if (!selectedItem) return;
+    const station = getFulfillmentStation(selectedItem);
     const itemToAdd = {
       ...selectedItem,
-      targetDestination: currentMenuTab === 'BAR' || selectedItem.targetDestination === 'BAR' || selectedItem.isAlcoholic ? ('BAR' as const) : ('KITCHEN' as const),
+      targetDestination: station,
     };
 
     const combinedNotes = [selectedServingOption ? `Serving: ${selectedServingOption}` : '', specialInstructions].filter(Boolean).join(' • ');
@@ -262,23 +263,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const tax = subtotal * 0.09;
     const total = subtotal + tax;
 
-    const hasBarItems = cart.some((c) => c.item.targetDestination === 'BAR' || c.item.isAlcoholic);
-    const hasKitchenItems = cart.some((c) => c.item.targetDestination !== 'BAR' && !c.item.isAlcoholic);
+    const orderItems: OrderItem[] = cart.map((c, idx) => {
+      const station = getFulfillmentStation(c.item);
+      return {
+        id: `oi-${Date.now()}-${idx}`,
+        menuItemId: c.item.id,
+        name: c.item.name,
+        quantity: c.quantity,
+        price: c.item.price,
+        notes: c.notes,
+        targetDestination: station,
+        isAlcoholic: c.item.isAlcoholic || station === 'BAR',
+        alcoholPercentage: c.item.alcoholPercentage,
+        glassSize: c.item.glassSize || c.item.bottleSize,
+      };
+    });
 
+    const hasBarItems = orderItems.some((i) => i.targetDestination === 'BAR');
+    const hasKitchenItems = orderItems.some((i) => i.targetDestination === 'KITCHEN');
     const targetDest = hasBarItems && hasKitchenItems ? 'MIXED' : hasBarItems ? 'BAR' : 'KITCHEN';
-
-    const orderItems: OrderItem[] = cart.map((c, idx) => ({
-      id: `oi-${Date.now()}-${idx}`,
-      menuItemId: c.item.id,
-      name: c.item.name,
-      quantity: c.quantity,
-      price: c.item.price,
-      notes: c.notes,
-      targetDestination: c.item.targetDestination || (c.item.isAlcoholic ? 'BAR' : 'KITCHEN'),
-      isAlcoholic: c.item.isAlcoholic,
-      alcoholPercentage: c.item.alcoholPercentage,
-      glassSize: c.item.glassSize || c.item.bottleSize,
-    }));
 
     const restId = api.getCurrentRestaurantId() || 'rest-1';
     const isNoTable = currentRestaurant?.hasTables === false;

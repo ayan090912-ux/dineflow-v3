@@ -77,12 +77,9 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     try {
       const restId = api.getCurrentRestaurantId() || undefined;
       const allOrders = await api.getOrders(restId);
-      // Filter orders destined for BAR or containing drink/alcoholic items
-      const barOrders = allOrders.filter(
-        (o) =>
-          o.targetDestination === 'BAR' ||
-          o.targetDestination === 'MIXED' ||
-          o.items.some((i) => i.targetDestination === 'BAR' || i.isAlcoholic)
+      // Filter orders containing BAR items strictly using getFulfillmentStation
+      const barOrders = allOrders.filter((o) =>
+        o.items.some((i) => getFulfillmentStation(i) === 'BAR')
       );
       setOrders(barOrders);
     } catch (err) {
@@ -94,7 +91,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      await api.updateOrderStatus(orderId, newStatus);
+      const stationStatus = newStatus === 'READY' ? 'READY' : newStatus === 'PREPARING_DRINKS' ? 'PREPARING' : 'COMPLETED';
+      await api.updateBarStatus(orderId, stationStatus);
       await loadBarOrders();
     } catch (err) {
       console.error('Failed to update drink order status:', err);
@@ -122,13 +120,15 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     await loadBarOrders();
   };
 
-  // Divide orders into Bar Pipeline stages
-  const pendingOrders = orders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED');
-  const preparingOrders = orders.filter(
-    (o) => o.status === 'PREPARING_DRINKS' || o.status === 'PREPARING' || o.status === 'IN_KITCHEN' || o.status === 'IN_PREPARATION'
+  // Divide orders into Bar Pipeline stages based on barStatus / status
+  const pendingOrders = orders.filter(
+    (o) => (o.barStatus === 'PENDING' || (!o.barStatus && o.status === 'PENDING')) && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
   );
-  const readyOrders = orders.filter((o) => o.status === 'READY');
-  const completedOrders = orders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED');
+  const preparingOrders = orders.filter(
+    (o) => o.barStatus === 'PREPARING' || o.barStatus === 'ACCEPTED' || (!o.barStatus && (o.status === 'PREPARING_DRINKS' || o.status === 'PREPARING'))
+  );
+  const readyOrders = orders.filter((o) => o.barStatus === 'READY' || (!o.barStatus && o.status === 'READY'));
+  const completedOrders = orders.filter((o) => o.barStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'COMPLETED');
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
@@ -399,7 +399,7 @@ const BarOrderCard: React.FC<{
   onCustomEta?: () => void;
   isCompleted?: boolean;
 }> = ({ order, actionLabel, actionVariant = 'brand', onAction, onAdjustEta, onCustomEta, isCompleted }) => {
-  const drinkItems = order.items.filter((i) => i.targetDestination === 'BAR' || i.isAlcoholic || true);
+  const drinkItems = order.items.filter((i) => getFulfillmentStation(i) === 'BAR');
 
   return (
     <Card className="bg-slate-900 border-slate-800/90 p-4 space-y-3 shadow-xl rounded-2xl relative overflow-hidden group hover:border-slate-700 transition-all">

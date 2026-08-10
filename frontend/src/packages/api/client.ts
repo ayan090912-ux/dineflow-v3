@@ -19,6 +19,7 @@ import {
   TableSession,
   BusinessDay,
   DailySummaryData,
+  getFulfillmentStation,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -2307,6 +2308,90 @@ export class DineFlowApiClient {
     return order;
   }
 
+  async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
+    await delay(100);
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.kitchenStatus = status;
+      if (status === 'COMPLETED') {
+        order.kitchenCompletedAt = new Date().toISOString();
+      }
+
+      const barReady = !order.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
+      if (status === 'READY' && barReady) {
+        order.status = 'READY';
+        order.readyAt = new Date().toISOString();
+      } else if (status === 'PREPARING' || status === 'ACCEPTED') {
+        if (order.status !== 'READY' && order.status !== 'DELIVERED' && order.status !== 'COMPLETED') {
+          order.status = 'PREPARING';
+        }
+      }
+
+      order.updatedAt = new Date().toISOString();
+      this.saveDatabase();
+
+      realtimeBus.emit('KitchenStatusUpdated' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        kitchenStatus: status,
+        data: order,
+      });
+
+      if (order.status === 'READY') {
+        realtimeBus.emit('OrderReady' as any, {
+          orderId: order.id,
+          restaurantId: order.restaurantId,
+          tableNumber: order.tableNumber,
+          data: order,
+        });
+      }
+    }
+    return order;
+  }
+
+  async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
+    await delay(100);
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.barStatus = status;
+      if (status === 'COMPLETED') {
+        order.barCompletedAt = new Date().toISOString();
+      }
+
+      const kitchenReady = !order.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
+      if (status === 'READY' && kitchenReady) {
+        order.status = 'READY';
+        order.readyAt = new Date().toISOString();
+      } else if (status === 'PREPARING' || status === 'ACCEPTED') {
+        if (order.status !== 'READY' && order.status !== 'DELIVERED' && order.status !== 'COMPLETED') {
+          order.status = 'PREPARING';
+        }
+      }
+
+      order.updatedAt = new Date().toISOString();
+      this.saveDatabase();
+
+      realtimeBus.emit('BarStatusUpdated' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        barStatus: status,
+        data: order,
+      });
+
+      if (order.status === 'READY') {
+        realtimeBus.emit('OrderReady' as any, {
+          orderId: order.id,
+          restaurantId: order.restaurantId,
+          tableNumber: order.tableNumber,
+          data: order,
+        });
+      }
+    }
+    return order;
+  }
+
   async createOrder(orderData: Partial<Order>) {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
@@ -2315,14 +2400,18 @@ export class DineFlowApiClient {
     const isNoTableFoodTruck = rest?.businessType === 'FOOD_TRUCK' && rest?.hasTables === false;
     const isPickup = isNoTableFoodTruck || orderData.orderType === 'PICKUP' || orderData.tableNumber === 'COUNTER';
 
-    let dest: 'KITCHEN' | 'BAR' | 'MIXED' = orderData.targetDestination || 'KITCHEN';
-    if (orderData.items && orderData.items.length > 0) {
-      const hasFood = orderData.items.some((i) => i.targetDestination !== 'BAR');
-      const hasBar = orderData.items.some((i) => i.targetDestination === 'BAR');
-      if (hasFood && hasBar) dest = 'MIXED';
-      else if (hasBar) dest = 'BAR';
-      else dest = 'KITCHEN';
-    }
+    const processedItems: OrderItem[] = (orderData.items || []).map((item) => {
+      const station = getFulfillmentStation(item);
+      return {
+        ...item,
+        targetDestination: station,
+        isAlcoholic: item.isAlcoholic || station === 'BAR',
+      };
+    });
+
+    const hasKitchenItems = processedItems.some((i) => i.targetDestination === 'KITCHEN');
+    const hasBarItems = processedItems.some((i) => i.targetDestination === 'BAR');
+    const dest: 'KITCHEN' | 'BAR' | 'MIXED' = hasKitchenItems && hasBarItems ? 'MIXED' : hasBarItems ? 'BAR' : 'KITCHEN';
 
     const orderSeq = (this.orders.filter((o) => o.restaurantId === restId).length + 101);
     const prefix = isPickup ? (rest?.orderNumberPrefix || 'F') : (rest?.orderNumberPrefix || 'ORD');
@@ -2367,12 +2456,14 @@ export class DineFlowApiClient {
       orderType: isPickup ? 'PICKUP' : 'DINE_IN',
       customerName: orderData.customerName || 'Guest',
       customerPhone: orderData.customerPhone,
-      items: orderData.items || [],
+      items: processedItems,
       totalAmount: orderData.totalAmount || 0,
       taxAmount: orderData.taxAmount || 0,
       tipAmount: orderData.tipAmount || 0,
       status: orderData.status || 'PENDING',
       targetDestination: dest,
+      kitchenStatus: hasKitchenItems ? 'PENDING' : undefined,
+      barStatus: hasBarItems ? 'PENDING' : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       paymentStatus: orderData.paymentStatus || 'UNPAID',

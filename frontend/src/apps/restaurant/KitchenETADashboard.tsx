@@ -34,7 +34,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, SearchInput, StatsCard, Avatar } from '../../packages/ui';
-import { Order, OrderItem } from '../../packages/types';
+import { Order, OrderItem, getFulfillmentStation } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
 
@@ -110,7 +110,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   onLogout,
 }) => {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [viewMode, setViewMode] = useState<'KDS' | 'WAITER' | 'ANALYTICS'>(
+  const [viewMode, setViewMode] = useState<'KDS' | 'WAITER' | 'COMPLETED' | 'ANALYTICS'>(
     activeRole === 'WAITER' ? 'WAITER' : activeRole === 'OWNER' ? 'ANALYTICS' : 'KDS'
   );
 
@@ -228,9 +228,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const handleConfirmAcceptOrder = async () => {
     if (!selectedOrderToAccept) return;
     const finalMins = parseInt(customPrepInput, 10) || chosenPrepTime || 15;
+    await api.updateKitchenStatus(selectedOrderToAccept.id, 'PREPARING');
     await api.acceptOrder(selectedOrderToAccept.id, finalMins);
     if (!isMuted) playKitchenChime('BUMP');
-    showToast(`Order #${selectedOrderToAccept.id} Accepted! Timer set to ${finalMins} mins.`, 'success');
+    showToast(`Order #${selectedOrderToAccept.id} Kitchen Ticket Accepted! Timer set to ${finalMins} mins.`, 'success');
     setSelectedOrderToAccept(null);
     onRefreshOrders();
   };
@@ -258,10 +259,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   };
 
   const handleMarkReady = async (order: Order) => {
-    await api.markOrderReady(order.id);
+    await api.updateKitchenStatus(order.id, 'READY');
     setBumpedHistory((prev) => [order, ...prev.slice(0, 19)]);
     if (!isMuted) playKitchenChime('BUMP');
-    showToast(`Order #${order.id} Plated & Sent to Waiter Pass! ✨`, 'success');
+    showToast(`Order #${order.id} Kitchen Ticket Plated & Ready! ✨`, 'success');
     onRefreshOrders();
   };
 
@@ -339,9 +340,12 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     return Math.floor((nowMs - createdMs) / 60000);
   };
 
-  // Filtered Orders Logic
+  // Filtered Orders Logic: ONLY orders containing kitchen items
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
+      const hasKitchenItems = order.items.some((i) => getFulfillmentStation(i) === 'KITCHEN');
+      if (!hasKitchenItems) return false;
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesId = order.id.toLowerCase().includes(q);
@@ -354,11 +358,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     });
   }, [orders, searchQuery]);
 
-  const pendingOrders = filteredOrders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED');
-  const inKitchenOrders = filteredOrders.filter((o) => o.status === 'IN_KITCHEN');
-  const readyOrders = filteredOrders.filter((o) => o.status === 'READY');
+  const pendingOrders = filteredOrders.filter(
+    (o) => (o.kitchenStatus === 'PENDING' || (!o.kitchenStatus && o.status === 'PENDING')) && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
+  );
+  const inKitchenOrders = filteredOrders.filter(
+    (o) => o.kitchenStatus === 'PREPARING' || o.kitchenStatus === 'ACCEPTED' || (!o.kitchenStatus && (o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION'))
+  );
+  const readyOrders = filteredOrders.filter((o) => o.kitchenStatus === 'READY' || (!o.kitchenStatus && o.status === 'READY'));
+  const completedOrders = filteredOrders.filter((o) => o.kitchenStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'COMPLETED');
 
-  const overdueCount = orders.filter((o) => o.status === 'IN_KITCHEN' && getRemainingTime(o).isOverdue).length;
+  const overdueCount = orders.filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && getRemainingTime(o).isOverdue).length;
 
   return (
     <div className="bg-slate-950 text-slate-100 flex flex-col font-sans relative w-full rounded-3xl overflow-hidden border border-slate-800 shadow-2xl">
@@ -450,13 +459,13 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* Real Operational Stats Bar */}
             {(() => {
-              const foodOrders = orders.filter(
-                (o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED' || o.items.some((i) => i.targetDestination !== 'BAR')
+              const foodOrders = orders.filter((o) =>
+                o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN')
               );
-              const received = foodOrders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED').length;
-              const preparing = foodOrders.filter((o) => o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION').length;
-              const ready = foodOrders.filter((o) => o.status === 'READY').length;
-              const completed = foodOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED').length;
+              const received = foodOrders.filter((o) => o.kitchenStatus === 'PENDING' || (!o.kitchenStatus && (o.status === 'PENDING' || o.status === 'CONFIRMED'))).length;
+              const preparing = foodOrders.filter((o) => o.kitchenStatus === 'PREPARING' || o.kitchenStatus === 'ACCEPTED' || (!o.kitchenStatus && (o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION'))).length;
+              const ready = foodOrders.filter((o) => o.kitchenStatus === 'READY' || (!o.kitchenStatus && o.status === 'READY')).length;
+              const completed = foodOrders.filter((o) => o.kitchenStatus === 'COMPLETED' || (!o.kitchenStatus && (o.status === 'DELIVERED' || o.status === 'COMPLETED'))).length;
 
               return (
                 <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
@@ -507,6 +516,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             {[
               { id: 'KDS', label: 'Live Bump Board', icon: <Flame className="w-4 h-4 text-rose-500" /> },
               { id: 'WAITER', label: 'Pass Pickup Window', icon: <Bell className="w-4 h-4 text-amber-400" />, badge: readyOrders.length },
+              { id: 'COMPLETED', label: 'Completed Shift Orders', icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" />, badge: completedOrders.length },
               { id: 'ANALYTICS', label: 'Kitchen Performance', icon: <BarChart2 className="w-4 h-4 text-sky-400" /> },
             ].map((tab) => (
               <button
@@ -767,7 +777,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                       {/* Dish Item Checklist */}
                       <div className="space-y-1.5 border-y border-slate-800/80 py-2.5">
-                        {order.items.map((item) => {
+                        {order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((item) => {
                           const isChecked = checkedItems[item.id] || false;
                           return (
                             <div
@@ -987,6 +997,72 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 ))}
               </div>
             </Card>
+          </div>
+        )}
+
+        {viewMode === 'COMPLETED' && (
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Completed Shift Orders
+                </h3>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  Archived kitchen tickets completed during the current business day
+                </p>
+              </div>
+              <Badge variant="brand" className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-xs font-mono font-bold">
+                {completedOrders.length} Tickets Completed Today
+              </Badge>
+            </div>
+
+            {completedOrders.length === 0 ? (
+              <Card className="bg-slate-900 border-slate-800 p-12 text-center text-slate-400 rounded-2xl">
+                <CheckCircle2 className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <p className="font-bold text-white text-base">No Completed Kitchen Orders Yet</p>
+                <p className="text-xs text-slate-500 mt-1">Completed kitchen tickets will automatically appear in this ledger.</p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {completedOrders.map((order) => {
+                  const kitchenItems = order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN');
+                  return (
+                    <Card key={order.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 rounded-2xl shadow-xl hover:border-slate-700 transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-white text-base">#{order.id}</span>
+                          <Badge variant="brand" className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] font-mono">
+                            📍 {order.tableNumber}
+                          </Badge>
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {order.kitchenCompletedAt ? new Date(order.kitchenCompletedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (order.readyAt ? new Date(order.readyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today')}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 font-semibold">
+                        Guest: {order.customerName || 'Guest'}
+                      </p>
+
+                      <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 space-y-1.5 font-mono text-xs">
+                        {kitchenItems.map((item) => (
+                          <div key={item.id} className="flex justify-between items-center text-slate-200">
+                            <span><strong className="text-rose-400 font-bold">{item.quantity}x</strong> {item.name}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 text-[11px]">
+                        <span className="text-slate-400 font-mono">Kitchen Ticket Status:</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> COMPLETED
+                        </span>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

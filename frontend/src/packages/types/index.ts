@@ -409,6 +409,10 @@ export interface Order {
   tipAmount: number;
   status: OrderStatus;
   targetDestination?: 'KITCHEN' | 'BAR' | 'MIXED';
+  kitchenStatus?: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED';
+  barStatus?: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED';
+  kitchenCompletedAt?: string;
+  barCompletedAt?: string;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED';
   paymentMethod?: 'CASH' | 'CARD' | 'APPLE_PAY' | 'QR_CODE';
   createdAt: string;
@@ -436,6 +440,40 @@ export interface Order {
     changedBy: string;
     reason?: string;
   }[];
+}
+
+export function getFulfillmentStation(item: {
+  targetDestination?: string;
+  isAlcoholic?: boolean;
+  category?: string;
+  barCategory?: string;
+  name?: string;
+}): 'KITCHEN' | 'BAR' {
+  if (item.targetDestination === 'BAR' || item.isAlcoholic === true || item.barCategory !== undefined) {
+    return 'BAR';
+  }
+  const cat = (item.category || '').toLowerCase();
+  const name = (item.name || '').toLowerCase();
+  if (
+    cat.includes('bar') ||
+    cat.includes('cocktail') ||
+    cat.includes('beer') ||
+    cat.includes('wine') ||
+    cat.includes('whiskey') ||
+    cat.includes('spirit') ||
+    cat.includes('beverage') ||
+    cat.includes('drink') ||
+    name.includes('beer') ||
+    name.includes('kingfisher') ||
+    name.includes('wine') ||
+    name.includes('whiskey') ||
+    name.includes('cocktail') ||
+    name.includes('vodka') ||
+    name.includes('rum')
+  ) {
+    return 'BAR';
+  }
+  return 'KITCHEN';
 }
 
 export interface Employee {
