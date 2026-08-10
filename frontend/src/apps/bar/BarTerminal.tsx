@@ -110,7 +110,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
       const stationStatus = newStatus === 'READY' ? 'READY' : newStatus === 'PREPARING' || newStatus === 'PREPARING_DRINKS' ? 'PREPARING' : 'COMPLETED';
-      await api.updateFulfillmentTicketStatus(orderId, stationStatus);
+      await api.updateFulfillmentTicketStatus(orderId, stationStatus, 'BAR');
       await api.updateBarStatus(orderId, stationStatus);
       await loadBarOrders();
     } catch (err) {

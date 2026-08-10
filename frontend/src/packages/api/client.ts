@@ -1121,11 +1121,20 @@ export class DineFlowApiClient {
   }
 
   async updateFulfillmentTicketStatus(
-    ticketId: string,
-    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED'
+    ticketIdOrOrderId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
+    station?: 'KITCHEN' | 'BAR'
   ) {
     await delay(100);
-    const ticket = this.fulfillmentTickets.find((t) => t.id === ticketId || t.parentOrderId === ticketId);
+    const ticket = this.fulfillmentTickets.find((t) => {
+      if (t.id === ticketIdOrOrderId) return true;
+      if (t.parentOrderId === ticketIdOrOrderId) {
+        if (station) return t.station === station;
+        return true;
+      }
+      return false;
+    });
+
     if (!ticket) return null;
 
     ticket.status = status;

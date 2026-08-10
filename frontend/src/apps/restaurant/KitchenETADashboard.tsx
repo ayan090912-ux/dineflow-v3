@@ -228,7 +228,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const handleConfirmAcceptOrder = async () => {
     if (!selectedOrderToAccept) return;
     const finalMins = parseInt(customPrepInput, 10) || chosenPrepTime || 15;
-    await api.updateFulfillmentTicketStatus(selectedOrderToAccept.id, 'PREPARING');
+    await api.updateFulfillmentTicketStatus(selectedOrderToAccept.id, 'PREPARING', 'KITCHEN');
     await api.updateKitchenStatus(selectedOrderToAccept.id, 'PREPARING');
     await api.acceptOrder(selectedOrderToAccept.id, finalMins);
     if (!isMuted) playKitchenChime('BUMP');
@@ -260,7 +260,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   };
 
   const handleMarkReady = async (order: Order) => {
-    await api.updateFulfillmentTicketStatus(order.id, 'READY');
+    await api.updateFulfillmentTicketStatus(order.id, 'READY', 'KITCHEN');
     await api.updateKitchenStatus(order.id, 'READY');
     setBumpedHistory((prev) => [order, ...prev.slice(0, 19)]);
     if (!isMuted) playKitchenChime('BUMP');
