@@ -393,34 +393,24 @@ export default function App() {
             )}
 
             {currentPath === '/bar/dashboard' && (
-              (currentRestaurant?.hasBar !== false && (currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR')) ? (
-                checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-                  <BarTerminal onLogout={() => handleLogout('/bar/login')} />
-                ) : currentUser ? (
-                  <UnauthorizedPage
-                    requiredRole="BARTENDER / BAR STAFF"
-                    userRole={currentUser?.role}
-                    userEmail={currentUser?.email}
-                    targetPath="/bar/dashboard"
-                    onNavigate={navigateTo}
-                  />
-                ) : (
-                  <RoleLoginPage
-                    portal="bar"
-                    onNavigate={navigateTo}
-                    onLoginSuccess={(_, user) => {
-                      setCurrentUser(user);
-                      navigateTo('/bar/dashboard');
-                    }}
-                  />
-                )
-              ) : (
+              checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                <BarTerminal onLogout={() => handleLogout('/bar/login')} />
+              ) : currentUser ? (
                 <UnauthorizedPage
-                  requiredRole="BAR MODULE (Disabled for this Business Type)"
+                  requiredRole="BARTENDER / BAR STAFF"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/bar/dashboard"
                   onNavigate={navigateTo}
+                />
+              ) : (
+                <RoleLoginPage
+                  portal="bar"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/bar/dashboard');
+                  }}
                 />
               )
             )}

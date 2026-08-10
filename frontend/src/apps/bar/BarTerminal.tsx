@@ -86,7 +86,11 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       const allOrders = await api.getOrders(restId);
 
       const barOrders = allOrders
-        .filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'))
+        .filter((o) => {
+          const hasBarTicket = barTickets.some((t) => t.parentOrderId === o.id);
+          const hasBarItems = o.items && o.items.some((i) => getFulfillmentStation(i) === 'BAR');
+          return hasBarTicket || hasBarItems;
+        })
         .map((o) => {
           const ticket = barTickets.find((t) => t.parentOrderId === o.id);
           return {
@@ -137,13 +141,13 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
   // Divide orders into Bar Pipeline stages based strictly on barStatus
   const pendingOrders = orders.filter(
-    (o) => (o.barStatus === 'PENDING' || !o.barStatus) && o.barStatus !== 'PREPARING' && o.barStatus !== 'ACCEPTED' && o.barStatus !== 'READY' && o.barStatus !== 'COMPLETED' && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && o.status !== 'COMPLETED'
+    (o) => (o.barStatus === 'PENDING' || !o.barStatus) && o.barStatus !== 'PREPARING' && o.barStatus !== 'ACCEPTED' && o.barStatus !== 'READY' && o.barStatus !== 'COMPLETED' && o.status !== 'CANCELLED'
   );
   const preparingOrders = orders.filter(
     (o) => o.barStatus === 'PREPARING' || o.barStatus === 'ACCEPTED'
   );
   const readyOrders = orders.filter((o) => o.barStatus === 'READY');
-  const completedOrders = orders.filter((o) => o.barStatus === 'COMPLETED' || (o.status === 'DELIVERED' && o.barStatus === 'READY') || (o.status === 'COMPLETED' && o.barStatus === 'READY'));
+  const completedOrders = orders.filter((o) => o.barStatus === 'COMPLETED');
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
