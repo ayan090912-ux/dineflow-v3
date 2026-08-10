@@ -101,8 +101,46 @@ export class DineFlowApiClient {
         password: 'admin123',
       };
       this.users.unshift(defaultAdmin);
+      this.sanitizeTableSessions();
       this.saveDatabase();
     }
+  }
+
+  private sanitizeTableSessions() {
+    const activeSessionsByTable = new Map<string, TableSession[]>();
+    for (const session of this.tableSessions) {
+      if (session.status === 'ACTIVE') {
+        const list = activeSessionsByTable.get(session.tableId) || [];
+        list.push(session);
+        activeSessionsByTable.set(session.tableId, list);
+      }
+    }
+
+    activeSessionsByTable.forEach((sessions) => {
+      if (sessions.length > 1) {
+        sessions.sort((a, b) => new Date(b.sessionStartedAt).getTime() - new Date(a.sessionStartedAt).getTime());
+        for (let i = 1; i < sessions.length; i++) {
+          sessions[i].status = 'CLOSED';
+          sessions[i].sessionClosedAt = new Date().toISOString();
+        }
+      }
+    });
+
+    this.tables.forEach((tbl) => {
+      const activeSession = this.tableSessions.find((s) => s.tableId === tbl.id && s.status === 'ACTIVE');
+      if (activeSession) {
+        tbl.status = 'OCCUPIED';
+        tbl.isOccupied = true;
+        tbl.activeSessionId = activeSession.id;
+        tbl.sessionStartedAt = activeSession.sessionStartedAt;
+      } else {
+        tbl.status = 'AVAILABLE';
+        tbl.isOccupied = false;
+        tbl.activeSessionId = undefined;
+        tbl.sessionStartedAt = undefined;
+        tbl.reservationDetails = undefined;
+      }
+    });
   }
 
   private saveDatabase() {
@@ -1345,6 +1383,12 @@ export class DineFlowApiClient {
   }
 
   // --- Table Session Management ---
+  async getActiveTableSessions(restaurantId?: string) {
+    await delay(50);
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+    return this.tableSessions.filter((s) => s.restaurantId === restId && s.status === 'ACTIVE');
+  }
+
   async getOrCreateTableSession(restaurantId?: string, tableId?: string, tableNumber?: string) {
     await delay(100);
     const restId = this.resolveTenantRestaurantId(restaurantId);

@@ -99,7 +99,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     }
     loadRestaurantAndMenu();
     loadTableInfo();
-    loadInitialOrder();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       const restId = api.getCurrentRestaurantId() || currentRestaurant?.id;
@@ -108,8 +107,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
 
       if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
+        setCurrentTableSession(null);
+        setCustomerOrders([]);
         loadTableInfo();
-        loadInitialOrder();
       }
 
       if (event.tableNumber?.toLowerCase() === selectedTableNum?.toLowerCase()) {
@@ -139,7 +139,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           addToast('success', 'Served 🍽️', 'Enjoy your order!');
         }
       }
-      loadTableInfo();
     });
 
     return () => unsubscribe();
@@ -158,7 +157,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       const session = await api.getOrCreateTableSession(restId, tbl.id, tbl.tableNumber);
       if (session) {
         setCurrentTableSession(session);
+        await loadInitialOrder(session.id);
       }
+    } else {
+      setCustomerOrders([]);
     }
   };
 
@@ -203,16 +205,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     addToast('success', 'Age Verified 🍸', 'Welcome to the Bar Lounge Menu!');
   };
 
-  const loadInitialOrder = async () => {
+  const loadInitialOrder = async (targetSessionId?: string) => {
     const restId = api.getCurrentRestaurantId() || undefined;
     const allOrders = await api.getOrders(restId);
     const targetTable = (selectedTableNum || tableNumber || 'Table 01').toLowerCase();
+    const activeSessionId = targetSessionId || currentTableSession?.id;
+
     const tableOrds = (allOrders || []).filter((o) => {
       if (!o.tableNumber || o.tableNumber.toLowerCase() !== targetTable) return false;
-      if (currentTableSession) {
-        return o.tableSessionId === currentTableSession.id;
+      if (activeSessionId) {
+        return o.tableSessionId === activeSessionId;
       }
-      return true;
+      return false;
     });
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setCustomerOrders(tableOrds);

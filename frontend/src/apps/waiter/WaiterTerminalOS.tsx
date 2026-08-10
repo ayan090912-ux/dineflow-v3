@@ -98,6 +98,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   const [requests, setRequests] = useState<CustomerRequest[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
+  const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
   const [notifications, setNotifications] = useState<WaiterNotification[]>([]);
 
   // Search filter
@@ -143,17 +144,19 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       setIsErrorState(false);
       const targetRestId = currentRestaurantId;
 
-      const [reqData, ordData, tblData, notifData] = await Promise.all([
+      const [reqData, ordData, tblData, notifData, sessionData] = await Promise.all([
         api.getCustomerRequests(targetRestId),
         api.getOrders(targetRestId),
         api.getTables(targetRestId),
         api.getWaiterNotifications(targetRestId),
+        api.getActiveTableSessions(targetRestId),
       ]);
 
       setRequests(reqData);
       setOrders(ordData);
       setTables(tblData);
       setNotifications(notifData);
+      setActiveSessions(sessionData || []);
     } catch (err) {
       console.error('Failed to load Waiter Terminal data:', err);
       setIsErrorState(true);
@@ -238,32 +241,24 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
   // Computed data collections
   const activeTablesList = useMemo(() => {
-    return tables.filter((t) => {
-      // Find matching orders
-      const tableOrders = orders.filter(
-        (o) => t.tableNumber && o.tableNumber && o.tableNumber.toLowerCase() === t.tableNumber.toLowerCase() && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
-      );
-      const isActive =
-        t.status === 'OCCUPIED' ||
-        t.status === 'WAITER_CALLED' ||
-        t.status === 'BILL_REQUESTED' ||
-        t.status === 'WAITING_FOR_SERVICE' ||
-        t.isOccupied === true ||
-        tableOrders.length > 0;
+    // Requirements 2 & 12: Source of truth for active tables is an ACTIVE TableSession!
+    const activeTableIdSet = new Set(activeSessions.filter((s) => s.status === 'ACTIVE').map((s) => s.tableId));
 
-      if (!isActive) return false;
+    return tables.filter((t) => {
+      // Must have an active table session!
+      const isActiveSession = activeTableIdSet.has(t.id);
+      if (!isActiveSession) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
           t.tableNumber.toLowerCase().includes(q) ||
-          (t.assignedWaiterName && t.assignedWaiterName.toLowerCase().includes(q)) ||
-          (tableOrder && tableOrder.id.toLowerCase().includes(q))
+          (t.assignedWaiterName && t.assignedWaiterName.toLowerCase().includes(q))
         );
       }
       return true;
     });
-  }, [tables, orders, searchQuery]);
+  }, [tables, activeSessions, searchQuery]);
 
   const pendingCallsList = useMemo(() => {
     return requests.filter((r) => {
@@ -824,9 +819,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {activeTablesList.map((table) => {
-                    const tableOrders = orders.filter(
-                      (o) => o.tableNumber.toLowerCase() === table.tableNumber.toLowerCase() && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
-                    );
+                    const activeSession = activeSessions.find((s) => s.tableId === table.id && s.status === 'ACTIVE');
+                    const tableOrders = orders.filter((o) => activeSession ? o.tableSessionId === activeSession.id : false);
                     const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
                     const latestOrder = tableOrders[0];
 
