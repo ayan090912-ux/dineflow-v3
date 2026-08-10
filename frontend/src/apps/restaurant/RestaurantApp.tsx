@@ -245,6 +245,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [currentRestaurant, setCurrentRestaurant] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // Business Day & Daily Closing State
+  const [currentBusinessDay, setCurrentBusinessDay] = useState<BusinessDay | null>(null);
+  const [businessDayHistory, setBusinessDayHistory] = useState<BusinessDay[]>([]);
+  const [isCloseDayModalOpen, setIsCloseDayModalOpen] = useState(false);
+  const [isClosingDayLoading, setIsClosingDayLoading] = useState(false);
+
   // Multi-Restaurant & Branch Outlet State
   const [allMyRestaurants, setAllMyRestaurants] = useState<any[]>([]);
   const [isOutletModalOpen, setIsOutletModalOpen] = useState(false);
@@ -448,6 +454,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     const i = await api.getInventory(rest?.id);
     const fc = await api.getCategories(rest?.id);
     const bc = await api.getBarCategories(rest?.id);
+    const bDay = await api.getCurrentBusinessDay(rest?.id);
+    const bHistory = await api.getBusinessDayHistory(rest?.id);
+
     setOrders(o);
     setMenuItems(m);
     setTables(t);
@@ -455,6 +464,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     setInventory(i);
     setFoodCategories(fc);
     setBarCategories(bc);
+    setCurrentBusinessDay(bDay);
+    setBusinessDayHistory(bHistory);
   };
 
   // Category CRUD Handlers
@@ -1009,6 +1020,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
                 { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
                 { id: 'inventory', label: 'Inventory', icon: <Package className="w-4 h-4" /> },
+                {
+                  id: 'business_day',
+                  label: 'Business Day & Daily Closing',
+                  icon: <Calendar className="w-4 h-4 text-amber-400" />,
+                  badge: currentBusinessDay?.status === 'OPEN' ? 'OPEN' : 'CLOSED',
+                },
                 { id: 'theme', label: 'Branding & Theme', icon: <Palette className="w-4 h-4" /> },
               ];
 
@@ -1246,74 +1263,110 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatsCard
-                title="Today's Sales"
-                value="$1,840.50"
-                change={{ value: '+24.5%', isPositive: true }}
-                subtitle="vs yesterday"
-                icon={<DollarSign className="w-5 h-5 text-emerald-400" />}
-              />
-              <StatsCard
-                title="Active Orders"
-                value={orders.filter((o) => o.status !== 'COMPLETED').length}
-                change={{ value: 'Live Kitchen', isPositive: true }}
-                icon={<ShoppingBag className="w-5 h-5 text-sky-400" />}
-              />
-              <StatsCard
-                title="Occupied Tables"
-                value={`${tables.filter((t) => t.status !== 'AVAILABLE').length} / ${tables.length}`}
-                change={{ value: '62% Occupancy', isPositive: true }}
-                icon={<Grid className="w-5 h-5 text-purple-400" />}
-              />
-              <StatsCard
-                title="Avg Prep Time"
-                value="14.2 min"
-                change={{ value: '-2.1 min', isPositive: true }}
-                icon={<Clock className="w-5 h-5 text-amber-400" />}
-              />
-            </div>
+            {/* Real Today Metrics Computation */}
+            {(() => {
+              const openBday = currentBusinessDay;
+              const dayOrders = orders.filter(
+                (o) => o.restaurantId === currentRestaurant?.id && (openBday ? o.businessDayId === openBday.id || new Date(o.createdAt).getTime() >= new Date(openBday.openedAt).getTime() : true)
+              );
 
-            {/* Bar Operating Analytics (When Bar Module Enabled) */}
-            {currentRestaurant?.features?.bar !== false && (
-              <Card className="bg-gradient-to-br from-slate-900 via-purple-950/20 to-slate-900 border-purple-500/30 p-6 space-y-4 shadow-xl rounded-3xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-purple-300 font-bold text-base">
-                    <Wine className="w-5 h-5 text-purple-400 animate-pulse" />
-                    <span>Bar Operating Analytics & Craft Beverage Revenue</span>
-                  </div>
-                  <Badge variant="brand" className="bg-purple-600/30 text-purple-300 border-purple-500/40 font-mono text-[10px]">
-                    BAR MODULE ACTIVE
-                  </Badge>
-                </div>
+              const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
+              const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Today's Bar Revenue</span>
-                    <p className="text-xl font-black text-amber-400 mt-0.5">$1,240.50</p>
-                    <span className="text-[10px] text-emerald-400 font-mono">↑ 18.5% vs yesterday</span>
+              const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
+              const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+
+              let foodSales = 0;
+              let barSales = 0;
+
+              dayOrders.forEach((o) => {
+                if (o.status !== 'CANCELLED') {
+                  o.items.forEach((item) => {
+                    const itemTotal = item.price * item.quantity;
+                    if (item.targetDestination === 'BAR' || item.isAlcoholic) {
+                      barSales += itemTotal;
+                    } else {
+                      foodSales += itemTotal;
+                    }
+                  });
+                }
+              });
+
+              const totalSales = foodSales + barSales;
+
+              return (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatsCard
+                      title="Today's Total Sales"
+                      value={formatCurrency(totalSales, theme.currency)}
+                      change={{ value: `${dayOrders.length} orders today`, isPositive: true }}
+                      subtitle={currentBusinessDay?.status === 'OPEN' ? `Business Day (${currentBusinessDay.date}) OPEN` : 'Business Day CLOSED'}
+                      icon={<DollarSign className="w-5 h-5 text-emerald-400" />}
+                    />
+                    <StatsCard
+                      title="Active Kitchen Orders"
+                      value={orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length}
+                      change={{ value: 'Live KDS', isPositive: true }}
+                      icon={<ShoppingBag className="w-5 h-5 text-sky-400" />}
+                    />
+                    <StatsCard
+                      title="Occupied Tables"
+                      value={`${tables.filter((t) => t.status !== 'AVAILABLE').length} / ${tables.length}`}
+                      change={{ value: `${tables.length > 0 ? Math.round((tables.filter((t) => t.status !== 'AVAILABLE').length / tables.length) * 100) : 0}% Occupancy`, isPositive: true }}
+                      icon={<Grid className="w-5 h-5 text-purple-400" />}
+                    />
+                    <StatsCard
+                      title="Completed Orders Today"
+                      value={completed.length}
+                      change={{ value: `${cancelled.length} cancelled`, isPositive: cancelled.length === 0 }}
+                      icon={<Clock className="w-5 h-5 text-amber-400" />}
+                    />
                   </div>
 
-                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Bar Orders Today</span>
-                    <p className="text-xl font-black text-white mt-0.5">24 Orders</p>
-                    <span className="text-[10px] text-purple-300 font-mono">Cocktails & Spirits</span>
-                  </div>
+                  {/* Bar Operating Analytics (When Bar Module Enabled) */}
+                  {currentRestaurant?.features?.bar !== false && (
+                    <Card className="bg-gradient-to-br from-slate-900 via-purple-950/20 to-slate-900 border-purple-500/30 p-6 space-y-4 shadow-xl rounded-3xl">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-purple-300 font-bold text-base">
+                          <Wine className="w-5 h-5 text-purple-400 animate-pulse" />
+                          <span>Bar Operating Analytics & Craft Beverage Revenue</span>
+                        </div>
+                        <Badge variant="brand" className="bg-purple-600/30 text-purple-300 border-purple-500/40 font-mono text-[10px]">
+                          BAR MODULE ACTIVE
+                        </Badge>
+                      </div>
 
-                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Avg Drink Prep Time</span>
-                    <p className="text-xl font-black text-emerald-400 mt-0.5">4.2 Mins</p>
-                    <span className="text-[10px] text-slate-400 font-mono">Mixology station</span>
-                  </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Today's Bar Revenue</span>
+                          <p className="text-xl font-black text-amber-400 mt-0.5">{formatCurrency(barSales, theme.currency)}</p>
+                          <span className="text-[10px] text-emerald-400 font-mono">{barOrders.length} Bar Orders</span>
+                        </div>
 
-                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Peak Bar Hours</span>
-                    <p className="text-sm font-bold text-amber-300 mt-1">8:00 PM - 11:00 PM</p>
-                    <span className="text-[10px] text-slate-400 font-mono">High lounge volume</span>
-                  </div>
-                </div>
-              </Card>
-            )}
+                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Food Sales</span>
+                          <p className="text-xl font-black text-white mt-0.5">{formatCurrency(foodSales, theme.currency)}</p>
+                          <span className="text-[10px] text-purple-300 font-mono">{foodOrders.length} Food Orders</span>
+                        </div>
+
+                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Business Day Status</span>
+                          <p className="text-xl font-black text-emerald-400 mt-0.5">{currentBusinessDay?.status || 'OPEN'}</p>
+                          <span className="text-[10px] text-slate-400 font-mono">{currentBusinessDay?.date || 'Today'}</span>
+                        </div>
+
+                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Completed Orders</span>
+                          <p className="text-xl font-black text-sky-400 mt-0.5">{completed.length}</p>
+                          <span className="text-[10px] text-slate-400 font-mono">Real database records</span>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Quick Actions & Live Order Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2671,7 +2724,258 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             </Card>
           </div>
         )}
+
+        {/* Tab: Business Day & Daily Closing */}
+        {activeTab === 'business_day' && (
+          <div className="space-y-6">
+            {/* Live Business Day Overview Banner */}
+            {(() => {
+              const openBday = currentBusinessDay;
+              const dayOrders = orders.filter(
+                (o) => o.restaurantId === currentRestaurant?.id && (openBday ? o.businessDayId === openBday.id || new Date(o.createdAt).getTime() >= new Date(openBday.openedAt).getTime() : true)
+              );
+              const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
+              const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
+              const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
+              const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+
+              let foodSales = 0;
+              let barSales = 0;
+              dayOrders.forEach((o) => {
+                if (o.status !== 'CANCELLED') {
+                  o.items.forEach((item) => {
+                    const itemTotal = item.price * item.quantity;
+                    if (item.targetDestination === 'BAR' || item.isAlcoholic) barSales += itemTotal;
+                    else foodSales += itemTotal;
+                  });
+                }
+              });
+              const totalSales = foodSales + barSales;
+
+              return (
+                <>
+                  <Card className="bg-slate-900 border-slate-800 p-6 space-y-6 rounded-3xl shadow-xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Calendar className="w-5 h-5 text-amber-400" /> Business Day: {currentBusinessDay?.date || 'Today'}
+                          </h3>
+                          <Badge variant={currentBusinessDay?.status === 'OPEN' ? 'success' : 'warning'} className="font-mono">
+                            {currentBusinessDay?.status === 'OPEN' ? 'STATUS: OPEN' : 'STATUS: CLOSED'}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Operational summary and sales ledger for current business day.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {currentBusinessDay?.status === 'OPEN' ? (
+                          <Button
+                            variant="brand"
+                            onClick={() => setIsCloseDayModalOpen(true)}
+                            className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs py-2 px-4 shadow-lg"
+                          >
+                            <span>CLOSE BUSINESS DAY 🌅</span>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="brand"
+                            onClick={async () => {
+                              await api.openBusinessDay(currentRestaurant?.id, currentUser?.name);
+                              addToast('success', 'New Business Day Opened ☀️', 'Now recording orders for new business day.');
+                              await loadData();
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-4 shadow-lg"
+                          >
+                            <span>OPEN NEW BUSINESS DAY ☀️</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono">
+                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Sales Today</span>
+                        <p className="text-2xl font-black text-amber-400 mt-1">{formatCurrency(totalSales, theme.currency)}</p>
+                        <span className="text-[10px] text-slate-400">{dayOrders.length} Total Orders</span>
+                      </div>
+
+                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Food Sales</span>
+                        <p className="text-2xl font-black text-white mt-1">{formatCurrency(foodSales, theme.currency)}</p>
+                        <span className="text-[10px] text-emerald-400">{foodOrders.length} Food Orders</span>
+                      </div>
+
+                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Bar Sales</span>
+                        <p className="text-2xl font-black text-purple-400 mt-1">{formatCurrency(barSales, theme.currency)}</p>
+                        <span className="text-[10px] text-purple-300">{barOrders.length} Bar Orders</span>
+                      </div>
+
+                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Completed vs Cancelled</span>
+                        <p className="text-2xl font-black text-sky-400 mt-1">{completed.length} / {cancelled.length}</p>
+                        <span className="text-[10px] text-slate-400">{completed.length} Delivered</span>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Historical Daily Summaries Table */}
+                  <Card className="bg-slate-900 border-slate-800 p-6 space-y-4 rounded-3xl shadow-xl">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <History className="w-5 h-5 text-sky-400" /> Daily Summary History Ledger
+                      </h3>
+                      <Badge variant="outline" className="border-slate-700 text-slate-300 font-mono">
+                        {businessDayHistory.length} Past Days Saved
+                      </Badge>
+                    </div>
+
+                    {businessDayHistory.length === 0 ? (
+                      <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 text-xs text-slate-400">
+                        No closed business day history records yet. When a business day is closed, its summary report will be archived here.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs font-mono">
+                          <thead>
+                            <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
+                              <th className="pb-3 px-3">Date</th>
+                              <th className="pb-3 px-3">Status</th>
+                              <th className="pb-3 px-3">Total Orders</th>
+                              <th className="pb-3 px-3">Food Sales</th>
+                              <th className="pb-3 px-3">Bar Sales</th>
+                              <th className="pb-3 px-3">Total Sales</th>
+                              <th className="pb-3 px-3 text-right">Closed By</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/80">
+                            {businessDayHistory.map((b) => (
+                              <tr key={b.id} className="hover:bg-slate-850/50">
+                                <td className="py-3 px-3 font-bold text-white">{b.date}</td>
+                                <td className="py-3 px-3">
+                                  <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">
+                                    {b.status}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-3 text-slate-300">{b.summary?.totalOrders || 0}</td>
+                                <td className="py-3 px-3 text-emerald-400">{formatCurrency(b.summary?.foodSales || 0, theme.currency)}</td>
+                                <td className="py-3 px-3 text-purple-400">{formatCurrency(b.summary?.barSales || 0, theme.currency)}</td>
+                                <td className="py-3 px-3 font-bold text-amber-400">{formatCurrency(b.summary?.totalSales || 0, theme.currency)}</td>
+                                <td className="py-3 px-3 text-right text-slate-400">{b.closedBy || 'Owner'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </Card>
+                </>
+              );
+            })()}
+          </div>
+        )}
       </main>
+
+      {/* Close Business Day Confirmation Modal */}
+      <Modal
+        isOpen={isCloseDayModalOpen}
+        onClose={() => setIsCloseDayModalOpen(false)}
+        title="Close Business Day Confirmation"
+        maxWidth="md"
+      >
+        <div className="space-y-4 font-sans">
+          <div className="p-4 bg-amber-950/40 border border-amber-800/60 rounded-2xl space-y-1 text-amber-200">
+            <h4 className="font-black text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400" /> Confirm Daily Closing
+            </h4>
+            <p className="text-xs text-amber-300/80">
+              Closing the business day will store permanent daily summary statistics. Historical order records will remain safe and intact.
+            </p>
+          </div>
+
+          {(() => {
+            const openBday = currentBusinessDay;
+            const dayOrders = orders.filter(
+              (o) => o.restaurantId === currentRestaurant?.id && (openBday ? o.businessDayId === openBday.id || new Date(o.createdAt).getTime() >= new Date(openBday.openedAt).getTime() : true)
+            );
+            const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
+            const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
+            const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
+            const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+
+            let foodSales = 0;
+            let barSales = 0;
+            dayOrders.forEach((o) => {
+              if (o.status !== 'CANCELLED') {
+                o.items.forEach((item) => {
+                  const itemTotal = item.price * item.quantity;
+                  if (item.targetDestination === 'BAR' || item.isAlcoholic) barSales += itemTotal;
+                  else foodSales += itemTotal;
+                });
+              }
+            });
+            const totalSales = foodSales + barSales;
+
+            return (
+              <div className="space-y-2 bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs font-mono">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                  <span className="text-slate-400">Business Day Date:</span>
+                  <span className="font-bold text-white">{currentBusinessDay?.date || 'Today'}</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-slate-400">Total Orders Processed:</span>
+                  <span className="font-bold text-white">{dayOrders.length} ({completed.length} completed, {cancelled.length} cancelled)</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-slate-400">Food Orders / Food Sales:</span>
+                  <span className="font-bold text-emerald-400">{foodOrders.length} orders • {formatCurrency(foodSales, theme.currency)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-slate-400">Bar Orders / Bar Sales:</span>
+                  <span className="font-bold text-purple-400">{barOrders.length} orders • {formatCurrency(barSales, theme.currency)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-sm">
+                  <span className="font-bold text-white">TOTAL DAILY SALES:</span>
+                  <span className="font-black text-amber-400 text-base">{formatCurrency(totalSales, theme.currency)}</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsCloseDayModalOpen(false)}
+              className="border-slate-800 text-slate-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              disabled={isClosingDayLoading}
+              onClick={async () => {
+                setIsClosingDayLoading(true);
+                try {
+                  await api.closeBusinessDay(currentRestaurant?.id, currentUser?.name);
+                  addToast('success', 'Business Day Closed 🌅', 'Daily summary stored safely in database history.');
+                  setIsCloseDayModalOpen(false);
+                  await loadData();
+                } catch (err: any) {
+                  addToast('error', 'Closing Error', err.message || 'Failed to close day');
+                } finally {
+                  setIsClosingDayLoading(false);
+                }
+              }}
+              className="bg-rose-600 hover:bg-rose-500 text-white font-bold"
+            >
+              {isClosingDayLoading ? 'Closing Day...' : 'CONFIRM & CLOSE DAY'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* QR Code Modal */}
       <Modal

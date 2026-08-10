@@ -20,6 +20,7 @@ import {
   VolumeX,
   Plus,
   Minus,
+  Activity,
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Modal } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -212,6 +213,36 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
           </Button>
         </div>
       </header>
+
+      {/* BAR TODAY Operational Statistics Bar */}
+      {(() => {
+        const received = orders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED').length;
+        const preparing = orders.filter((o) => o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION' || o.status === 'PREPARING_DRINKS').length;
+        const ready = orders.filter((o) => o.status === 'READY').length;
+        const completed = orders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED').length;
+
+        return (
+          <div className="bg-slate-900/90 border-b border-slate-800/80 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+            <span className="font-bold text-slate-300 font-sans flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+              <Activity className="w-3.5 h-3.5 text-purple-400" /> BAR TODAY STATS:
+            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center gap-1.5 text-amber-300 bg-amber-950/40 border border-amber-800/50 px-2.5 py-1 rounded-lg">
+                <span>Bar Received:</span> <span className="font-black text-amber-400">{received}</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-purple-300 bg-purple-950/40 border border-purple-800/50 px-2.5 py-1 rounded-lg">
+                <span>Preparing:</span> <span className="font-black text-purple-400">{preparing}</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-lg">
+                <span>Ready:</span> <span className="font-black text-emerald-400">{ready}</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-sky-300 bg-sky-950/40 border border-sky-800/50 px-2.5 py-1 rounded-lg">
+                <span>Completed Today:</span> <span className="font-black text-sky-400">{completed}</span>
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Main Bar Preparation KanBan Pipeline */}
       <main className="flex-1 p-6 overflow-x-auto">

@@ -16,6 +16,9 @@ import {
   MenuCategory,
   BarCategory,
   BarMenuItem,
+  TableSession,
+  BusinessDay,
+  DailySummaryData,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -35,6 +38,8 @@ export class DineFlowApiClient {
   private barMenuItems: BarMenuItem[] = [];
   private orders: Order[] = [];
   private tables: Table[] = [];
+  private tableSessions: TableSession[] = [];
+  private businessDays: BusinessDay[] = [];
   private employees: Employee[] = [];
   private inventory: InventoryItem[] = [];
   private auditLogs: AuditLog[] = [];
@@ -67,6 +72,8 @@ export class DineFlowApiClient {
           this.barMenuItems = db.barMenuItems || [];
           this.orders = db.orders || [];
           this.tables = db.tables || [];
+          this.tableSessions = db.tableSessions || [];
+          this.businessDays = db.businessDays || [];
           this.employees = db.employees || [];
           this.inventory = db.inventory || [];
           this.auditLogs = db.auditLogs || [];
@@ -110,6 +117,8 @@ export class DineFlowApiClient {
           barMenuItems: this.barMenuItems,
           orders: this.orders,
           tables: this.tables,
+          tableSessions: this.tableSessions,
+          businessDays: this.businessDays,
           employees: this.employees,
           inventory: this.inventory,
           auditLogs: this.auditLogs,
@@ -1335,6 +1344,237 @@ export class DineFlowApiClient {
     return table;
   }
 
+  // --- Table Session Management ---
+  async getOrCreateTableSession(restaurantId?: string, tableId?: string, tableNumber?: string) {
+    await delay(100);
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+    const tbl = this.tables.find(
+      (t) => t.restaurantId === restId && (t.id === tableId || (tableNumber && t.tableNumber.toLowerCase() === tableNumber.toLowerCase()))
+    );
+
+    if (!tbl) return null;
+
+    let activeSession = this.tableSessions.find(
+      (s) => s.restaurantId === restId && s.tableId === tbl.id && s.status === 'ACTIVE'
+    );
+
+    if (!activeSession) {
+      const currentBday = await this.getCurrentBusinessDay(restId);
+      const sessionSeq = (this.tableSessions.filter((s) => s.restaurantId === restId).length + 1);
+      const newSessionId = `S${String(sessionSeq).padStart(3, '0')}`;
+
+      activeSession = {
+        id: newSessionId,
+        restaurantId: restId,
+        tableId: tbl.id,
+        tableNumber: tbl.tableNumber,
+        status: 'ACTIVE',
+        sessionStartedAt: new Date().toISOString(),
+        businessDayId: currentBday?.id,
+      };
+
+      this.tableSessions.unshift(activeSession);
+
+      tbl.status = 'OCCUPIED';
+      tbl.isOccupied = true;
+      tbl.activeSessionId = activeSession.id;
+      tbl.sessionStartedAt = activeSession.sessionStartedAt;
+
+      this.saveDatabase();
+
+      realtimeBus.emit('TableSessionStarted' as any, {
+        sessionId: activeSession.id,
+        restaurantId: restId,
+        tableId: tbl.id,
+        tableNumber: tbl.tableNumber,
+        data: activeSession,
+      });
+
+      realtimeBus.emit('TableStatusUpdated' as any, {
+        tableId: tbl.id,
+        restaurantId: restId,
+        tableNumber: tbl.tableNumber,
+        status: 'OCCUPIED',
+        data: tbl,
+      });
+    }
+
+    return activeSession;
+  }
+
+  async closeTableSession(tableId: string, waiterName?: string) {
+    await delay(100);
+    const tbl = this.tables.find((t) => t.id === tableId || t.tableNumber.toLowerCase() === tableId.toLowerCase());
+    if (!tbl) return null;
+
+    const restId = tbl.restaurantId;
+
+    const activeSession = this.tableSessions.find(
+      (s) => s.restaurantId === restId && s.tableId === tbl.id && s.status === 'ACTIVE'
+    );
+
+    if (activeSession) {
+      activeSession.status = 'CLOSED';
+      activeSession.sessionClosedAt = new Date().toISOString();
+      activeSession.closedByWaiterName = waiterName || 'Staff';
+    }
+
+    tbl.status = 'AVAILABLE';
+    tbl.isOccupied = false;
+    tbl.activeSessionId = undefined;
+    tbl.sessionStartedAt = undefined;
+    tbl.reservationDetails = undefined;
+
+    this.saveDatabase();
+
+    realtimeBus.emit('TableSessionClosed' as any, {
+      sessionId: activeSession?.id,
+      restaurantId: restId,
+      tableId: tbl.id,
+      tableNumber: tbl.tableNumber,
+    });
+
+    realtimeBus.emit('TableStatusUpdated' as any, {
+      tableId: tbl.id,
+      restaurantId: restId,
+      tableNumber: tbl.tableNumber,
+      status: 'AVAILABLE',
+      data: tbl,
+    });
+
+    realtimeBus.emit('TableCleared' as any, {
+      tableId: tbl.id,
+      restaurantId: restId,
+      tableNumber: tbl.tableNumber,
+    });
+
+    return tbl;
+  }
+
+  // --- Business Day Management ---
+  async getCurrentBusinessDay(restaurantId?: string) {
+    await delay(50);
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+    let openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+
+    if (!openDay) {
+      const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      openDay = {
+        id: `bday-${restId}-${Date.now()}`,
+        restaurantId: restId,
+        date: todayStr,
+        status: 'OPEN',
+        openedAt: new Date().toISOString(),
+        openedBy: 'System Auto',
+      };
+      this.businessDays.unshift(openDay);
+      this.saveDatabase();
+    }
+
+    return openDay;
+  }
+
+  async openBusinessDay(restaurantId?: string, openedBy?: string) {
+    await delay(100);
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+
+    const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+    if (openDay) {
+      return openDay;
+    }
+
+    const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const newDay: BusinessDay = {
+      id: `bday-${restId}-${Date.now()}`,
+      restaurantId: restId,
+      date: todayStr,
+      status: 'OPEN',
+      openedAt: new Date().toISOString(),
+      openedBy: openedBy || 'Manager',
+    };
+
+    this.businessDays.unshift(newDay);
+    this.saveDatabase();
+
+    realtimeBus.emit('BusinessDayOpened' as any, {
+      businessDayId: newDay.id,
+      restaurantId: restId,
+      data: newDay,
+    });
+
+    return newDay;
+  }
+
+  async closeBusinessDay(restaurantId?: string, closedBy?: string) {
+    await delay(150);
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+    const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+
+    if (!openDay) {
+      throw new Error('No active open business day to close.');
+    }
+
+    const dayOrders = this.orders.filter(
+      (o) => o.restaurantId === restId && (o.businessDayId === openDay.id || new Date(o.createdAt).getTime() >= new Date(openDay.openedAt).getTime())
+    );
+
+    const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
+    const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
+
+    const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED');
+    const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR');
+
+    let foodSales = 0;
+    let barSales = 0;
+
+    dayOrders.forEach((o) => {
+      if (o.status !== 'CANCELLED') {
+        o.items.forEach((item) => {
+          const itemTotal = item.price * item.quantity;
+          if (item.targetDestination === 'BAR' || item.isAlcoholic) {
+            barSales += itemTotal;
+          } else {
+            foodSales += itemTotal;
+          }
+        });
+      }
+    });
+
+    const totalSales = foodSales + barSales;
+
+    const summary: DailySummaryData = {
+      totalOrders: dayOrders.length,
+      foodOrders: foodOrders.length,
+      barOrders: barOrders.length,
+      foodSales,
+      barSales,
+      totalSales,
+      completedOrders: completed.length,
+      cancelledOrders: cancelled.length,
+    };
+
+    openDay.status = 'CLOSED';
+    openDay.closedAt = new Date().toISOString();
+    openDay.closedBy = closedBy || 'Owner';
+    openDay.summary = summary;
+
+    this.saveDatabase();
+
+    realtimeBus.emit('BusinessDayClosed' as any, {
+      businessDayId: openDay.id,
+      restaurantId: restId,
+      summary,
+    });
+
+    return openDay;
+  }
+
+  async getBusinessDayHistory(restaurantId?: string) {
+    await delay(100);
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+    return this.businessDays.filter((b) => b.restaurantId === restId && b.status === 'CLOSED');
+  }
+
   // Menu Helper APIs
   async duplicateMenuItem(itemId: string) {
     await delay(150);
@@ -2015,10 +2255,42 @@ export class DineFlowApiClient {
     const prefix = isPickup ? (rest?.orderNumberPrefix || 'F') : (rest?.orderNumberPrefix || 'ORD');
     const customOrderId = orderData.id || `${prefix.replace(/#/g, '')}${orderSeq}`;
 
+    // Get or create table session and current business day
+    let tableSessionId = orderData.tableSessionId;
+    if (!isPickup && !tableSessionId && orderData.tableNumber) {
+      const table = this.tables.find(
+        (t) => t.restaurantId === restId && t.tableNumber.toLowerCase() === orderData.tableNumber?.toLowerCase()
+      );
+      if (table) {
+        let session = this.tableSessions.find((s) => s.restaurantId === restId && s.tableId === table.id && s.status === 'ACTIVE');
+        if (!session) {
+          const sessionSeq = (this.tableSessions.filter((s) => s.restaurantId === restId).length + 1);
+          session = {
+            id: `S${String(sessionSeq).padStart(3, '0')}`,
+            restaurantId: restId,
+            tableId: table.id,
+            tableNumber: table.tableNumber,
+            status: 'ACTIVE',
+            sessionStartedAt: new Date().toISOString(),
+          };
+          this.tableSessions.unshift(session);
+        }
+        tableSessionId = session.id;
+        table.status = 'OCCUPIED';
+        table.isOccupied = true;
+        table.activeSessionId = session.id;
+        table.sessionStartedAt = table.sessionStartedAt || session.sessionStartedAt;
+      }
+    }
+
+    const currentBday = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+
     const newOrd: Order = {
       id: customOrderId,
       restaurantId: restId,
       tableNumber: isPickup ? 'COUNTER' : (orderData.tableNumber || 'Table 01'),
+      tableSessionId,
+      businessDayId: currentBday?.id,
       orderType: isPickup ? 'PICKUP' : 'DINE_IN',
       customerName: orderData.customerName || 'Guest',
       customerPhone: orderData.customerPhone,

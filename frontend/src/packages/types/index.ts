@@ -252,6 +252,41 @@ export interface TableReservation {
   reservedBy?: string;
 }
 
+export interface TableSession {
+  id: string;
+  restaurantId: string;
+  tableId: string;
+  tableNumber: string;
+  status: 'ACTIVE' | 'CLOSED';
+  sessionStartedAt: string;
+  sessionClosedAt?: string;
+  closedByWaiterName?: string;
+  businessDayId?: string;
+}
+
+export interface DailySummaryData {
+  totalOrders: number;
+  foodOrders: number;
+  barOrders: number;
+  foodSales: number;
+  barSales: number;
+  totalSales: number;
+  completedOrders: number;
+  cancelledOrders: number;
+}
+
+export interface BusinessDay {
+  id: string;
+  restaurantId: string;
+  date: string;
+  status: 'OPEN' | 'CLOSED';
+  openedAt: string;
+  closedAt?: string;
+  openedBy?: string;
+  closedBy?: string;
+  summary?: DailySummaryData;
+}
+
 export interface Table {
   id: string;
   restaurantId: string;
@@ -260,9 +295,11 @@ export interface Table {
   status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING' | 'WAITING_FOR_SERVICE' | 'BILL_REQUESTED' | 'WAITER_CALLED' | 'MERGED';
   qrCodeUrl: string;
   activeOrderId?: string;
+  activeSessionId?: string;
   assignedWaiterName?: string;
   isVip?: boolean;
   sessionStartedAt?: string;
+  isOccupied?: boolean;
   section?: string;
   shape?: 'SQUARE' | 'ROUND' | 'RECTANGLE';
   // Table Merging for large gatherings
@@ -361,6 +398,8 @@ export interface Order {
   id: string;
   restaurantId: string;
   tableNumber: string;
+  tableSessionId?: string;
+  businessDayId?: string;
   orderType?: 'DINE_IN' | 'PICKUP';
   customerName?: string;
   customerPhone?: string;

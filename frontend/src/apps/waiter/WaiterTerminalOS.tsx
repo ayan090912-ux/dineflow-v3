@@ -868,6 +868,21 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                             <span className="text-slate-400 font-medium">Assigned Waiter</span>
                             <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
                           </div>
+
+                          <div className="pt-2 border-t border-slate-800/80">
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              className="w-full text-xs font-bold py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-200"
+                              onClick={async () => {
+                                await api.closeTableSession(table.id, waiterName);
+                                showToast('Table Session Closed 🧹', `${table.tableNumber} is now available for new guests`, 'success');
+                                loadData();
+                              }}
+                            >
+                              <span>CLOSE TABLE / END SESSION 🧹</span>
+                            </Button>
+                          </div>
                         </div>
                       </Card>
                     );

@@ -448,6 +448,39 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               Recall ({bumpedHistory.length})
             </Button>
 
+            {/* Real Operational Stats Bar */}
+            {(() => {
+              const foodOrders = orders.filter(
+                (o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED' || o.items.some((i) => i.targetDestination !== 'BAR')
+              );
+              const received = foodOrders.filter((o) => o.status === 'PENDING' || o.status === 'CONFIRMED').length;
+              const preparing = foodOrders.filter((o) => o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION').length;
+              const ready = foodOrders.filter((o) => o.status === 'READY').length;
+              const completed = foodOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED').length;
+
+              return (
+                <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+                  <span className="font-bold text-slate-300 font-sans flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+                    <Activity className="w-3.5 h-3.5 text-rose-400" /> Today's Kitchen Stats:
+                  </span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="flex items-center gap-1.5 text-amber-300 bg-amber-950/40 border border-amber-800/50 px-2.5 py-1 rounded-lg">
+                      <span>Received:</span> <span className="font-black text-amber-400">{received}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-rose-300 bg-rose-950/40 border border-rose-800/50 px-2.5 py-1 rounded-lg">
+                      <span>Preparing:</span> <span className="font-black text-rose-400">{preparing}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-lg">
+                      <span>Ready:</span> <span className="font-black text-emerald-400">{ready}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-sky-300 bg-sky-950/40 border border-sky-800/50 px-2.5 py-1 rounded-lg">
+                      <span>Completed Today:</span> <span className="font-black text-sky-400">{completed}</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Clock */}
             <div className="font-mono text-xs text-amber-400 font-bold bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 shrink-0">
               {currentTime}

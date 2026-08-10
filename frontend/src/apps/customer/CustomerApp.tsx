@@ -78,6 +78,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   // Active Live Orders
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
+  const [currentTableSession, setCurrentTableSession] = useState<TableSession | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [highlightActiveOrders, setHighlightActiveOrders] = useState(false);
   const [isRecentStatusPulse, setIsRecentStatusPulse] = useState(false);
@@ -104,6 +105,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       const restId = api.getCurrentRestaurantId() || currentRestaurant?.id;
       if (event.restaurantId && restId && event.restaurantId !== restId) {
         return;
+      }
+
+      if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
+        loadTableInfo();
+        loadInitialOrder();
       }
 
       if (event.tableNumber?.toLowerCase() === selectedTableNum?.toLowerCase()) {
@@ -149,11 +155,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     );
     if (tbl) {
       setCurrentTable(tbl);
-      if (tbl.status === 'AVAILABLE') {
-        const updated = await api.updateTableStatus(tbl.id, 'OCCUPIED');
-        if (updated) {
-          setCurrentTable(updated);
-        }
+      const session = await api.getOrCreateTableSession(restId, tbl.id, tbl.tableNumber);
+      if (session) {
+        setCurrentTableSession(session);
       }
     }
   };
@@ -203,9 +207,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const restId = api.getCurrentRestaurantId() || undefined;
     const allOrders = await api.getOrders(restId);
     const targetTable = (selectedTableNum || tableNumber || 'Table 01').toLowerCase();
-    const tableOrds = (allOrders || []).filter(
-      (o) => o.tableNumber && o.tableNumber.toLowerCase() === targetTable
-    );
+    const tableOrds = (allOrders || []).filter((o) => {
+      if (!o.tableNumber || o.tableNumber.toLowerCase() !== targetTable) return false;
+      if (currentTableSession) {
+        return o.tableSessionId === currentTableSession.id;
+      }
+      return true;
+    });
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setCustomerOrders(tableOrds);
   };
@@ -274,6 +282,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const newOrd = await api.createOrder({
       restaurantId: restId,
       tableNumber: isNoTable ? 'COUNTER' : selectedTableNum,
+      tableSessionId: currentTableSession?.id,
       orderType: isNoTable ? 'PICKUP' : 'DINE_IN',
       customerName: 'Guest',
       items: orderItems,
