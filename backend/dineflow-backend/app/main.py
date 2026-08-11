@@ -11,7 +11,7 @@ settings = get_settings()
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="DineFlow Cloud - Multi-tenant Restaurant Operating System",
+    description="Dinely Cloud - Multi-tenant Restaurant Operating System",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None
 )

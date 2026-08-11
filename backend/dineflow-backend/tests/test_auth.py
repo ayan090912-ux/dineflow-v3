@@ -21,7 +21,7 @@ class TestHealthEndpoints:
 class TestAuthEndpoints:
     def test_platform_login_invalid_credentials(self):
         response = client.post("/api/v1/auth/platform/login", json={
-            "email": "nonexistent@dineflow.com",
+            "email": "nonexistent@dinely.com",
             "password": "wrongpassword"
         })
         assert response.status_code == 401

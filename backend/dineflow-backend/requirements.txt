@@ -1,4 +1,4 @@
-# DineFlow Cloud - Backend Requirements
+# Dinely Cloud - Backend Requirements
 fastapi==0.111.0
 uvicorn[standard]==0.30.0
 sqlalchemy[asyncio]==2.0.31

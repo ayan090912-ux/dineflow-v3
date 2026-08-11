@@ -222,7 +222,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         businessAddress,
         contactNumber,
         supportEmail,
-        ownerEmail: regEmail || 'owner@dineflow.app',
+        ownerEmail: regEmail || 'owner@dinely.app',
         ownerName: verifiedUser ? verifiedUser.name : `${firstName} ${lastName}`,
       });
 
@@ -271,7 +271,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">
         <div className="flex flex-col items-center text-center space-y-4 max-w-3xl mx-auto">
           <Badge variant="brand" className="px-3 py-1 text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-rose-900/20">
-            <Sparkles className="w-3.5 h-3.5 text-rose-300" /> DineFlow Cloud Self-Service Platform
+            <Sparkles className="w-3.5 h-3.5 text-rose-300" /> Dinely Cloud Self-Service Platform
           </Badge>
           <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-tight">
             Next-Gen Restaurant <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-amber-400 to-rose-400">Onboarding Engine</span>
@@ -513,7 +513,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div>
                     <Badge variant="brand" className="mb-2">Sprint 1 • Step 1</Badge>
                     <h2 className="text-2xl font-black text-white tracking-tight">Create Owner Account</h2>
-                    <p className="text-xs text-slate-400 mt-1">Register as a Restaurant Owner on DineFlow Cloud.</p>
+                    <p className="text-xs text-slate-400 mt-1">Register as a Restaurant Owner on Dinely Cloud.</p>
                   </div>
                   <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-sm">
                     1/3
@@ -885,7 +885,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
       {/* Footer Branding */}
       <footer className="border-t border-slate-900 py-6 px-4 text-center text-xs text-slate-600">
-        DineFlow Cloud Platform &copy; 2026. Self-Service Architecture & Tenant Isolation Engine.
+        Dinely Cloud Platform &copy; 2026. Self-Service Architecture & Tenant Isolation Engine.
       </footer>
     </div>
   );

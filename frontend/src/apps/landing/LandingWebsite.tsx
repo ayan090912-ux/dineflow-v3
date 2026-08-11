@@ -76,16 +76,16 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
 
   const faqs = [
     {
-      q: 'How does joining DineFlow Cloud work?',
+      q: 'How does joining Dinely Cloud work?',
       a: 'Simply create your account, configure your restaurant through our 7-step wizard (business details, logo, menu, staff, and tables), and click "Request Launch". Once our platform admin team approves your setup, your restaurant workspace goes live instantly!',
     },
     {
       q: 'Are there any hidden fees or subscription plans?',
-      a: 'No! DineFlow Cloud is a self-service restaurant enablement platform with no payment processing or subscription plan requirements.',
+      a: 'No! Dinely Cloud is a self-service restaurant enablement platform with no payment processing or subscription plan requirements.',
     },
     {
       q: 'Do I need special POS hardware or tablets?',
-      a: 'No! DineFlow Cloud runs on any web browser, iPad, Android tablet, phone, or touchscreen POS terminal. Customers simply scan QR codes on their phones to view menus and order.',
+      a: 'No! Dinely Cloud runs on any web browser, iPad, Android tablet, phone, or touchscreen POS terminal. Customers simply scan QR codes on their phones to view menus and order.',
     },
     {
       q: 'How does the platform approval process work?',
@@ -100,11 +100,11 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('home')}>
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-rose-600 via-amber-500 to-rose-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-rose-950/50">
-              DF
+              DL
             </div>
             <div>
               <span className="text-base font-black tracking-tight text-white flex items-center gap-2">
-                DineFlow <span className="text-rose-500 font-mono text-xs font-semibold px-1.5 py-0.5 bg-rose-950/60 border border-rose-800/50 rounded-md">CLOUD</span>
+                Dinely <span className="text-rose-500 font-mono text-xs font-semibold px-1.5 py-0.5 bg-rose-950/60 border border-rose-800/50 rounded-md">CLOUD</span>
               </span>
             </div>
           </div>
@@ -272,7 +272,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                     <span className="w-3 h-3 rounded-full bg-rose-500/80" />
                     <span className="w-3 h-3 rounded-full bg-amber-500/80" />
                     <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                    <span className="text-xs font-mono text-slate-400 ml-2">dineflow.cloud/live-preview</span>
+                    <span className="text-xs font-mono text-slate-400 ml-2">dinely.cloud/live-preview</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs font-semibold">
                     <span className="text-emerald-400 flex items-center gap-1">
@@ -361,7 +361,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                 Everything Your Restaurant Needs to Flourish
               </h2>
               <p className="text-xs md:text-sm text-slate-400 max-w-xl mx-auto">
-                DineFlow Cloud replaces 5 different fragmented software tools with one integrated, real-time operating system.
+                Dinely Cloud replaces 5 different fragmented software tools with one integrated, real-time operating system.
               </p>
             </div>
 
@@ -465,7 +465,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         <section className="py-12 px-4 md:px-8 max-w-7xl mx-auto space-y-8 flex-1">
           <div className="text-center space-y-2">
             <Badge variant="brand">LIVE INTERACTIVE SHOWCASE</Badge>
-            <h2 className="text-3xl font-black text-white">Experience DineFlow Operating Systems</h2>
+            <h2 className="text-3xl font-black text-white">Experience Dinely Operating Systems</h2>
             <p className="text-xs text-slate-400 max-w-lg mx-auto">
               Switch between modules to preview the exact interface your staff and diners will use.
             </p>
@@ -804,7 +804,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
             <Badge variant="brand">CLIENT SUCCESS STORIES</Badge>
             <h2 className="text-3xl font-black text-white">Loved by Restaurateurs Worldwide</h2>
             <p className="text-xs text-slate-400 max-w-lg mx-auto">
-              Read how leading restaurants rely on DineFlow Cloud to increase turnover speed and cut ticket errors.
+              Read how leading restaurants rely on Dinely Cloud to increase turnover speed and cut ticket errors.
             </p>
           </div>
 
@@ -817,7 +817,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                   ))}
                 </div>
                 <p className="text-xs text-slate-300 italic leading-relaxed">
-                  "DineFlow changed our entire dinner rush. Diners scan the QR code and place their order immediately. Table turnover jumped 42% in our first month."
+                  "Dinely changed our entire dinner rush. Diners scan the QR code and place their order immediately. Table turnover jumped 42% in our first month."
                 </p>
               </div>
               <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
@@ -906,7 +906,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         <section className="py-16 px-4 md:px-8 max-w-3xl mx-auto space-y-8 flex-1">
           <div className="text-center space-y-2">
             <Badge variant="brand">GET IN TOUCH</Badge>
-            <h2 className="text-3xl font-black text-white">Contact DineFlow Sales & Support</h2>
+            <h2 className="text-3xl font-black text-white">Contact Dinely Sales & Support</h2>
             <p className="text-xs text-slate-400">We respond in under 15 minutes during business hours.</p>
           </div>
 
@@ -957,9 +957,9 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center font-black text-white text-xs">
-                DF
+                DL
               </div>
-              <span className="text-sm font-bold text-white">DineFlow Cloud</span>
+              <span className="text-sm font-bold text-white">Dinely Cloud</span>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500">
               The next-generation multi-tenant cloud operating system for cafes, bars, and fine dining establishments.
@@ -998,7 +998,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         </div>
 
         <div className="max-w-7xl mx-auto pt-8 mt-8 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-600">
-          <div>© {new Date().getFullYear()} DineFlow Cloud Inc. All rights reserved.</div>
+          <div>© {new Date().getFullYear()} Dinely Cloud Inc. All rights reserved.</div>
           <div className="flex items-center gap-4 mt-2 sm:mt-0">
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
@@ -1022,7 +1022,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               <Badge variant="brand">SELF-SERVICE ONBOARDING</Badge>
               <h3 className="text-xl font-black text-white">Create Restaurant Account</h3>
               <p className="text-xs text-slate-400">
-                Join DineFlow Cloud, configure your restaurant details, and request launch approval.
+                Join Dinely Cloud, configure your restaurant details, and request launch approval.
               </p>
             </div>
 
@@ -1082,7 +1082,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               </div>
 
               <div className="text-[11px] text-slate-400 pt-1 leading-relaxed">
-                By clicking "Continue to Restaurant Setup", you agree to DineFlow's Terms of Service and Privacy Policy.
+                By clicking "Continue to Restaurant Setup", you agree to Dinely's Terms of Service and Privacy Policy.
               </div>
 
               <Button variant="brand" className="w-full shadow-lg shadow-rose-950/50 mt-2 py-3 text-sm font-bold" type="submit" icon={<Sparkles className="w-4 h-4" />}>

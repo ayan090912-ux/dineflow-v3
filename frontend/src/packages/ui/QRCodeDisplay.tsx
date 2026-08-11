@@ -170,7 +170,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
   // Safe Resolution of Table Number & Identifiers
   const safeTableNum = (customTableLabel || tableNumber || (isPickup ? 'COUNTER' : 'Table 01')).trim();
-  const safeRestName = (restaurantName || 'DineFlow Restaurant').trim();
+  const safeRestName = (restaurantName || 'Dinely Restaurant').trim();
 
   // Requirement 1 & 3: Construct the EXACT Destination URL
   const defaultOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
@@ -185,9 +185,9 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
   // Exact encoded customer destination URL (single source of truth for display, QR code, copy link, and live view)
   const rawUrl =
-    url && !url.includes('qrserver.com') && !url.includes('.dineflow.app')
+    url && !url.includes('qrserver.com') && !url.includes('.dinely.app')
       ? url
-      : value && !value.includes('qrserver.com') && !value.includes('.dineflow.app')
+      : value && !value.includes('qrserver.com') && !value.includes('.dinely.app')
       ? value
       : '';
   const qrUrl = rawUrl || defaultUrl;
@@ -282,7 +282,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   <text x="300" y="730" class="table-text">${safeTableNum.toUpperCase()}</text>
 
   <!-- Footer -->
-  ${showWifi ? `<text x="300" y="820" class="footer-text">📶 Wi-Fi: ${wifiName} • Powered by DineFlow</text>` : ''}
+  ${showWifi ? `<text x="300" y="820" class="footer-text">📶 Wi-Fi: ${wifiName} • Powered by Dinely</text>` : ''}
 </svg>`;
 
       const svgBlob = new Blob([fullSvgString], { type: 'image/svg+xml;charset=utf-8' });
@@ -442,7 +442,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
       if (showWifi) {
         ctx.font = '500 32px "Inter", sans-serif';
         ctx.fillStyle = subtextColor;
-        ctx.fillText(`📶 Wi-Fi: ${wifiName} • Powered by DineFlow`, cardWidth / 2, cardHeight - 110);
+        ctx.fillText(`📶 Wi-Fi: ${wifiName} • Powered by Dinely`, cardWidth / 2, cardHeight - 110);
       }
 
       // Download High-Res PNG

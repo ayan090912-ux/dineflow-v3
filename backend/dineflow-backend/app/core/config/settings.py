@@ -13,14 +13,14 @@ class Settings(BaseSettings):
     )
 
     # App
-    APP_NAME: str = "DineFlow Cloud"
+    APP_NAME: str = "Dinely Cloud"
     APP_VERSION: str = "2.0.0"
     ENVIRONMENT: str = "development"
     DEBUG: bool = False
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/dineflow"
-    DATABASE_URL_SYNC: str = "postgresql://postgres:postgres@localhost:5432/dineflow"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/dinely"
+    DATABASE_URL_SYNC: str = "postgresql://postgres:postgres@localhost:5432/dinely"
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_PRE_PING: bool = True
@@ -74,9 +74,9 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = None
 
     # URLs
-    CUSTOMER_APP_URL: str = "https://order.dineflow.com"
-    RESTAURANT_DASHBOARD_URL: str = "https://dashboard.dineflow.com"
-    PLATFORM_ADMIN_URL: str = "https://admin.dineflow.com"
+    CUSTOMER_APP_URL: str = "https://order.dinely.com"
+    RESTAURANT_DASHBOARD_URL: str = "https://dashboard.dinely.com"
+    PLATFORM_ADMIN_URL: str = "https://admin.dinely.com"
 
     @validator("CORS_ORIGINS", pre=True)
     def parse_cors_origins(cls, v):

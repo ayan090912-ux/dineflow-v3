@@ -214,13 +214,13 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           {/* Admin Branding */}
           <div className="flex items-center gap-3 mb-8 px-2">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 via-rose-500 to-amber-400 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-rose-500/20">
-              DF
+              DL
             </div>
             <div>
               <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-                DineFlow <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30">Admin</span>
+                Dinely <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30">Admin</span>
               </h1>
-              <p className="text-[11px] text-slate-400">admin.dineflow.com</p>
+              <p className="text-[11px] text-slate-400">admin.dinely.com</p>
             </div>
           </div>
 
@@ -269,7 +269,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               <Avatar name="Platform Admin" size="sm" status="online" />
               <div>
                 <p className="text-xs font-bold text-white">Chief Admin</p>
-                <p className="text-[10px] text-slate-400">admin@dineflow.com</p>
+                <p className="text-[10px] text-slate-400">admin@dinely.com</p>
               </div>
             </div>
           </div>
@@ -657,7 +657,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       <p className="truncate"><span className="text-slate-500 font-semibold">Owner:</span> {rest.ownerName || 'Owner'} ({rest.ownerEmail || rest.email})</p>
                       <p><span className="text-slate-500 font-semibold">Type & Flags:</span> <strong className="text-rose-400 font-bold">{rest.businessType || (rest.features?.bar ? 'BAR' : 'RESTAURANT')}</strong> • Bar: <strong className={rest.hasBar ? "text-purple-400" : "text-slate-400"}>{rest.hasBar ? 'YES' : 'NO'}</strong> • Tables: <strong className={rest.hasTables !== false ? "text-emerald-400" : "text-slate-400"}>{rest.hasTables !== false ? 'YES' : 'NO'}</strong></p>
                       <p><span className="text-slate-500 font-semibold">Phone:</span> {rest.phone}</p>
-                      <p className="truncate"><span className="text-slate-500 font-semibold">Domain:</span> {rest.domain || `${rest.slug}.dineflow.app`}</p>
+                      <p className="truncate"><span className="text-slate-500 font-semibold">Domain:</span> {rest.domain || `${rest.slug}.dinely.app`}</p>
                     </div>
                   </div>
 
@@ -805,7 +805,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   render: (o) => (
                     <div>
                       <p className="font-bold text-white">{o.name}</p>
-                      <p className="text-xs text-slate-400">{o.slug}.dineflow.app</p>
+                      <p className="text-xs text-slate-400">{o.slug}.dinely.app</p>
                     </div>
                   ),
                 },
@@ -901,7 +901,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 <div>
                   <h3 className="text-lg font-black text-white">{selectedRestaurant.name}</h3>
                   <p className="text-slate-300 font-semibold">{selectedRestaurant.cuisine} ({selectedRestaurant.restaurantType || 'Casual Dining'})</p>
-                  <p className="text-slate-400 text-[11px]">{selectedRestaurant.domain || `${selectedRestaurant.slug}.dineflow.app`}</p>
+                  <p className="text-slate-400 text-[11px]">{selectedRestaurant.domain || `${selectedRestaurant.slug}.dinely.app`}</p>
                 </div>
               </div>
               <Badge variant={selectedRestaurant.lifecycleStatus === 'LIVE' || selectedRestaurant.isApproved ? 'success' : 'warning'}>

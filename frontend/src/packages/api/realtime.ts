@@ -1,4 +1,4 @@
-// Real-Time Event Bus & WebSocket Synchronization for DineFlow Cloud
+// Real-Time Event Bus & WebSocket Synchronization for Dinely Cloud
 // Supports cross-tab BroadcastChannel and internal listener subscriptions
 
 export type RealTimeEventType =
@@ -49,7 +49,7 @@ class RealTimeEventBus {
   constructor() {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
-        this.channel = new BroadcastChannel('dineflow_realtime_eta_channel');
+        this.channel = new BroadcastChannel('dinely_realtime_eta_channel');
         this.channel.onmessage = (e) => {
           if (e.data && e.data.type) {
             this.notifyListeners(e.data, false);

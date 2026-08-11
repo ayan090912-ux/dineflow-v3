@@ -1,4 +1,4 @@
-# DineFlow Cloud - Backend
+# Dinely Cloud - Backend
 
 Multi-tenant Restaurant Operating System built with FastAPI, SQLAlchemy, and PostgreSQL.
 
@@ -60,4 +60,4 @@ backend/
 
 ## License
 
-Proprietary - DineFlow Cloud Platform
+Proprietary - Dinely Cloud Platform

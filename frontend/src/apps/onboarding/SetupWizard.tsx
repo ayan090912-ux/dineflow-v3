@@ -975,7 +975,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
               </div>
               <h3 className="text-2xl font-black text-white">Review Setup & Request Launch</h3>
               <p className="text-xs text-slate-400">
-                Verify your configuration below. Once you click <strong>"Request Launch"</strong>, your restaurant application will be submitted to the DineFlow Platform Team for approval.
+                Verify your configuration below. Once you click <strong>"Request Launch"</strong>, your restaurant application will be submitted to the Dinely Platform Team for approval.
               </p>
               
               <div className="p-3 bg-amber-950/40 border border-amber-800/50 rounded-2xl text-left text-xs text-amber-200 flex items-start gap-2.5">

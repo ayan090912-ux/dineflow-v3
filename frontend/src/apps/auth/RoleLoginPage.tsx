@@ -43,11 +43,11 @@ const PORTAL_CONFIGS: Record<PortalType, {
 }> = {
   admin: {
     title: 'Platform Admin Login',
-    subtitle: 'DineFlow Control Plane & Global Multi-Tenant Management',
+    subtitle: 'Dinely Control Plane & Global Multi-Tenant Management',
     roleBadge: 'PLATFORM_ADMIN',
     badgeVariant: 'brand',
     icon: <Building2 className="w-6 h-6 text-indigo-400" />,
-    demoEmail: 'admin@dineflow.com',
+    demoEmail: 'admin@dinely.com',
     demoPass: 'admin123',
     targetDashboard: '/admin/dashboard',
     accentGradient: 'from-indigo-500 to-purple-600',
@@ -179,7 +179,7 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 mb-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            DineFlow Dedicated Role Portal
+            Dinely Dedicated Role Portal
           </div>
           
           <div className="flex items-center justify-center gap-3">
@@ -394,7 +394,7 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
             onClick={() => onNavigate('/')}
             className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
           >
-            ← Back to DineFlow Home Page
+            ← Back to Dinely Home Page
           </button>
         </div>
       </div>

@@ -86,10 +86,10 @@ export default function App() {
             <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-sm">
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-xl bg-rose-600 flex items-center justify-center font-black text-white text-xs shadow-sm">
-                  DF
+                  DL
                 </div>
                 <span className="text-xs font-bold text-slate-200 hidden sm:inline-flex items-center gap-2">
-                  DineFlow OS
+                  Dinely OS
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 </span>
               </div>

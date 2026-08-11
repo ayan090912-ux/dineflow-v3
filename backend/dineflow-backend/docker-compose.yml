@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dineflow
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dinely
       - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=development
       - DEBUG=true
@@ -24,7 +24,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: dineflow
+      POSTGRES_DB: dinely
     ports:
       - "5432:5432"
     volumes:
@@ -39,7 +39,7 @@ services:
   celery_worker:
     build: .
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dineflow
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dinely
       - REDIS_URL=redis://redis:6379/0
     env_file:
       - .env
@@ -51,7 +51,7 @@ services:
   celery_beat:
     build: .
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dineflow
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dinely
       - REDIS_URL=redis://redis:6379/0
     env_file:
       - .env

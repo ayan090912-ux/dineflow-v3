@@ -28,10 +28,10 @@ import { realtimeBus } from './realtime';
 // Simulated API delay helper
 const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const SESSION_STORAGE_KEY = 'dineflow_user_session';
-const DATABASE_STORAGE_KEY = 'dineflow_production_db_v3';
+const SESSION_STORAGE_KEY = 'dinely_user_session';
+const DATABASE_STORAGE_KEY = 'dinely_production_db_v3';
 
-export class DineFlowApiClient {
+export class DinelyApiClient {
   private organizations: Organization[] = [];
   private restaurants: Restaurant[] = [];
   private menuItems: MenuItem[] = [];
@@ -98,8 +98,8 @@ export class DineFlowApiClient {
         firstName: 'Platform',
         lastName: 'Admin',
         name: 'Platform Administrator',
-        email: 'admin@dineflow.com',
-        phone: '+1 800-DINE-FLOW',
+        email: 'admin@dinely.com',
+        phone: '+1 800-DINELY',
         role: 'PLATFORM_ADMIN',
         isEmailVerified: true,
         password: 'admin123',
@@ -132,7 +132,7 @@ export class DineFlowApiClient {
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
     this.tables.forEach((tbl) => {
-      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dineflow.app')) {
+      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app')) {
         tbl.qrCodeUrl = `${origin}/customer?table=${encodeURIComponent(tbl.tableNumber)}${tbl.restaurantId ? `&restaurant=${tbl.restaurantId}` : ''}`;
       }
       const activeSession = this.tableSessions.find((s) => s.tableId === tbl.id && s.status === 'ACTIVE');
@@ -322,7 +322,7 @@ export class DineFlowApiClient {
     let user = this.users.find((u) => u.email.toLowerCase() === normalizedEmail);
 
     // If user does not exist, check if this is the default admin
-    if (!user && normalizedEmail === 'admin@dineflow.com') {
+    if (!user && normalizedEmail === 'admin@dinely.com') {
       return this.loginPlatformAdmin(email, password);
     }
 
@@ -391,7 +391,7 @@ export class DineFlowApiClient {
     await delay(300);
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (normalizedEmail !== 'admin@dineflow.com' && !normalizedEmail.includes('admin')) {
+    if (normalizedEmail !== 'admin@dinely.com' && !normalizedEmail.includes('admin')) {
       throw new Error('Access Denied: This portal is strictly reserved for Platform Administrators.');
     }
 
@@ -404,8 +404,8 @@ export class DineFlowApiClient {
       firstName: 'Platform',
       lastName: 'Admin',
       name: 'Platform Administrator',
-      email: normalizedEmail || 'admin@dineflow.com',
-      phone: '+1 800-DINE-FLOW',
+      email: normalizedEmail || 'admin@dinely.com',
+      phone: '+1 800-DINELY',
       role: 'PLATFORM_ADMIN',
       isEmailVerified: true,
     };
@@ -424,7 +424,7 @@ export class DineFlowApiClient {
       id: `log-${Date.now()}`,
       actor: 'Platform Administrator',
       action: 'Authenticated Platform Admin Control Plane',
-      target: 'DineFlow Cloud',
+      target: 'Dinely Cloud',
       timestamp: 'Just now',
       ipAddress: '127.0.0.1',
       status: 'SUCCESS',
@@ -654,10 +654,10 @@ export class DineFlowApiClient {
       orderNumberPrefix: orderPrefix,
       address: restData.address || 'Main Street Center',
       phone: restData.phone || '+1 555-0100',
-      email: restData.email || 'contact@dineflow.com',
+      email: restData.email || 'contact@dinely.com',
       ownerName: restData.ownerName || this.currentUser?.name || 'Restaurant Owner',
       ownerEmail: restData.ownerEmail || this.currentUser?.email || 'owner@restaurant.com',
-      domain: `${slug}.dineflow.app`,
+      domain: `${slug}.dinely.app`,
       isApproved: false,
       lifecycleStatus: 'DRAFT',
       status: 'CLOSED',
@@ -835,7 +835,7 @@ export class DineFlowApiClient {
         restaurantId: rest.id,
         restaurantName: rest.name,
         title: 'Congratulations! Your Restaurant has been Approved 🎉',
-        message: `Your restaurant "${rest.name}" has been approved by DineFlow Cloud Platform Admin. Your live Operating System and Customer Ordering Portal are now active!`,
+        message: `Your restaurant "${rest.name}" has been approved by Dinely Cloud Platform Admin. Your live Operating System and Customer Ordering Portal are now active!`,
         type: 'APPROVED',
         timestamp: 'Just now',
         isRead: false,
@@ -3116,4 +3116,4 @@ export class DineFlowApiClient {
   }
 }
 
-export const api = new DineFlowApiClient();
+export const api = new DinelyApiClient();

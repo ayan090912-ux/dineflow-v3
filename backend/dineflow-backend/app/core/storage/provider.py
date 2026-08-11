@@ -44,7 +44,7 @@ class CloudinaryStorage(StorageProvider):
 
 
 class LocalStorage(StorageProvider):
-    def __init__(self, base_path: str = "/tmp/dineflow-uploads"):
+    def __init__(self, base_path: str = "/tmp/dinely-uploads"):
         self.base_path = base_path
         os.makedirs(base_path, exist_ok=True)
 

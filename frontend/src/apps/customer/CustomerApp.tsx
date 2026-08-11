@@ -95,7 +95,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [isSessionEnded, setIsSessionEnded] = useState(false);
 
   useEffect(() => {
-    const savedAge = typeof window !== 'undefined' && sessionStorage.getItem('dineflow_bar_age_verified');
+    const savedAge = typeof window !== 'undefined' && sessionStorage.getItem('dinely_bar_age_verified');
     if (savedAge === 'true') {
       setIsAgeConfirmed(true);
     }
@@ -201,7 +201,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const handleConfirmAge = () => {
     setIsAgeConfirmed(true);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('dineflow_bar_age_verified', 'true');
+      sessionStorage.setItem('dinely_bar_age_verified', 'true');
     }
     setIsAgeModalOpen(false);
     setCurrentMenuTab('BAR');

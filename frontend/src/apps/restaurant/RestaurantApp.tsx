@@ -642,7 +642,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         restaurantId: restId,
         name: newStaff.name,
         role: newStaff.role,
-        email: newStaff.email || `${newStaff.name.toLowerCase().replace(/\s+/g, '')}@dineflow.com`,
+        email: newStaff.email || `${newStaff.name.toLowerCase().replace(/\s+/g, '')}@dinely.com`,
         phone: newStaff.phone || '+1 555-0100',
         status: 'OFF_CLOCK',
         shift: newStaff.shift,
@@ -815,7 +815,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
           <div className="pt-4 space-y-2">
             <h1 className="text-3xl font-black text-white tracking-tight">{theme.restaurantName}</h1>
-            <p className="text-xs text-slate-400 font-mono">dashboard.dineflow.com • ID: {currentRestaurant.id}</p>
+            <p className="text-xs text-slate-400 font-mono">dashboard.dinely.com • ID: {currentRestaurant.id}</p>
           </div>
 
           {/* STATUS DISPLAY */}
@@ -887,7 +887,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
           {currentRestaurant.lifecycleStatus === 'SUSPENDED' && (
             <div className="bg-rose-500/10 p-6 rounded-2xl border border-rose-500/30 space-y-2 text-rose-200 text-sm text-center">
               <p className="font-bold text-white text-base">Account Suspended</p>
-              <p className="text-xs text-rose-300">Access to the Restaurant OS is currently disabled. Please contact Platform Support at support@dineflow.com.</p>
+              <p className="text-xs text-rose-300">Access to the Restaurant OS is currently disabled. Please contact Platform Support at support@dinely.com.</p>
             </div>
           )}
 
@@ -1184,7 +1184,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         {/* Top Header Bar */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-800/60">
           <div>
-            <span className="text-xs text-slate-400 font-mono">dashboard.dineflow.com</span>
+            <span className="text-xs text-slate-400 font-mono">dashboard.dinely.com</span>
             <h2 className="text-2xl font-black text-white tracking-tight mt-0.5">
               {activeTab === 'dashboard' && 'Restaurant Executive Overview'}
               {activeTab === 'orders' && 'Live POS & Customer QR Orders'}
@@ -1208,7 +1208,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 Add Menu Item
               </Button>
             )}
-            <Badge variant="success">Domain: {(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app</Badge>
+            <Badge variant="success">Domain: {(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app</Badge>
           </div>
         </header>
 
@@ -1239,7 +1239,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> Restaurant Status: Live
                       </span>
                       <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                        {currentRestaurant?.domain || `${(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dineflow.app`}
+                        {currentRestaurant?.domain || `${(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app`}
                       </span>
                     </div>
                     <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
@@ -1476,7 +1476,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                     <QrCode className="w-12 h-12 text-sky-400 mx-auto" />
                     <div>
                       <p className="text-xs font-bold text-white">Food Truck Counter Entry Point</p>
-                      <p className="text-[10px] font-mono text-slate-400 truncate">https://{currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order</p>
+                      <p className="text-[10px] font-mono text-slate-400 truncate">https://{currentRestaurant?.slug || 'foodtruck'}.dinely.app/order</p>
                     </div>
                     <Button variant="brand" size="sm" onClick={() => setActiveTab('qr_pickup')} className="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold">
                       View Printable Counter QR
@@ -1590,7 +1590,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <Card className="bg-slate-900 border-slate-800 p-8 max-w-xl mx-auto text-center space-y-6 shadow-2xl">
               <div className="p-6 bg-slate-950 rounded-3xl border border-sky-500/30 inline-block shadow-inner">
                 <QRCodeDisplay
-                  url={`https://${currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order`}
+                  url={`https://${currentRestaurant?.slug || 'foodtruck'}.dinely.app/order`}
                   tableNumber="COUNTER"
                   restaurantName={currentRestaurant?.name || theme?.restaurantName || 'Food Truck'}
                   restaurantLogo={theme?.logo}
@@ -1604,7 +1604,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   COUNTER PICKUP QR
                 </Badge>
                 <h4 className="text-xl font-bold text-white">{currentRestaurant?.name || 'Food Truck'}</h4>
-                <p className="text-xs font-mono text-sky-300">https://{currentRestaurant?.slug || 'foodtruck'}.dineflow.app/order</p>
+                <p className="text-xs font-mono text-sky-300">https://{currentRestaurant?.slug || 'foodtruck'}.dinely.app/order</p>
                 <p className="text-xs text-slate-400 max-w-md mx-auto">
                   Customers scan this code to view your food menu, add items to cart, and place pickup orders with unique ticket numbers (e.g. #F1024).
                 </p>
@@ -2988,7 +2988,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         {selectedTableQR && (
           <QRCodeDisplay
             url={
-              (selectedTableQR.qrCodeUrl && !selectedTableQR.qrCodeUrl.includes('qrserver.com') && !selectedTableQR.qrCodeUrl.includes('.dineflow.app'))
+              (selectedTableQR.qrCodeUrl && !selectedTableQR.qrCodeUrl.includes('qrserver.com') && !selectedTableQR.qrCodeUrl.includes('.dinely.app'))
                 ? selectedTableQR.qrCodeUrl
                 : (typeof window !== 'undefined'
                   ? `${window.location.origin}/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`
