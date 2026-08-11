@@ -13,13 +13,13 @@ export const DinelyLogoMark: React.FC<{ size?: number; className?: string }> = (
 }) => {
   return (
     <div
-      className={`relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-slate-950 border border-slate-800/80 shadow-md shrink-0 ${className}`}
+      className={`relative inline-flex items-center justify-center overflow-hidden rounded-2xl bg-slate-950 border border-slate-800/80 shadow-md shrink-0 ${className}`}
       style={{ width: size, height: size }}
     >
       <img
         src="/assets/dinely-logo.png"
         alt="Dinely Icon"
-        className="w-full h-full object-cover scale-125"
+        className="w-full h-full object-cover scale-125 rounded-2xl"
         style={{ objectPosition: 'center' }}
       />
     </div>
@@ -57,11 +57,11 @@ export const DinelyLogo: React.FC<DinelyLogoProps> = ({
   }
 
   return (
-    <div className={`inline-flex items-center select-none shrink-0 ${className}`}>
+    <div className={`inline-flex items-center select-none shrink-0 overflow-hidden rounded-2xl ${className}`}>
       <img
         src="/assets/dinely-logo.png"
         alt="Dinely Logo"
-        className={`w-auto object-contain mix-blend-screen ${heightClass}`}
+        className={`w-auto object-contain mix-blend-screen rounded-2xl ${heightClass}`}
         style={customStyle}
       />
     </div>
