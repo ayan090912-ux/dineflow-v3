@@ -17,3 +17,4 @@ export * from './ImageUpload';
 export * from './Pagination';
 export * from './Skeleton';
 export * from './EmptyState';
+export * from './ErrorBoundary';
