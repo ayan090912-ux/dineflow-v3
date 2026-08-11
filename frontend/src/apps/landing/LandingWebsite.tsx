@@ -42,7 +42,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   onLogin,
   onOpenApp,
 }) => {
-  const [activeTab, setActiveTab] = useState<'home' | 'features' | 'showcase' | 'pricing' | 'testimonials' | 'faq' | 'contact'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'features' | 'showcase' | 'pricing' | 'faq' | 'contact'>('home');
   const [showSignupModal, setShowSignupModal] = useState(false);
   const [showTrialModal, setShowTrialModal] = useState(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
@@ -122,12 +122,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               className={`hover:text-white transition-colors ${activeTab === 'showcase' ? 'text-rose-400 font-bold' : ''}`}
             >
               Interactive Showcase
-            </button>
-            <button
-              onClick={() => setActiveTab('testimonials')}
-              className={`hover:text-white transition-colors ${activeTab === 'testimonials' ? 'text-rose-400 font-bold' : ''}`}
-            >
-              Testimonials
             </button>
             <button
               onClick={() => setActiveTab('faq')}
@@ -791,80 +785,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         </section>
       )}
 
-      {/* Testimonials Section */}
-      {activeTab === 'testimonials' && (
-        <section className="py-16 px-4 md:px-8 max-w-7xl mx-auto space-y-12 flex-1">
-          <div className="text-center space-y-3">
-            <Badge variant="brand">CLIENT SUCCESS STORIES</Badge>
-            <h2 className="text-3xl font-black text-white">Loved by Restaurateurs Worldwide</h2>
-            <p className="text-xs text-slate-400 max-w-lg mx-auto">
-              Read how leading restaurants rely on Dinely Cloud to increase turnover speed and cut ticket errors.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex text-amber-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400" />
-                  ))}
-                </div>
-                <p className="text-xs text-slate-300 italic leading-relaxed">
-                  "Dinely changed our entire dinner rush. Diners scan the QR code and place their order immediately. Table turnover jumped 42% in our first month."
-                </p>
-              </div>
-              <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
-                <img src="https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=100" alt="Chef Marco" className="w-10 h-10 rounded-full object-cover" />
-                <div>
-                  <div className="text-xs font-bold text-white">Chef Marco Rossi</div>
-                  <div className="text-[10px] text-slate-400">Owner, Lumiere Bistro (Florence)</div>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex text-amber-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400" />
-                  ))}
-                </div>
-                <p className="text-xs text-slate-300 italic leading-relaxed">
-                  "The Waiter Terminal OS on Android handhelds saves our floor staff hours of walking back and forth to a central POS terminal. It's ridiculously fast."
-                </p>
-              </div>
-              <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
-                <img src="https://images.unsplash.com/photo-1583394838336-acd977736f90?w=100" alt="Emi" className="w-10 h-10 rounded-full object-cover" />
-                <div>
-                  <div className="text-xs font-bold text-white">Emi Tanaka</div>
-                  <div className="text-[10px] text-slate-400">General Manager, Sakura Ramen House</div>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex text-amber-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400" />
-                  ))}
-                </div>
-                <p className="text-xs text-slate-300 italic leading-relaxed">
-                  "Being able to mark an item as 86ed with one tap and have it vanish instantly from all QR menus saved us so many awkward customer conversations."
-                </p>
-              </div>
-              <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
-                <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100" alt="James" className="w-10 h-10 rounded-full object-cover" />
-                <div>
-                  <div className="text-xs font-bold text-white">James O'Connor</div>
-                  <div className="text-[10px] text-slate-400">Owner, The Artisan Bakery & Cafe</div>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </section>
-      )}
 
       {/* FAQ Section */}
       {activeTab === 'faq' && (
@@ -973,7 +893,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
             <ul className="space-y-2">
               <li className="hover:text-white cursor-pointer" onClick={() => setActiveTab('features')}>Features</li>
               <li className="hover:text-white cursor-pointer" onClick={() => setActiveTab('showcase')}>Interactive Showcase</li>
-              <li className="hover:text-white cursor-pointer" onClick={() => setActiveTab('testimonials')}>Testimonials</li>
               <li className="hover:text-white cursor-pointer" onClick={() => setActiveTab('faq')}>FAQ</li>
             </ul>
           </div>
