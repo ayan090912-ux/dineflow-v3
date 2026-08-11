@@ -444,7 +444,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const isBarTheme = currentMenuTab === 'BAR';
 
   return (
-    <div className={`min-h-screen font-sans pb-28 max-w-md mx-auto relative border-x border-slate-800 shadow-2xl transition-colors duration-500 ${
+    <div className={`min-h-screen font-sans pb-44 sm:pb-48 max-w-md mx-auto relative border-x border-slate-800 shadow-2xl transition-colors duration-500 ${
       isBarTheme ? 'bg-gradient-to-b from-slate-950 via-slate-900 to-amber-950/40 text-slate-100' : 'bg-slate-900 text-slate-100'
     }`}>
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
@@ -1110,35 +1110,40 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* STICKY FLOATING ACTIVE SESSION ORDER STATUS BAR */}
       {currentTableSession && customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 max-w-md mx-auto z-40 animate-in slide-in-from-bottom duration-300">
+        <div
+          className={`fixed left-4 right-4 max-w-md mx-auto z-40 animate-in slide-in-from-bottom duration-300 transition-all ${
+            totalCartCount > 0 ? 'bottom-20' : 'bottom-4'
+          }`}
+        >
           <div
             onClick={() => {
               const el = document.getElementById('active-orders-section');
               if (el) el.scrollIntoView({ behavior: 'smooth' });
               else window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
             }}
-            className="bg-gradient-to-r from-slate-950 via-slate-900 to-rose-950 border-2 border-rose-500/60 p-3 rounded-2xl shadow-2xl backdrop-blur-xl flex items-center justify-between cursor-pointer group hover:border-rose-400 transition-all"
+            className="bg-slate-900/95 border border-rose-500/50 p-3.5 rounded-2xl shadow-2xl shadow-slate-950 backdrop-blur-xl flex items-center justify-between gap-3 cursor-pointer group hover:border-rose-400 transition-all"
           >
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-300 font-black text-xs shrink-0">
-                📍 {selectedTableNum}
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="px-3 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-black text-xs shrink-0 whitespace-nowrap flex items-center gap-1">
+                <span>📍</span>
+                <span className="whitespace-nowrap">{selectedTableNum}</span>
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black text-white">Table Session #{currentTableSession.id}</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                  <span className="text-xs font-black text-white truncate">Table Session #{currentTableSession.id}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
                 </div>
-                <p className="text-[11px] text-slate-300 font-mono">
+                <p className="text-[11px] text-slate-300 font-mono truncate">
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').length} Live {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} • Total: ₹
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
-              <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50 group-hover:scale-105 transition-transform flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50 group-hover:scale-105 transition-transform flex items-center gap-1 whitespace-nowrap">
                 <span>View Tracker</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-3.5 h-3.5 shrink-0" />
               </span>
             </div>
           </div>
