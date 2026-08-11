@@ -21,6 +21,39 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Skeleton Shimmer Animation */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(30, 41, 59, 0.5) 0%,
+      rgba(51, 65, 85, 0.8) 50%,
+      rgba(30, 41, 59, 0.5) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s infinite ease-in-out;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Isolated Print Styles for QR Code Standees & Signs */

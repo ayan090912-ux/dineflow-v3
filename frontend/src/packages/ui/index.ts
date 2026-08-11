@@ -15,4 +15,5 @@ export * from './Dropdown';
 export * from './ToastNotification';
 export * from './ImageUpload';
 export * from './Pagination';
-export * from './ErrorBoundary';
+export * from './Skeleton';
+export * from './EmptyState';

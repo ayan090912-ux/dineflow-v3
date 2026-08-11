@@ -83,24 +83,24 @@ export default function App() {
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
           {/* Sleek Subdomain & Environment Switcher Bar */}
           {showDomainBar ? (
-            <header className="bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-md">
+            <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-sm">
               <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center font-black text-white text-[10px] shadow-sm">
+                <div className="w-7 h-7 rounded-xl bg-rose-600 flex items-center justify-center font-black text-white text-xs shadow-sm">
                   DF
                 </div>
-                <span className="text-xs font-bold text-slate-300 hidden sm:inline-flex items-center gap-1.5">
-                  DineFlow Cloud OS
+                <span className="text-xs font-bold text-slate-200 hidden sm:inline-flex items-center gap-2">
+                  DineFlow OS
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 </span>
               </div>
 
               {/* Core Domain Switcher Pills */}
-              <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto scrollbar-none no-scrollbar">
+              <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 overflow-x-auto scrollbar-none no-scrollbar">
                 <button
                   onClick={() => navigateTo('/')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath === '/' || currentPath === '/landing'
-                      ? 'bg-rose-600 text-white shadow-sm'
+                      ? 'bg-slate-800 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -109,13 +109,12 @@ export default function App() {
                 </button>
 
                 <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
-                <span className="text-[10px] font-mono text-amber-400 font-bold px-1.5 hidden md:block uppercase">Staff:</span>
 
                 <button
                   onClick={() => navigateTo(currentUser ? '/kitchen/dashboard' : '/kitchen/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/kitchen')
-                      ? 'bg-amber-600 text-white shadow-sm'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -128,7 +127,7 @@ export default function App() {
                     onClick={() => navigateTo(currentUser ? '/waiter' : '/waiter/login')}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                       currentPath.startsWith('/waiter')
-                        ? 'bg-emerald-600 text-white shadow-sm'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -142,23 +141,22 @@ export default function App() {
                     onClick={() => navigateTo(currentUser ? '/bar/dashboard' : '/bar/login')}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                       currentPath.startsWith('/bar')
-                        ? 'bg-purple-600 text-white shadow-sm'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <Wine className="w-3.5 h-3.5 text-purple-400" />
+                    <Wine className="w-3.5 h-3.5 text-sky-400" />
                     <span>Bar Terminal</span>
                   </button>
                 )}
 
                 <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
-                <span className="text-[10px] font-mono text-rose-400 font-bold px-1.5 hidden md:block uppercase">Management:</span>
 
                 <button
                   onClick={() => navigateTo(currentUser ? '/restaurant/dashboard' : '/restaurant/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/restaurant')
-                      ? 'bg-rose-600 text-white shadow-sm'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -170,7 +168,7 @@ export default function App() {
                   onClick={() => navigateTo(currentUser ? '/admin/dashboard' : '/admin/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/admin')
-                      ? 'bg-indigo-600 text-white shadow-sm'
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -189,14 +187,14 @@ export default function App() {
                   }`}
                 >
                   <Smartphone className="w-3.5 h-3.5" />
-                  <span>Customer Ordering</span>
+                  <span>Customer App</span>
                 </button>
               </div>
 
               {/* Active User Badge & Explicit Logout / Login Control */}
               <div className="flex items-center gap-2">
                 {currentUser ? (
-                  <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1">
+                  <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1">
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                     <div className="hidden sm:block text-[11px] leading-tight">
                       <p className="font-bold text-white max-w-[120px] truncate">{currentUser.name || currentUser.email}</p>
@@ -204,7 +202,7 @@ export default function App() {
                     </div>
                     <button
                       onClick={() => handleLogout('/restaurant/login')}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 transition-all cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
                       title="Explicitly sign out of active session"
                     >
                       <LogOut className="w-3.5 h-3.5" />
@@ -214,7 +212,7 @@ export default function App() {
                 ) : (
                   <button
                     onClick={() => navigateTo('/restaurant/login')}
-                    className="flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition-all cursor-pointer"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition-all cursor-pointer"
                   >
                     <span>Log In</span>
                   </button>
