@@ -769,59 +769,31 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     />
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-slate-300">Country *</label>
-                      <select
-                        value={country}
-                        onChange={(e) => setCountry(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-rose-500"
-                      >
-                        <option value="India">India</option>
-                        <option value="United States">United States</option>
-                        <option value="United Kingdom">United Kingdom</option>
-                        <option value="United Arab Emirates">United Arab Emirates</option>
-                        <option value="Japan">Japan</option>
-                        <option value="Singapore">Singapore</option>
-                        <option value="Canada">Canada</option>
-                        <option value="Australia">Australia</option>
-                      </select>
+                      <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
+                        <span>🇮🇳 India</span>
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">Fixed</span>
+                      </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-slate-300">Base Currency *</label>
-                      <select
-                        value={currency}
-                        onChange={(e) => setCurrency(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-rose-500"
-                      >
-                        <option value="INR (₹)">INR (₹) - Indian Rupee</option>
-                        <option value="USD ($)">USD ($) - US Dollar</option>
-                        <option value="EUR (€)">EUR (€) - Euro</option>
-                        <option value="GBP (£)">GBP (£) - British Pound</option>
-                        <option value="AED (AED)">AED (AED) - UAE Dirham</option>
-                        <option value="JPY (¥)">JPY (¥) - Japanese Yen</option>
-                        <option value="CAD ($)">CAD ($) - Canadian Dollar</option>
-                        <option value="AUD ($)">AUD ($) - Australian Dollar</option>
-                      </select>
+                      <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
+                        <span>INR (₹) - Indian Rupee</span>
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">₹ Symbol</span>
+                      </div>
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-slate-300">Operational Timezone *</label>
-                      <select
-                        value={timezone}
-                        onChange={(e) => setTimezone(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-rose-500"
-                      >
-                        <option value="Asia/Kolkata (IST)">Asia/Kolkata (IST)</option>
-                        <option value="America/Los_Angeles (PST)">America/Los_Angeles (PST)</option>
-                        <option value="America/New_York (EST)">America/New_York (EST)</option>
-                        <option value="Europe/London (GMT)">Europe/London (GMT)</option>
-                        <option value="Asia/Dubai (GST)">Asia/Dubai (GST)</option>
-                        <option value="Asia/Tokyo (JST)">Asia/Tokyo (JST)</option>
-                        <option value="Asia/Singapore (SGT)">Asia/Singapore (SGT)</option>
-                      </select>
+                      <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
+                        <span>Asia/Kolkata (IST)</span>
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">+05:30</span>
+                      </div>
                     </div>
                   </div>
+
 
                   <Input
                     label="Business Address *"

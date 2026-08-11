@@ -59,7 +59,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
     email: '',
     phone: '',
     password: '',
-    country: 'United States',
+    country: 'India',
   });
 
   const handleSignupSubmit = (e: React.FormEvent) => {
@@ -1074,21 +1074,11 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               />
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">Country *</label>
-                <select
-                  value={signupForm.country}
-                  onChange={(e) => setSignupForm({ ...signupForm, country: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500 transition-all duration-200"
-                >
-                  <option value="United States">United States</option>
-                  <option value="United Kingdom">United Kingdom</option>
-                  <option value="Canada">Canada</option>
-                  <option value="Australia">Australia</option>
-                  <option value="France">France</option>
-                  <option value="Germany">Germany</option>
-                  <option value="Japan">Japan</option>
-                  <option value="India">India</option>
-                </select>
+                <label className="block text-xs font-semibold text-slate-300">Country / Region *</label>
+                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white font-semibold flex items-center justify-between">
+                  <span>🇮🇳 India (IST / INR ₹)</span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">Primary</span>
+                </div>
               </div>
 
               <div className="text-[11px] text-slate-400 pt-1 leading-relaxed">

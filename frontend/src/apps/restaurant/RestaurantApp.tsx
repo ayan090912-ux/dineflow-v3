@@ -2600,48 +2600,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <select
-                      value={theme.currency || 'INR (₹)'}
-                      onChange={(e) => updateThemeColor('currency', e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-rose-500 font-medium"
-                    >
-                      {CURRENCY_OPTIONS.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.flagEmoji} {c.label}
-                        </option>
-                      ))}
-                    </select>
+                <div className="px-3.5 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🇮🇳</span>
+                    <span>INR (₹) — Indian Rupee</span>
                   </div>
-
-                  {/* Quick Select Preset Buttons */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {[
-                      { code: 'INR (₹)', flag: '🇮🇳', label: 'INR ₹' },
-                      { code: 'USD ($)', flag: '🇺🇸', label: 'USD $' },
-                      { code: 'EUR (€)', flag: '🇪🇺', label: 'EUR €' },
-                      { code: 'GBP (£)', flag: '🇬🇧', label: 'GBP £' },
-                      { code: 'AED (AED)', flag: '🇦🇪', label: 'AED' },
-                    ].map((cur) => {
-                      const isSelected = (theme.currency || 'INR (₹)') === cur.code;
-                      return (
-                        <button
-                          key={cur.code}
-                          type="button"
-                          onClick={() => updateThemeColor('currency', cur.code)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
-                            isSelected
-                              ? 'bg-rose-600 text-white shadow-md shadow-rose-950/40 ring-1 ring-rose-400'
-                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
-                          }`}
-                        >
-                          <span>{cur.flag}</span>
-                          <span>{cur.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <span className="text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-lg font-mono font-bold">Standard Currency (₹)</span>
                 </div>
               </div>
 

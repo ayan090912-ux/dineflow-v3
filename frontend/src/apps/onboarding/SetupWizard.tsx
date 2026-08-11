@@ -98,13 +98,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [ownerConfirmPassword, setOwnerConfirmPassword] = useState(initialOwnerData?.password || '');
 
   // Step 2: Address
-  const [country, setCountry] = useState('United States');
-  const [state, setState] = useState('California');
-  const [city, setCity] = useState('San Francisco');
-  const [address, setAddress] = useState('742 Montgomery St');
-  const [pinCode, setPinCode] = useState('94111');
-  const [timezone, setTimezone] = useState('America/Los_Angeles (PST)');
-  const [currency, setCurrency] = useState('USD ($)');
+  const [country, setCountry] = useState('India');
+  const [state, setState] = useState('Maharashtra');
+  const [city, setCity] = useState('Mumbai');
+  const [address, setAddress] = useState('Bandra West');
+  const [pinCode, setPinCode] = useState('400050');
+  const [timezone, setTimezone] = useState('Asia/Kolkata (IST)');
+  const [currency, setCurrency] = useState('INR (₹)');
 
   // Step 3: Branding
   const [logo, setLogo] = useState(LOGO_PRESETS[0]);
@@ -135,13 +135,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     setFeatures((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Step 6: Employees & Roster
-  const [employees, setEmployees] = useState([
-    { id: '1', name: 'Marcus Vance', email: 'marcus@lumiere.com', role: 'MANAGER', phone: '+1 555-0192', shift: 'Full Day (10AM - 10PM)', section: 'Front Floor & POS', status: 'ON_CLOCK' },
-    { id: '2', name: 'Chef Jean-Luc', email: 'jean@lumiere.com', role: 'CHEF', phone: '+1 555-0193', shift: 'Evening (4PM - 12AM)', section: 'Main Kitchen', status: 'ON_CLOCK' },
-    { id: '3', name: 'Marco Silva', email: 'bartender@lumiere.com', role: 'BARTENDER', phone: '+1 555-0310', shift: 'Night (6PM - 2AM)', section: 'Cocktail Bar', status: 'ON_CLOCK' },
-    { id: '4', name: 'Elena Rostova', email: 'elena@lumiere.com', role: 'WAITER', phone: '+1 555-0194', shift: 'Evening (4PM - 12AM)', section: 'Patio & Section A', status: 'ON_CLOCK' },
-  ]);
+  // Step 6: Employees & Roster (Starts empty for authentic onboarding)
+  const [employees, setEmployees] = useState<any[]>([]);
   const [newEmpName, setNewEmpName] = useState('');
   const [newEmpEmail, setNewEmpEmail] = useState('');
   const [newEmpPhone, setNewEmpPhone] = useState('');
@@ -149,45 +144,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [newEmpShift, setNewEmpShift] = useState('Evening (4PM - 12AM)');
   const [newEmpSection, setNewEmpSection] = useState('Front Floor');
 
-  // Step 7: Menu Setup
+  // Step 7: Menu Setup (Starts empty for authentic onboarding)
   const [categories, setCategories] = useState(['Starters', 'Main Course', 'Desserts', 'Drinks']);
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  const [menuItems, setMenuItems] = useState([
-    {
-      id: 'm1',
-      name: 'Truffle Mushroom Risotto',
-      category: 'Main Course',
-      price: 28,
-      description: 'Arborio rice, wild mushrooms, fresh black truffle shavings, shaved parmesan.',
-      isVegetarian: true,
-      prepTime: 20,
-      image: 'https://images.unsplash.com/photo-1633964913295-ceb43826e7c9?w=300&auto=format&fit=crop&q=80',
-      available: true,
-    },
-    {
-      id: 'm2',
-      name: 'Wagyu Beef Burger',
-      category: 'Main Course',
-      price: 32,
-      description: 'A5 Wagyu patty, aged cheddar, caramelized onion jam, brioche bun.',
-      isVegetarian: false,
-      prepTime: 15,
-      image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80',
-      available: true,
-    },
-    {
-      id: 'm3',
-      name: 'Valrhona Chocolate Fondant',
-      category: 'Desserts',
-      price: 16,
-      description: 'Warm molten chocolate cake served with Madagascar vanilla bean gelato.',
-      isVegetarian: true,
-      prepTime: 12,
-      image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=300&auto=format&fit=crop&q=80',
-      available: true,
-    },
-  ]);
+  const [menuItems, setMenuItems] = useState<any[]>([]);
 
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('Main Course');
@@ -555,7 +516,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input label="Country" value={country} onChange={(e) => setCountry(e.target.value)} />
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Country</label>
+                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
+                  <span>🇮🇳 India</span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">Fixed</span>
+                </div>
+              </div>
               <Input label="State / Region" value={state} onChange={(e) => setState(e.target.value)} />
               <Input label="City" value={city} onChange={(e) => setCity(e.target.value)} />
               <Input label="PIN / Postal Code" value={pinCode} onChange={(e) => setPinCode(e.target.value)} />
@@ -566,34 +533,18 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-300">Operational Timezone</label>
-                <select
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-rose-500"
-                >
-                  <option value="Asia/Kolkata (IST)">Asia/Kolkata (IST)</option>
-                  <option value="America/Los_Angeles (PST)">America/Los_Angeles (PST)</option>
-                  <option value="America/New_York (EST)">America/New_York (EST)</option>
-                  <option value="Europe/London (GMT)">Europe/London (GMT)</option>
-                  <option value="Asia/Dubai (GST)">Asia/Dubai (GST)</option>
-                  <option value="Asia/Singapore (SGT)">Asia/Singapore (SGT)</option>
-                </select>
+                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
+                  <span>Asia/Kolkata (IST)</span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">+05:30</span>
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-300">Base Currency</label>
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-rose-500"
-                >
-                  <option value="INR (₹)">INR (₹) - Indian Rupee</option>
-                  <option value="USD ($)">USD ($) - US Dollar</option>
-                  <option value="EUR (€)">EUR (€) - Euro</option>
-                  <option value="GBP (£)">GBP (£) - British Pound</option>
-                  <option value="CAD ($)">CAD ($) - Canadian Dollar</option>
-                  <option value="AUD ($)">AUD ($) - Australian Dollar</option>
-                </select>
+                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
+                  <span>INR (₹) - Indian Rupee</span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">₹ Symbol</span>
+                </div>
               </div>
             </div>
           </Card>
