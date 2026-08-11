@@ -53,14 +53,6 @@ import { api } from '../../packages/api/client';
 import { Organization, Restaurant, AuditLog } from '../../packages/types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-const chartData = [
-  { month: 'Jan', orders: 18200 },
-  { month: 'Feb', orders: 24100 },
-  { month: 'Mar', orders: 31000 },
-  { month: 'Apr', orders: 39400 },
-  { month: 'May', orders: 48900 },
-  { month: 'Jun', orders: 58200 },
-];
 
 interface PlatformAppProps {
   onLogout?: () => void;
@@ -73,6 +65,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [stats, setStats] = useState<any>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
+  const [allOrders, setAllOrders] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,11 +88,29 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     const orgs = await api.getOrganizations();
     const allRests = await api.getAllRestaurants();
     const logs = await api.getAuditLogs();
+    const orders = await api.getOrders();
     setStats(s);
     setOrganizations(orgs);
     setAllRestaurants(allRests);
     setAuditLogs(logs);
+    setAllOrders(orders);
   };
+
+  const platformChartData = React.useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentMonthIdx = new Date().getMonth();
+    const result = [];
+    for (let i = 5; i >= 0; i--) {
+      const targetMonthIdx = (currentMonthIdx - i + 12) % 12;
+      const mName = months[targetMonthIdx];
+      const count = allOrders.filter((o) => {
+        const d = new Date(o.createdAt);
+        return d.getMonth() === targetMonthIdx;
+      }).length;
+      result.push({ month: mName, orders: count });
+    }
+    return result;
+  }, [allOrders]);
 
   const pendingRestaurants = allRestaurants.filter(
     (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved)
@@ -400,7 +411,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
+                    <AreaChart data={platformChartData}>
                       <defs>
                         <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#e11d48" stopOpacity={0.4} />
@@ -832,39 +843,11 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             </div>
 
             <div className="space-y-3">
-              {(allRestaurants.length > 0
-                ? allRestaurants.slice(0, 3).map((r, idx) => ({
-                    id: `t-10${idx + 1}`,
-                    restaurant: r.name,
-                    subject: idx === 0 ? 'Domain & QR Code Configuration Query' : idx === 1 ? 'Thermal Printer & KDS Integration' : 'Multi-tax GST Percentage Configuration',
-                    priority: idx === 0 ? 'HIGH' : 'MEDIUM',
-                    status: idx === 0 ? 'OPEN' : 'RESOLVED',
-                    time: `${idx + 1} hours ago`,
-                  }))
-                : [
-                    { id: 't-101', restaurant: 'Registered Outlet', subject: 'Domain & QR Code Configuration Query', priority: 'HIGH', status: 'OPEN', time: '1 hour ago' },
-                  ]
-              ).map((t) => (
-                <Card key={t.id} className="bg-slate-900 border-slate-800 p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-slate-800 text-rose-400 font-mono text-xs font-bold">
-                      {t.id}
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-white">{t.subject}</h4>
-                      <p className="text-xs text-slate-400">{t.restaurant} • {t.time}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant={t.status === 'OPEN' ? 'danger' : t.status === 'IN_PROGRESS' ? 'warning' : 'success'}>
-                      {t.status}
-                    </Badge>
-                    <Button variant="outline" size="sm" className="text-xs border-slate-800 text-slate-300">
-                      Respond
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+              <EmptyState
+                icon={<LifeBuoy className="w-6 h-6 text-slate-400" />}
+                title="No Open Support Tickets"
+                description="All merchant inquiry tickets and platform support channels are clean with zero unresolved issues."
+              />
             </div>
           </div>
         )}
