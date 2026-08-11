@@ -70,6 +70,7 @@ import {
   ImageUpload,
   ToastContainer,
   ToastMessage,
+  DinelyLogo,
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
@@ -961,6 +962,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       {/* Sidebar Navigation */}
       <aside className="w-full md:w-64 bg-slate-900 border-r border-slate-800 p-5 flex flex-col justify-between shrink-0">
         <div>
+          {/* Platform Branding Badge */}
+          <div className="mb-4 px-1 flex items-center justify-between pb-3 border-b border-slate-800/80">
+            <DinelyLogo size="sm" />
+            <span className="text-[10px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">Owner OS</span>
+          </div>
+
           {/* Multi-Restaurant Outlet Switcher Button */}
           <div className="mb-6 px-1">
             <button

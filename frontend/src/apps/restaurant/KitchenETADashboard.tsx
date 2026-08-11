@@ -34,7 +34,7 @@ import {
   Activity,
   ChevronRight,
 } from 'lucide-react';
-import { Button, Card, Badge, Modal, Input, SearchInput, StatsCard, Avatar } from '../../packages/ui';
+import { Button, Card, Badge, Modal, Input, SearchInput, StatsCard, Avatar, DinelyLogo } from '../../packages/ui';
 import { Order, OrderItem, getFulfillmentStation } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
@@ -395,6 +395,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
+                <DinelyLogo size="sm" />
                 <h1 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
                   KITCHEN DISPLAY SYSTEM (KDS)
                 </h1>

@@ -23,7 +23,7 @@ import {
   Minus,
   Activity,
 } from 'lucide-react';
-import { Button, Card, Badge, Input, Modal } from '../../packages/ui';
+import { Button, Card, Badge, Input, Modal, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Order, OrderItem, OrderStatus, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
@@ -187,7 +187,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-white tracking-tight">Dinely Bar Terminal</h1>
+              <DinelyLogo size="sm" />
+              <h1 className="text-xl font-black text-white tracking-tight">Bar Terminal</h1>
               <Badge variant="brand" className="bg-purple-600/30 text-purple-300 border-purple-500/40 text-[10px]">
                 BARTENDER KDS
               </Badge>

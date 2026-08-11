@@ -39,6 +39,7 @@ import {
   Timeline,
   ToastContainer,
   ToastMessage,
+  DinelyLogoMark,
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CallWaiterModal } from './CallWaiterModal';
@@ -820,6 +821,16 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           </div>
         );
       })()}
+
+      {/* Subtle Customer Footer Attribution */}
+      <footer className="py-8 px-4 text-center text-xs text-slate-500 border-t border-slate-900 mt-12 mb-24 space-y-1">
+        <p className="font-semibold text-slate-400">{restaurant?.name || 'Restaurant'}</p>
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-mono pt-1">
+          <span>Powered by</span>
+          <DinelyLogoMark size={14} className="opacity-80 inline-block" />
+          <span className="font-bold text-slate-300">Dinely</span>
+        </div>
+      </footer>
 
       {/* Floating Cart Sticky Footer */}
       {totalCartCount > 0 && (

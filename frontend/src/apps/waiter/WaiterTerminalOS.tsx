@@ -31,6 +31,7 @@ import {
   Avatar,
   SearchInput,
   Modal,
+  DinelyLogo,
 } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import {
@@ -402,6 +403,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           </div>
           <div>
             <div className="flex items-center gap-2">
+              <DinelyLogo size="sm" />
               <h1 className="text-base font-black text-white tracking-tight">Waiter Terminal OS</h1>
               <Badge variant="success" className="text-[10px] py-0 px-1.5 font-mono">MVP</Badge>
             </div>
