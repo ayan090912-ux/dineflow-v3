@@ -18,7 +18,7 @@ import {
   Info,
   Wine,
 } from 'lucide-react';
-import { Button, Card, Input, Badge } from '../../packages/ui';
+import { Button, Card, Input, Badge, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 
 export type PortalType = 'admin' | 'restaurant' | 'kitchen' | 'waiter' | 'bar';
@@ -177,7 +177,8 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       <div className="w-full max-w-md space-y-6 relative z-10">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 mb-2">
+          <DinelyLogo size="md" className="justify-center mb-1" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             Dinely Dedicated Role Portal
           </div>

@@ -48,6 +48,7 @@ import {
   Avatar,
   SearchInput,
   CommandPalette,
+  DinelyLogo,
 } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Organization, Restaurant, AuditLog } from '../../packages/types';
@@ -212,16 +213,9 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       <aside className="w-full sm:w-64 bg-slate-900 border-r border-slate-800 p-5 flex flex-col justify-between shrink-0">
         <div>
           {/* Admin Branding */}
-          <div className="flex items-center gap-3 mb-8 px-2">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 via-rose-500 to-amber-400 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-rose-500/20">
-              DL
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-                Dinely <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30">Admin</span>
-              </h1>
-              <p className="text-[11px] text-slate-400">admin.dinely.com</p>
-            </div>
+          <div className="mb-8 px-2 space-y-1">
+            <DinelyLogo size="md" />
+            <p className="text-[11px] text-slate-400 font-mono">admin.dinely.com</p>
           </div>
 
           {/* Navigation Links */}

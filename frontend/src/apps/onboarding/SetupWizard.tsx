@@ -7,6 +7,7 @@ import {
   Badge,
   Table,
   ImageUpload,
+  DinelyLogo,
 } from '../../packages/ui';
 import {
   Building,
@@ -318,6 +319,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
+                <DinelyLogo size="sm" />
                 <Badge variant="brand">Step {currentStep} of 5</Badge>
                 <span className="text-xs font-mono text-slate-400">Merchant Setup Wizard</span>
               </div>

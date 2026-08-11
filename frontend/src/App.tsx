@@ -12,7 +12,7 @@ import { UnauthorizedPage } from './apps/auth/UnauthorizedPage';
 import { SetupWizard } from './apps/onboarding/SetupWizard';
 import { PendingApprovalPage } from './apps/onboarding/PendingApprovalPage';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
-import { ErrorBoundary } from './packages/ui';
+import { ErrorBoundary, DinelyLogo } from './packages/ui';
 import { api } from './packages/api/client';
 import {
   Building2,
@@ -84,14 +84,9 @@ export default function App() {
           {/* Sleek Subdomain & Environment Switcher Bar */}
           {showDomainBar ? (
             <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-sm">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-xl bg-rose-600 flex items-center justify-center font-black text-white text-xs shadow-sm">
-                  DL
-                </div>
-                <span className="text-xs font-bold text-slate-200 hidden sm:inline-flex items-center gap-2">
-                  Dinely OS
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                </span>
+              <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigateTo('/')}>
+                <DinelyLogo size="sm" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse hidden sm:inline-block" />
               </div>
 
               {/* Core Domain Switcher Pills */}

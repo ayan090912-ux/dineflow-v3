@@ -28,7 +28,7 @@ import {
   ChefHat,
   Wine,
 } from 'lucide-react';
-import { Button, Card, Badge, Input, Modal } from '../../packages/ui';
+import { Button, Card, Badge, Input, Modal, DinelyLogo, DinelyLogoMark } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 
 interface LandingWebsiteProps {
@@ -99,14 +99,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
       <nav className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 md:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('home')}>
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-rose-600 via-amber-500 to-rose-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-rose-950/50">
-              DL
-            </div>
-            <div>
-              <span className="text-base font-black tracking-tight text-white flex items-center gap-2">
-                Dinely <span className="text-rose-500 font-mono text-xs font-semibold px-1.5 py-0.5 bg-rose-950/60 border border-rose-800/50 rounded-md">CLOUD</span>
-              </span>
-            </div>
+            <DinelyLogo size="md" />
+            <span className="text-rose-500 font-mono text-xs font-semibold px-1.5 py-0.5 bg-rose-950/60 border border-rose-800/50 rounded-md">CLOUD</span>
           </div>
 
           {/* Desktop Nav Links */}
@@ -955,11 +949,9 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
       <footer className="bg-slate-950 border-t border-slate-800/80 pt-12 pb-8 px-4 md:px-8 mt-auto">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 text-xs text-slate-400">
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center font-black text-white text-xs">
-                DL
-              </div>
-              <span className="text-sm font-bold text-white">Dinely Cloud</span>
+            <div className="flex items-center gap-2.5">
+              <DinelyLogo size="sm" />
+              <span className="text-xs font-semibold text-rose-500 bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/50 font-mono">CLOUD</span>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500">
               The next-generation multi-tenant cloud operating system for cafes, bars, and fine dining establishments.

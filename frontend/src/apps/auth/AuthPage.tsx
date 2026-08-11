@@ -4,6 +4,7 @@ import {
   Card,
   Input,
   Badge,
+  DinelyLogo,
 } from '../../packages/ui';
 import {
   Utensils,
@@ -270,6 +271,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       {/* Hero Header Banner */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">
         <div className="flex flex-col items-center text-center space-y-4 max-w-3xl mx-auto">
+          <DinelyLogo size="lg" />
           <Badge variant="brand" className="px-3 py-1 text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-rose-900/20">
             <Sparkles className="w-3.5 h-3.5 text-rose-300" /> Dinely Cloud Self-Service Platform
           </Badge>
