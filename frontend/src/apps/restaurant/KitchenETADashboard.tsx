@@ -958,20 +958,20 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatsCard
                 title="Avg Preparation Time"
-                value={`${analytics?.avgPrepTimeMinutes || '14.2'} min`}
-                change={{ value: '2.1m faster than SLA target', isPositive: true }}
+                value={`${analytics?.avgPrepTimeMinutes ?? 0} min`}
+                change={{ value: analytics?.avgPrepTimeMinutes ? 'Live shift average' : 'No completed orders yet', isPositive: true }}
                 icon={<Clock className="w-5 h-5 text-amber-400" />}
               />
               <StatsCard
                 title="ETA Accuracy SLA"
-                value={`${analytics?.etaAccuracyPercent || '94.8'}%`}
+                value={`${analytics?.etaAccuracyPercent ?? 100}%`}
                 change={{ value: 'Target ±2 min window', isPositive: true }}
                 icon={<CheckCircle2 className="w-5 h-5 text-emerald-400" />}
               />
               <StatsCard
                 title="Kitchen Load Factor"
-                value={`${analytics?.kitchenLoadPercent || '62'}%`}
-                change={{ value: 'Optimal Grill Capacity', isPositive: true }}
+                value={`${analytics?.kitchenLoadPercent ?? 0}%`}
+                change={{ value: 'Active queue capacity', isPositive: true }}
                 icon={<Flame className="w-5 h-5 text-rose-500" />}
               />
               <StatsCard
@@ -988,20 +988,12 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               </h4>
 
               <div className="grid grid-cols-7 gap-2 pt-4">
-                {(analytics?.dailyPerformance || [
-                  { day: 'Mon', avgTime: 12.4 },
-                  { day: 'Tue', avgTime: 13.8 },
-                  { day: 'Wed', avgTime: 11.9 },
-                  { day: 'Thu', avgTime: 14.2 },
-                  { day: 'Fri', avgTime: 16.5 },
-                  { day: 'Sat', avgTime: 17.1 },
-                  { day: 'Sun', avgTime: 15.0 },
-                ]).map((item: any) => (
+                {(analytics?.dailyPerformance || []).map((item: any) => (
                   <div key={item.day} className="space-y-2 text-center">
                     <div className="h-36 bg-slate-950 rounded-xl flex flex-col justify-end p-1 border border-slate-800">
                       <div
                         className="w-full bg-gradient-to-t from-amber-600 via-rose-500 to-rose-400 rounded-lg"
-                        style={{ height: `${(item.avgTime / 20) * 100}%` }}
+                        style={{ height: `${Math.min(100, (item.avgTime / (analytics?.avgPrepTimeMinutes || 20)) * 100)}%` }}
                       />
                     </div>
                     <span className="text-xs font-bold text-slate-300 block">{item.day}</span>

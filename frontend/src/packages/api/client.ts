@@ -2819,15 +2819,65 @@ export class DineFlowApiClient {
   }
 
   async getKitchenAnalytics(restaurantId?: string) {
-    await delay(100);
+    await delay(50);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
-    const kitchenOrders = this.orders.filter((o) => o.restaurantId === targetId);
-    const completed = kitchenOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'READY');
+    const kitchenOrders = this.orders.filter(
+      (o) => o.restaurantId === targetId && o.items.some((i) => i.targetDestination === 'KITCHEN' || getFulfillmentStation(i) === 'KITCHEN')
+    );
+    const completed = kitchenOrders.filter(
+      (o) => o.kitchenStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'READY'
+    );
+
+    let totalPrepMins = 0;
+    completed.forEach((o) => {
+      const created = new Date(o.createdAt).getTime();
+      const updated = new Date(o.updatedAt || o.createdAt).getTime();
+      const diffMins = Math.max(1, Math.round((updated - created) / (1000 * 60)));
+      totalPrepMins += diffMins;
+    });
+    const avgPrepTimeMinutes = completed.length > 0 ? Number((totalPrepMins / completed.length).toFixed(1)) : 0;
+
+    const onTimeCount = completed.filter((o) => {
+      const targetEta = o.estimatedPrepTimeMinutes || 15;
+      const created = new Date(o.createdAt).getTime();
+      const updated = new Date(o.updatedAt || o.createdAt).getTime();
+      const diffMins = (updated - created) / (1000 * 60);
+      return diffMins <= targetEta + 2;
+    }).length;
+
+    const onTimeDeliveryRate = completed.length > 0 ? Number(((onTimeCount / completed.length) * 100).toFixed(1)) : 100;
+    const activeKitchenStations = Array.from(new Set(kitchenOrders.flatMap((o) => o.items.map((i) => i.category || 'Kitchen')))).length || 1;
+    const activeQueue = kitchenOrders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
+    const kitchenLoadPercent = Math.min(100, Math.round((activeQueue / 10) * 100));
+
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const today = new Date();
+    const dailyPerformance = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      const dayName = days[d.getDay()];
+      const dayOrders = completed.filter((o) => {
+        const oDate = new Date(o.createdAt);
+        return oDate.toDateString() === d.toDateString();
+      });
+      let dayPrepMins = 0;
+      dayOrders.forEach((o) => {
+        const created = new Date(o.createdAt).getTime();
+        const updated = new Date(o.updatedAt || o.createdAt).getTime();
+        dayPrepMins += Math.max(1, Math.round((updated - created) / (1000 * 60)));
+      });
+      const avgTime = dayOrders.length > 0 ? Number((dayPrepMins / dayOrders.length).toFixed(1)) : 0;
+      return { day: dayName, avgTime, count: dayOrders.length };
+    });
+
     return {
-      avgPrepTimeMinutes: 14,
-      totalOrdersPrepared: completed.length || kitchenOrders.length || 0,
-      onTimeDeliveryRate: 98.5,
-      activeKitchenStations: 3,
+      avgPrepTimeMinutes,
+      totalOrdersPrepared: completed.length,
+      onTimeDeliveryRate,
+      activeKitchenStations,
+      kitchenLoadPercent,
+      etaAccuracyPercent: onTimeDeliveryRate,
+      dailyPerformance,
     };
   }
 

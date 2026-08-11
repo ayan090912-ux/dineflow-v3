@@ -254,7 +254,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                     <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
                   ))}
                 </div>
-                <span className="text-white font-bold">4.9/5</span> rating (1,200+ restaurants)
+                <span className="text-white font-bold">Enterprise Grade</span> Architecture
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" /> No credit card required
@@ -331,24 +331,24 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
             </div>
           </section>
 
-          {/* Social Proof & Metrics Bar */}
+          {/* Core Platform Capabilities Banner */}
           <section className="bg-slate-900/60 border-y border-slate-800/80 py-8 px-4">
             <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
               <div className="space-y-1">
-                <div className="text-2xl md:text-3xl font-black text-white font-mono">$50M+</div>
-                <div className="text-xs text-slate-400 font-medium">Annual Volume Processed</div>
+                <div className="text-xl md:text-2xl font-black text-white font-mono">Real-Time</div>
+                <div className="text-xs text-slate-400 font-medium">WebSocket Event Sync</div>
               </div>
               <div className="space-y-1">
-                <div className="text-2xl md:text-3xl font-black text-rose-400 font-mono">1,200+</div>
-                <div className="text-xs text-slate-400 font-medium">Active Restaurants & Cafes</div>
+                <div className="text-xl md:text-2xl font-black text-rose-400 font-mono">Multi-Terminal</div>
+                <div className="text-xs text-slate-400 font-medium">Waiter, Kitchen & Bar Terminals</div>
               </div>
               <div className="space-y-1">
-                <div className="text-2xl md:text-3xl font-black text-amber-400 font-mono">+42%</div>
-                <div className="text-xs text-slate-400 font-medium">Avg Table Turnover Increase</div>
+                <div className="text-xl md:text-2xl font-black text-amber-400 font-mono">Persistent</div>
+                <div className="text-xs text-slate-400 font-medium">Database Table Session Engine</div>
               </div>
               <div className="space-y-1">
-                <div className="text-2xl md:text-3xl font-black text-emerald-400 font-mono">99.99%</div>
-                <div className="text-xs text-slate-400 font-medium">Cloud Uptime SLA Guarantee</div>
+                <div className="text-xl md:text-2xl font-black text-emerald-400 font-mono">Self-Service</div>
+                <div className="text-xs text-slate-400 font-medium">Guided Onboarding Wizard</div>
               </div>
             </div>
           </section>
@@ -527,19 +527,19 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                   <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                    <div className="text-xs text-slate-400">Today's Gross Sales</div>
-                    <div className="text-2xl font-black text-emerald-400 font-mono">$3,842.50</div>
-                    <div className="text-[10px] text-emerald-500">↑ 18.4% vs yesterday</div>
+                    <div className="text-xs text-slate-400">POS Revenue Engine</div>
+                    <div className="text-xl font-bold text-emerald-400 font-mono">Live Order Billing</div>
+                    <div className="text-[10px] text-emerald-500">Automated Tax & Receipt Calc</div>
                   </div>
                   <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                    <div className="text-xs text-slate-400">Active Tables Seated</div>
-                    <div className="text-2xl font-black text-amber-400 font-mono">14 / 18</div>
-                    <div className="text-[10px] text-amber-500">77% floor occupancy</div>
+                    <div className="text-xs text-slate-400">Floor Table Layout</div>
+                    <div className="text-xl font-bold text-amber-400 font-mono">Real-Time Sessions</div>
+                    <div className="text-[10px] text-amber-500">Active / Vacant Heatmap</div>
                   </div>
                   <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                    <div className="text-xs text-slate-400">Avg Prep ETA</div>
-                    <div className="text-2xl font-black text-rose-400 font-mono">11 mins</div>
-                    <div className="text-[10px] text-rose-500">3 mins faster than benchmark</div>
+                    <div className="text-xs text-slate-400">Station Kitchen KDS</div>
+                    <div className="text-xl font-bold text-rose-400 font-mono">Automated ETA</div>
+                    <div className="text-[10px] text-rose-500">Station Firing & Course Pacing</div>
                   </div>
                 </div>
               </div>

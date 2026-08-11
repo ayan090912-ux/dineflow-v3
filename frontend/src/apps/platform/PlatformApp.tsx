@@ -382,9 +382,9 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               />
               <StatsCard
                 title="Global Orders Processed"
-                value="142,850"
-                change={{ value: '99.99%', isPositive: true }}
-                subtitle="SLA Uptime"
+                value={(stats?.totalOrdersProcessed ?? 0).toLocaleString()}
+                change={{ value: 'Live System', isPositive: true }}
+                subtitle="Database Total"
                 icon={<Zap className="w-5 h-5 text-sky-500" />}
               />
             </div>
