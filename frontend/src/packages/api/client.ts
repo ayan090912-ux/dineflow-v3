@@ -387,6 +387,99 @@ export class DinelyApiClient {
     return { user, tokens, restaurant };
   }
 
+  async authenticateWithGoogle(googleData: {
+    googleUid: string;
+    email: string;
+    name: string;
+    photoURL?: string;
+  }) {
+    await delay(300);
+    const normalizedEmail = googleData.email.trim().toLowerCase();
+
+    // 1. Search existing user by googleUid or email
+    let user = this.users.find(
+      (u) => (u.googleUid && u.googleUid === googleData.googleUid) || u.email.toLowerCase() === normalizedEmail
+    );
+
+    let isNewUser = false;
+
+    if (user) {
+      // Security enforcement: Never grant Platform Admin role via Google Auth
+      if (user.role === 'PLATFORM_ADMIN') {
+        throw new Error('Platform Administrator accounts must use the dedicated Admin Portal credentials.');
+      }
+
+      user.googleUid = googleData.googleUid;
+      user.authProvider = 'google';
+      if (googleData.photoURL && !user.avatar) {
+        user.avatar = googleData.photoURL;
+      }
+    } else {
+      isNewUser = true;
+      const userId = `usr-google-${Date.now()}`;
+      user = {
+        id: userId,
+        firstName: googleData.name.split(' ')[0] || 'Owner',
+        lastName: googleData.name.split(' ').slice(1).join(' ') || '',
+        name: googleData.name,
+        email: normalizedEmail,
+        role: 'RESTAURANT_OWNER',
+        isEmailVerified: true,
+        googleUid: googleData.googleUid,
+        authProvider: 'google',
+        avatar: googleData.photoURL,
+      };
+      this.users.unshift(user);
+    }
+
+    // 2. Find restaurant associated with this owner
+    const restaurant = this.restaurants.find(
+      (r) => !r.isDeleted && (r.id === user?.restaurantId || r.ownerEmail?.toLowerCase() === normalizedEmail)
+    );
+
+    if (restaurant && restaurant.lifecycleStatus === 'SUSPENDED') {
+      throw new Error('Your restaurant account has been suspended by Platform Admin. Access is temporarily disabled.');
+    }
+
+    if (restaurant && restaurant.isDeleted) {
+      throw new Error('This restaurant account has been permanently removed by Platform Admin.');
+    }
+
+    const tokens: AuthTokens = {
+      accessToken: `df_jwt_google_${user.id}_${Date.now()}`,
+      refreshToken: `df_ref_google_${user.id}_${Date.now()}`,
+      expiresIn: 86400,
+      tokenType: 'Bearer',
+    };
+
+    user.tokens = tokens;
+    if (restaurant) {
+      user.restaurantId = restaurant.id;
+    }
+
+    this.saveSession(user, tokens, restaurant?.id || null);
+
+    this.auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      actor: user.name,
+      action: isNewUser ? 'Registered Owner Account via Google' : 'Logged in via Google Auth',
+      target: normalizedEmail,
+      timestamp: 'Just now',
+      ipAddress: '127.0.0.1',
+      status: 'SUCCESS',
+    });
+
+    this.saveDatabase();
+
+    return {
+      user,
+      tokens,
+      isNewUser,
+      hasRestaurant: !!restaurant,
+      restaurant,
+    };
+  }
+
   async loginPlatformAdmin(email: string, password?: string) {
     await delay(300);
     const normalizedEmail = email.trim().toLowerCase();

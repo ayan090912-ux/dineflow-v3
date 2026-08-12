@@ -20,6 +20,9 @@ export interface User {
   restaurantId?: string;
   orgId?: string;
   isEmailVerified?: boolean;
+  googleUid?: string;
+  authProvider?: 'password' | 'google';
+  photoURL?: string;
   tokens?: AuthTokens;
 }
 
