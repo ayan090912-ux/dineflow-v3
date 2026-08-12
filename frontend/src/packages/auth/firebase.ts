@@ -7,14 +7,14 @@ import {
   UserCredential,
 } from 'firebase/auth';
 
-// Firebase configuration from environment variables with safe fallback for localhost dev
+// Firebase configuration from environment variables (Project: dinely-cd6cd)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDemoKeyForDinelyLocalhostAuthDev',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'dinely-cloud.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'dinely-cloud',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'dinely-cloud.appspot.com',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'dinely-cd6cd.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'dinely-cd6cd',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'dinely-cd6cd.firebasestorage.app',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '100000000000',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:100000000000:web:dinelydemo123456',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:100000000000:web:dinelycd6cd123456',
 };
 
 // Initialize Firebase App singleton safely
