@@ -180,7 +180,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               <Button
                 variant="brand"
                 size="sm"
-                onClick={() => setShowSignupModal(true)}
+                onClick={() => onStartTrial()}
                 icon={<Sparkles className="w-3.5 h-3.5" />}
                 className="shadow-lg shadow-rose-950/40"
               >
@@ -217,7 +217,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               <Button
                 variant="brand"
                 size="lg"
-                onClick={() => setShowSignupModal(true)}
+                onClick={() => onStartTrial()}
                 icon={<ArrowRight className="w-4 h-4" />}
                 className="px-8 py-3 text-sm font-bold shadow-xl shadow-rose-950/60"
               >
@@ -985,92 +985,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
           </div>
         </div>
       </footer>
-
-      {/* Create Restaurant Signup Modal */}
-      {showSignupModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setShowSignupModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="space-y-1 pr-6">
-              <Badge variant="brand">SELF-SERVICE ONBOARDING</Badge>
-              <h3 className="text-xl font-black text-white">Create Restaurant Account</h3>
-              <p className="text-xs text-slate-400">
-                Join Dinely Cloud, configure your restaurant details, and request launch approval.
-              </p>
-            </div>
-
-            <form onSubmit={handleSignupSubmit} className="space-y-3.5">
-              <Input
-                label="Owner Name *"
-                placeholder="Alex Mercer"
-                value={signupForm.ownerName}
-                onChange={(e) => setSignupForm({ ...signupForm, ownerName: e.target.value })}
-                className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500"
-                required
-              />
-              <Input
-                label="Restaurant Name *"
-                placeholder="Lumiere Bistro"
-                value={signupForm.restaurantName}
-                onChange={(e) => setSignupForm({ ...signupForm, restaurantName: e.target.value })}
-                className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500"
-                required
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  label="Business Email *"
-                  type="email"
-                  placeholder="alex@lumiere.com"
-                  value={signupForm.email}
-                  onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
-                  className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500"
-                  required
-                />
-                <Input
-                  label="Phone Number *"
-                  placeholder="+1 (555) 234-5678"
-                  value={signupForm.phone}
-                  onChange={(e) => setSignupForm({ ...signupForm, phone: e.target.value })}
-                  className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500"
-                  required
-                />
-              </div>
-
-              <Input
-                label="Password *"
-                type="password"
-                placeholder="••••••••••••"
-                value={signupForm.password}
-                onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
-                className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500"
-                required
-              />
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">Country / Region *</label>
-                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white font-semibold flex items-center justify-between">
-                  <span>🇮🇳 India (IST / INR ₹)</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">Primary</span>
-                </div>
-              </div>
-
-              <div className="text-[11px] text-slate-400 pt-1 leading-relaxed">
-                By clicking "Continue to Restaurant Setup", you agree to Dinely's Terms of Service and Privacy Policy.
-              </div>
-
-              <Button variant="brand" className="w-full shadow-lg shadow-rose-950/50 mt-2 py-3 text-sm font-bold" type="submit" icon={<Sparkles className="w-4 h-4" />}>
-                Continue to Restaurant Setup
-              </Button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Sleek Role & Staff Portal Selector Modal */}
       <Modal
