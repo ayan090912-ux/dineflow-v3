@@ -297,6 +297,12 @@ export class DinelyApiClient {
 
   // --- Auth & Account APIs ---
 
+  async checkUserExists(email: string): Promise<boolean> {
+    await delay(100);
+    const normalized = email.trim().toLowerCase();
+    return this.users.some((u) => u.email.toLowerCase() === normalized);
+  }
+
   async registerOwner(data: {
     name: string;
     email: string;
@@ -1221,13 +1227,13 @@ export class DinelyApiClient {
     return rest;
   }
 
-  async getOwnerRestaurants() {
+  async getOwnerRestaurants(ownerEmail?: string) {
     await delay(100);
     const active = this.restaurants.filter((r) => !r.isDeleted).map((r) => this.ensureRestaurantDefaults(r));
-    if (!this.currentUser) return active;
-    const email = this.currentUser.email?.toLowerCase();
+    const email = (ownerEmail || this.currentUser?.email || '').trim().toLowerCase();
+    if (!email) return active;
     const myRests = active.filter(
-      (r) => r.ownerEmail?.toLowerCase() === email || r.id === this.currentUser?.restaurantId || r.orgId === this.currentUser?.orgId
+      (r) => r.ownerEmail?.toLowerCase() === email || r.email?.toLowerCase() === email || r.id === this.currentUser?.restaurantId || r.orgId === this.currentUser?.orgId
     );
     return myRests.length > 0 ? myRests : active;
   }

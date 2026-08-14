@@ -111,7 +111,12 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
 }) => {
   const config = PORTAL_CONFIGS[portal] || PORTAL_CONFIGS.restaurant;
 
+  // 2-Step Email-First Auth State for Restaurant Portal
+  const [authStage, setAuthStage] = useState<'ENTER_EMAIL' | 'PASSWORD_LOGIN' | 'CREATE_ACCOUNT'>(
+    portal === 'restaurant' ? 'ENTER_EMAIL' : 'PASSWORD_LOGIN'
+  );
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -122,6 +127,64 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
     setEmail(config.demoEmail);
     setPassword(config.demoPass);
     setErrorMessage('');
+    if (portal === 'restaurant') {
+      setAuthStage('PASSWORD_LOGIN');
+    }
+  };
+
+  const handleEmailContinue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!email || !email.includes('@')) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const exists = await api.checkUserExists(email);
+      setIsLoading(false);
+      if (exists) {
+        setAuthStage('PASSWORD_LOGIN');
+      } else {
+        setAuthStage('CREATE_ACCOUNT');
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMessage(err.message || 'Failed to check account.');
+    }
+  };
+
+  const handleCreateAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!fullName || !email || !password) {
+      setErrorMessage('Please complete all required fields.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await api.registerOwner({
+        name: fullName,
+        email,
+        phone: '',
+        password,
+      });
+
+      setSuccessMessage('Account created successfully! Loading workspace...');
+      setTimeout(() => {
+        onLoginSuccess('RESTAURANT_OWNER', result.user);
+        onNavigate('/workspace');
+      }, 500);
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMessage(err.message || 'Failed to create account.');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -153,9 +216,9 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       setSuccessMessage(`Authenticated successfully! Loading ${config.title}...`);
       setTimeout(() => {
         onLoginSuccess(result.user?.role || portal, result.user);
-        
-        if (portal === 'restaurant' && result.restaurant && (!result.restaurant.isApproved || result.restaurant.lifecycleStatus === 'PENDING_APPROVAL')) {
-          onNavigate('/restaurant/pending-approval');
+
+        if (portal === 'restaurant') {
+          onNavigate('/workspace');
         } else {
           onNavigate(config.targetDashboard);
         }
@@ -210,17 +273,25 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
           <DinelyLogo size="md" className="justify-center mb-1" />
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Dinely Dedicated Role Portal
+            {portal === 'restaurant' ? 'Dinely Owner Portal' : 'Dinely Dedicated Role Portal'}
           </div>
           
           <div className="flex items-center justify-center gap-3">
             <div className={`p-3 rounded-2xl bg-gradient-to-br ${config.accentGradient} text-white shadow-xl flex items-center justify-center`}>
               {config.icon}
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">{config.title}</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              {portal === 'restaurant' && authStage === 'ENTER_EMAIL' ? 'Start with Dinely' :
+               portal === 'restaurant' && authStage === 'CREATE_ACCOUNT' ? 'Create your Dinely account' :
+               portal === 'restaurant' && authStage === 'PASSWORD_LOGIN' ? 'Welcome back' : config.title}
+            </h1>
           </div>
           
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">{config.subtitle}</p>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            {portal === 'restaurant' && authStage === 'ENTER_EMAIL' ? 'Enter your email to sign in or create an account' :
+             portal === 'restaurant' && authStage === 'CREATE_ACCOUNT' ? 'Set up your credentials for Dinely Restaurant Cloud' :
+             portal === 'restaurant' && authStage === 'PASSWORD_LOGIN' ? 'Enter your password to access your restaurant workspace' : config.subtitle}
+          </p>
         </div>
 
         {/* Login Card */}
@@ -241,14 +312,14 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
                   size="sm"
                   onClick={() => {
                     const dashboard = currentUser.role === 'PLATFORM_ADMIN' ? '/admin/dashboard' :
-                                      currentUser.role === 'RESTAURANT_OWNER' ? '/restaurant/dashboard' :
+                                      currentUser.role === 'RESTAURANT_OWNER' ? '/workspace' :
                                       currentUser.role === 'CHEF' ? '/kitchen/dashboard' :
-                                      currentUser.role === 'WAITER' ? '/waiter' : '/restaurant/dashboard';
+                                      currentUser.role === 'WAITER' ? '/waiter' : '/workspace';
                     onNavigate(dashboard);
                   }}
                   className="flex-1 text-xs py-2 font-bold"
                 >
-                  Go to Active Dashboard
+                  Go to Workspace Dashboard
                 </Button>
                 <Button
                   variant="outline"
@@ -266,19 +337,6 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
             </div>
           )}
 
-          {/* Portal Info Banner */}
-          <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-2xl flex items-start gap-3">
-            <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-            <div className="text-[11px] text-slate-300 leading-relaxed">
-              <span className="font-bold text-white block mb-0.5">{config.description}</span>
-              {portal === 'kitchen' || portal === 'waiter' ? (
-                <span className="text-slate-400">
-                  Staff credentials are generated by the Restaurant Owner via Staff Management.
-                </span>
-              ) : null}
-            </div>
-          </div>
-
           {/* Messages */}
           {errorMessage && (
             <div className="p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-2xl text-xs text-rose-300 flex items-start gap-2.5 animate-shake">
@@ -294,61 +352,187 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
             </div>
           )}
 
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                <span>Email Address</span>
-                <span className="text-[10px] text-slate-500 font-mono">Role Email</span>
-              </label>
-              <div className="relative">
+          {/* STAGE 1: ENTER EMAIL (RESTAURANT PORTAL) */}
+          {portal === 'restaurant' && authStage === 'ENTER_EMAIL' && (
+            <form onSubmit={handleEmailContinue} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="pl-10"
+                  />
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                variant="brand"
+                className="w-full py-3 text-xs font-bold shadow-lg mt-2 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white"
+                disabled={isLoading}
+                icon={isLoading ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              >
+                {isLoading ? 'Checking Email...' : 'Continue'}
+              </Button>
+            </form>
+          )}
+
+          {/* STAGE 2: CREATE ACCOUNT (NEW USER) */}
+          {portal === 'restaurant' && authStage === 'CREATE_ACCOUNT' && (
+            <form onSubmit={handleCreateAccountSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">
+                  Full Name
+                </label>
+                <Input
+                  placeholder="e.g. Ayaan Sharma"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">
+                  Email Address
+                </label>
                 <Input
                   type="email"
-                  placeholder="enter email..."
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="pl-10"
                 />
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                <span>Password</span>
-                <span className="text-[10px] text-slate-500 font-mono">Secure Auth</span>
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="pl-10 pr-10"
-                />
-                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <button
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">
+                  Password
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Create a strong password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <Button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  variant="outline"
+                  onClick={() => setAuthStage('ENTER_EMAIL')}
+                  className="text-xs border-slate-800 text-slate-400"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                  Back
+                </Button>
+                <Button
+                  type="submit"
+                  variant="brand"
+                  className="flex-1 py-3 text-xs font-bold shadow-lg bg-gradient-to-r from-rose-600 to-amber-500 text-white"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Creating Account...' : 'Create account'}
+                </Button>
               </div>
-            </div>
+            </form>
+          )}
 
-            <Button
-              type="submit"
-              variant="brand"
-              className="w-full py-3 text-xs font-bold shadow-lg mt-2"
-              disabled={isLoading}
-              icon={isLoading ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+          {/* STAGE 1b / REGULAR LOGIN (PASSWORD LOGIN) */}
+          {(portal !== 'restaurant' || authStage === 'PASSWORD_LOGIN') && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                  <span>Email Address</span>
+                </label>
+                <div className="relative">
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="pl-10"
+                  />
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                  <span>Password</span>
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="pl-10 pr-10"
+                  />
+                  <KeyRound className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2">
+                {portal === 'restaurant' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setAuthStage('ENTER_EMAIL')}
+                    className="text-xs border-slate-800 text-slate-400"
+                  >
+                    Change Email
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  variant="brand"
+                  className="flex-1 py-3 text-xs font-bold shadow-lg"
+                  disabled={isLoading}
+                  icon={isLoading ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                >
+                  {isLoading ? 'Authenticating...' : `Log in`}
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {/* Quick Demo Credentials Assistant */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={handleQuickFill}
+              className="text-[11px] text-slate-500 hover:text-slate-300 underline font-mono block mx-auto text-center"
             >
-              {isLoading ? 'Authenticating...' : `Sign In to ${config.title}`}
-            </Button>
-          </form>
+              ⚡ Fill Demo Account ({config.demoEmail})
+            </button>
+          </div>
 
           {portal === 'restaurant' && (
             <div className="space-y-3 pt-3 border-t border-slate-800 text-center">

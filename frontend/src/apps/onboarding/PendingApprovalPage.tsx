@@ -181,25 +181,40 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
         <div className="pt-2 space-y-2">
           <h1 className="text-3xl font-black text-white tracking-tight">{restName}</h1>
           <p className="text-xs text-slate-400 font-mono">
-            {restaurant?.domain || `${(restName || 'restaurant').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app`} • ID: {restaurant?.id || 'rest-new'}
+            Application #{restaurant?.id ? restaurant.id.replace(/^rest-/, 'APP-').slice(0, 8).toUpperCase() : 'APP-8492'}
           </p>
         </div>
 
-        {/* TIMELINE PROGRESS BAR */}
-        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between text-[11px] font-bold">
-            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> 1. Application Submitted</span>
-            <span className={isApproved ? 'text-emerald-400' : isRejected ? 'text-rose-400' : 'text-amber-400 font-extrabold animate-pulse'}>
-              2. Under Review
-            </span>
-            <span className={isApproved ? 'text-emerald-400 font-extrabold' : 'text-slate-600'}>
-              3. Approved & Activated
-            </span>
-          </div>
-          <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden flex">
-            <div className="h-full bg-emerald-500 w-1/3" />
-            <div className={`h-full ${isApproved ? 'bg-emerald-500 w-1/3' : isRejected ? 'bg-rose-500 w-1/3' : 'bg-amber-400 w-1/3 animate-pulse'}`} />
-            <div className={`h-full ${isApproved ? 'bg-emerald-500 w-1/3' : 'bg-slate-800 w-1/3'}`} />
+        {/* TIMELINE PROGRESSION LIST */}
+        <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-3 text-left">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Application Timeline</p>
+          <div className="space-y-2.5 text-xs">
+            <div className="flex items-center gap-2.5 text-emerald-400 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Account created</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-emerald-400 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Restaurant submitted</span>
+            </div>
+            <div className={`flex items-center gap-2.5 ${isApproved ? 'text-emerald-400 font-bold' : isRejected ? 'text-rose-400 font-bold' : 'text-amber-400 font-extrabold animate-pulse'}`}>
+              {isApproved ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : isRejected ? (
+                <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              ) : (
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping ml-0.5 mr-1 shrink-0" />
+              )}
+              <span>Dinely review</span>
+            </div>
+            <div className={`flex items-center gap-2.5 ${isApproved ? 'text-emerald-400 font-bold' : 'text-slate-600 font-medium'}`}>
+              {isApproved ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : (
+                <span className="w-2.5 h-2.5 rounded-full border border-slate-600 ml-0.5 mr-1 shrink-0" />
+              )}
+              <span>Restaurant activated</span>
+            </div>
           </div>
         </div>
 
@@ -230,7 +245,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
             </div>
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span>Status: PENDING ADMIN APPROVAL ⏳</span>
+              <span>Status: Pending approval ⏳</span>
             </div>
           </div>
         )}
@@ -258,27 +273,35 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
           </div>
         ) : (
           <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-3 text-slate-300 text-sm leading-relaxed max-w-lg mx-auto">
-            <p className="font-semibold text-white text-base">Your restaurant application has been submitted.</p>
+            <p className="font-semibold text-white text-base">Your restaurant is under review</p>
             <p className="text-xs text-slate-400 leading-relaxed">
-              The Dinely platform administrator must review and approve your restaurant details before you can access the full restaurant management system.
+              Our team is reviewing your restaurant. You'll get access once your application is approved.
             </p>
             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-emerald-400 text-xs font-semibold">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Real-time polling active • Automatically directs on approval</span>
+              <span>Real-time status updates active</span>
             </div>
           </div>
         )}
 
         {/* Action Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <Button
+            variant="outline"
+            onClick={() => onNavigate('/workspace')}
+            className="w-full sm:w-auto text-xs font-bold border-slate-700 text-slate-200 hover:bg-slate-800 px-5 py-3"
+          >
+            ← Back to restaurants
+          </Button>
+
           {isApproved ? (
             <Button
               variant="brand"
               onClick={() => onNavigate('/restaurant/dashboard')}
-              className="w-full sm:w-auto text-xs font-bold px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-950/60"
+              className="w-full sm:w-auto text-xs font-bold px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-950/60"
               icon={<ArrowRight className="w-4 h-4 ml-1" />}
             >
-              Launch Operational Dashboard →
+              Open Restaurant →
             </Button>
           ) : isRejected ? (
             <>
@@ -290,35 +313,16 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
               >
                 Resubmit Application
               </Button>
-              <Button
-                variant="outline"
-                onClick={handleManualRefresh}
-                className="w-full sm:w-auto text-xs font-bold border-slate-800 text-slate-300 hover:bg-slate-800 px-4 py-3"
-                icon={<RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />}
-              >
-                Check Status
-              </Button>
             </>
           ) : (
-            <>
-              <Button
-                variant="brand"
-                onClick={() => setIsDetailsModalOpen(true)}
-                className="w-full sm:w-auto text-xs font-bold px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700"
-                icon={<Building className="w-4 h-4 mr-1" />}
-              >
-                View Submitted Info
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={handleManualRefresh}
-                className="w-full sm:w-auto text-xs font-bold border-slate-800 text-slate-300 hover:bg-slate-800 px-4 py-3"
-                icon={<RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />}
-              >
-                Check Status
-              </Button>
-            </>
+            <Button
+              variant="brand"
+              onClick={() => setIsDetailsModalOpen(true)}
+              className="w-full sm:w-auto text-xs font-bold px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700"
+              icon={<Building className="w-4 h-4 mr-1" />}
+            >
+              View Submitted Info
+            </Button>
           )}
 
           <Button

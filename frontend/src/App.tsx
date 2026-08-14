@@ -11,6 +11,7 @@ import { RoleLoginPage, PortalType } from './apps/auth/RoleLoginPage';
 import { UnauthorizedPage } from './apps/auth/UnauthorizedPage';
 import { SetupWizard } from './apps/onboarding/SetupWizard';
 import { PendingApprovalPage } from './apps/onboarding/PendingApprovalPage';
+import { WorkspaceSelector } from './apps/onboarding/WorkspaceSelector';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
 import { ErrorBoundary, DinelyLogo } from './packages/ui';
 import { api } from './packages/api/client';
@@ -148,9 +149,9 @@ export default function App() {
                 <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
 
                 <button
-                  onClick={() => navigateTo(currentUser ? '/restaurant/dashboard' : '/restaurant/login')}
+                  onClick={() => navigateTo(currentUser ? '/workspace' : '/restaurant/login')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                    currentPath.startsWith('/restaurant')
+                    currentPath.startsWith('/restaurant') || currentPath === '/workspace'
                       ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
@@ -343,10 +344,29 @@ export default function App() {
                   onNavigate={navigateTo}
                   onLoginSuccess={(_, user) => {
                     setCurrentUser(user);
-                    navigateTo('/restaurant/dashboard');
+                    navigateTo('/workspace');
                   }}
                 />
               )
+            )}
+
+            {(currentPath === '/workspace' || currentPath === '/restaurant/select') && (
+              <WorkspaceSelector
+                user={currentUser}
+                onSelectRestaurant={async (rest) => {
+                  await api.switchActiveRestaurant(rest.id);
+                  const updated = await api.getRestaurantDetails(rest.id);
+                  setCurrentRestaurant(updated);
+                  const isApproved = updated?.isApproved || updated?.lifecycleStatus === 'APPROVED' || updated?.lifecycleStatus === 'LIVE' || updated?.lifecycleStatus === 'ACTIVE';
+                  if (isApproved) {
+                    navigateTo('/restaurant/dashboard');
+                  } else {
+                    navigateTo('/restaurant/pending-approval');
+                  }
+                }}
+                onCreateNewRestaurant={() => navigateTo('/wizard')}
+                onLogout={() => handleLogout('/restaurant/login')}
+              />
             )}
 
             {currentPath === '/restaurant/pending-approval' && (
