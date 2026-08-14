@@ -484,9 +484,10 @@ export default function App() {
             )}
 
             {/* Setup Wizard */}
-            {currentPath === '/wizard' && (
+            {(currentPath === '/wizard' || currentPath === '/create-restaurant' || currentPath === '/restaurant-setup') && (
               <SetupWizard
                 initialOwnerData={activeOwnerData}
+                onNavigate={navigateTo}
                 onFinishSetup={(setupData) => {
                   setActiveOwnerData((prev: any) => ({ ...prev, ...setupData }));
                   navigateTo('/restaurant/pending-approval');
