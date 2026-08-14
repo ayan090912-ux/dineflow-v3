@@ -5,37 +5,27 @@ import {
   Card,
   Input,
   Badge,
-  Table,
-  ImageUpload,
   DinelyLogo,
 } from '../../packages/ui';
 import {
   Building,
   MapPin,
-  Palette,
-  QrCode,
-  Users,
   UtensilsCrossed,
+  Wine,
+  Truck,
+  Coffee,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
-  Plus,
-  Trash2,
-  Upload,
   Sparkles,
-  Clock,
   ShieldCheck,
   Store,
-  DollarSign,
-  Coffee,
-  Wine,
-  Truck,
-  Flame,
-  ChefHat,
-  UserPlus,
-  Eye,
-  Check,
+  Grid,
   Image as ImageIcon,
+  Mail,
+  Phone,
+  User as UserIcon,
+  Lock,
 } from 'lucide-react';
 
 interface SetupWizardProps {
@@ -43,40 +33,35 @@ interface SetupWizardProps {
   onFinishSetup: (setupData: any) => void;
 }
 
-const CORE_BUSINESS_TYPES = [
+const BUSINESS_TYPES = [
   {
     id: 'RESTAURANT',
-    name: 'Restaurant',
+    name: 'Fine Dining & Bistro',
     icon: UtensilsCrossed,
-    badge: 'Standard OS',
-    badgeVariant: 'brand' as const,
-    desc: 'Full-service restaurant OS with food menu, tables, waiter workflow & kitchen KDS.',
+    desc: 'Full-service dining with table service, waiter workflow & kitchen KDS.',
   },
   {
     id: 'BAR',
     name: 'Bar & Lounge',
     icon: Wine,
-    badge: 'Restaurant + Bar Module',
-    badgeVariant: 'warning' as const,
-    desc: 'Full Restaurant OS PLUS Bar Menu, Bar KDS Terminal, mixology order routing & drink prep queue.',
+    desc: 'Craft cocktail bar, mixology order routing & drink prep queue.',
+  },
+  {
+    id: 'CAFE',
+    name: 'Cafe & Bakery',
+    icon: Coffee,
+    desc: 'Fast-casual coffee house, pastries, counter QR & table service.',
   },
   {
     id: 'FOOD_TRUCK',
-    name: 'Food Truck / Food Stall',
+    name: 'Food Truck / Quick Service',
     icon: Truck,
-    badge: 'Mobile / Counter OS',
-    badgeVariant: 'info' as const,
-    desc: 'Order OS for mobile food trucks & stalls. Supports counter QR ordering, pickup notifications & optional tables.',
+    desc: 'Express mobile food truck or counter ordering service.',
   },
 ];
 
-const BANNER_PRESETS = [
-  'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1000&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?w=1000&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1000&auto=format&fit=crop&q=80',
-];
-
-const LOGO_PRESETS = [
+const DEFAULT_LOGOS = [
+  'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
   'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=200&auto=format&fit=crop&q=80',
   'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=200&auto=format&fit=crop&q=80',
 ];
@@ -86,976 +71,422 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   onFinishSetup,
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  // Step 1: Business Info & Owner Login Credentials
-  const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || '');
-  const [brandName, setBrandName] = useState('');
-  const [businessType, setBusinessType] = useState<'RESTAURANT' | 'BAR' | 'FOOD_TRUCK'>('RESTAURANT');
-  const [foodTruckHasTables, setFoodTruckHasTables] = useState<boolean>(false);
+  // Step 1: Account Info (If not prefilled)
   const [ownerName, setOwnerName] = useState(initialOwnerData?.ownerName || initialOwnerData?.name || '');
   const [ownerEmail, setOwnerEmail] = useState(initialOwnerData?.ownerEmail || initialOwnerData?.email || '');
-  const [ownerPhone, setOwnerPhone] = useState(initialOwnerData?.phone || '');
   const [ownerPassword, setOwnerPassword] = useState(initialOwnerData?.password || '');
-  const [ownerConfirmPassword, setOwnerConfirmPassword] = useState(initialOwnerData?.password || '');
 
-  // Step 2: Address
-  const [country, setCountry] = useState('India');
-  const [state, setState] = useState('Maharashtra');
-  const [city, setCity] = useState('Mumbai');
-  const [address, setAddress] = useState('Bandra West');
-  const [pinCode, setPinCode] = useState('400050');
-  const [timezone, setTimezone] = useState('Asia/Kolkata (IST)');
-  const [currency, setCurrency] = useState('INR (₹)');
+  // Step 2: Restaurant / Business Information
+  const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || '');
+  const [businessType, setBusinessType] = useState<string>('RESTAURANT');
+  const [address, setAddress] = useState(initialOwnerData?.address || '');
+  const [city, setCity] = useState(initialOwnerData?.city || '');
+  const [contactEmail, setContactEmail] = useState(initialOwnerData?.ownerEmail || initialOwnerData?.email || '');
+  const [contactNumber, setContactNumber] = useState(initialOwnerData?.phone || '');
+  const [logo, setLogo] = useState(DEFAULT_LOGOS[0]);
 
-  // Step 3: Branding
-  const [logo, setLogo] = useState(LOGO_PRESETS[0]);
-  const [banner, setBanner] = useState(BANNER_PRESETS[0]);
-  const [primaryColor, setPrimaryColor] = useState('#e11d48'); // rose-600
-  const [secondaryColor, setSecondaryColor] = useState('#f59e0b'); // amber-500
+  // Step 3: Seating & Floorplan Capacity
+  const [totalTablesCount, setTotalTablesCount] = useState<number>(10);
+  const [indoorTablesCount, setIndoorTablesCount] = useState<number>(8);
+  const [outdoorTablesCount, setOutdoorTablesCount] = useState<number>(2);
 
-  // Step 4: Configuration & Tables
-  const [indoorTables, setIndoorTables] = useState(12);
-  const [outdoorTables, setOutdoorTables] = useState(6);
-  const [vipTables, setVipTables] = useState(2);
-
-  // Step 5: Restaurant Features (Modular Feature Flags)
-  const [features, setFeatures] = useState({
-    food_service: true,
-    cafe: true,
-    bar: true,
-    bakery: false,
-    desserts: true,
-    takeaway: true,
-    delivery: true,
-    reservations: true,
-    outdoor_seating: true,
-    vip_rooms: true,
-  });
-
-  const toggleFeature = (key: keyof typeof features) => {
-    setFeatures((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  // Step 6: Employees & Roster (Starts empty for authentic onboarding)
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [newEmpName, setNewEmpName] = useState('');
-  const [newEmpEmail, setNewEmpEmail] = useState('');
-  const [newEmpPhone, setNewEmpPhone] = useState('');
-  const [newEmpRole, setNewEmpRole] = useState<'MANAGER' | 'CHEF' | 'WAITER' | 'BARTENDER' | 'CASHIER'>('WAITER');
-  const [newEmpShift, setNewEmpShift] = useState('Evening (4PM - 12AM)');
-  const [newEmpSection, setNewEmpSection] = useState('Front Floor');
-
-  // Step 7: Menu Setup (Starts empty for authentic onboarding)
-  const [categories, setCategories] = useState(['Starters', 'Main Course', 'Desserts', 'Drinks']);
-  const [newCategoryName, setNewCategoryName] = useState('');
-
-  const [menuItems, setMenuItems] = useState<any[]>([]);
-
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemCategory, setNewItemCategory] = useState('Main Course');
-  const [newItemPrice, setNewItemPrice] = useState('22');
-  const [newItemDesc, setNewItemDesc] = useState('');
-  const [newItemImage, setNewItemImage] = useState('');
-  const [newItemIsVeg, setNewItemIsVeg] = useState(true);
-  const [newItemPrepTime, setNewItemPrepTime] = useState('15');
-
-  // Add Employee Handler
-  const handleAddEmployee = () => {
-    if (!newEmpName) return;
-    setEmployees([
-      ...employees,
-      {
-        id: Date.now().toString(),
-        name: newEmpName,
-        email: newEmpEmail || `${newEmpName.toLowerCase().replace(/\s+/g, '')}@lumiere.com`,
-        role: newEmpRole,
-        phone: newEmpPhone || '+1 555-0100',
-        shift: newEmpShift,
-        section: newEmpSection,
-        status: 'ON_CLOCK',
-      },
-    ]);
-    setNewEmpName('');
-    setNewEmpEmail('');
-    setNewEmpPhone('');
-  };
-
-  const handleRemoveEmployee = (id: string) => {
-    setEmployees(employees.filter((e) => e.id !== id));
-  };
-
-  // Add Category Handler
-  const handleAddCategory = () => {
-    if (!newCategoryName) return;
-    if (!categories.includes(newCategoryName)) {
-      setCategories([...categories, newCategoryName]);
+  const handleNextStep = () => {
+    setErrorMessage('');
+    if (currentStep === 1) {
+      if (!ownerName || !ownerEmail) {
+        setErrorMessage('Please enter your full name and owner email address.');
+        return;
+      }
+      if (!api.getCurrentUser() && !ownerPassword) {
+        setErrorMessage('Please choose a password for your owner account.');
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      if (!restaurantName || !address || !city || !contactEmail || !contactNumber) {
+        setErrorMessage('Please complete all required restaurant business details.');
+        return;
+      }
+      setCurrentStep(3);
     }
-    setNewCategoryName('');
   };
 
-  // Add Menu Item Handler
-  const handleAddMenuItem = () => {
-    if (!newItemName || !newItemPrice) return;
-    setMenuItems([
-      ...menuItems,
-      {
-        id: Date.now().toString(),
-        name: newItemName,
-        category: newItemCategory,
-        price: parseFloat(newItemPrice) || 0,
-        description: newItemDesc || 'Delicious freshly prepared dish.',
-        isVegetarian: newItemIsVeg,
-        prepTime: parseInt(newItemPrepTime) || 15,
-        image: newItemImage || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop&q=80',
-        available: true,
-      },
-    ]);
-    setNewItemName('');
-    setNewItemDesc('');
-    setNewItemImage('');
+  const handlePrevStep = () => {
+    setErrorMessage('');
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
   };
 
-  const totalTables = indoorTables + outdoorTables + vipTables;
-
-  const stepsList = [
-    { num: 1, name: 'Business Info', icon: Building },
-    { num: 2, name: 'Address & Currency', icon: MapPin },
-    { num: 3, name: 'Branding', icon: Palette },
-    { num: 4, name: 'Dining & Floorplan', icon: QrCode },
-    { num: 5, name: 'Review & Launch', icon: Sparkles },
-  ];
-
-  const handleFinish = async () => {
-    const hasBar = businessType === 'BAR';
-    const hasKitchen = true;
-    const hasTables = businessType === 'FOOD_TRUCK' ? foodTruckHasTables : true;
-    const hasWaiter = hasTables;
-    const orderNumberPrefix = businessType === 'FOOD_TRUCK' ? '#F' : '#ORD';
-
-    const finalData = {
-      restaurantName,
-      brandName,
-      businessType,
-      hasBar,
-      hasKitchen,
-      hasTables,
-      hasWaiter,
-      orderNumberPrefix,
-      address: `${address}, ${city}, ${state} ${pinCode}, ${country}`,
-      timezone,
-      currency,
-      theme: { logo, banner, primaryColor, secondaryColor },
-      tables: { total: totalTables, indoor: indoorTables, outdoor: outdoorTables, vip: vipTables },
-      features: {
-        ...features,
-        bar: hasBar,
-      },
-      employees,
-      categories,
-      menuItems,
-    };
+  const handleSubmitApplication = async () => {
+    setErrorMessage('');
+    setIsSubmitting(true);
 
     try {
-      // Register owner account
-      try {
-        await api.registerOwner({
-          name: ownerName || 'Restaurant Owner',
-          email: ownerEmail || 'owner@restaurant.com',
-          phone: ownerPhone || '+1 555-0100',
+      // 1. Ensure user account is registered/persisted if new
+      let currentUser = api.getCurrentUser();
+      if (!currentUser) {
+        const authRes = await api.registerOwner({
+          name: ownerName,
+          email: ownerEmail,
+          phone: contactNumber,
           password: ownerPassword || 'owner123',
         });
-      } catch (e) {
-        // Fallback if account already created
+        currentUser = authRes.user;
       }
 
-      const rest = await api.createRestaurantForOwner({
-        name: restaurantName,
-        cuisine: businessType === 'BAR' ? 'Bar & Lounge' : businessType === 'FOOD_TRUCK' ? 'Street Food & Truck' : 'Multi-Cuisine',
+      // 2. Create or update restaurant application
+      let existingRest = await api.getRestaurantDetails();
+      if (!existingRest) {
+        existingRest = await api.createRestaurantForOwner({
+          name: restaurantName,
+          businessType: businessType as any,
+          address: `${address}, ${city}`,
+          phone: contactNumber,
+          email: contactEmail,
+          ownerName: ownerName,
+          ownerEmail: ownerEmail,
+          theme: { logo },
+        });
+      }
+
+      // 3. Submit application for Platform Admin Review with table counts
+      const updatedRest = await api.submitRestaurantLaunch({
+        id: existingRest.id,
+        restaurantName,
         businessType,
-        hasBar,
-        hasKitchen,
-        hasTables,
-        hasWaiter,
-        orderNumberPrefix,
-        address: `${address}, ${city}, ${state} ${pinCode}`,
-        phone: ownerPhone || '+1 555-0100',
-        email: ownerEmail || 'owner@restaurant.com',
-        ownerName: ownerName || 'Restaurant Owner',
-        ownerEmail: ownerEmail || 'owner@restaurant.com',
-        features: {
-          ...features,
-          bar: hasBar,
+        address: `${address}, ${city}`,
+        city,
+        phone: contactNumber,
+        email: contactEmail,
+        theme: { logo },
+        tables: {
+          indoor: indoorTablesCount,
+          outdoor: outdoorTablesCount,
+          vip: 0,
         },
-        theme: {
-          logo,
-          bannerUrl: banner,
-          primaryColor,
-          secondaryColor,
-        },
+        totalTablesCount: Math.max(totalTablesCount, indoorTablesCount + outdoorTablesCount),
       });
 
-      // Submit application for platform launch approval (sets status to PENDING_APPROVAL)
-      await api.submitRestaurantLaunch({
-        id: rest?.id,
-        name: rest?.name || restaurantName,
-        businessType,
-        hasBar,
-        hasKitchen,
-        hasTables,
-        hasWaiter,
-      });
-
-      onFinishSetup(finalData);
-    } catch (err) {
-      onFinishSetup(finalData);
+      setIsSubmitting(false);
+      onFinishSetup(updatedRest);
+    } catch (err: any) {
+      setIsSubmitting(false);
+      setErrorMessage(err.message || 'Failed to submit restaurant application. Please try again.');
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-65px)] bg-slate-950 text-slate-100 p-4 sm:p-8">
-      <div className="max-w-5xl mx-auto space-y-8">
-        {/* Wizard Header Progress Bar */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <DinelyLogo size="sm" />
-                <Badge variant="brand">Step {currentStep} of 5</Badge>
-                <span className="text-xs font-mono text-slate-400">Merchant Setup Wizard</span>
-              </div>
-              <h2 className="text-2xl font-black text-white mt-1">Configure {restaurantName || 'Your Restaurant'}</h2>
-            </div>
-            <div className="text-right hidden sm:block">
-              <span className="text-xs text-slate-400 font-mono">Progress: {Math.round((currentStep / 5) * 100)}%</span>
-              <div className="w-36 h-2 bg-slate-800 rounded-full overflow-hidden mt-1">
-                <div
-                  className="h-full bg-gradient-to-r from-rose-600 to-amber-500 transition-all duration-300"
-                  style={{ width: `${(currentStep / 5) * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 relative font-sans overflow-x-hidden">
+      {/* Background Glow Effect */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-rose-600/10 via-amber-500/10 to-indigo-600/10 blur-[140px] rounded-full pointer-events-none" />
 
-          {/* Steps Breadcrumbs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 pt-2 border-t border-slate-800/80">
-            {stepsList.map((step) => {
-              const Icon = step.icon;
-              const isActive = step.num === currentStep;
-              const isCompleted = step.num < currentStep;
-              return (
-                <button
-                  key={step.num}
-                  onClick={() => setCurrentStep(step.num)}
-                  className={`flex flex-col items-center gap-1.5 p-2 rounded-2xl transition-all text-center ${
-                    isActive
-                      ? 'bg-rose-600/20 border border-rose-500/50 text-white'
-                      : isCompleted
-                      ? 'bg-slate-800/40 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-500 border border-transparent hover:text-slate-300'
-                  }`}
-                >
-                  <div
-                    className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold ${
-                      isActive
-                        ? 'bg-rose-600 text-white shadow-md'
-                        : isCompleted
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {isCompleted ? <Check className="w-4 h-4" /> : step.num}
-                  </div>
-                  <span className="text-[10px] font-bold tracking-tight truncate max-w-full">{step.name}</span>
-                </button>
-              );
-            })}
-          </div>
+      {/* Top Header Navbar */}
+      <header className="max-w-4xl w-full mx-auto flex items-center justify-between py-3 px-4 bg-slate-900/80 border border-slate-800 rounded-2xl backdrop-blur-xl z-10 shadow-lg">
+        <div className="flex items-center gap-3">
+          <DinelyLogo size="sm" />
+          <Badge variant="brand" className="text-[10px]">Setup Wizard</Badge>
         </div>
+        <div className="text-xs text-slate-400 font-mono">
+          Step <span className="text-rose-400 font-bold">{currentStep}</span> of 3
+        </div>
+      </header>
 
-        {/* STEP 1: BUSINESS INFORMATION */}
-        {currentStep === 1 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                <Building className="w-5 h-5 text-rose-500" /> Step 1: Business Information
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Set your primary venue identity and operational concept.</p>
+      {/* Main Form Content */}
+      <main className="max-w-3xl w-full mx-auto my-8 relative z-10">
+        <Card className="bg-slate-900/90 border-slate-800/90 p-6 sm:p-10 backdrop-blur-xl shadow-2xl space-y-8 rounded-3xl">
+          {/* Wizard Step Progress Tracker */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+              <span className={currentStep >= 1 ? 'text-rose-400' : 'text-slate-500'}>1. Account Information</span>
+              <span className={currentStep >= 2 ? 'text-rose-400' : 'text-slate-500'}>2. Business & Venue Details</span>
+              <span className={currentStep >= 3 ? 'text-rose-400' : 'text-slate-500'}>3. Tables & Capacity</span>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Restaurant Name *"
-                placeholder="e.g. Lumiere Bistro"
-                value={restaurantName}
-                onChange={(e) => setRestaurantName(e.target.value)}
-              />
-              <Input
-                label="Brand / Parent Legal Entity *"
-                placeholder="e.g. Lumiere Group LLC"
-                value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
+            <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800 flex">
+              <div
+                className="h-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-500 transition-all duration-500 ease-out"
+                style={{ width: `${(currentStep / 3) * 100}%` }}
               />
             </div>
+          </div>
 
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Restaurant Owner Account & Dashboard Credentials</h4>
+          {/* Error Message Callout */}
+          {errorMessage && (
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium animate-shake">
+              <span className="font-bold">Error:</span> {errorMessage}
+            </div>
+          )}
+
+          {/* STEP 1: OWNER ACCOUNT INFORMATION */}
+          {currentStep === 1 && (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <Badge variant="brand" className="mb-1">Step 1</Badge>
+                <h2 className="text-2xl font-black text-white tracking-tight">Owner Account Details</h2>
+                <p className="text-xs text-slate-400">Verify your primary restaurant administrator account information.</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+              <div className="space-y-4">
                 <Input
-                  label="Owner Full Name *"
-                  placeholder="e.g. Alex Mercer"
+                  label="Restaurant Owner Name *"
+                  placeholder="e.g. Rahul Sharma"
                   value={ownerName}
                   onChange={(e) => setOwnerName(e.target.value)}
+                  icon={<UserIcon className="w-4 h-4 text-slate-500" />}
+                  required
                 />
                 <Input
-                  label="Owner Email (Login ID) *"
+                  label="Owner Email Address *"
                   type="email"
-                  placeholder="owner@myrestaurant.com"
+                  placeholder="rahul@restaurant.com"
                   value={ownerEmail}
                   onChange={(e) => setOwnerEmail(e.target.value)}
+                  icon={<Mail className="w-4 h-4 text-slate-500" />}
+                  required
                 />
-                <Input
-                  label="Phone Number *"
-                  placeholder="+1 555-0100"
-                  value={ownerPhone}
-                  onChange={(e) => setOwnerPhone(e.target.value)}
-                />
-                <Input
-                  label="Dashboard Password *"
-                  type="password"
-                  placeholder="••••••••"
-                  value={ownerPassword}
-                  onChange={(e) => setOwnerPassword(e.target.value)}
-                />
-                <Input
-                  label="Confirm Password *"
-                  type="password"
-                  placeholder="••••••••"
-                  value={ownerConfirmPassword}
-                  onChange={(e) => setOwnerConfirmPassword(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-xs font-semibold text-slate-300">Select Business Type & Architecture *</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {CORE_BUSINESS_TYPES.map((type) => {
-                  const Icon = type.icon;
-                  const isSelected = businessType === type.id;
-                  return (
-                    <div
-                      key={type.id}
-                      onClick={() => setBusinessType(type.id as any)}
-                      className={`p-4 rounded-2xl border cursor-pointer transition-all space-y-2.5 ${
-                        isSelected
-                          ? 'bg-rose-600/10 border-rose-500 text-white shadow-lg shadow-rose-950/20'
-                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <Icon className={`w-6 h-6 ${isSelected ? 'text-rose-400' : 'text-slate-500'}`} />
-                        <Badge variant={type.badgeVariant}>{type.badge}</Badge>
-                      </div>
-                      <h4 className="text-sm font-bold text-white">{type.name}</h4>
-                      <p className="text-[11px] text-slate-400 leading-snug">{type.desc}</p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Food Truck / Stall Table Configuration Question */}
-              {businessType === 'FOOD_TRUCK' && (
-                <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 animate-fadeIn">
-                  <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-sky-400" />
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">Food Truck Table Configuration</h4>
-                  </div>
-                  <p className="text-xs text-slate-400">Do you have tables / seating at your Food Truck or Stall?</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setFoodTruckHasTables(false)}
-                      className={`p-3 rounded-xl border text-left space-y-1 transition-all cursor-pointer ${
-                        !foodTruckHasTables
-                          ? 'bg-sky-500/10 border-sky-500 text-white font-bold'
-                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-sky-400">NO (Takeaway / Counter Pickup Only)</div>
-                      <p className="text-[10px] text-slate-400 leading-tight">Customer orders via counter QR code & receives pickup order number (e.g. #F1024).</p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setFoodTruckHasTables(true)}
-                      className={`p-3 rounded-xl border text-left space-y-1 transition-all cursor-pointer ${
-                        foodTruckHasTables
-                          ? 'bg-emerald-500/10 border-emerald-500 text-white font-bold'
-                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-emerald-400">YES (Outdoor / Stall Seating)</div>
-                      <p className="text-[10px] text-slate-400 leading-tight">Enable table QR codes, session management, and optional waiter workflow.</p>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-        )}
-
-        {/* STEP 2: BUSINESS ADDRESS */}
-        {currentStep === 2 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-rose-500" /> Step 2: Location & Regional Settings
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Configure physical address, timezone, and currency defaults.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Country</label>
-                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
-                  <span>🇮🇳 India</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">Fixed</span>
-                </div>
-              </div>
-              <Input label="State / Region" value={state} onChange={(e) => setState(e.target.value)} />
-              <Input label="City" value={city} onChange={(e) => setCity(e.target.value)} />
-              <Input label="PIN / Postal Code" value={pinCode} onChange={(e) => setPinCode(e.target.value)} />
-            </div>
-
-            <Input label="Street Address" value={address} onChange={(e) => setAddress(e.target.value)} />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Operational Timezone</label>
-                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
-                  <span>Asia/Kolkata (IST)</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">+05:30</span>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Base Currency</label>
-                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
-                  <span>INR (₹) - Indian Rupee</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">₹ Symbol</span>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* STEP 3: BRANDING & THEME */}
-        {currentStep === 3 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                <Palette className="w-5 h-5 text-rose-500" /> Step 3: Brand Aesthetics & Theme Preview
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Upload brand assets from your local drive or select presets for the QR App.</p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="space-y-5">
-                {/* Logo Image Upload with Local Drive support */}
-                <div className="space-y-2">
-                  <ImageUpload
-                    label="Upload Restaurant Logo (Local Drive or URL)"
-                    value={logo}
-                    onChange={setLogo}
+                {!initialOwnerData?.password && (
+                  <Input
+                    label="Account Password *"
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={ownerPassword}
+                    onChange={(e) => setOwnerPassword(e.target.value)}
+                    icon={<Lock className="w-4 h-4 text-slate-500" />}
                   />
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="text-[11px] text-slate-400">Or pick preset:</span>
-                    {LOGO_PRESETS.map((p, idx) => (
-                      <button
-                        type="button"
-                        key={idx}
-                        onClick={() => setLogo(p)}
-                        className={`w-8 h-8 rounded-lg border p-0.5 overflow-hidden ${
-                          logo === p ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-slate-800'
-                        }`}
-                      >
-                        <img src={p} className="w-full h-full object-cover rounded-md" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Banner Image Upload with Local Drive support */}
-                <div className="space-y-2">
-                  <ImageUpload
-                    label="Upload Header Banner Backdrop (Local Drive or URL)"
-                    value={banner}
-                    onChange={setBanner}
-                  />
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="text-[11px] text-slate-400">Or pick preset backdrop:</span>
-                    {BANNER_PRESETS.map((b, idx) => (
-                      <button
-                        type="button"
-                        key={idx}
-                        onClick={() => setBanner(b)}
-                        className={`h-10 w-16 rounded-lg border overflow-hidden ${
-                          banner === b ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-slate-800'
-                        }`}
-                      >
-                        <img src={b} className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Color Palette Controls */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Primary Accent</label>
-                    <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
-                      <input
-                        type="color"
-                        value={primaryColor}
-                        onChange={(e) => setPrimaryColor(e.target.value)}
-                        className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
-                      />
-                      <span className="text-xs font-mono uppercase text-slate-300">{primaryColor}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Secondary Accent</label>
-                    <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
-                      <input
-                        type="color"
-                        value={secondaryColor}
-                        onChange={(e) => setSecondaryColor(e.target.value)}
-                        className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
-                      />
-                      <span className="text-xs font-mono uppercase text-slate-300">{secondaryColor}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Real-time Smartphone Theme Preview Card */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Eye className="w-3.5 h-3.5" /> Customer QR App Real-time Preview
-                </span>
-                <div className="bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative max-w-xs mx-auto">
-                  <div className="h-28 relative">
-                    <img src={banner} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-                  </div>
-                  <div className="p-4 -mt-10 relative z-10 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <img src={logo} className="w-12 h-12 rounded-2xl border-2 border-slate-900 object-cover shadow-lg" />
-                      <div>
-                        <h4 className="text-sm font-bold text-white">{restaurantName}</h4>
-                        <span className="text-[10px] text-slate-400">Table 04 • QR Menu</span>
-                      </div>
-                    </div>
-
-                    <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-slate-300 font-bold">Featured Dish</span>
-                        <span className="font-bold text-emerald-400">$28.00</span>
-                      </div>
-                      <button
-                        style={{ backgroundColor: primaryColor }}
-                        className="w-full py-1.5 rounded-xl text-white font-bold text-xs shadow-md transition-all"
-                      >
-                        Add to Order
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
-          </Card>
-        )}
-
-        {/* STEP 4: TABLES & QR CONFIGURATION */}
-        {currentStep === 4 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-rose-500" /> Step 4: Table Floorplan & QR Code Setup
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Specify seating sections to auto-generate dining QR codes.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <Card className="bg-slate-950 border-slate-800 p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-white">Indoor Seating</h4>
-                  <Badge variant="brand">Section A</Badge>
-                </div>
-                <Input
-                  type="number"
-                  label="Number of Tables"
-                  value={indoorTables.toString()}
-                  onChange={(e) => setIndoorTables(parseInt(e.target.value) || 0)}
-                />
-              </Card>
-
-              <Card className="bg-slate-950 border-slate-800 p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-white">Outdoor Patio</h4>
-                  <Badge variant="info">Section B</Badge>
-                </div>
-                <Input
-                  type="number"
-                  label="Number of Tables"
-                  value={outdoorTables.toString()}
-                  onChange={(e) => setOutdoorTables(parseInt(e.target.value) || 0)}
-                />
-              </Card>
-
-              <Card className="bg-slate-950 border-slate-800 p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-white">VIP Rooms</h4>
-                  <Badge variant="warning">Section C</Badge>
-                </div>
-                <Input
-                  type="number"
-                  label="Number of Tables"
-                  value={vipTables.toString()}
-                  onChange={(e) => setVipTables(parseInt(e.target.value) || 0)}
-                />
-              </Card>
-            </div>
-
-            {/* Generated QR Codes Summary */}
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-white">QR Code Floorplan Auto-Generator</h4>
-                  <p className="text-xs text-slate-400">Total {totalTables} table QR codes ready for instant download.</p>
-                </div>
-                <Badge variant="success">{totalTables} Tables Configured</Badge>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 pt-2">
-                {Array.from({ length: Math.min(totalTables, 12) }).map((_, i) => (
-                  <div key={i} className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-center space-y-1">
-                    <QrCode className="w-6 h-6 text-slate-400 mx-auto" />
-                    <span className="text-[11px] font-bold text-slate-200 block">Table {i + 1}</span>
-                    <span className="text-[9px] font-mono text-emerald-400">Active QR</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
-
-
-
-        {/* STEP 6: EMPLOYEES & SHIFTS */}
-        {currentStep === 6 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-rose-500" /> Step 6: Staff Onboarding & Shift Roster
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Directly add or remove staff members, assign work shifts, and manage floor stations with instant live preview.</p>
-            </div>
-
-            {/* Add Employee Direct Form */}
-            <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
-              <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                <UserPlus className="w-4 h-4" /> Add New Staff Member
-              </h4>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Input
-                  label="Full Name *"
-                  placeholder="e.g. Alex Rivera"
-                  value={newEmpName}
-                  onChange={(e) => setNewEmpName(e.target.value)}
-                />
-                <Input
-                  label="Email Address"
-                  placeholder="alex@lumiere.com"
-                  value={newEmpEmail}
-                  onChange={(e) => setNewEmpEmail(e.target.value)}
-                />
-                <Input
-                  label="Phone Number"
-                  placeholder="+1 555-0188"
-                  value={newEmpPhone}
-                  onChange={(e) => setNewEmpPhone(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Staff Role *</label>
-                  <select
-                    value={newEmpRole}
-                    onChange={(e: any) => setNewEmpRole(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-                  >
-                    <option value="MANAGER">Manager</option>
-                    <option value="CHEF">Kitchen Chef</option>
-                    <option value="WAITER">Floor Waiter</option>
-                    <option value="BARTENDER">Bartender</option>
-                    <option value="CASHIER">Cashier</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Assigned Shift *</label>
-                  <select
-                    value={newEmpShift}
-                    onChange={(e) => setNewEmpShift(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-                  >
-                    <option value="Morning (8AM - 4PM)">Morning (8AM - 4PM)</option>
-                    <option value="Evening (4PM - 12AM)">Evening (4PM - 12AM)</option>
-                    <option value="Night (12AM - 8AM)">Night (12AM - 8AM)</option>
-                    <option value="Full Day (10AM - 10PM)">Full Day (10AM - 10PM)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Station / Floor Section</label>
-                  <select
-                    value={newEmpSection}
-                    onChange={(e) => setNewEmpSection(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-                  >
-                    <option value="Front Floor">Front Floor</option>
-                    <option value="Patio Deck">Patio Deck</option>
-                    <option value="Hot Kitchen Station">Hot Kitchen Station</option>
-                    <option value="Cocktail Bar">Cocktail Bar</option>
-                    <option value="VIP Private Rooms">VIP Private Rooms</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <Button variant="brand" onClick={handleAddEmployee} className="text-xs px-5 py-2 font-bold" icon={<UserPlus className="w-4 h-4 mr-1" />}>
-                  Save & Add Employee
-                </Button>
-              </div>
-            </div>
-
-            {/* Employees Roster List */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Staff Roster ({employees.length})</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {employees.map((emp) => (
-                  <div key={emp.id} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3">
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white truncate">{emp.name}</span>
-                        <Badge variant={emp.role === 'CHEF' ? 'warning' : emp.role === 'BARTENDER' ? 'brand' : 'info'} className="text-[9px]">
-                          {emp.role}
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-slate-400 truncate">{emp.email} • {emp.shift}</p>
-                      <p className="text-[10px] text-emerald-400 font-mono">Station: {emp.section}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* STEP 7: INITIAL MENU SETUP */}
-        {currentStep === 7 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                <UtensilsCrossed className="w-5 h-5 text-rose-500" /> Step 7: Initial Menu & Categories
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Configure your foundational menu categories and add flagship signature dishes.</p>
-            </div>
-
-            {/* Categories Pills */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300">Menu Categories</label>
-              <div className="flex flex-wrap items-center gap-2">
-                {categories.map((cat, idx) => (
-                  <Badge key={idx} variant="outline" className="px-3 py-1 text-xs font-bold bg-slate-950">
-                    {cat}
-                  </Badge>
-                ))}
-                <div className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    placeholder="New category..."
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    className="px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200"
-                  />
-                  <Button variant="secondary" onClick={handleAddCategory} className="px-2 py-1 text-xs">
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Add Dish Form */}
-            <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
-              <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider">Add Flagship Dish</h4>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Input label="Dish Name *" placeholder="e.g. Lobster Bisque" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} />
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Category</label>
-                  <select
-                    value={newItemCategory}
-                    onChange={(e) => setNewItemCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100"
-                  >
-                    {categories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                <Input label="Price ($) *" type="number" value={newItemPrice} onChange={(e) => setNewItemPrice(e.target.value)} />
-              </div>
-
-              {/* Local File / Image Upload for Dish */}
-              <ImageUpload
-                label="Dish Photo (Upload from local drive or drop image)"
-                value={newItemImage}
-                onChange={setNewItemImage}
-              />
-
-              <div className="flex items-center justify-between pt-2">
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newItemIsVeg}
-                    onChange={(e) => setNewItemIsVeg(e.target.checked)}
-                    className="rounded bg-slate-900 text-emerald-500"
-                  />
-                  Vegetarian Option
-                </label>
-                <Button variant="brand" onClick={handleAddMenuItem} className="text-xs px-5 py-2 font-bold" icon={<Plus className="w-4 h-4 mr-1" />}>
-                  Add Dish to Menu
-                </Button>
-              </div>
-            </div>
-
-            {/* Menu Items List */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {menuItems.map((item) => (
-                <div key={item.id} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-3">
-                  <img src={item.image} className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-800" />
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h5 className="text-xs font-bold text-white truncate">{item.name}</h5>
-                      <span className="text-xs font-bold text-emerald-400">${item.price.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[9px]">{item.category}</Badge>
-                      {item.isVegetarian && <Badge variant="success" className="text-[9px]">Veg</Badge>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {/* STEP 5: REVIEW & FINISH */}
-        {currentStep === 5 && (
-          <Card className="bg-slate-900 border-slate-800 p-8 space-y-6">
-            <div className="text-center max-w-xl mx-auto space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
-                <Sparkles className="w-6 h-6" />
-              </div>
-              <h3 className="text-2xl font-black text-white">Review Setup & Request Launch</h3>
-              <p className="text-xs text-slate-400">
-                Verify your configuration below. Once you click <strong>"Request Launch"</strong>, your restaurant application will be submitted to the Dinely Platform Team for approval.
-              </p>
-              
-              <div className="p-3 bg-amber-950/40 border border-amber-800/50 rounded-2xl text-left text-xs text-amber-200 flex items-start gap-2.5">
-                <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold text-amber-300">Platform Approval Workflow</p>
-                  <p className="text-[11px] text-amber-200/80 mt-0.5">
-                    Your restaurant status will change to <strong>Pending Approval</strong>. All configured tables with QR codes will be immediately populated in your Owner OS. You can add staff and menu items anytime after setup.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <Card className="bg-slate-950 border-slate-800 p-4 space-y-2">
-                <h4 className="font-bold text-rose-400 flex items-center gap-1.5">
-                  <Building className="w-4 h-4" /> Business & Location
-                </h4>
-                <p className="text-slate-200 font-bold">{restaurantName}</p>
-                <p className="text-slate-400">{address}, {city}, {country}</p>
-                <p className="text-slate-400">{timezone} • Currency: {currency}</p>
-              </Card>
-
-              <Card className="bg-slate-950 border-slate-800 p-4 space-y-2">
-                <h4 className="font-bold text-amber-400 flex items-center gap-1.5">
-                  <QrCode className="w-4 h-4" /> Dining Floorplan
-                </h4>
-                <p className="text-slate-200 font-bold">{totalTables} Tables Configured</p>
-                <p className="text-slate-400">Indoor: {indoorTables} | Outdoor: {outdoorTables} | VIP: {vipTables}</p>
-                <p className="text-emerald-400 font-mono">Auto Table Generation & QR Codes Enabled</p>
-              </Card>
-
-              <Card className="bg-slate-950 border-slate-800 p-4 space-y-2 md:col-span-2">
-                <h4 className="font-bold text-indigo-400 flex items-center gap-1.5">
-                  <Wine className="w-4 h-4" /> Enabled Services
-                </h4>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {Object.entries(features)
-                    .filter(([_, v]) => v)
-                    .map(([k]) => (
-                      <Badge key={k} variant="brand" className="text-[10px] uppercase">{k.replace('_', ' ')}</Badge>
-                    ))}
-                </div>
-              </Card>
-            </div>
-          </Card>
-        )}
-
-        {/* Wizard Footer Navigation Controls */}
-        <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-            disabled={currentStep === 1}
-            className="text-xs font-bold"
-          >
-            <ChevronLeft className="w-4 h-4 mr-1" /> Previous Step
-          </Button>
-
-          {currentStep < 5 ? (
-            <Button
-              variant="brand"
-              onClick={() => setCurrentStep(Math.min(5, currentStep + 1))}
-              className="text-xs font-bold px-6 shadow-lg shadow-rose-950/40"
-            >
-              Next Step <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          ) : (
-            <Button
-              variant="brand"
-              onClick={handleFinish}
-              className="text-xs font-bold px-8 py-3 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 shadow-xl shadow-rose-950/50"
-            >
-              Request Launch <Sparkles className="w-4 h-4 ml-2" />
-            </Button>
           )}
-        </div>
-      </div>
+
+          {/* STEP 2: RESTAURANT & BUSINESS DETAILS */}
+          {currentStep === 2 && (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <Badge variant="brand" className="mb-1">Step 2</Badge>
+                <h2 className="text-2xl font-black text-white tracking-tight">Restaurant & Business Information</h2>
+                <p className="text-xs text-slate-400">Enter venue details for official Dinely Platform Admin verification.</p>
+              </div>
+
+              <div className="space-y-5">
+                <Input
+                  label="Restaurant Name *"
+                  placeholder="e.g. Lumiere Bistro & Lounge"
+                  value={restaurantName}
+                  onChange={(e) => setRestaurantName(e.target.value)}
+                  icon={<Store className="w-4 h-4 text-slate-500" />}
+                  required
+                />
+
+                {/* Business Category Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 block">Select Restaurant Type *</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {BUSINESS_TYPES.map((bt) => {
+                      const IconComp = bt.icon;
+                      const isSelected = businessType === bt.id;
+                      return (
+                        <div
+                          key={bt.id}
+                          onClick={() => setBusinessType(bt.id)}
+                          className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                            isSelected
+                              ? 'bg-rose-500/10 border-rose-500 text-white shadow-md shadow-rose-950/30'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                          }`}
+                        >
+                          <div className={`p-2 rounded-xl border shrink-0 ${isSelected ? 'bg-rose-500 text-white border-rose-400' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                            <IconComp className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold">{bt.name}</div>
+                            <div className="text-[10px] text-slate-400 leading-snug mt-0.5">{bt.desc}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Address & City */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Street Address *"
+                    placeholder="e.g. 45 Hill Road, Bandra West"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    icon={<MapPin className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
+                  <Input
+                    label="City *"
+                    placeholder="e.g. Mumbai"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    icon={<Building className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
+                </div>
+
+                {/* Contact Information */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Contact Email *"
+                    type="email"
+                    placeholder="contact@lumierebistro.com"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    icon={<Mail className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
+                  <Input
+                    label="Contact Phone Number *"
+                    placeholder="+91 98765 43210"
+                    value={contactNumber}
+                    onChange={(e) => setContactNumber(e.target.value)}
+                    icon={<Phone className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
+                </div>
+
+                {/* Optional Restaurant Logo Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 block">Restaurant Logo (Optional)</label>
+                  <div className="flex items-center gap-3">
+                    {DEFAULT_LOGOS.map((img, idx) => (
+                      <img
+                        key={idx}
+                        src={img}
+                        alt="logo option"
+                        onClick={() => setLogo(img)}
+                        className={`w-12 h-12 rounded-2xl object-cover cursor-pointer border-2 transition-all ${
+                          logo === img ? 'border-rose-500 scale-105 shadow-md shadow-rose-950/40' : 'border-slate-800 opacity-60 hover:opacity-100'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: TABLES & SEATING CAPACITY */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <Badge variant="brand" className="mb-1">Step 3</Badge>
+                <h2 className="text-2xl font-black text-white tracking-tight">Tables & Dining Capacity</h2>
+                <p className="text-xs text-slate-400">Specify your venue's table count. Tables will be automatically created upon admin approval.</p>
+              </div>
+
+              <div className="p-4 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  <span className="font-bold text-white block mb-0.5">Automated Floorplan Generation</span>
+                  Upon approval by Platform Admin, Dinely will generate <span className="font-bold text-rose-400">{totalTablesCount} tables</span> with table-specific QR codes ready for immediate customer dining.
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                        <Grid className="w-4 h-4 text-rose-400" /> Total Dining Tables *
+                      </div>
+                      <div className="text-[11px] text-slate-400">Total physical tables at your outlet.</div>
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={totalTablesCount}
+                      onChange={(e) => {
+                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                        setTotalTablesCount(val);
+                        setIndoorTablesCount(Math.min(val, indoorTablesCount));
+                        setOutdoorTablesCount(Math.max(0, val - indoorTablesCount));
+                      }}
+                      className="w-20 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-center font-bold text-rose-400 text-sm focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                    <div className="text-xs font-bold text-white">Indoor Main Floor Tables</div>
+                    <div className="text-[11px] text-slate-400">Main dining hall seating count.</div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={totalTablesCount}
+                      value={indoorTablesCount}
+                      onChange={(e) => setIndoorTablesCount(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-center font-bold text-white text-sm focus:outline-none focus:border-rose-500 mt-1"
+                    />
+                  </div>
+
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                    <div className="text-xs font-bold text-white">Outdoor / Patio Tables</div>
+                    <div className="text-[11px] text-slate-400">Terrace or outdoor seating count.</div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={totalTablesCount}
+                      value={outdoorTablesCount}
+                      onChange={(e) => setOutdoorTablesCount(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-center font-bold text-white text-sm focus:outline-none focus:border-rose-500 mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation Control Buttons */}
+          <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+            {currentStep > 1 ? (
+              <Button
+                variant="outline"
+                onClick={handlePrevStep}
+                disabled={isSubmitting}
+                className="text-xs border-slate-800 text-slate-300 hover:bg-slate-800"
+                icon={<ChevronLeft className="w-4 h-4 mr-1" />}
+              >
+                Back
+              </Button>
+            ) : <div />}
+
+            {currentStep < 3 ? (
+              <Button
+                variant="brand"
+                onClick={handleNextStep}
+                className="text-xs font-bold px-6 py-2.5 shadow-lg shadow-rose-950/40"
+                icon={<ChevronRight className="w-4 h-4 ml-1" />}
+              >
+                Continue to Next Step
+              </Button>
+            ) : (
+              <Button
+                variant="brand"
+                onClick={handleSubmitApplication}
+                isLoading={isSubmitting}
+                className="text-xs font-bold px-8 py-3 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-xl shadow-rose-950/50"
+                icon={isSubmitting ? undefined : <Sparkles className="w-4 h-4 ml-1" />}
+              >
+                Submit Restaurant Application →
+              </Button>
+            )}
+          </div>
+        </Card>
+      </main>
+
+      {/* Footer */}
+      <footer className="text-center text-[11px] text-slate-500 py-2">
+        Protected by Dinely Tenant Isolation Engine • Multi-outlet SaaS Compliance
+      </footer>
     </div>
   );
 };

@@ -6,19 +6,17 @@ import {
   Edit,
   LogOut,
   Building,
-  QrCode,
-  Users,
-  UtensilsCrossed,
-  Wine,
   ShieldCheck,
-  ChevronDown,
-  ChevronUp,
-  MapPin,
   RefreshCw,
   ArrowRight,
   AlertTriangle,
+  XCircle,
+  MapPin,
+  Mail,
+  Phone,
+  Grid,
 } from 'lucide-react';
-import { Button, Card, Badge, Modal } from '../../packages/ui';
+import { Button, Card, Badge, Modal, Input } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Restaurant } from '../../packages/types';
 
@@ -37,17 +35,27 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isResubmitModalOpen, setIsResubmitModalOpen] = useState(false);
+
+  // Resubmit Form State
+  const [resubmitName, setResubmitName] = useState('');
+  const [resubmitAddress, setResubmitAddress] = useState('');
+  const [resubmitCity, setResubmitCity] = useState('');
+  const [resubmitPhone, setResubmitPhone] = useState('');
+  const [resubmitTables, setResubmitTables] = useState<number>(10);
+  const [isResubmitting, setIsResubmitting] = useState(false);
+  const [resubmitError, setResubmitError] = useState('');
 
   useEffect(() => {
     loadRestaurantData();
     const interval = setInterval(() => {
       loadRestaurantDataSilent();
-    }, 3000);
+    }, 2500);
     return () => clearInterval(interval);
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurant && (restaurant.isApproved || restaurant.lifecycleStatus === 'LIVE')) {
+    if (restaurant && (restaurant.isApproved || restaurant.lifecycleStatus === 'APPROVED' || restaurant.lifecycleStatus === 'LIVE' || restaurant.lifecycleStatus === 'ACTIVE')) {
       const timer = setTimeout(() => {
         onNavigate('/restaurant/dashboard');
       }, 500);
@@ -60,8 +68,15 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     try {
       const rest = await api.getRestaurantDetails(restaurantId);
       setRestaurant(rest);
+      if (rest) {
+        setResubmitName(rest.name || '');
+        setResubmitAddress(rest.address || '');
+        setResubmitCity(rest.city || 'Mumbai');
+        setResubmitPhone(rest.phone || '');
+        setResubmitTables(rest.tablesCount || rest.indoorTablesCount || 10);
+      }
     } catch (err) {
-      console.error('Failed to load pending restaurant details:', err);
+      console.error('Failed to load restaurant details:', err);
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +95,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     setIsRefreshing(true);
     const rest = await api.getRestaurantDetails(restaurantId);
     setRestaurant(rest);
-    if (rest && (rest.isApproved || rest.lifecycleStatus === 'LIVE')) {
+    if (rest && (rest.isApproved || rest.lifecycleStatus === 'APPROVED' || rest.lifecycleStatus === 'LIVE' || rest.lifecycleStatus === 'ACTIVE')) {
       onNavigate('/restaurant/dashboard');
     }
     setTimeout(() => setIsRefreshing(false), 500);
@@ -95,8 +110,28 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     }
   };
 
-  const handleEditRestaurant = () => {
-    onNavigate('/wizard');
+  const handleResubmitApplication = async () => {
+    if (!restaurant) return;
+    setResubmitError('');
+    setIsResubmitting(true);
+
+    try {
+      const updated = await api.submitRestaurantLaunch({
+        id: restaurant.id,
+        restaurantName: resubmitName,
+        address: resubmitAddress,
+        city: resubmitCity,
+        phone: resubmitPhone,
+        totalTablesCount: resubmitTables,
+      });
+
+      setRestaurant(updated);
+      setIsResubmitting(false);
+      setIsResubmitModalOpen(false);
+    } catch (err: any) {
+      setIsResubmitting(false);
+      setResubmitError(err.message || 'Failed to resubmit application.');
+    }
   };
 
   if (isLoading) {
@@ -110,8 +145,8 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     );
   }
 
-  const isApproved = restaurant?.isApproved || restaurant?.lifecycleStatus === 'LIVE';
-  const isChangesRequested = restaurant?.lifecycleStatus === 'CHANGES_REQUESTED';
+  const isApproved = restaurant?.isApproved || restaurant?.lifecycleStatus === 'APPROVED' || restaurant?.lifecycleStatus === 'LIVE' || restaurant?.lifecycleStatus === 'ACTIVE';
+  const isRejected = restaurant?.lifecycleStatus === 'REJECTED' || restaurant?.lifecycleStatus === 'CHANGES_REQUESTED';
   const logo = restaurant?.theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80';
   const banner = restaurant?.theme?.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80';
   const restName = restaurant?.name || 'Your Restaurant';
@@ -150,26 +185,42 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
           </p>
         </div>
 
-        {/* DYNAMIC STATUS BADGE & HERO */}
+        {/* TIMELINE PROGRESS BAR */}
+        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between text-[11px] font-bold">
+            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> 1. Application Submitted</span>
+            <span className={isApproved ? 'text-emerald-400' : isRejected ? 'text-rose-400' : 'text-amber-400 font-extrabold animate-pulse'}>
+              2. Under Review
+            </span>
+            <span className={isApproved ? 'text-emerald-400 font-extrabold' : 'text-slate-600'}>
+              3. Approved & Activated
+            </span>
+          </div>
+          <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden flex">
+            <div className="h-full bg-emerald-500 w-1/3" />
+            <div className={`h-full ${isApproved ? 'bg-emerald-500 w-1/3' : isRejected ? 'bg-rose-500 w-1/3' : 'bg-amber-400 w-1/3 animate-pulse'}`} />
+            <div className={`h-full ${isApproved ? 'bg-emerald-500 w-1/3' : 'bg-slate-800 w-1/3'}`} />
+          </div>
+        </div>
+
+        {/* DYNAMIC STATUS HERO BADGE */}
         {isApproved ? (
           <div className="space-y-3">
             <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 mx-auto shadow-2xl shadow-emerald-950/40">
               <CheckCircle2 className="w-8 h-8 text-emerald-400 animate-bounce" />
             </div>
-
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-              <span>Status: Approved & Live 🎉</span>
+              <span>Status: Approved & Restaurant Activated 🎉</span>
             </div>
           </div>
-        ) : isChangesRequested ? (
+        ) : isRejected ? (
           <div className="space-y-3">
-            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto shadow-2xl shadow-amber-950/40">
-              <AlertTriangle className="w-8 h-8 text-amber-400" />
+            <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border-2 border-rose-500/40 flex items-center justify-center text-rose-400 mx-auto shadow-2xl shadow-rose-950/40">
+              <XCircle className="w-8 h-8 text-rose-400" />
             </div>
-
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-              <span>Status: Modifications Requested ⚠️</span>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              <span>Status: Application Rejected ❌</span>
             </div>
           </div>
         ) : (
@@ -177,37 +228,44 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
             <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto shadow-2xl shadow-amber-950/40">
               <Clock className="w-8 h-8 text-amber-400 animate-pulse" />
             </div>
-
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span>Status: Pending Approval ⏳</span>
+              <span>Status: PENDING ADMIN APPROVAL ⏳</span>
             </div>
           </div>
         )}
 
-        {/* Informational Message */}
+        {/* Informational Box */}
         {isApproved ? (
           <div className="bg-emerald-950/60 p-6 rounded-2xl border border-emerald-800 space-y-2 text-emerald-200 text-sm leading-relaxed max-w-lg mx-auto shadow-lg">
-            <p className="font-bold text-white text-base">Your restaurant has been approved by Platform Admin!</p>
+            <p className="font-bold text-white text-base">Your restaurant has been approved!</p>
             <p className="text-xs text-emerald-300/90">
-              Your live Operating System, POS Terminal, Kitchen KDS, and QR Table Ordering are now fully operational.
+              Your live Operating System, POS Terminal, Kitchen KDS, Bar Terminal, and Table Floorplan are now active.
             </p>
           </div>
-        ) : isChangesRequested ? (
-          <div className="bg-amber-950/60 p-6 rounded-2xl border border-amber-800 space-y-2 text-amber-200 text-sm leading-relaxed max-w-lg mx-auto">
-            <p className="font-bold text-white text-base">Action Required from Platform Admin</p>
-            <p className="text-xs text-amber-300">
-              "{restaurant?.requestedChanges || restaurant?.rejectionReason || 'Please verify business GST and update menu offerings.'}"
+        ) : isRejected ? (
+          <div className="bg-rose-950/60 p-6 rounded-2xl border border-rose-800/80 space-y-3 text-rose-200 text-sm leading-relaxed max-w-lg mx-auto text-left">
+            <div className="font-bold text-white text-base flex items-center gap-2 text-rose-300">
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+              Rejection Reason from Platform Admin:
+            </div>
+            <div className="p-3 bg-slate-950/80 border border-rose-900/60 rounded-xl text-xs text-rose-200 font-mono">
+              "{restaurant?.rejectionReason || 'Please verify business details, address, and table configuration.'}"
+            </div>
+            <p className="text-xs text-slate-300">
+              Please click <span className="font-bold text-white">Resubmit Application</span> below to update your details and resubmit for admin approval.
             </p>
           </div>
         ) : (
-          <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-2 text-slate-300 text-sm leading-relaxed max-w-lg mx-auto">
-            <p className="font-semibold text-white text-base">Your restaurant setup has been submitted.</p>
-            <p className="text-xs text-slate-400">Our platform team is reviewing your venue identity, menu items, and dining floorplan.</p>
-            <p className="text-emerald-400 font-semibold text-xs pt-1 flex items-center justify-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              Live status updates automatically as soon as Platform Admin approves.
+          <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-3 text-slate-300 text-sm leading-relaxed max-w-lg mx-auto">
+            <p className="font-semibold text-white text-base">Your restaurant application has been submitted.</p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              The Dinely platform administrator must review and approve your restaurant details before you can access the full restaurant management system.
             </p>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-emerald-400 text-xs font-semibold">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Real-time polling active • Automatically directs on approval</span>
+            </div>
           </div>
         )}
 
@@ -220,26 +278,36 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
               className="w-full sm:w-auto text-xs font-bold px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-950/60"
               icon={<ArrowRight className="w-4 h-4 ml-1" />}
             >
-              Launch Restaurant Dashboard →
+              Launch Operational Dashboard →
             </Button>
+          ) : isRejected ? (
+            <>
+              <Button
+                variant="brand"
+                onClick={() => setIsResubmitModalOpen(true)}
+                className="w-full sm:w-auto text-xs font-bold px-8 py-3 bg-gradient-to-r from-rose-600 to-amber-500 text-white shadow-xl"
+                icon={<Sparkles className="w-4 h-4 mr-1" />}
+              >
+                Resubmit Application
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleManualRefresh}
+                className="w-full sm:w-auto text-xs font-bold border-slate-800 text-slate-300 hover:bg-slate-800 px-4 py-3"
+                icon={<RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />}
+              >
+                Check Status
+              </Button>
+            </>
           ) : (
             <>
               <Button
                 variant="brand"
                 onClick={() => setIsDetailsModalOpen(true)}
-                className="w-full sm:w-auto text-xs font-bold px-5 py-3 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-xl shadow-rose-950/50"
-                icon={<Sparkles className="w-4 h-4 mr-1" />}
+                className="w-full sm:w-auto text-xs font-bold px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700"
+                icon={<Building className="w-4 h-4 mr-1" />}
               >
                 View Submitted Info
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={handleEditRestaurant}
-                className="w-full sm:w-auto text-xs font-bold border-slate-700 text-slate-200 hover:bg-slate-800 px-5 py-3"
-                icon={<Edit className="w-4 h-4 mr-1" />}
-              >
-                Edit Setup
               </Button>
 
               <Button
@@ -282,26 +350,86 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-              <span className="text-[10px] text-slate-500 uppercase font-semibold">Cuisine & Type</span>
-              <p className="font-bold text-white text-sm mt-0.5">{restaurant?.cuisine}</p>
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Restaurant Type</span>
+              <p className="font-bold text-white text-sm mt-0.5">{restaurant?.businessType || restaurant?.cuisine}</p>
             </div>
             <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-              <span className="text-[10px] text-slate-500 uppercase font-semibold">Owner Contact</span>
-              <p className="font-bold text-white text-sm mt-0.5">{restaurant?.ownerName}</p>
-              <p className="text-[11px] text-slate-400">{restaurant?.ownerEmail}</p>
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Total Tables</span>
+              <p className="font-bold text-rose-400 text-sm mt-0.5">{restaurant?.tablesCount || restaurant?.indoorTablesCount || 10} Tables</p>
             </div>
           </div>
 
-          <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-            <span className="text-[10px] text-slate-500 uppercase font-semibold block">Features Enabled</span>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {Object.entries(restaurant?.features || {}).map(([feat, enabled]) => (
-                <div key={feat} className={`p-2 rounded-lg border text-[11px] font-bold flex items-center justify-between ${enabled ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-slate-900 border-slate-800 text-slate-600 opacity-60'}`}>
-                  <span className="capitalize">{feat.replace('_', ' ')}</span>
-                  <span>{enabled ? '✓' : '✗'}</span>
-                </div>
-              ))}
+          <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+            <span className="text-[10px] text-slate-500 uppercase font-semibold block">Location & Contact</span>
+            <p className="font-bold text-white">{restaurant?.address}</p>
+            <p className="text-[11px] text-slate-400">{restaurant?.ownerName} • {restaurant?.ownerEmail} • {restaurant?.phone}</p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Resubmit Application Modal */}
+      <Modal
+        isOpen={isResubmitModalOpen}
+        onClose={() => setIsResubmitModalOpen(false)}
+        title="Resubmit Restaurant Application"
+        maxWidth="lg"
+      >
+        <div className="space-y-4 text-xs">
+          {resubmitError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold">
+              {resubmitError}
             </div>
+          )}
+
+          <Input
+            label="Restaurant Name *"
+            value={resubmitName}
+            onChange={(e) => setResubmitName(e.target.value)}
+          />
+          <Input
+            label="Street Address *"
+            value={resubmitAddress}
+            onChange={(e) => setResubmitAddress(e.target.value)}
+          />
+          <Input
+            label="City *"
+            value={resubmitCity}
+            onChange={(e) => setResubmitCity(e.target.value)}
+          />
+          <Input
+            label="Contact Phone Number *"
+            value={resubmitPhone}
+            onChange={(e) => setResubmitPhone(e.target.value)}
+          />
+          <div>
+            <label className="text-xs font-bold text-slate-300 block mb-1">Total Tables Count *</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={resubmitTables}
+              onChange={(e) => setResubmitTables(parseInt(e.target.value) || 10)}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm font-bold focus:outline-none focus:border-rose-500"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+            <Button
+              variant="outline"
+              onClick={() => setIsResubmitModalOpen(false)}
+              disabled={isResubmitting}
+              className="text-xs border-slate-800 text-slate-400"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              onClick={handleResubmitApplication}
+              isLoading={isResubmitting}
+              className="text-xs font-bold px-6 py-2 bg-gradient-to-r from-rose-600 to-amber-500 text-white"
+            >
+              Confirm Resubmission →
+            </Button>
           </div>
         </div>
       </Modal>

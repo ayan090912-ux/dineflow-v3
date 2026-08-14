@@ -315,9 +315,10 @@ export default function App() {
               )
             )}
 
-            {currentPath === '/restaurant/dashboard' && (
+            {/* Operational Dashboards with Strict Approval Guard */}
+            {(currentPath === '/restaurant/dashboard' || currentPath === '/owner') && (
               checkRoleAccess(['RESTAURANT_OWNER', 'MANAGER', 'SUPER_ADMIN']) ? (
-                currentRestaurant && !currentRestaurant.isApproved && currentUser?.role !== 'SUPER_ADMIN' ? (
+                (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
                     onNavigate={navigateTo}
                     onLogout={() => handleLogout('/restaurant/login')}
@@ -357,14 +358,21 @@ export default function App() {
 
             {currentPath === '/kitchen/dashboard' && (
               checkRoleAccess(['CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-                <KitchenETADashboard
-                  orders={kitchenOrders}
-                  onRefreshOrders={() => {
-                    const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
-                    api.getOrders(restId).then(setKitchenOrders);
-                  }}
-                  onLogout={() => handleLogout('/kitchen/login')}
-                />
+                (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
+                  <PendingApprovalPage
+                    onNavigate={navigateTo}
+                    onLogout={() => handleLogout('/kitchen/login')}
+                  />
+                ) : (
+                  <KitchenETADashboard
+                    orders={kitchenOrders}
+                    onRefreshOrders={() => {
+                      const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
+                      api.getOrders(restId).then(setKitchenOrders);
+                    }}
+                    onLogout={() => handleLogout('/kitchen/login')}
+                  />
+                )
               ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="CHEF / KITCHEN STAFF"
@@ -387,7 +395,14 @@ export default function App() {
 
             {currentPath === '/bar/dashboard' && (
               checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-                <BarTerminal onLogout={() => handleLogout('/bar/login')} />
+                (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
+                  <PendingApprovalPage
+                    onNavigate={navigateTo}
+                    onLogout={() => handleLogout('/bar/login')}
+                  />
+                ) : (
+                  <BarTerminal onLogout={() => handleLogout('/bar/login')} />
+                )
               ) : currentUser ? (
                 <UnauthorizedPage
                   requiredRole="BARTENDER / BAR STAFF"
@@ -411,7 +426,14 @@ export default function App() {
             {(currentPath === '/waiter' || currentPath === '/waiter/dashboard') && (
               (currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) ? (
                 checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
-                  <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
+                  (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
+                    <PendingApprovalPage
+                      onNavigate={navigateTo}
+                      onLogout={() => handleLogout('/waiter/login')}
+                    />
+                  ) : (
+                    <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
+                  )
                 ) : currentUser ? (
                   <UnauthorizedPage
                     requiredRole="WAITER / FLOOR STAFF"

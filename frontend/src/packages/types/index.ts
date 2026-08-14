@@ -80,6 +80,7 @@ export type RestaurantLifecycleStatus =
   | 'DRAFT'
   | 'PENDING_APPROVAL'
   | 'APPROVED'
+  | 'ACTIVE'
   | 'LIVE'
   | 'REJECTED'
   | 'CHANGES_REQUESTED'
@@ -361,6 +362,7 @@ export interface CustomerRequest {
 
 export interface WaiterNotification {
   id: string;
+  restaurantId?: string;
   type: 'KITCHEN_ORDER_READY' | 'BAR_ORDER_READY' | 'CUSTOMER_CALL' | 'BILL_REQUEST' | 'MANAGER_ANNOUNCEMENT' | 'ETA_CHANGED';
   title: string;
   message: string;
@@ -391,6 +393,7 @@ export interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  category?: string;
   selectedOptions?: string[];
   notes?: string;
   targetDestination?: 'KITCHEN' | 'BAR';
@@ -442,7 +445,10 @@ export interface Order {
     timestamp: string;
     oldEta: number;
     newEta: number;
+    previousMinutes?: number;
+    newMinutes?: number;
     changedBy: string;
+    updatedBy?: string;
     reason?: string;
   }[];
 }

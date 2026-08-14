@@ -75,7 +75,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api } from '../../packages/api/client';
-import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus, MenuCategory, BarCategory, getFulfillmentStation } from '../../packages/types';
+import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation } from '../../packages/types';
 import { MOCK_CATEGORIES } from '../../packages/data/mockData';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
@@ -1623,7 +1623,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   size="md"
                   onClick={() => {
                     const cardEl = document.querySelector('.printable-card-wrapper') as HTMLElement || document.querySelector('.w-72.sm\\:w-80') as HTMLElement;
-                    printQRCodeCard(cardEl, currentRestaurant?.name || 'Food Truck', 'COUNTER');
+                    printQRCodeCard(cardEl?.outerHTML || '', currentRestaurant?.name || 'Food Truck', 'COUNTER');
                   }}
                   className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold"
                   icon={<QrCode className="w-4 h-4" />}
@@ -2712,8 +2712,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                       await api.updateRestaurantTheme(currentRestaurant.id, theme);
                       await api.updateRestaurantDetails(currentRestaurant.id, {
                         name: theme.restaurantName || currentRestaurant.name,
-                        logo: theme.logo || currentRestaurant.logo,
-                        bannerUrl: theme.bannerUrl || currentRestaurant.bannerUrl,
                         currency: theme.currency || currentRestaurant.currency,
                       });
                     }

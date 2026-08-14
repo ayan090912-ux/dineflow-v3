@@ -48,6 +48,7 @@ import {
   Avatar,
   SearchInput,
   CommandPalette,
+  EmptyState,
   DinelyLogo,
 } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -146,7 +147,11 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   };
 
   const handleReject = async (id: string) => {
-    await api.rejectRestaurant(id, actionReason || 'Application declined by Platform Admin.');
+    if (!actionReason || !actionReason.trim()) {
+      alert('A rejection reason is required before declining a restaurant application.');
+      return;
+    }
+    await api.rejectRestaurant(id, actionReason.trim());
     showSuccess('Application Declined. Owner notified.');
     closeModals();
     await loadData();

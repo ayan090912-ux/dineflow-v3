@@ -44,7 +44,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CallWaiterModal } from './CallWaiterModal';
 import { api } from '../../packages/api/client';
-import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, getFulfillmentStation } from '../../packages/types';
+import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, TableSession, getFulfillmentStation } from '../../packages/types';
 import { MOCK_CATEGORIES } from '../../packages/data/mockData';
 import { CustomerLiveTracker } from './CustomerLiveTracker';
 import { realtimeBus } from '../../packages/api/realtime';
@@ -221,7 +221,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       if (activeSessionId) {
         return o.tableSessionId === activeSessionId;
       }
-      return o.status !== 'PAID' && o.status !== 'CANCELLED';
+      return o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED';
     });
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setCustomerOrders(tableOrds);
@@ -824,7 +824,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Subtle Customer Footer Attribution */}
       <footer className="py-8 px-4 text-center text-xs text-slate-500 border-t border-slate-900 mt-12 mb-24 space-y-1">
-        <p className="font-semibold text-slate-400">{restaurant?.name || 'Restaurant'}</p>
+        <p className="font-semibold text-slate-400">{currentRestaurant?.name || 'Restaurant'}</p>
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-mono pt-1">
           <span>Powered by</span>
           <DinelyLogoMark size={14} className="opacity-80 inline-block" />

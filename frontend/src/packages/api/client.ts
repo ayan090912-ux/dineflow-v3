@@ -2,6 +2,7 @@ import {
   Organization,
   Restaurant,
   MenuItem,
+  OrderItem,
   Order,
   Table,
   Employee,
@@ -21,6 +22,7 @@ import {
   DailySummaryData,
   getFulfillmentStation,
   FulfillmentTicket,
+  BusinessType,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -183,7 +185,21 @@ export class DinelyApiClient {
   private restoreSession() {
     try {
       if (typeof window !== 'undefined') {
-        // Tab-isolated session storage check first
+        const path = window.location.pathname || '';
+        let targetRoleKey = '';
+        if (path.startsWith('/admin')) {
+          targetRoleKey = `${SESSION_STORAGE_KEY}_PLATFORM_ADMIN`;
+        } else if (path.startsWith('/restaurant') || path.startsWith('/owner')) {
+          targetRoleKey = `${SESSION_STORAGE_KEY}_RESTAURANT_OWNER`;
+        } else if (path.startsWith('/kitchen')) {
+          targetRoleKey = `${SESSION_STORAGE_KEY}_CHEF`;
+        } else if (path.startsWith('/waiter')) {
+          targetRoleKey = `${SESSION_STORAGE_KEY}_WAITER`;
+        } else if (path.startsWith('/bar')) {
+          targetRoleKey = `${SESSION_STORAGE_KEY}_BARTENDER`;
+        }
+
+        // 1. Check tab-isolated sessionStorage
         const tabSession = sessionStorage.getItem(SESSION_STORAGE_KEY);
         if (tabSession) {
           const parsed = JSON.parse(tabSession);
@@ -199,6 +215,25 @@ export class DinelyApiClient {
           }
         }
 
+        // 2. Check role-specific localStorage session if available for this route
+        if (window.localStorage && targetRoleKey) {
+          const roleSession = localStorage.getItem(targetRoleKey);
+          if (roleSession) {
+            const parsed = JSON.parse(roleSession);
+            if (parsed && parsed.user) {
+              const freshUser = this.users.find((u) => u.email?.toLowerCase() === parsed.user.email?.toLowerCase());
+              const mergedUser = freshUser
+                ? { ...parsed.user, ...freshUser, restaurantId: parsed.restaurantId || freshUser.restaurantId || parsed.user.restaurantId }
+                : parsed.user;
+              this.currentUser = mergedUser;
+              this.currentTokens = parsed.tokens || mergedUser.tokens || null;
+              this.currentRestaurantId = parsed.restaurantId || mergedUser.restaurantId || null;
+              return;
+            }
+          }
+        }
+
+        // 3. Fallback to default localStorage session
         if (window.localStorage) {
           const savedSession = localStorage.getItem(SESSION_STORAGE_KEY);
           if (savedSession) {
@@ -902,10 +937,36 @@ export class DinelyApiClient {
       const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       rest.isApproved = true;
       rest.status = 'OPEN';
-      rest.lifecycleStatus = 'LIVE';
+      rest.lifecycleStatus = 'APPROVED';
       rest.approvedAt = now;
       rest.rejectionReason = undefined;
       rest.requestedChanges = undefined;
+
+      // Ensure tables entered during setup are created in DB
+      const targetId = rest.id;
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3007';
+      const totalCount = Math.max(1, rest.tablesCount || (rest.indoorTablesCount || 8) + (rest.outdoorTablesCount || 2));
+
+      let existingTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
+      if (existingTables.length === 0) {
+        let tableNum = 1;
+        const mainCount = Math.ceil(totalCount * 0.75);
+        for (let i = 0; i < totalCount; i++) {
+          const tName = `Table ${String(tableNum).padStart(2, '0')}`;
+          const isOutdoor = i >= mainCount;
+          this.tables.push({
+            id: `tbl-${targetId}-${tableNum}`,
+            restaurantId: targetId,
+            tableNumber: tName,
+            capacity: 4,
+            section: isOutdoor ? 'Patio & Outdoor' : 'Main Dining Hall',
+            shape: isOutdoor ? 'ROUND' : 'RECTANGLE',
+            status: 'AVAILABLE',
+            qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
+          });
+          tableNum++;
+        }
+      }
 
       // Update active tenant pointers and session
       this.currentRestaurantId = rest.id;
@@ -927,8 +988,8 @@ export class DinelyApiClient {
         recipientRole: 'RESTAURANT_OWNER',
         restaurantId: rest.id,
         restaurantName: rest.name,
-        title: 'Congratulations! Your Restaurant has been Approved 🎉',
-        message: `Your restaurant "${rest.name}" has been approved by Dinely Cloud Platform Admin. Your live Operating System and Customer Ordering Portal are now active!`,
+        title: 'Application Approved! Your Restaurant is Activated 🎉',
+        message: `Your restaurant "${rest.name}" has been approved by Dinely Platform Admin. Operational Dashboard & Table Floorplan are now active!`,
         type: 'APPROVED',
         timestamp: 'Just now',
         isRead: false,
@@ -940,21 +1001,21 @@ export class DinelyApiClient {
         action: 'Approved & Activated Restaurant OS',
         target: rest.name,
         timestamp: 'Just now',
-        ipAddress: '10.0.0.1',
+        ipAddress: '127.0.0.1',
         status: 'SUCCESS',
       });
 
       this.saveDatabase();
-      realtimeBus.emit('RESTAURANT_APPROVED' as any, { restaurantId: rest.id, restaurantName: rest.name } as any);
+      realtimeBus.emit('RESTAURANT_APPROVED', { restaurantId: rest.id, restaurantName: rest.name });
     }
     return rest;
   }
 
-  async rejectRestaurant(restaurantId: string, reason = 'Application declined') {
+  async rejectRestaurant(restaurantId: string, reason = 'Application declined by administrator') {
     await delay(300);
-    const rest = this.restaurants.find((r) => r.id === restaurantId);
+    const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
     if (rest) {
-      rest.lifecycleStatus = 'CHANGES_REQUESTED';
+      rest.lifecycleStatus = 'REJECTED';
       rest.isApproved = false;
       rest.rejectionReason = reason;
 
@@ -963,11 +1024,21 @@ export class DinelyApiClient {
         recipientRole: 'RESTAURANT_OWNER',
         restaurantId: rest.id,
         restaurantName: rest.name,
-        title: 'Application Update: Action Required',
-        message: `Your setup submission requires changes before launch approval: "${reason}". Please edit your setup details and resubmit.`,
-        type: 'CHANGES_REQUESTED',
+        title: 'Restaurant Application Rejected',
+        message: `Your application for "${rest.name}" was declined: "${reason}". Please update details and resubmit.`,
+        type: 'REJECTED',
         timestamp: 'Just now',
         isRead: false,
+      });
+
+      this.auditLogs.unshift({
+        id: `log-${Date.now()}`,
+        actor: 'Platform Admin',
+        action: 'Rejected Restaurant Application',
+        target: rest.name,
+        timestamp: 'Just now',
+        ipAddress: '127.0.0.1',
+        status: 'SUCCESS',
       });
 
       this.saveDatabase();
@@ -2585,8 +2656,11 @@ export class DinelyApiClient {
         if (!order.etaHistory) order.etaHistory = [];
         order.etaHistory.unshift({
           timestamp: new Date().toISOString(),
+          oldEta: currentMins,
+          newEta: newMins,
           previousMinutes: currentMins,
           newMinutes: newMins,
+          changedBy: 'Kitchen Chef',
           reason: reason || note || 'Adjusted by Chef',
           updatedBy: 'Kitchen Chef',
         });

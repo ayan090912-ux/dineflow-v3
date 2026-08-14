@@ -19,24 +19,41 @@ export type RealTimeEventType =
   | 'CustomerRequestCompleted'
   | 'BroadcastMessage'
   | 'TableStatusChanged'
+  | 'TableStatusUpdated'
   | 'TableMerged'
   | 'TableUnmerged'
-  | 'TableReserved';
+  | 'TableReserved'
+  | 'TableSessionClosed'
+  | 'TableCleared'
+  | 'BusinessDayClosed'
+  | 'BusinessDayOpened'
+  | 'RESTAURANT_APPROVED'
+  | 'RESTAURANT_REJECTED';
 
 export interface RealTimeEventPayload {
   type: RealTimeEventType;
   orderId?: string;
+  parentOrderId?: string;
+  ticketId?: string;
+  station?: 'KITCHEN' | 'BAR';
   restaurantId?: string;
+  restaurantName?: string;
   tableNumber?: string;
   tableId?: string;
   tableIds?: string[];
   table?: any;
+  summary?: any;
   groupLabel?: string;
   estimatedPrepTimeMinutes?: number;
   etaTargetTimestamp?: string;
   reason?: string;
   timestamp: string;
   actor?: string;
+  barStatus?: string;
+  kitchenStatus?: string;
+  status?: string;
+  sessionId?: string;
+  businessDayId?: string;
   data?: any;
 }
 
