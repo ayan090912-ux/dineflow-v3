@@ -27,11 +27,12 @@ import {
   LogOut,
   ChefHat,
   Wine,
-  Sun,
-  Moon,
-  Search,
+  Activity,
+  Layers3,
+  Compass,
+  Cpu,
 } from 'lucide-react';
-import { Button, Card, Badge, Input, Modal, DinelyLogo, DinelyLogoMark } from '../../packages/ui';
+import { Button, Card, Badge, Input, Modal, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 
 interface LandingWebsiteProps {
@@ -50,7 +51,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [contactSubmitted, setContactSubmitted] = useState(false);
 
-  const [showcaseTab, setShowcaseTab] = useState<'pos' | 'waiter' | 'kds' | 'bar' | 'customer'>('pos');
   const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
 
   const currentUser = api.getCurrentUser();
@@ -58,7 +58,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   const faqs = [
     {
       q: 'How does joining Dinely Cloud work?',
-      a: 'Simply authenticate with Google, configure your restaurant through our 4-step wizard (basics, location, tables, review), and click "Submit for Approval". Once our platform admin team approves your setup, your restaurant workspace goes live instantly!',
+      a: 'Authenticate with Google, configure your restaurant through our 4-step wizard (basics, location, tables, review), and click "Submit for Approval". Once our platform admin team approves your setup, your restaurant workspace goes live instantly!',
     },
     {
       q: 'Are there any hidden fees or subscription plans?',
@@ -75,291 +75,288 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-[#121316] text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* selfh.st Inspired Clean Navigation Header */}
-      <header className="sticky top-0 z-40 bg-[#121316]/90 backdrop-blur-md border-b border-slate-800/60 px-4 md:px-8 py-3 flex items-center justify-between">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('home')}>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-xl font-black tracking-tight text-white font-mono">
-              dinely<span className="text-blue-500">.cloud</span>
-            </span>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#0b0c10] text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white relative overflow-x-hidden">
+      {/* Eterna Ambient Glow Meshes */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[600px] glow-mesh-indigo pointer-events-none z-0" />
+      <div className="absolute top-[400px] right-0 w-[500px] h-[500px] glow-mesh-orange pointer-events-none z-0" />
 
-        {/* Grouped Pill Navigation Container */}
-        <nav className="hidden md:flex items-center gap-6 rounded-full bg-[#18191c] border border-slate-800/80 px-6 py-2 text-xs font-medium text-slate-300 shadow-lg">
-          <button
-            onClick={() => setActiveTab('home')}
-            className={`hover:text-white transition-colors cursor-pointer ${activeTab === 'home' ? 'text-blue-400 font-bold' : ''}`}
-          >
-            Content ▾
-          </button>
-          <button
-            onClick={() => setActiveTab('features')}
-            className={`hover:text-white transition-colors cursor-pointer ${activeTab === 'features' ? 'text-blue-400 font-bold' : ''}`}
-          >
-            Apps
-          </button>
-          <button
-            onClick={() => setActiveTab('showcase')}
-            className={`hover:text-white transition-colors cursor-pointer ${activeTab === 'showcase' ? 'text-blue-400 font-bold' : ''}`}
-          >
-            Showcase
-          </button>
-          <button
-            onClick={() => setActiveTab('faq')}
-            className={`hover:text-white transition-colors cursor-pointer ${activeTab === 'faq' ? 'text-blue-400 font-bold' : ''}`}
-          >
-            FAQ
-          </button>
-          <button
-            onClick={() => setActiveTab('contact')}
-            className={`hover:text-white transition-colors cursor-pointer ${activeTab === 'contact' ? 'text-blue-400 font-bold' : ''}`}
-          >
-            Submit Content
-          </button>
-        </nav>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsPortalModalOpen(true)}
-            className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-[#18191c] transition-colors cursor-pointer"
-            title="Search portals"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-
-          {currentUser ? (
+      {/* Floating Eterna Header Navbar */}
+      <div className="sticky top-4 z-50 px-4 md:px-8 max-w-6xl mx-auto w-full">
+        <header className="rounded-full bg-[#12141d]/85 border border-indigo-500/20 backdrop-blur-2xl px-6 py-2.5 flex items-center justify-between shadow-2xl shadow-black/80">
+          {/* Brand Logo */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('home')}>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (currentUser?.role === 'PLATFORM_ADMIN') onOpenApp('platform');
-                  else if (currentUser?.role === 'WAITER') onOpenApp('waiter');
-                  else onOpenApp('restaurant');
-                }}
-                className="rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 transition-all shadow-md shadow-blue-950/40 cursor-pointer"
-              >
-                My Dashboard
-              </button>
-              <button
-                onClick={async () => {
-                  await api.logout();
-                  window.location.reload();
-                }}
-                className="p-2 rounded-full text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                title="Log Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 animate-pulse" />
+              <span className="text-xl font-black tracking-tight text-white font-mono">
+                dinely<span className="text-purple-400">.cloud</span>
+              </span>
             </div>
-          ) : (
-            <>
-              <button
-                onClick={() => setIsPortalModalOpen(true)}
-                className="text-xs font-bold text-slate-300 hover:text-white px-4 py-2 rounded-full border border-slate-800 hover:border-slate-700 bg-[#18191c] transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <span>Log In</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-              <button
-                onClick={() => onStartTrial()}
-                className="rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 transition-all shadow-lg shadow-blue-950/40 cursor-pointer"
-              >
-                Subscribe
-              </button>
-            </>
-          )}
-        </div>
-      </header>
+          </div>
 
-      {/* Main Content Area */}
+          {/* Grouped Pill Navigation Links */}
+          <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-300">
+            <button
+              onClick={() => setActiveTab('home')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1 ${activeTab === 'home' ? 'text-indigo-400 font-bold' : ''}`}
+            >
+              What we do
+            </button>
+            <button
+              onClick={() => setActiveTab('features')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1 ${activeTab === 'features' ? 'text-indigo-400 font-bold' : ''}`}
+            >
+              Our approach
+            </button>
+            <button
+              onClick={() => setActiveTab('showcase')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1 ${activeTab === 'showcase' ? 'text-indigo-400 font-bold' : ''}`}
+            >
+              Showcase
+            </button>
+            <button
+              onClick={() => setActiveTab('faq')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1 ${activeTab === 'faq' ? 'text-indigo-400 font-bold' : ''}`}
+            >
+              About us
+            </button>
+          </nav>
+
+          {/* Right Action Controls */}
+          <div className="flex items-center gap-3">
+            {currentUser ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (currentUser?.role === 'PLATFORM_ADMIN') onOpenApp('platform');
+                    else if (currentUser?.role === 'WAITER') onOpenApp('waiter');
+                    else onOpenApp('restaurant');
+                  }}
+                  className="eterna-pill-btn text-xs font-bold px-5 py-2 cursor-pointer shadow-lg"
+                >
+                  My Dashboard
+                </button>
+                <button
+                  onClick={async () => {
+                    await api.logout();
+                    window.location.reload();
+                  }}
+                  className="p-2 rounded-full text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  title="Log Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => setIsPortalModalOpen(true)}
+                  className="text-xs font-bold text-slate-300 hover:text-white px-4 py-2 rounded-full border border-indigo-500/20 hover:border-indigo-500/40 bg-[#12141d] transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Log In</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+                <button
+                  onClick={() => onStartTrial()}
+                  className="eterna-pill-btn text-xs font-bold px-6 py-2 cursor-pointer shadow-lg"
+                >
+                  Create Restaurant
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+      </div>
+
+      {/* Main Home View */}
       {activeTab === 'home' && (
-        <main className="flex-1">
-          {/* selfh.st Style High-Impact Hero Section */}
-          <section className="pt-20 pb-16 px-4 md:px-8 max-w-5xl mx-auto text-center space-y-8">
-            <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight leading-tight">
-              Next-gen restaurant <span className="bg-gradient-to-r from-blue-400 via-sky-400 to-blue-500 bg-clip-text text-transparent">content + OS</span> delivered straight to your venue
+        <main className="flex-1 z-10 relative">
+          {/* Eterna Hero Section 1 */}
+          <section className="pt-16 pb-20 px-4 md:px-8 max-w-5xl mx-auto text-center space-y-8">
+            {/* Top Eterna Pill Chip */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#12141d]/90 border border-indigo-500/30 text-xs font-semibold text-indigo-300 shadow-xl backdrop-blur-xl">
+              <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+              <span>Data-driven product management partner</span>
+            </div>
+
+            <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight max-w-4xl mx-auto text-white">
+              Perfecting every detail for <span className="eterna-gradient-text">dining & equipment</span> takes monumental effort
             </h1>
 
-            <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-              Join 30,000+ readers discovering the latest in self-hosted dining software, QR table ordering, Kitchen KDS, and Waiter terminals every Friday
+            <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed font-normal">
+              Empower your restaurant with seamless order taking, real-time table floorplans, Kitchen KDS, Waiter OS, and multi-tenant cloud security built for scale.
             </p>
 
-            {/* Signature selfh.st Hero Action Pill Input Bar */}
-            <div className="w-full max-w-xl mx-auto rounded-full bg-[#18191c] border border-slate-800/90 p-1.5 pl-6 flex items-center shadow-2xl focus-within:border-blue-500 transition-all">
+            {/* Eterna Signature Hero Email Action Bar */}
+            <div className="w-full max-w-xl mx-auto rounded-full bg-[#12141d] border border-indigo-500/30 p-1.5 pl-6 flex items-center shadow-2xl focus-within:border-purple-400 transition-all">
               <input
                 type="email"
-                placeholder="enter your email address..."
+                placeholder="enter your restaurant email address..."
                 value={heroEmail}
                 onChange={(e) => setHeroEmail(e.target.value)}
                 className="bg-transparent text-white font-medium text-xs flex-1 outline-none placeholder:text-slate-500"
               />
               <button
                 onClick={() => onStartTrial({ email: heroEmail })}
-                className="rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-7 py-3 shadow-lg shadow-blue-950/50 transition-all shrink-0 cursor-pointer flex items-center gap-2"
+                className="eterna-pill-btn text-xs font-bold px-7 py-3 shadow-xl shrink-0 cursor-pointer flex items-center gap-2"
               >
-                <span>Subscribe</span>
+                <span>Create Restaurant</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
-            </div>
-
-            {/* Sub-headline Badges */}
-            <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500 font-mono pt-4">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>256-bit Isolated Multi-Tenant Architecture</span>
-              </div>
-              <div>•</div>
-              <div>No Credit Card Required</div>
-              <div>•</div>
-              <div>3-Minute Instant Setup</div>
             </div>
           </section>
 
-          {/* selfh.st Content Section: LATEST CONTENT */}
-          <section className="py-12 px-4 md:px-8 max-w-6xl mx-auto space-y-8">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <h2 className="text-xs font-bold font-mono tracking-widest text-slate-400 uppercase">
-                LATEST CONTENT
+          {/* Eterna Section 2: One Go-to Partner Process Flow Cards */}
+          <section className="py-16 px-4 md:px-8 max-w-6xl mx-auto space-y-10">
+            <div className="text-center space-y-3">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-950/40 border border-indigo-500/30 text-[11px] font-mono font-bold text-indigo-400">
+                <span>● Value proposition</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-black eterna-gradient-text">
+                One go-to partner who orchestrates and delivers
               </h2>
-              <button
-                onClick={() => setActiveTab('showcase')}
-                className="text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-              >
-                Show all &gt;
-              </button>
             </div>
 
-            {/* Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Card 1 */}
-              <div
-                onClick={() => onOpenApp('restaurant')}
-                className="bg-[#18191c] border border-slate-800/70 rounded-3xl p-6 hover:border-slate-700 transition-all cursor-pointer group space-y-4 shadow-xl"
-              >
-                <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 w-fit text-blue-400 group-hover:scale-110 transition-transform">
-                  <Utensils className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs font-mono text-blue-400 font-bold uppercase">POS Module</div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">
-                    POS Terminal OS & Table Floorplan
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Full-service cashier terminal, real-time table floorplan layout, guest ordering, and bill settlement.
-                  </p>
-                </div>
-                <div className="pt-2 text-xs text-blue-400 font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                  Launch Terminal &rarr;
-                </div>
+            {/* 4-Stage Process Flow Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="eterna-glass-card rounded-3xl p-6 space-y-4 hover:border-indigo-500/50 transition-all duration-300 group">
+                <div className="text-xs font-mono font-bold text-indigo-400">01. SETUP & AUTH</div>
+                <h3 className="text-base font-bold text-white group-hover:text-indigo-300 transition-colors">
+                  Google Account Authentication
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Single click authentication with Firebase Google Auth. Automatic owner profile synchronization.
+                </p>
               </div>
 
-              {/* Card 2 */}
-              <div
-                onClick={() => onOpenApp('waiter')}
-                className="bg-[#18191c] border border-slate-800/70 rounded-3xl p-6 hover:border-slate-700 transition-all cursor-pointer group space-y-4 shadow-xl"
-              >
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 w-fit text-amber-400 group-hover:scale-110 transition-transform">
-                  <Zap className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs font-mono text-amber-400 font-bold uppercase">Handheld Module</div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-amber-400 transition-colors">
-                    Waiter Terminal OS
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Mobile handheld order taker, floor table status sync, and instant customer service call notifications.
-                  </p>
-                </div>
-                <div className="pt-2 text-xs text-amber-400 font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                  Launch Handheld &rarr;
-                </div>
+              <div className="eterna-glass-card rounded-3xl p-6 space-y-4 hover:border-purple-500/50 transition-all duration-300 group">
+                <div className="text-xs font-mono font-bold text-purple-400">02. FLOORPLAN</div>
+                <h3 className="text-base font-bold text-white group-hover:text-purple-300 transition-colors">
+                  Table & Venue Configuration
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Specify exact table capacity for automated database creation and table-specific QR codes.
+                </p>
               </div>
 
-              {/* Card 3 */}
-              <div
-                onClick={() => onOpenApp('customer')}
-                className="bg-[#18191c] border border-slate-800/70 rounded-3xl p-6 hover:border-slate-700 transition-all cursor-pointer group space-y-4 shadow-xl"
-              >
-                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 w-fit text-emerald-400 group-hover:scale-110 transition-transform">
-                  <Smartphone className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs font-mono text-emerald-400 font-bold uppercase">Customer Module</div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-emerald-400 transition-colors">
-                    Customer QR Mobile App
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    App-less scan & order mobile experience, digital menu with dietary tags, and live order tracking.
-                  </p>
-                </div>
-                <div className="pt-2 text-xs text-emerald-400 font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                  Scan & Order &rarr;
-                </div>
+              <div className="eterna-glass-card rounded-3xl p-6 space-y-4 hover:border-pink-500/50 transition-all duration-300 group">
+                <div className="text-xs font-mono font-bold text-pink-400">03. APPROVAL</div>
+                <h3 className="text-base font-bold text-white group-hover:text-pink-300 transition-colors">
+                  Admin Verification Queue
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Platform admin reviews application and instantiates active table floorplan in backend storage.
+                </p>
+              </div>
+
+              <div className="eterna-glass-card rounded-3xl p-6 space-y-4 hover:border-emerald-500/50 transition-all duration-300 group">
+                <div className="text-xs font-mono font-bold text-emerald-400">04. LIVE POS</div>
+                <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors">
+                  Live Operations & Ordering
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Instant go-live across POS Terminal, Kitchen KDS, Waiter OS, Bar Terminal, and QR Ordering.
+                </p>
               </div>
             </div>
           </section>
 
-          {/* selfh.st Section: AFFILIATES AND OFFERS / SHOWCASE */}
-          <section className="py-12 px-4 md:px-8 max-w-6xl mx-auto space-y-8">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <h2 className="text-xs font-bold font-mono tracking-widest text-slate-400 uppercase">
-                FEATURED TERMINALS & SYSTEM ARCHITECTURE
+          {/* Eterna Section 3: Trusted by Fortune 100 Hyperscalers */}
+          <section className="py-16 px-4 md:px-8 max-w-6xl mx-auto space-y-10">
+            <div className="text-center space-y-3">
+              <h2 className="text-3xl sm:text-4xl font-black eterna-gradient-text">
+                Trusted by Fortune 100 hyperscalers from concept to completion
               </h2>
-              <button
-                onClick={() => onStartTrial()}
-                className="text-xs font-bold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
-              >
-                Create Restaurant &gt;
-              </button>
+              <p className="text-xs text-slate-400 max-w-xl mx-auto">
+                Discover how Dinely enables multi-outlet restaurant management with tenant isolation and real-time speed.
+              </p>
             </div>
 
-            <div className="bg-[#18191c] border border-slate-800/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="space-y-4">
-                  <Badge variant="brand">REAL-TIME WEBSOCKET ENGINE</Badge>
-                  <h3 className="text-2xl font-black text-white leading-tight">
-                    Instant Multi-Terminal Order & Kitchen Ticket Dispatch
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+              <div className="p-6 bg-[#12141d] border border-indigo-500/20 rounded-3xl space-y-3">
+                <div className="text-xs font-mono text-slate-500 uppercase">Onboarding</div>
+                <div className="text-lg font-bold text-white">From Idea to Setup</div>
+                <div className="text-xs text-slate-400">Offer complete system.</div>
+              </div>
+
+              <div className="p-6 bg-[#12141d] border border-indigo-500/20 rounded-3xl space-y-3">
+                <div className="text-xs font-mono text-slate-500 uppercase">Reviewing</div>
+                <div className="text-lg font-bold text-white">From Evaluation to Approval</div>
+                <button
+                  onClick={() => onStartTrial()}
+                  className="eterna-pill-btn text-[11px] font-bold px-4 py-1.5 shadow-md cursor-pointer"
+                >
+                  Request Launch &rarr;
+                </button>
+              </div>
+
+              <div className="p-6 bg-[#12141d] border border-indigo-500/20 rounded-3xl space-y-3">
+                <div className="text-xs font-mono text-slate-500 uppercase">Activation</div>
+                <div className="text-lg font-bold text-white">From Approval to Launch</div>
+                <div className="text-xs text-slate-400">Instant go-live.</div>
+              </div>
+
+              <div className="p-6 bg-[#12141d] border border-indigo-500/20 rounded-3xl space-y-3">
+                <div className="text-xs font-mono text-slate-500 uppercase">Deployment</div>
+                <div className="text-lg font-bold text-white">From Operating to Scale</div>
+                <div className="text-xs text-slate-400">Multi-tenant security.</div>
+              </div>
+            </div>
+          </section>
+
+          {/* Eterna Section 4: Interactive Orbital Radar & Execution Layer */}
+          <section className="py-16 px-4 md:px-8 max-w-6xl mx-auto space-y-12">
+            <div className="eterna-glass-card rounded-3xl p-8 sm:p-12 space-y-8 shadow-2xl relative overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+                {/* Left: Interactive Orbital System Graphic */}
+                <div className="relative flex items-center justify-center p-8">
+                  {/* Glowing orbital rings */}
+                  <div className="w-64 h-64 rounded-full border border-indigo-500/30 animate-spin-slow flex items-center justify-center relative">
+                    <div className="w-48 h-48 rounded-full border border-purple-500/40 flex items-center justify-center">
+                      <div className="w-32 h-32 rounded-full border border-pink-500/40 flex items-center justify-center bg-indigo-950/40 backdrop-blur-xl">
+                        <Cpu className="w-10 h-10 text-indigo-400 animate-pulse" />
+                      </div>
+                    </div>
+                    {/* Satellite Dots */}
+                    <div className="absolute -top-2 left-1/2 w-4 h-4 rounded-full bg-indigo-500 shadow-lg shadow-indigo-500" />
+                    <div className="absolute -bottom-2 right-1/4 w-4 h-4 rounded-full bg-purple-500 shadow-lg shadow-purple-500" />
+                    <div className="absolute top-1/2 -left-2 w-4 h-4 rounded-full bg-pink-500 shadow-lg shadow-pink-500" />
+                  </div>
+                </div>
+
+                {/* Right: Execution Layer Text */}
+                <div className="space-y-6">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-950/50 border border-purple-500/30 text-[11px] font-mono text-purple-300">
+                    <span>● Real-Time Sync</span>
+                  </div>
+                  <h3 className="text-3xl font-black eterna-gradient-text leading-tight">
+                    We are the execution layer across products, terminals, and ordering
                   </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    When a guest scans a table QR code and submits an order, Dinely instantly routes drinks to the Bar Terminal, food items to the Kitchen KDS, and updates floor waiters in real time.
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Our real-time WebSocket bus seamlessly orchestrates table QR scans, kitchen prep queues, bartender tickets, and cashier floorplans under one unified platform.
                   </p>
-                  <div className="pt-2 flex items-center gap-3">
+
+                  <div className="space-y-3 pt-2 text-xs">
+                    <div className="flex items-center gap-3 text-slate-200">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>POS Terminal OS with real-time bill settlement</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-200">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Kitchen KDS countdown timer bump tickets</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-200">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Waiter handheld service call notifications</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
                     <button
                       onClick={() => onStartTrial()}
-                      className="rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-6 py-2.5 shadow-lg shadow-blue-950/40 cursor-pointer"
+                      className="eterna-pill-btn text-xs font-bold px-7 py-3 shadow-xl cursor-pointer"
                     >
-                      Start Free Trial
+                      Get Started Today &rarr;
                     </button>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-[#121316] border border-slate-800/80 rounded-2xl space-y-3 font-mono text-xs">
-                  <div className="flex items-center justify-between text-slate-400 border-b border-slate-800 pb-2 text-[11px]">
-                    <span>SYSTEM DISPATCH METRICS</span>
-                    <span className="text-emerald-400 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> 100% OPERATIONAL
-                    </span>
-                  </div>
-                  <div className="space-y-2 text-slate-300 text-[11px]">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Routing Latency:</span>
-                      <span className="text-white font-bold">&lt; 14ms</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Database Engine:</span>
-                      <span className="text-white font-bold">Isolated Tenant Store</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Table QR Generator:</span>
-                      <span className="text-white font-bold">Automated Instantiation</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Role Isolation:</span>
-                      <span className="text-white font-bold">Enforced (RBAC)</span>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -370,35 +367,38 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
 
       {/* Features View */}
       {activeTab === 'features' && (
-        <main className="flex-1 py-12 px-4 md:px-8 max-w-6xl mx-auto space-y-8">
-          <div className="border-b border-slate-800/80 pb-4 space-y-1">
-            <h1 className="text-2xl font-black text-white">All Platform Features & Terminals</h1>
-            <p className="text-xs text-slate-400">Explore the complete suit of self-hosted restaurant modules.</p>
+        <main className="flex-1 py-12 px-4 md:px-8 max-w-6xl mx-auto space-y-8 z-10 relative">
+          <div className="border-b border-indigo-500/20 pb-4 space-y-1">
+            <h1 className="text-3xl font-black eterna-gradient-text">Our Approach & Terminal Architecture</h1>
+            <p className="text-xs text-slate-400">Comprehensive overview of Dinely's dedicated operating terminals.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-[#18191c] border border-slate-800/80 rounded-3xl p-6 space-y-3">
-              <Utensils className="w-6 h-6 text-blue-400" />
+            <div className="eterna-glass-card rounded-3xl p-6 space-y-3">
+              <Utensils className="w-6 h-6 text-indigo-400" />
               <h3 className="text-lg font-bold text-white">POS Terminal OS</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
                 Cashier checkout, table floorplan management, splitting bills, order modifications, and end-of-day daily closing summaries.
               </p>
             </div>
-            <div className="bg-[#18191c] border border-slate-800/80 rounded-3xl p-6 space-y-3">
+
+            <div className="eterna-glass-card rounded-3xl p-6 space-y-3">
               <ChefHat className="w-6 h-6 text-amber-400" />
               <h3 className="text-lg font-bold text-white">Kitchen Display System (KDS)</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
                 Dedicated station for kitchen chefs with prep countdown timers, order bumping, ingredient alerts, and ready notifications.
               </p>
             </div>
-            <div className="bg-[#18191c] border border-slate-800/80 rounded-3xl p-6 space-y-3">
+
+            <div className="eterna-glass-card rounded-3xl p-6 space-y-3">
               <Wine className="w-6 h-6 text-purple-400" />
               <h3 className="text-lg font-bold text-white">Bar Terminal KDS</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
                 Drink prep terminal for bartenders to fulfill cocktail, beverage, and wine orders directly from customer table QR scans.
               </p>
             </div>
-            <div className="bg-[#18191c] border border-slate-800/80 rounded-3xl p-6 space-y-3">
+
+            <div className="eterna-glass-card rounded-3xl p-6 space-y-3">
               <Building2 className="w-6 h-6 text-emerald-400" />
               <h3 className="text-lg font-bold text-white">Multi-Tenant Platform Admin</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -411,21 +411,16 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
 
       {/* FAQ View */}
       {activeTab === 'faq' && (
-        <main className="flex-1 py-12 px-4 md:px-8 max-w-4xl mx-auto space-y-6">
-          <div className="border-b border-slate-800/80 pb-4 space-y-1 text-center">
-            <h1 className="text-2xl font-black text-white">Frequently Asked Questions</h1>
+        <main className="flex-1 py-12 px-4 md:px-8 max-w-4xl mx-auto space-y-6 z-10 relative">
+          <div className="border-b border-indigo-500/20 pb-4 space-y-1 text-center">
+            <h1 className="text-3xl font-black eterna-gradient-text">Frequently Asked Questions</h1>
             <p className="text-xs text-slate-400">Everything you need to know about joining Dinely Cloud.</p>
           </div>
 
           <div className="space-y-4">
             {faqs.map((faq, idx) => (
-              <div
-                key={idx}
-                className="bg-[#18191c] border border-slate-800/80 rounded-2xl p-5 space-y-2"
-              >
-                <h3 className="text-sm font-bold text-white flex items-center justify-between">
-                  <span>{faq.q}</span>
-                </h3>
+              <div key={idx} className="eterna-glass-card rounded-2xl p-5 space-y-2">
+                <h3 className="text-sm font-bold text-white">{faq.q}</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">{faq.a}</p>
               </div>
             ))}
@@ -435,13 +430,13 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
 
       {/* Contact View */}
       {activeTab === 'contact' && (
-        <main className="flex-1 py-12 px-4 md:px-8 max-w-xl mx-auto space-y-6">
+        <main className="flex-1 py-12 px-4 md:px-8 max-w-xl mx-auto space-y-6 z-10 relative">
           <div className="text-center space-y-1">
-            <h1 className="text-2xl font-black text-white">Submit Content & Inquiries</h1>
+            <h1 className="text-3xl font-black eterna-gradient-text">Get in Touch</h1>
             <p className="text-xs text-slate-400">Reach out to the Dinely platform architecture team.</p>
           </div>
 
-          <div className="bg-[#18191c] border border-slate-800/80 rounded-3xl p-6 sm:p-8 space-y-4 shadow-2xl">
+          <div className="eterna-glass-card rounded-3xl p-6 sm:p-8 space-y-4 shadow-2xl">
             {contactSubmitted ? (
               <div className="p-4 bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs rounded-2xl text-center space-y-2">
                 <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
@@ -463,13 +458,13 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                   <textarea
                     rows={4}
                     placeholder="Tell us about your restaurant inquiry..."
-                    className="w-full p-3.5 bg-[#121316] border border-slate-800 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full p-3.5 bg-[#12141d] border border-indigo-500/20 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
                     required
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 shadow-lg shadow-blue-950/50 cursor-pointer"
+                  className="eterna-pill-btn w-full text-xs font-bold py-3 shadow-lg cursor-pointer"
                 >
                   Submit Inquiry
                 </button>
@@ -479,19 +474,19 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         </main>
       )}
 
-      {/* Clean selfh.st Style Footer */}
-      <footer className="border-t border-slate-800/60 py-8 px-4 md:px-8 bg-[#121316]">
+      {/* Eterna Style Footer */}
+      <footer className="border-t border-indigo-500/20 py-8 px-4 md:px-8 bg-[#0b0c10] z-10 relative">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+            <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500" />
             <span className="font-mono text-slate-300 font-bold">dinely.cloud</span>
             <span>&copy; {new Date().getFullYear()} Dinely Cloud Inc. All rights reserved.</span>
           </div>
 
           <div className="flex items-center gap-6 mt-4 sm:mt-0 font-medium">
-            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('features')}>Content</span>
-            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('showcase')}>Apps</span>
-            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('faq')}>FAQ</span>
+            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('features')}>What we do</span>
+            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('showcase')}>Approach</span>
+            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('faq')}>About us</span>
             <span className="hover:text-slate-300 cursor-pointer" onClick={() => onStartTrial()}>Subscribe</span>
           </div>
         </div>
@@ -518,7 +513,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                   setIsPortalModalOpen(false);
                   window.location.pathname = '/kitchen/login';
                 }}
-                className="p-3 bg-[#121316] hover:bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
+                className="p-3 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-amber-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
               >
                 <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
                   <ChefHat className="w-4 h-4 text-amber-400" /> Kitchen KDS
@@ -531,7 +526,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                   setIsPortalModalOpen(false);
                   window.location.pathname = '/waiter/login';
                 }}
-                className="p-3 bg-[#121316] hover:bg-slate-900 border border-slate-800 hover:border-sky-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
+                className="p-3 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-sky-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
               >
                 <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
                   <Zap className="w-4 h-4 text-sky-400" /> Waiter OS
@@ -544,7 +539,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                   setIsPortalModalOpen(false);
                   window.location.pathname = '/bar/login';
                 }}
-                className="p-3 bg-[#121316] hover:bg-slate-900 border border-slate-800 hover:border-purple-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
+                className="p-3 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-purple-500/50 rounded-2xl text-left space-y-1.5 transition-all group cursor-pointer"
               >
                 <div className="flex items-center gap-2 text-purple-400 font-bold text-xs">
                   <Wine className="w-4 h-4 text-purple-400" /> Bar Terminal
@@ -564,7 +559,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                   setIsPortalModalOpen(false);
                   window.location.pathname = '/restaurant/login';
                 }}
-                className="p-3.5 bg-[#121316] hover:bg-slate-900 border border-slate-800 hover:border-rose-500/50 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
+                className="p-3.5 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-rose-500/50 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
                   <Utensils className="w-4 h-4" /> Restaurant Owner Portal
@@ -577,7 +572,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                   setIsPortalModalOpen(false);
                   window.location.pathname = '/admin/login';
                 }}
-                className="p-3.5 bg-[#121316] hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
+                className="p-3.5 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-indigo-500/50 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
                   <Building2 className="w-4 h-4" /> Platform Admin Portal
