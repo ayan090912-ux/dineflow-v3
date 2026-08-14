@@ -81,7 +81,13 @@ export class DinelyApiClient {
           this.tableSessions = db.tableSessions || [];
           this.businessDays = db.businessDays || [];
           this.employees = db.employees || [];
-          this.inventory = db.inventory || [];
+          this.inventory = (db.inventory || []).filter(
+            (i: InventoryItem) =>
+              i.name !== 'Organic Extra Virgin Olive Oil' &&
+              i.name !== 'Prime Wagyu Beef Tenderloin' &&
+              i.name !== 'Fresh Puglia Burrata & Mozzarella' &&
+              i.name !== 'Organic San Marzano Tomatoes'
+          );
           this.auditLogs = db.auditLogs || [];
           this.customerRequests = db.customerRequests || [];
           this.platformNotifications = db.platformNotifications || [];
@@ -1574,74 +1580,7 @@ export class DinelyApiClient {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    let items = this.inventory.filter((i) => i.restaurantId === targetId);
-    if (items.length === 0) {
-      items = [
-        {
-          id: `inv-${targetId}-1`,
-          restaurantId: targetId,
-          name: 'Organic Extra Virgin Olive Oil',
-          category: 'Oils & Condiments',
-          quantity: 25,
-          unit: 'liters',
-          minThreshold: 5,
-          costPerUnit: 450.00,
-          supplierName: 'Verona Imports Ltd.',
-          supplierContact: '+91 98765 43210',
-          storageLocation: 'Pantry Shelf B2',
-          lastRestocked: new Date().toISOString().split('T')[0],
-          status: 'IN_STOCK',
-        },
-        {
-          id: `inv-${targetId}-2`,
-          restaurantId: targetId,
-          name: 'Prime Wagyu Beef Tenderloin',
-          category: 'Meat & Poultry',
-          quantity: 12,
-          unit: 'kg',
-          minThreshold: 4,
-          costPerUnit: 1200.00,
-          supplierName: 'Royal Meats & Co.',
-          supplierContact: '+91 98123 45678',
-          storageLocation: 'Cold Walk-in Freezer #1',
-          lastRestocked: new Date().toISOString().split('T')[0],
-          status: 'IN_STOCK',
-        },
-        {
-          id: `inv-${targetId}-3`,
-          restaurantId: targetId,
-          name: 'Fresh Puglia Burrata & Mozzarella',
-          category: 'Dairy & Cheese',
-          quantity: 18,
-          unit: 'kg',
-          minThreshold: 5,
-          costPerUnit: 320.00,
-          supplierName: 'Milano Artisan Dairy',
-          supplierContact: '+91 97654 32109',
-          storageLocation: 'Dairy Chiller #2',
-          lastRestocked: new Date().toISOString().split('T')[0],
-          status: 'IN_STOCK',
-        },
-        {
-          id: `inv-${targetId}-4`,
-          restaurantId: targetId,
-          name: 'Organic San Marzano Tomatoes',
-          category: 'Produce & Herbs',
-          quantity: 40,
-          unit: 'kg',
-          minThreshold: 10,
-          costPerUnit: 120.00,
-          supplierName: 'Green Earth Organics',
-          supplierContact: '+91 96543 21098',
-          storageLocation: 'Produce Pantry A1',
-          lastRestocked: new Date().toISOString().split('T')[0],
-          status: 'IN_STOCK',
-        },
-      ];
-      this.inventory.push(...items);
-      this.saveDatabase();
-    }
-    return items;
+    return this.inventory.filter((i) => i.restaurantId === targetId);
   }
 
   async updateRestaurantTheme(restaurantId: string, theme: ThemeConfig) {
