@@ -7,14 +7,14 @@ import {
   UserCredential,
 } from 'firebase/auth';
 
-// Firebase configuration from environment variables (Project: dinely-cd6cd)
+// Firebase Web SDK Configuration for Dinely Cloud (Project: dinely-cd6cd)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDemoKeyForDinelyLocalhostAuthDev',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'dinely-cd6cd.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'dinely-cd6cd',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'dinely-cd6cd.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '100000000000',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:100000000000:web:dinelycd6cd123456',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '99267644103',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:99267644103:web:c7f93f68625d3c0da04ce2',
 };
 
 // Initialize Firebase App singleton safely
@@ -68,6 +68,8 @@ export async function signInWithGooglePopup(): Promise<GoogleAuthResult> {
       throw new Error('Sign-in process cancelled.');
     } else if (error.code === 'auth/account-exists-with-different-credential') {
       throw new Error('An account already exists with the same email address using a different login method.');
+    } else if (error.code === 'auth/api-key-not-valid' || error.message?.includes('api-key-not-valid')) {
+      throw new Error('Firebase API key is missing or invalid in frontend/.env (VITE_FIREBASE_API_KEY). Please set a valid Firebase Web API key from Firebase Console.');
     }
 
     throw new Error(error.message || 'Google Authentication failed. Please try again.');
