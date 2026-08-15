@@ -614,24 +614,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
-      {/* Active Order Status Quick Alert Banner */}
-      {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
-        <div className="px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/30 text-emerald-200 flex items-center justify-between text-xs font-bold">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
-            <span className="truncate">
-              {customerOrders.filter((o) => o.status !== 'CANCELLED').length} Active Order Live Tracker
-            </span>
-          </div>
-          <button
-            onClick={() => setIsOrderStatusModalOpen(true)}
-            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 cursor-pointer transition-all shadow shrink-0"
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>View Status 🛵</span>
-          </button>
-        </div>
-      )}
+
 
       {/* Food Menu ⇄ Bar Menu Switcher (If Bar Feature is Enabled) */}
       {(currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR') && (
@@ -862,78 +845,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       </div>
 
-      {/* Dedicated Bottom Order Status Section */}
-      {(() => {
-        // Show ALL orders belonging to the active table session until the waiter closes the session
-        const sessionOrders = customerOrders.filter((o) => o.status !== 'CANCELLED');
-        const cancelledOrders = customerOrders.filter((o) => o.status === 'CANCELLED');
 
-        if (sessionOrders.length === 0 && cancelledOrders.length === 0) return null;
-
-        return (
-          <div className="p-4 space-y-4 pt-6 border-t border-slate-800/80 mt-6">
-            {sessionOrders.length > 0 && (
-              <div
-                id="active-orders-section"
-                className={`space-y-3 px-1 transition-all duration-500 rounded-3xl ${
-                  highlightActiveOrders ? 'ring-2 ring-rose-500 bg-rose-500/10 p-2 shadow-2xl shadow-rose-950/50' : ''
-                }`}
-              >
-                <div className="px-1 flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Flame className="w-4 h-4 text-rose-500" />
-                    Active Table Session Orders ({sessionOrders.length})
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                    Session Active
-                  </span>
-                </div>
-                {sessionOrders.map((ord) => (
-                  <CustomerLiveTracker
-                    key={ord.id}
-                    order={ord}
-                    onUpdateOrder={(updated) =>
-                      setCustomerOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
-                    }
-                  />
-                ))}
-              </div>
-            )}
-
-            {cancelledOrders.length > 0 && (
-              <div className="my-2">
-                <details className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300">
-                  <summary className="font-bold cursor-pointer flex items-center justify-between text-slate-300 hover:text-white">
-                    <span className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-rose-400" />
-                      Cancelled Orders ({cancelledOrders.length})
-                    </span>
-                    <span className="text-[10px] text-rose-400 font-mono font-bold bg-rose-950/60 border border-rose-800/60 px-2 py-0.5 rounded-full">
-                      Cancelled
-                    </span>
-                  </summary>
-                  <div className="mt-3 space-y-2 pt-2 border-t border-slate-800">
-                    {cancelledOrders.map((pOrd) => (
-                      <div key={pOrd.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-white font-mono">Order #{pOrd.id}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            {pOrd.items.length} items • ₹{pOrd.totalAmount.toFixed(2)}
-                          </p>
-                        </div>
-                        <Badge variant="danger" className="text-[10px] font-mono">
-                          CANCELLED
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {/* Subtle Customer Footer Attribution */}
       <footer className="py-8 px-4 text-center text-xs text-slate-500 border-t border-slate-900 mt-12 mb-24 space-y-1">
