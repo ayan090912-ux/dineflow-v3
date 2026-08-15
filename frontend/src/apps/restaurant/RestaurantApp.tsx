@@ -127,35 +127,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
 
-  const filteredMenuItems = menuItems.filter((item) => {
-    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || (item.barCategory !== undefined && item.barCategory !== null);
-    if (activeCatalogMode === 'BAR' && !isBarItem) return false;
-    if (activeCatalogMode === 'FOOD' && isBarItem) return false;
-
-    const foodCatObj = foodCategories.find((c) => c.id === item.categoryId || c.name === item.categoryId);
-    const matchesCategory =
-      selectedMenuCategory === 'ALL' ||
-      item.categoryId === selectedMenuCategory ||
-      (foodCatObj && (foodCatObj.name === selectedMenuCategory || foodCatObj.id === selectedMenuCategory)) ||
-      item.barCategory === selectedMenuCategory;
-
-    const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
-    const matchesDietary =
-      dietaryFilter === 'ALL' ||
-      (dietaryFilter === 'VEG' && isVeg) ||
-      (dietaryFilter === 'NON_VEG' && !isVeg);
-
-    const query = menuSearchQuery.trim().toLowerCase();
-    const matchesSearch =
-      !query ||
-      item.name.toLowerCase().includes(query) ||
-      (item.description && item.description.toLowerCase().includes(query)) ||
-      (item.brand && item.brand.toLowerCase().includes(query)) ||
-      item.price.toString().includes(query);
-
-    return matchesCategory && matchesDietary && matchesSearch;
-  });
-
   const handleDuplicateItem = async (itemId: string) => {
     try {
       const dup = await api.duplicateMenuItem(itemId);
@@ -269,6 +240,38 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     address: '',
     phone: '',
     cuisine: 'Modern Fusion',
+  });
+
+  const isBarEnabled = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
+  const activeCatalogMode = isBarEnabled ? menuCatalogMode : 'FOOD';
+
+  const filteredMenuItems = menuItems.filter((item) => {
+    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || (item.barCategory !== undefined && item.barCategory !== null);
+    if (activeCatalogMode === 'BAR' && !isBarItem) return false;
+    if (activeCatalogMode === 'FOOD' && isBarItem) return false;
+
+    const foodCatObj = foodCategories.find((c) => c.id === item.categoryId || c.name === item.categoryId);
+    const matchesCategory =
+      selectedMenuCategory === 'ALL' ||
+      item.categoryId === selectedMenuCategory ||
+      (foodCatObj && (foodCatObj.name === selectedMenuCategory || foodCatObj.id === selectedMenuCategory)) ||
+      item.barCategory === selectedMenuCategory;
+
+    const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
+    const matchesDietary =
+      dietaryFilter === 'ALL' ||
+      (dietaryFilter === 'VEG' && isVeg) ||
+      (dietaryFilter === 'NON_VEG' && !isVeg);
+
+    const query = menuSearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      item.name.toLowerCase().includes(query) ||
+      (item.description && item.description.toLowerCase().includes(query)) ||
+      (item.brand && item.brand.toLowerCase().includes(query)) ||
+      item.price.toString().includes(query);
+
+    return matchesCategory && matchesDietary && matchesSearch;
   });
 
   const handleSwitchRestaurant = async (restId: string) => {
@@ -432,9 +435,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
     return () => unsubscribe();
   }, []);
-
-  const isBarEnabled = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
-  const activeCatalogMode = isBarEnabled ? menuCatalogMode : 'FOOD';
 
   const loadData = async () => {
     const user = api.getCurrentUser();
