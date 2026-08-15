@@ -239,7 +239,7 @@ export default function App() {
               <LandingWebsite
                 onStartTrial={(ownerData) => {
                   if (ownerData) setActiveOwnerData(ownerData);
-                  navigateTo('/wizard');
+                  navigateTo('/wizard?mode=create');
                 }}
                 onLogin={() => navigateTo('/restaurant/login')}
                 onOpenApp={(app) => {
@@ -364,7 +364,7 @@ export default function App() {
                     navigateTo('/restaurant/pending-approval');
                   }
                 }}
-                onCreateNewRestaurant={() => navigateTo('/wizard')}
+                onCreateNewRestaurant={() => navigateTo('/wizard?mode=create')}
                 onLogout={() => handleLogout('/restaurant/login')}
               />
             )}

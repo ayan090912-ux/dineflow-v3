@@ -116,6 +116,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
   const resolveOwnerState = async (user: User) => {
     try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const isCreateMode = searchParams.get('mode') === 'create' || searchParams.get('new') === 'true' || window.location.hash.includes('create');
+      
+      // If user explicitly clicked "Create a new restaurant", do NOT auto-redirect to existing restaurant
+      if (isCreateMode) {
+        setCurrentStep(1);
+        return;
+      }
+
       const restaurants = await api.getOwnerRestaurants(user.email);
       if (restaurants.length > 0) {
         const activeRest = restaurants.find((r) => r.isApproved || r.lifecycleStatus === 'APPROVED' || r.lifecycleStatus === 'LIVE' || r.lifecycleStatus === 'ACTIVE');
