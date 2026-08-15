@@ -76,7 +76,6 @@ import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api } from '../../packages/api/client';
 import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation } from '../../packages/types';
-import { MOCK_CATEGORIES } from '../../packages/data/mockData';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
 import { BarTerminal } from '../bar/BarTerminal';
@@ -2118,7 +2117,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             {/* Menu Items Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredMenuItems.map((item) => {
-                const categoryObj = MOCK_CATEGORIES.find((c) => c.id === item.categoryId);
+                const categoryObj = foodCategories.find((c) => c.id === item.categoryId || c.name === item.categoryId);
                 const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
                 return (
                   <Card key={item.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-all">

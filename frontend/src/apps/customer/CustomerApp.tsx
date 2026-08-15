@@ -44,8 +44,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CallWaiterModal } from './CallWaiterModal';
 import { api } from '../../packages/api/client';
-import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, TableSession, getFulfillmentStation } from '../../packages/types';
-import { MOCK_CATEGORIES } from '../../packages/data/mockData';
+import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, TableSession, MenuCategory, getFulfillmentStation } from '../../packages/types';
 import { CustomerLiveTracker } from './CustomerLiveTracker';
 import { realtimeBus } from '../../packages/api/realtime';
 
@@ -61,6 +60,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [dietaryFilter, setDietaryFilter] = useState<'ALL' | 'VEG' | 'NON_VEG'>('ALL');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [foodCategories, setFoodCategories] = useState<MenuCategory[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -176,12 +176,20 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const r = rests.find((x) => x.id === restId) || rests[0];
     if (r) {
       setCurrentRestaurant(r);
-      const items = await api.getMenuItems(r.id);
+      const [items, cats] = await Promise.all([
+        api.getMenuItems(r.id),
+        api.getCategories(r.id),
+      ]);
       setMenuItems(items);
+      setFoodCategories(cats);
       await loadInitialOrder(undefined, r.id);
     } else {
-      const items = await api.getMenuItems(restId);
+      const [items, cats] = await Promise.all([
+        api.getMenuItems(restId),
+        api.getCategories(restId),
+      ]);
       setMenuItems(items);
+      setFoodCategories(cats);
       await loadInitialOrder(undefined, restId);
     }
   };
@@ -735,7 +743,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 { id: 'Mocktails', name: 'Mocktails' },
                 { id: 'Shots', name: 'Shots' },
               ]
-            : MOCK_CATEGORIES.filter((c) => c.restaurantId === 'rest-1')
+            : foodCategories.length > 0
+            ? foodCategories.map((c) => ({ id: c.id, name: c.name }))
+            : Array.from(new Set(menuItems.map((i) => i.categoryId).filter(Boolean))).map((catId) => ({
+                id: String(catId),
+                name: String(catId).replace(/^cat-/, '').replace(/[-_]/g, ' ').toUpperCase(),
+              }))
           ).map((cat) => (
             <button
               key={cat.id}
