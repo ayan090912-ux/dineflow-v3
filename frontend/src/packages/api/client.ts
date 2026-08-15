@@ -1246,8 +1246,11 @@ export class DinelyApiClient {
 
   async getOrders(restaurantId?: string) {
     await delay(100);
+    if (restaurantId === 'ALL' || restaurantId === '*') {
+      return [...this.orders];
+    }
     const targetId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetId) return [];
+    if (!targetId) return [...this.orders];
     return this.orders.filter((o) => o.restaurantId === targetId);
   }
 
