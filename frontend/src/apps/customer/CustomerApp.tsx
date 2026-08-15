@@ -211,19 +211,74 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     addToast('success', 'Age Verified 🍸', 'Welcome to the Bar Lounge Menu!');
   };
 
+  const saveCustomerOrderId = (orderId: string, restId: string) => {
+    try {
+      const key = `dinely_customer_active_orders_${restId}`;
+      const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!existing.includes(orderId)) {
+        existing.unshift(orderId);
+        localStorage.setItem(key, JSON.stringify(existing));
+      }
+    } catch (e) {
+      console.error('Failed to save customer order ID', e);
+    }
+  };
+
+  const getSavedCustomerOrderIds = (restId: string): string[] => {
+    try {
+      const key = `dinely_customer_active_orders_${restId}`;
+      return JSON.parse(localStorage.getItem(key) || '[]');
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const removeSavedCustomerOrderId = (orderId: string, restId: string) => {
+    try {
+      const key = `dinely_customer_active_orders_${restId}`;
+      const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      const updated = existing.filter((id) => id !== orderId);
+      localStorage.setItem(key, JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to remove customer order ID', e);
+    }
+  };
+
   const loadInitialOrder = async (targetSessionId?: string) => {
-    const restId = api.getCurrentRestaurantId() || undefined;
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
     const allOrders = await api.getOrders(restId);
+    const savedOrderIds = getSavedCustomerOrderIds(restId);
     const targetTable = (selectedTableNum || tableNumber || 'Table 01').toLowerCase();
     const activeSessionId = targetSessionId || currentTableSession?.id;
+    const isNoTableVenue = currentRestaurant?.hasTables === false || currentRestaurant?.businessType === 'FOOD_TRUCK' || currentRestaurant?.businessType === 'QUICK_SERVICE';
 
     const tableOrds = (allOrders || []).filter((o) => {
-      if (!o.tableNumber || o.tableNumber.toLowerCase() !== targetTable) return false;
-      if (activeSessionId) {
-        return o.tableSessionId === activeSessionId;
+      const isSavedLocally = savedOrderIds.includes(o.id);
+      const isMatchingTable = o.tableNumber && o.tableNumber.toLowerCase() === targetTable;
+      const isMatchingSession = activeSessionId && o.tableSessionId === activeSessionId;
+
+      if (!isSavedLocally && !isMatchingTable && !isMatchingSession) {
+        return false;
       }
-      return o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED';
+
+      const isFoodCartOrPickup = isNoTableVenue || o.orderType === 'PICKUP' || o.tableNumber === 'COUNTER';
+
+      if (isFoodCartOrPickup) {
+        // FOOD CART / COUNTER PICKUP:
+        // Order status ONLY vanishes after Kitchen marks order as DELIVERED or COMPLETED
+        const isDone = o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED';
+        if (isDone && isSavedLocally) {
+          removeSavedCustomerOrderId(o.id, restId);
+        }
+        return !isDone;
+      }
+
+      // DINE-IN TABLE SECTION:
+      // Order status stays until waiter closes active table session or payment is completed
+      const isDone = o.status === 'CANCELLED';
+      return !isDone;
     });
+
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setCustomerOrders(tableOrds);
   };
@@ -304,6 +359,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       targetDestination: targetDest,
       paymentStatus: 'UNPAID',
     });
+
+    saveCustomerOrderId(newOrd.id, restId);
 
     setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
     setCart([]);
