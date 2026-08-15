@@ -128,27 +128,31 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
 
   const filteredMenuItems = menuItems.filter((item) => {
-    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory !== undefined;
-    if (menuCatalogMode === 'BAR' && !isBarItem) return false;
-    if (menuCatalogMode === 'FOOD' && isBarItem) return false;
+    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || (item.barCategory !== undefined && item.barCategory !== null);
+    if (activeCatalogMode === 'BAR' && !isBarItem) return false;
+    if (activeCatalogMode === 'FOOD' && isBarItem) return false;
 
     const foodCatObj = foodCategories.find((c) => c.id === item.categoryId || c.name === item.categoryId);
     const matchesCategory =
       selectedMenuCategory === 'ALL' ||
       item.categoryId === selectedMenuCategory ||
-      (foodCatObj && foodCatObj.name === selectedMenuCategory) ||
+      (foodCatObj && (foodCatObj.name === selectedMenuCategory || foodCatObj.id === selectedMenuCategory)) ||
       item.barCategory === selectedMenuCategory;
 
+    const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
     const matchesDietary =
       dietaryFilter === 'ALL' ||
-      (dietaryFilter === 'VEG' && (item.isVegetarian === true || item.dietaryType === 'VEG')) ||
-      (dietaryFilter === 'NON_VEG' && (item.isVegetarian === false || item.dietaryType === 'NON_VEG'));
+      (dietaryFilter === 'VEG' && isVeg) ||
+      (dietaryFilter === 'NON_VEG' && !isVeg);
 
+    const query = menuSearchQuery.trim().toLowerCase();
     const matchesSearch =
-      item.name.toLowerCase().includes(menuSearchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(menuSearchQuery.toLowerCase()) ||
-      (item.brand && item.brand.toLowerCase().includes(menuSearchQuery.toLowerCase())) ||
-      item.price.toString().includes(menuSearchQuery);
+      !query ||
+      item.name.toLowerCase().includes(query) ||
+      (item.description && item.description.toLowerCase().includes(query)) ||
+      (item.brand && item.brand.toLowerCase().includes(query)) ||
+      item.price.toString().includes(query);
+
     return matchesCategory && matchesDietary && matchesSearch;
   });
 
@@ -604,6 +608,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
       addToast('success', `${isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `"${newItem.name.trim()}" added to catalog`);
       setIsAddItemModalOpen(false);
+      setSelectedMenuCategory('ALL');
+      setMenuSearchQuery('');
+      setDietaryFilter('ALL');
       setNewItem({ name: '', description: '', price: '', categoryId: isBar ? defaultBarCat : defaultFoodCat, isVegetarian: true, image: '' });
       await loadData();
     } catch (err: any) {
