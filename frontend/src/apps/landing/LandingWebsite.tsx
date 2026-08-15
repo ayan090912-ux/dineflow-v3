@@ -46,7 +46,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   onLogin,
   onOpenApp,
 }) => {
-  const [activeTab, setActiveTab] = useState<'home' | 'features' | 'showcase' | 'pricing' | 'faq' | 'contact'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'features' | 'pricing' | 'faq' | 'contact'>('home');
   const [heroEmail, setHeroEmail] = useState('');
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [contactSubmitted, setContactSubmitted] = useState(false);
@@ -106,12 +106,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1 ${activeTab === 'features' ? 'text-indigo-400 font-bold' : ''}`}
             >
               Our approach
-            </button>
-            <button
-              onClick={() => setActiveTab('showcase')}
-              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1 ${activeTab === 'showcase' ? 'text-indigo-400 font-bold' : ''}`}
-            >
-              Showcase
             </button>
             <button
               onClick={() => setActiveTab('faq')}
@@ -484,8 +478,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
           </div>
 
           <div className="flex items-center gap-6 mt-4 sm:mt-0 font-medium">
-            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('features')}>What we do</span>
-            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('showcase')}>Approach</span>
+            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('home')}>What we do</span>
+            <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('features')}>Our approach</span>
             <span className="hover:text-slate-300 cursor-pointer" onClick={() => setActiveTab('faq')}>About us</span>
             <span className="hover:text-slate-300 cursor-pointer" onClick={() => onStartTrial()}>Subscribe</span>
           </div>
