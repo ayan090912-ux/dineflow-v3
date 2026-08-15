@@ -429,6 +429,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     return () => unsubscribe();
   }, []);
 
+  const isBarEnabled = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
+  const activeCatalogMode = isBarEnabled ? menuCatalogMode : 'FOOD';
+
   const loadData = async () => {
     const user = api.getCurrentUser();
     const rest = await api.getRestaurantDetails();
@@ -1003,7 +1006,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
           {/* Navigation Links */}
           <nav className="space-y-1">
             {(() => {
-              const hasBarModule = currentRestaurant?.hasBar ?? (currentRestaurant?.businessType === 'BAR' || currentRestaurant?.features?.bar !== false);
+              const hasBarModule = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
               const hasTablesModule = currentRestaurant?.hasTables !== false;
               const hasWaiterModule = (currentRestaurant?.hasWaiter !== false) && hasTablesModule;
               const isFoodTruck = currentRestaurant?.businessType === 'FOOD_TRUCK';
@@ -1910,92 +1913,96 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         {/* Tab 5: Menu & Pricing */}
         {activeTab === 'menu' && (
           <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <UtensilsCrossed className="w-5 h-5 text-rose-500" /> Menu Catalog & Availability Engine
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Manage independent Food & Bar catalogs, categories, drink specs, and digital menu pricing.
-                </p>
-              </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <UtensilsCrossed className="w-5 h-5 text-rose-500" /> Menu Catalog & Availability Engine
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {isBarEnabled
+                      ? 'Manage independent Food & Bar catalogs, categories, drink specs, and digital menu pricing.'
+                      : 'Manage food categories, dish items, dietary tags, and digital menu pricing.'}
+                  </p>
+                </div>
 
-              {/* Sub-Tab Switcher: Food Menu vs Bar Menu */}
-              <div className="flex items-center gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
-                <button
-                  onClick={() => {
-                    setMenuCatalogMode('FOOD');
-                    setSelectedMenuCategory('ALL');
-                  }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                    menuCatalogMode === 'FOOD'
-                      ? 'bg-rose-600 text-white shadow-lg'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <UtensilsCrossed className="w-3.5 h-3.5" />
-                  <span>Food Menu</span>
-                </button>
+                {/* Sub-Tab Switcher: Food Menu vs Bar Menu (Only rendered if Bar is enabled for venue) */}
+                {isBarEnabled && (
+                  <div className="flex items-center gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
+                    <button
+                      onClick={() => {
+                        setMenuCatalogMode('FOOD');
+                        setSelectedMenuCategory('ALL');
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                        activeCatalogMode === 'FOOD'
+                          ? 'bg-rose-600 text-white shadow-lg'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <UtensilsCrossed className="w-3.5 h-3.5" />
+                      <span>Food Menu</span>
+                    </button>
 
-                <button
-                  onClick={() => {
-                    setMenuCatalogMode('BAR');
-                    setSelectedMenuCategory('ALL');
-                  }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                    menuCatalogMode === 'BAR'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Wine className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Bar Menu</span>
-                </button>
-              </div>
+                    <button
+                      onClick={() => {
+                        setMenuCatalogMode('BAR');
+                        setSelectedMenuCategory('ALL');
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                        activeCatalogMode === 'BAR'
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Wine className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Bar Menu</span>
+                    </button>
+                  </div>
+                )}
 
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setCategoryModalMode(menuCatalogMode);
-                    setIsManageCategoriesModalOpen(true);
-                  }}
-                  className="border-slate-700 text-slate-200 hover:bg-slate-800 font-bold text-xs"
-                  icon={<Layers className="w-3.5 h-3.5 text-amber-400" />}
-                >
-                  Manage Categories 🏷️
-                </Button>
-
-                {menuCatalogMode === 'BAR' && (
+                <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleBulkImportBarDrinks}
-                    className="border-purple-500/40 text-purple-300 hover:bg-purple-950/40 font-bold text-xs"
-                    icon={<Sparkles className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      setCategoryModalMode(activeCatalogMode);
+                      setIsManageCategoriesModalOpen(true);
+                    }}
+                    className="border-slate-700 text-slate-200 hover:bg-slate-800 font-bold text-xs"
+                    icon={<Layers className="w-3.5 h-3.5 text-amber-400" />}
                   >
-                    Bulk Import Craft Drinks
+                    Manage Categories 🏷️
                   </Button>
-                )}
 
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={() => {
-                    const firstCat = menuCatalogMode === 'BAR'
-                      ? (barCategories[0]?.name || 'Cocktails')
-                      : (foodCategories[0]?.id || foodCategories[0]?.name || 'cat-starters');
-                    setNewItem({ name: '', description: '', price: '', categoryId: firstCat, image: '' });
-                    setIsAddItemModalOpen(true);
-                  }}
-                  icon={<Plus className="w-3.5 h-3.5" />}
-                  className={menuCatalogMode === 'BAR' ? 'bg-purple-600 hover:bg-purple-500 font-bold' : ''}
-                >
-                  {menuCatalogMode === 'BAR' ? 'Add Bar Drink 🍸' : 'Add Food Item 🍽️'}
-                </Button>
+                  {isBarEnabled && activeCatalogMode === 'BAR' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBulkImportBarDrinks}
+                      className="border-purple-500/40 text-purple-300 hover:bg-purple-950/40 font-bold text-xs"
+                      icon={<Sparkles className="w-3.5 h-3.5" />}
+                    >
+                      Bulk Import Craft Drinks
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="brand"
+                    size="sm"
+                    onClick={() => {
+                      const firstCat = (isBarEnabled && activeCatalogMode === 'BAR')
+                        ? (barCategories[0]?.name || 'Cocktails')
+                        : (foodCategories[0]?.id || foodCategories[0]?.name || 'cat-starters');
+                      setNewItem({ name: '', description: '', price: '', categoryId: firstCat, image: '' });
+                      setIsAddItemModalOpen(true);
+                    }}
+                    icon={<Plus className="w-3.5 h-3.5" />}
+                    className={(isBarEnabled && activeCatalogMode === 'BAR') ? 'bg-purple-600 hover:bg-purple-500 font-bold' : ''}
+                  >
+                    {(isBarEnabled && activeCatalogMode === 'BAR') ? 'Add Bar Drink 🍸' : 'Add Food Item 🍽️'}
+                  </Button>
+                </div>
               </div>
-            </div>
 
             {/* Filter & Search Toolbar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
