@@ -561,34 +561,54 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   };
 
   const handleAddItem = async () => {
-    if (!newItem.name || !newItem.price) {
-      addToast('error', 'Validation Failed', 'Item name and price are required');
-      return;
-    }
-    const restId = currentRestaurant?.id || 'rest-1';
-    const isBar = menuCatalogMode === 'BAR';
-    const isVeg = isBar ? false : newItem.isVegetarian;
+    try {
+      if (!newItem.name || !newItem.name.trim()) {
+        addToast('error', 'Validation Failed', 'Dish/Item name is required.');
+        return;
+      }
+      if (!newItem.price || !newItem.price.toString().trim()) {
+        addToast('error', 'Validation Failed', 'Price is required.');
+        return;
+      }
 
-    await api.addMenuItem({
-      restaurantId: restId,
-      categoryId: newItem.categoryId,
-      barCategory: isBar ? (newItem.categoryId as any) : undefined,
-      name: newItem.name,
-      description: newItem.description,
-      price: parseFloat(newItem.price),
-      image: newItem.image || (isBar ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600' : 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600'),
-      isAvailable: true,
-      isVegetarian: isVeg,
-      dietaryType: isVeg ? 'VEG' : 'NON_VEG',
-      targetDestination: isBar ? 'BAR' : 'KITCHEN',
-      isAlcoholic: isBar,
-      alcoholPercentage: isBar ? 40 : 0,
-      glassSize: isBar ? '60ml Peg' : undefined,
-    });
-    addToast('success', `${isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `${newItem.name} added to catalog`);
-    setIsAddItemModalOpen(false);
-    setNewItem({ name: '', description: '', price: '', categoryId: isBar ? 'Cocktails' : 'cat-1', isVegetarian: true, image: '' });
-    loadData();
+      const restId = currentRestaurant?.id || 'rest-1';
+      const isBar = isBarEnabled && activeCatalogMode === 'BAR';
+      const isVeg = isBar ? false : newItem.isVegetarian !== false;
+
+      const defaultFoodCat = foodCategories[0]?.id || foodCategories[0]?.name || 'cat-starters';
+      const defaultBarCat = barCategories[0]?.name || barCategories[0]?.id || 'Cocktails';
+
+      let finalCat = newItem.categoryId;
+      if (!finalCat || finalCat === 'cat-1') {
+        finalCat = isBar ? defaultBarCat : defaultFoodCat;
+      }
+
+      const cleanPrice = parseFloat(newItem.price.toString().replace(/[^0-9.]/g, '')) || 0;
+
+      await api.addMenuItem({
+        restaurantId: restId,
+        categoryId: finalCat,
+        barCategory: isBar ? (finalCat as any) : undefined,
+        name: newItem.name.trim(),
+        description: (newItem.description || '').trim(),
+        price: cleanPrice,
+        image: newItem.image || (isBar ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600' : 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600'),
+        isAvailable: true,
+        isVegetarian: isVeg,
+        dietaryType: isVeg ? 'VEG' : 'NON_VEG',
+        targetDestination: isBar ? 'BAR' : 'KITCHEN',
+        isAlcoholic: isBar,
+        alcoholPercentage: isBar ? 40 : 0,
+        glassSize: isBar ? '60ml Peg' : undefined,
+      });
+
+      addToast('success', `${isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `"${newItem.name.trim()}" added to catalog`);
+      setIsAddItemModalOpen(false);
+      setNewItem({ name: '', description: '', price: '', categoryId: isBar ? defaultBarCat : defaultFoodCat, isVegetarian: true, image: '' });
+      await loadData();
+    } catch (err: any) {
+      addToast('error', 'Failed to Add Item', err.message || 'An error occurred while adding the dish.');
+    }
   };
 
   const handleOpenEditModal = (item: MenuItem) => {
@@ -3057,7 +3077,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                       { id: 'cat-pizza', name: 'Wood-Fired Pizza' },
                       { id: 'cat-desserts', name: 'Desserts & Sweets' },
                     ]).map((cat: any) => (
-                      <option key={cat.id} value={cat.id}>
+                      <option key={cat.id || cat.name} value={cat.id || cat.name}>
                         {cat.name}
                       </option>
                     ))}
