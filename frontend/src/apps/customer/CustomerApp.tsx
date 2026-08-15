@@ -83,6 +83,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [highlightActiveOrders, setHighlightActiveOrders] = useState(false);
   const [isRecentStatusPulse, setIsRecentStatusPulse] = useState(false);
+  const [isOrderStatusModalOpen, setIsOrderStatusModalOpen] = useState(false);
 
   const handleScrollToActiveOrders = () => {
     const el = document.getElementById('active-orders-section');
@@ -307,6 +308,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
     setCart([]);
     setIsCartOpen(false);
+    setIsOrderStatusModalOpen(true);
     addToast('success', 'Order Transmitted! 🎉', `Order #${newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`);
   };
 
@@ -459,11 +461,21 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 
-        {/* Floating Table Badge Top Right */}
+        {/* Floating Action Buttons Top Right */}
         <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+          {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
+            <button
+              onClick={() => setIsOrderStatusModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-950/60 flex items-center gap-1.5 cursor-pointer border border-emerald-300/60 animate-pulse transition-all"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Order Status ({customerOrders.filter((o) => o.status !== 'CANCELLED').length}) 🛵</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsTableSelectorModalOpen(true)}
-            className={`px-3 py-1 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5 transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5 transition-all ${
               isBarTheme ? 'bg-amber-600 hover:bg-amber-500' : 'bg-rose-600 hover:bg-rose-500'
             }`}
           >
@@ -517,6 +529,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <span>Counter Pickup Ordering — Direct to Kitchen</span>
           </div>
           <Badge variant="warning" className="text-[10px]">PICKUP</Badge>
+        </div>
+      )}
+
+      {/* Active Order Status Quick Alert Banner */}
+      {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
+        <div className="px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/30 text-emerald-200 flex items-center justify-between text-xs font-bold">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+            <span className="truncate">
+              {customerOrders.filter((o) => o.status !== 'CANCELLED').length} Active Order Live Tracker
+            </span>
+          </div>
+          <button
+            onClick={() => setIsOrderStatusModalOpen(true)}
+            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 cursor-pointer transition-all shadow shrink-0"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>View Status 🛵</span>
+          </button>
         </div>
       )}
 
@@ -1119,41 +1150,65 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         }}
       />
 
+      {/* LIVE ORDER STATUS TRACKER MODAL */}
+      <Modal
+        isOpen={isOrderStatusModalOpen}
+        onClose={() => setIsOrderStatusModalOpen(false)}
+        title="Live Order Status & Kitchen Tracker 🛵"
+      >
+        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+          {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 0 ? (
+            <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800 text-slate-400 space-y-2">
+              <Clock className="w-10 h-10 text-slate-600 mx-auto" />
+              <h4 className="font-bold text-white text-sm">No Active Orders Yet</h4>
+              <p className="text-xs text-slate-500">Items you order will appear here with live kitchen status & prep countdowns.</p>
+            </div>
+          ) : (
+            customerOrders
+              .filter((o) => o.status !== 'CANCELLED')
+              .map((order) => (
+                <CustomerLiveTracker
+                  key={order.id}
+                  order={order}
+                  onUpdateOrder={(updated) => {
+                    setCustomerOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+                  }}
+                />
+              ))
+          )}
+        </div>
+      </Modal>
+
       {/* STICKY FLOATING ACTIVE SESSION ORDER STATUS BAR */}
-      {currentTableSession && customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
+      {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
         <div
           className={`fixed left-4 right-4 max-w-md mx-auto z-40 animate-in slide-in-from-bottom duration-300 transition-all ${
             totalCartCount > 0 ? 'bottom-20' : 'bottom-4'
           }`}
         >
           <div
-            onClick={() => {
-              const el = document.getElementById('active-orders-section');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-              else window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-            }}
-            className="bg-slate-900/95 border border-rose-500/50 p-3.5 rounded-2xl shadow-2xl shadow-slate-950 backdrop-blur-xl flex items-center justify-between gap-3 cursor-pointer group hover:border-rose-400 transition-all"
+            onClick={() => setIsOrderStatusModalOpen(true)}
+            className="bg-slate-900/95 border-2 border-emerald-500/60 p-3.5 rounded-2xl shadow-2xl shadow-slate-950 backdrop-blur-xl flex items-center justify-between gap-3 cursor-pointer group hover:border-emerald-400 transition-all"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="px-3 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-black text-xs shrink-0 whitespace-nowrap flex items-center gap-1">
-                <span>📍</span>
-                <span className="whitespace-nowrap">{selectedTableNum}</span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5 animate-spin" />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black text-white truncate">Table Session #{currentTableSession.id}</span>
+                  <span className="text-xs font-black text-white truncate">Live Order Status</span>
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
                 </div>
                 <p className="text-[11px] text-slate-300 font-mono truncate">
-                  {customerOrders.filter((o) => o.status !== 'CANCELLED').length} Live {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} • Total: ₹
+                  {customerOrders.filter((o) => o.status !== 'CANCELLED').length} Active {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} • Total: ₹
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50 group-hover:scale-105 transition-transform flex items-center gap-1 whitespace-nowrap">
-                <span>View Tracker</span>
+              <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-950/50 group-hover:scale-105 transition-transform flex items-center gap-1 whitespace-nowrap font-sans">
+                <span>Track Status</span>
                 <ChevronRight className="w-3.5 h-3.5 shrink-0" />
               </span>
             </div>
