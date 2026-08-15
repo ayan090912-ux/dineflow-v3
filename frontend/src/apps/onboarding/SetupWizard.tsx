@@ -174,19 +174,22 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     setErrorMessage('');
     if (currentStep === 1) {
       if (!restaurantName.trim()) {
-        setErrorMessage("Please enter your restaurant's name.");
+        setErrorMessage("Please enter your venue/restaurant name.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
       if (!country.trim() || !city.trim() || !address.trim()) {
         setErrorMessage('Please enter country, city, and street address.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       setCurrentStep(3);
     } else if (currentStep === 3) {
-      if (!tablesCount || tablesCount < 1) {
-        setErrorMessage('Please enter at least 1 table for your restaurant.');
+      const isNoSeating = businessType === 'FOOD_CART' && !hasSeating;
+      if (!isNoSeating && (!tablesCount || tablesCount < 1)) {
+        setErrorMessage('Please enter at least 1 table for your venue.');
         return;
       }
       setCurrentStep(4);
