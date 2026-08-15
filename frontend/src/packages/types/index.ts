@@ -89,7 +89,7 @@ export type RestaurantLifecycleStatus =
   | 'ARCHIVED'
   | 'DELETED';
 
-export type BusinessType = 'RESTAURANT' | 'BAR' | 'FOOD_TRUCK';
+export type BusinessType = 'RESTAURANT' | 'CAFE' | 'BAR' | 'FOOD_CART' | 'FOOD_TRUCK';
 
 export interface Restaurant {
   id: string;

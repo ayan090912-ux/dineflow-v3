@@ -58,22 +58,10 @@ const BUSINESS_TYPES = [
     desc: 'Cocktail bar, pub, brewery, or lounge.',
   },
   {
-    id: 'CLOUD_KITCHEN',
-    name: 'Cloud Kitchen',
+    id: 'FOOD_CART',
+    name: 'Food Cart',
     icon: Truck,
-    desc: 'Delivery-only virtual kitchen or ghost kitchen.',
-  },
-  {
-    id: 'BAKERY',
-    name: 'Bakery',
-    icon: Coffee,
-    desc: 'Artisanal bakery, pastry shop, or dessert parlor.',
-  },
-  {
-    id: 'OTHER',
-    name: 'Other',
-    icon: Store,
-    desc: 'Specialty food venue or event outlet.',
+    desc: 'Mobile food cart, kiosk, stall, or food truck venue.',
   },
 ];
 
@@ -103,6 +91,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [postalCode, setPostalCode] = useState('');
 
   // Step 3: Tables
+  const [hasSeating, setHasSeating] = useState<boolean>(true);
   const [tablesCount, setTablesCount] = useState<number>(10);
 
   // Check user state on mount
@@ -223,14 +212,19 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
       const fullAddress = [address, city, state, country, postalCode ? `PIN: ${postalCode}` : ''].filter(Boolean).join(', ');
 
+      const isNoSeating = businessType === 'FOOD_CART' && !hasSeating;
+      const finalTablesCount = isNoSeating ? 0 : tablesCount;
+
       // 1. Create new restaurant record
       const newRest = await api.createRestaurantForOwner({
         name: restaurantName,
         businessType: businessType as any,
+        hasTables: !isNoSeating,
+        hasWaiter: !isNoSeating,
         address: fullAddress,
         phone: user.phone || '+91 98765 43210',
         email: user.email,
-        ownerName: user.name,
+        ownerName: user.name || user.firstName || user.email.split('@')[0],
         ownerEmail: user.email,
       });
 
@@ -239,6 +233,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         id: newRest.id,
         restaurantName,
         businessType,
+        hasTables: !isNoSeating,
+        hasWaiter: !isNoSeating,
         address: fullAddress,
         city,
         state,
@@ -246,11 +242,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         phone: user.phone || '+91 98765 43210',
         email: user.email,
         tables: {
-          indoor: Math.ceil(tablesCount * 0.8),
-          outdoor: Math.floor(tablesCount * 0.2),
+          indoor: isNoSeating ? 0 : Math.ceil(finalTablesCount * 0.8),
+          outdoor: isNoSeating ? 0 : Math.floor(finalTablesCount * 0.2),
           vip: 0,
         },
-        totalTablesCount: tablesCount,
+        totalTablesCount: finalTablesCount,
       });
 
       setIsSubmitting(false);
@@ -421,6 +417,42 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                     })}
                   </div>
                 </div>
+
+                {/* Food Cart Seating Toggle */}
+                {businessType === 'FOOD_CART' && (
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                    <label className="text-xs font-bold text-slate-300 block">Do you have customer seating available at your Food Cart? *</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { setHasSeating(true); if (tablesCount === 0) setTablesCount(5); }}
+                        className={`p-3.5 rounded-xl border text-xs font-bold transition-all text-left space-y-1 cursor-pointer ${
+                          hasSeating ? 'bg-rose-500/10 border-rose-500 text-white shadow-md shadow-rose-950/30' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>Yes, Seating Available</span>
+                          {hasSeating && <CheckCircle2 className="w-4 h-4 text-rose-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-normal">Customer dining tables configured for QR ordering</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setHasSeating(false); setTablesCount(0); }}
+                        className={`p-3.5 rounded-xl border text-xs font-bold transition-all text-left space-y-1 cursor-pointer ${
+                          !hasSeating ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-950/30' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>No Seating — Counter Pickup</span>
+                          {!hasSeating && <CheckCircle2 className="w-4 h-4 text-amber-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-normal">Standee QR code + Digital Token Bill on screen</p>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -494,32 +526,48 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 <p className="text-xs text-slate-400">Specify total seating tables for automated QR code generation.</p>
               </div>
 
-              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-bold text-white flex items-center gap-2">
-                      <Grid className="w-4 h-4 text-rose-400" /> Number of Tables *
-                    </label>
-                    <p className="text-xs text-slate-400">Total dining tables available at your outlet.</p>
+              {!hasSeating ? (
+                <div className="p-6 bg-slate-950 rounded-2xl border border-amber-500/30 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+                    <Truck className="w-6 h-6" />
                   </div>
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={tablesCount}
-                    onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-24 px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-center font-black text-rose-400 text-base focus:outline-none focus:border-rose-500"
-                  />
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-white">No Seating (0 Tables) — Counter Token Mode</h3>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                      Customers will scan your Food Cart standee QR code, place orders, and receive a digital Token Bill on their phone screen to show at your counter.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-sm font-bold text-white flex items-center gap-2">
+                          <Grid className="w-4 h-4 text-rose-400" /> Number of Tables *
+                        </label>
+                        <p className="text-xs text-slate-400">Total dining tables available at your outlet.</p>
+                      </div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={tablesCount}
+                        onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-24 px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-center font-black text-rose-400 text-base focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
 
-              <div className="p-4 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl flex items-start gap-3 text-xs text-slate-300">
-                <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-white block mb-0.5">Automated Table Instantiation</span>
-                  Upon approval by Platform Admin, Dinely will automatically create <span className="font-bold text-rose-400">{tablesCount} tables</span> in the database with table-specific QR codes.
-                </div>
-              </div>
+                  <div className="p-4 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl flex items-start gap-3 text-xs text-slate-300">
+                    <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-white block mb-0.5">Automated Table Instantiation</span>
+                      Upon approval by Platform Admin, Dinely will automatically create <span className="font-bold text-rose-400">{tablesCount} tables</span> in the database with table-specific QR codes.
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
