@@ -2092,9 +2092,8 @@ export class DinelyApiClient {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
     
-    // Resolve category ID if category name was passed
     let catId = itemData.categoryId;
-    const existingCats = this.categories.filter((c) => c.restaurantId === restId);
+    const existingCats = await this.getCategories(restId);
     if (catId) {
       const matchedCat = existingCats.find((c) => c.id === catId || c.name === catId);
       if (matchedCat) catId = matchedCat.id;
@@ -2115,43 +2114,72 @@ export class DinelyApiClient {
       isAvailable: itemData.isAvailable !== false,
       isVegetarian: itemData.isVegetarian !== false,
       dietaryType: itemData.isVegetarian ? 'VEG' : 'NON_VEG',
-      image: itemData.image || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
+      image: itemData.image || itemData.imageUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
+      imageUrl: itemData.imageUrl || itemData.image || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
       targetDestination: itemData.targetDestination || 'KITCHEN',
       isAlcoholic: !!itemData.isAlcoholic,
       prepTimeMinutes: itemData.prepTimeMinutes || 15,
     };
+
     this.menuItems.unshift(newItem);
+    const existingSharedIdx = GLOBAL_MULTI_TENANT_MENU_ITEMS.findIndex((m) => m.id === newItem.id);
+    if (existingSharedIdx >= 0) {
+      GLOBAL_MULTI_TENANT_MENU_ITEMS[existingSharedIdx] = newItem;
+    } else {
+      GLOBAL_MULTI_TENANT_MENU_ITEMS.unshift(newItem);
+    }
     this.saveDatabase();
+
     realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
     return newItem;
   }
 
   async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
     await delay(150);
-    const item = this.menuItems.find((m) => m.id === itemId);
+    const item = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
     if (item) {
       Object.assign(item, updates);
       if (updates.isVegetarian !== undefined) {
         item.dietaryType = updates.isVegetarian ? 'VEG' : 'NON_VEG';
       }
+      const sharedItem = GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
+      if (sharedItem) {
+        Object.assign(sharedItem, updates);
+        if (updates.isVegetarian !== undefined) {
+          sharedItem.dietaryType = updates.isVegetarian ? 'VEG' : 'NON_VEG';
+        }
+      }
       this.saveDatabase();
+      realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: item.id, restaurantId: item.restaurantId, data: item });
     }
     return item;
   }
 
   async deleteMenuItem(itemId: string) {
     await delay(150);
+    const target = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
+    const restId = target?.restaurantId;
     this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
+    const sIdx = GLOBAL_MULTI_TENANT_MENU_ITEMS.findIndex((m) => m.id === itemId);
+    if (sIdx >= 0) {
+      GLOBAL_MULTI_TENANT_MENU_ITEMS.splice(sIdx, 1);
+    }
     this.saveDatabase();
+    if (restId) {
+      realtimeBus.emit('MenuItemDeleted' as any, { menuItemId: itemId, restaurantId: restId });
+    }
     return true;
   }
 
   async toggleMenuItemAvailability(itemId: string) {
     await delay(100);
-    const item = this.menuItems.find((m) => m.id === itemId);
+    const item = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
     if (item) {
       item.isAvailable = !item.isAvailable;
+      const sharedItem = GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
+      if (sharedItem) sharedItem.isAvailable = item.isAvailable;
       this.saveDatabase();
+      realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: item.id, restaurantId: item.restaurantId, data: item });
     }
     return item;
   }

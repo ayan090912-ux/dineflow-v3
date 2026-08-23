@@ -547,9 +547,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40">
               ⚠️ Venue Unavailable
             </span>
-            <h2 className="text-2xl font-black text-white">Restaurant Not Found</h2>
+            <h2 className="text-2xl font-black text-white">Restaurant menu unavailable</h2>
             <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-              The restaurant specified in this QR code could not be found or is inactive. Please re-scan a valid restaurant QR code.
+              The menu for this restaurant specified in the QR code is currently unavailable or has no active items. Please ask floor staff for assistance.
             </p>
           </div>
         </div>
