@@ -68,6 +68,9 @@ export async function signInWithGooglePopup(forceRefreshIdToken: boolean = false
       throw new Error('Sign-in process cancelled.');
     } else if (error.code === 'auth/account-exists-with-different-credential') {
       throw new Error('An account already exists with the same email address using a different login method.');
+    } else if (error.code === 'auth/unauthorized-domain' || error.message?.includes('unauthorized-domain')) {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      throw new Error(`Firebase Auth Domain Error: '${currentHost}' is not authorized in Firebase Console. Please add '${currentHost}' under Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
     } else if (error.code === 'auth/api-key-not-valid' || error.message?.includes('api-key-not-valid')) {
       throw new Error('Firebase API key is missing or invalid in frontend/.env (VITE_FIREBASE_API_KEY). Please set a valid Firebase Web API key from Firebase Console.');
     }
