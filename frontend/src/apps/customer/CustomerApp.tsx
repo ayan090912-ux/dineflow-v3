@@ -98,6 +98,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   };
 
   const [isSessionEnded, setIsSessionEnded] = useState(false);
+  const [restaurantError, setRestaurantError] = useState<'RESTAURANT_NOT_FOUND' | null>(null);
+  const [tableError, setTableError] = useState<'TABLE_NOT_FOUND' | null>(null);
 
   useEffect(() => {
     async function initCustomerApp() {
@@ -296,8 +298,16 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
     }
     if (!r) {
+      if (urlRestParam || urlTableIdParam) {
+        setRestaurantError('RESTAURANT_NOT_FOUND');
+        return null;
+      }
       const rests = await api.getRestaurants();
-      r = rests.find((x) => x.id === activeRestId || x.slug === activeRestId) || rests.find((x) => x.isApproved) || rests[0];
+      r = rests.find((x) => x.id === activeRestId || x.slug === activeRestId) || rests.find((x) => x.isApproved) || null;
+      if (!r) {
+        setRestaurantError('RESTAURANT_NOT_FOUND');
+        return null;
+      }
     }
 
     if (r) {
@@ -524,6 +534,50 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       (item.brand && item.brand.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCat && matchesDietary && matchesQuery;
   });
+
+  if (restaurantError === 'RESTAURANT_NOT_FOUND') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative">
+        <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
+        <div className="space-y-6 text-center my-auto">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-rose-500/10 border-2 border-rose-500/40 flex items-center justify-center shadow-2xl shadow-rose-950/40">
+            <AlertTriangle className="w-10 h-10 text-rose-400" />
+          </div>
+          <div className="space-y-2">
+            <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              ⚠️ Venue Unavailable
+            </span>
+            <h2 className="text-2xl font-black text-white">Restaurant Not Found</h2>
+            <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+              The restaurant specified in this QR code could not be found or is inactive. Please re-scan a valid restaurant QR code.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tableError === 'TABLE_NOT_FOUND') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative">
+        <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
+        <div className="space-y-6 text-center my-auto">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center shadow-2xl shadow-amber-950/40">
+            <QrCode className="w-10 h-10 text-amber-400" />
+          </div>
+          <div className="space-y-2">
+            <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              ⚠️ Table QR Error
+            </span>
+            <h2 className="text-2xl font-black text-white">Invalid Table QR Code</h2>
+            <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+              The table specified in this QR code is invalid or no longer active for this venue. Please request assistance from floor staff.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // RESERVED TABLE BLOCK SCREEN
   const isTableReserved = currentTable && (currentTable.status === 'RESERVED' || !!currentTable.reservationDetails);

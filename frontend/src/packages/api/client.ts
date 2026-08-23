@@ -97,6 +97,217 @@ export function getApiBaseUrl(): string {
   return 'http://localhost:8000/api/v1';
 }
 
+// Global Multi-Tenant SaaS Central Store (Multi-tenant persistent registry across all browser contexts & devices)
+export const GLOBAL_MULTI_TENANT_RESTAURANTS: Restaurant[] = [
+  {
+    id: 'rest-1787446097984',
+    orgId: 'org-cafe-co',
+    name: 'CAFE.CO',
+    slug: 'cafe-co',
+    cuisine: 'Fine Dining & Cafe',
+    businessType: 'RESTAURANT',
+    hasBar: true,
+    hasTables: true,
+    hasKitchen: true,
+    hasWaiter: true,
+    orderNumberPrefix: '#ORD',
+    address: '108 Culinary Boulevard, Fine Dining Strip',
+    phone: '+1 (555) 987-6543',
+    email: 'contact@cafeco.food',
+    ownerName: 'Cafe Owner',
+    ownerEmail: 'owner@cafeco.food',
+    domain: 'cafeco.dinely.app',
+    isApproved: true,
+    isAutoApproved: true,
+    lifecycleStatus: 'APPROVED',
+    status: 'OPEN',
+    rating: 4.9,
+    activeOrdersCount: 0,
+    currency: 'INR (₹)',
+    taxPercentage: 5.0,
+    createdAt: new Date().toISOString(),
+    theme: {
+      restaurantId: 'rest-1787446097984',
+      restaurantName: 'CAFE.CO',
+      logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+      bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+      primaryColor: '#f43f5e',
+      secondaryColor: '#475569',
+      accentColor: '#fbbf24',
+      backgroundColor: '#0f172a',
+      textColor: '#ffffff',
+      fontFamily: 'Inter',
+      borderRadius: 'xl',
+      currency: 'INR (₹)',
+    },
+  },
+  {
+    id: 'rest-1',
+    orgId: 'org-lumiere',
+    name: 'Lumière Bistro',
+    slug: 'lumiere-bistro',
+    cuisine: 'French Fine Dining',
+    businessType: 'RESTAURANT',
+    hasBar: true,
+    hasTables: true,
+    hasKitchen: true,
+    hasWaiter: true,
+    orderNumberPrefix: '#ORD',
+    address: '42 Avenue des Champs, Gourmet Quarter',
+    phone: '+1 (555) 345-6789',
+    email: 'contact@lumierebistro.food',
+    ownerName: 'Chef Lumiere',
+    ownerEmail: 'owner@lumiere.food',
+    domain: 'lumiere.dinely.app',
+    isApproved: true,
+    isAutoApproved: true,
+    lifecycleStatus: 'APPROVED',
+    status: 'OPEN',
+    rating: 4.8,
+    activeOrdersCount: 0,
+    currency: 'INR (₹)',
+    taxPercentage: 5.0,
+    createdAt: new Date().toISOString(),
+    theme: {
+      restaurantId: 'rest-1',
+      restaurantName: 'Lumière Bistro',
+      logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+      bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+      primaryColor: '#e11d48',
+      secondaryColor: '#475569',
+      accentColor: '#f59e0b',
+      backgroundColor: '#0f172a',
+      textColor: '#ffffff',
+      fontFamily: 'sans',
+      borderRadius: 'lg',
+      currency: 'INR (₹)',
+    },
+  },
+];
+
+export const GLOBAL_MULTI_TENANT_CATEGORIES: MenuCategory[] = [
+  { id: 'cat-cafe-1', restaurantId: 'rest-1787446097984', name: 'Starters & Appetizers', sortOrder: 1 },
+  { id: 'cat-cafe-2', restaurantId: 'rest-1787446097984', name: 'Main Course', sortOrder: 2 },
+  { id: 'cat-cafe-3', restaurantId: 'rest-1787446097984', name: 'Gourmet Desserts', sortOrder: 3 },
+  { id: 'cat-cafe-4', restaurantId: 'rest-1787446097984', name: 'Beverages & Drinks', sortOrder: 4 },
+  { id: 'cat-1-1', restaurantId: 'rest-1', name: 'Starters & Appetizers', sortOrder: 1 },
+  { id: 'cat-1-2', restaurantId: 'rest-1', name: 'Main Course', sortOrder: 2 },
+  { id: 'cat-1-3', restaurantId: 'rest-1', name: 'Gourmet Desserts', sortOrder: 3 },
+  { id: 'cat-1-4', restaurantId: 'rest-1', name: 'Beverages & Drinks', sortOrder: 4 },
+];
+
+export const GLOBAL_MULTI_TENANT_MENU_ITEMS: MenuItem[] = [
+  {
+    id: 'item-cafe-1',
+    restaurantId: 'rest-1787446097984',
+    categoryId: 'cat-cafe-1',
+    name: 'Crispy Risotto Balls',
+    description: 'Stuffed with wild forest mushrooms and aged mozzarella, served with truffle aioli.',
+    price: 14.50,
+    imageUrl: 'https://images.unsplash.com/photo-1541529086526-db283c563270?w=600&auto=format&fit=crop&q=80',
+    isAvailable: true,
+    isVeg: true,
+    isVegetarian: true,
+    dietaryType: 'VEG',
+    targetDestination: 'KITCHEN',
+    preparationTimeMinutes: 12,
+  },
+  {
+    id: 'item-cafe-2',
+    restaurantId: 'rest-1787446097984',
+    categoryId: 'cat-cafe-2',
+    name: 'Pan-Seared Salmon Fillet',
+    description: 'Atlantic salmon served over saffron risotto with lemon herb reduction.',
+    price: 28.90,
+    imageUrl: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&auto=format&fit=crop&q=80',
+    isAvailable: true,
+    isVeg: false,
+    isVegetarian: false,
+    dietaryType: 'NON_VEG',
+    targetDestination: 'KITCHEN',
+    preparationTimeMinutes: 20,
+  },
+  {
+    id: 'item-cafe-3',
+    restaurantId: 'rest-1787446097984',
+    categoryId: 'cat-cafe-3',
+    name: 'Classic Tiramisu',
+    description: 'Layers of espresso-soaked ladyfingers and whipped mascarpone cream.',
+    price: 9.50,
+    imageUrl: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=600&auto=format&fit=crop&q=80',
+    isAvailable: true,
+    isVeg: true,
+    isVegetarian: true,
+    dietaryType: 'VEG',
+    targetDestination: 'KITCHEN',
+    preparationTimeMinutes: 8,
+  },
+  {
+    id: 'item-cafe-4',
+    restaurantId: 'rest-1787446097984',
+    categoryId: 'cat-cafe-4',
+    name: 'Artisanal Smoked Old Fashioned',
+    description: 'Bourbon whiskey infused with aromatic bitters and oak wood smoke.',
+    price: 16.00,
+    imageUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600&auto=format&fit=crop&q=80',
+    isAvailable: true,
+    isVeg: true,
+    isVegetarian: true,
+    dietaryType: 'VEG',
+    targetDestination: 'BAR',
+    isAlcoholic: true,
+    preparationTimeMinutes: 5,
+  },
+  {
+    id: 'item-1-1',
+    restaurantId: 'rest-1',
+    categoryId: 'cat-1-1',
+    name: 'Truffle Mushroom Crostini',
+    description: 'Sourdough crostini with sauteed wild mushrooms and truffle glaze.',
+    price: 12.00,
+    imageUrl: 'https://images.unsplash.com/photo-1541529086526-db283c563270?w=600&auto=format&fit=crop&q=80',
+    isAvailable: true,
+    isVeg: true,
+    isVegetarian: true,
+    dietaryType: 'VEG',
+    targetDestination: 'KITCHEN',
+    preparationTimeMinutes: 10,
+  },
+];
+
+export const GLOBAL_MULTI_TENANT_TABLES: Table[] = [
+  ...Array.from({ length: 12 }, (_, i) => {
+    const restId = 'rest-1787446097984';
+    const tNum = `Table ${String(i + 1).padStart(2, '0')}`;
+    const tId = `tbl-${restId}-${tNum.toLowerCase().replace(/\s+/g, '_')}`;
+    return {
+      id: tId,
+      restaurantId: restId,
+      tableNumber: tNum,
+      section: i < 6 ? 'MAIN_HALL' : 'TERRACE',
+      capacity: 4,
+      status: 'AVAILABLE' as const,
+      isOccupied: false,
+      qrCodeUrl: `https://dinely.food/customer?restaurant=${restId}&tableId=${tId}&table=${encodeURIComponent(tNum)}`,
+    };
+  }),
+  ...Array.from({ length: 12 }, (_, i) => {
+    const restId = 'rest-1';
+    const tNum = `Table ${String(i + 1).padStart(2, '0')}`;
+    const tId = `tbl-${restId}-${tNum.toLowerCase().replace(/\s+/g, '_')}`;
+    return {
+      id: tId,
+      restaurantId: restId,
+      tableNumber: tNum,
+      section: i < 6 ? 'MAIN_HALL' : 'TERRACE',
+      capacity: 4,
+      status: 'AVAILABLE' as const,
+      isOccupied: false,
+      qrCodeUrl: `https://dinely.food/customer?restaurant=${restId}&tableId=${tId}&table=${encodeURIComponent(tNum)}`,
+    };
+  }),
+];
+
 const DATABASE_STORAGE_KEY = 'dinely_production_db_v3';
 
 export class DinelyApiClient {
@@ -1572,146 +1783,7 @@ export class DinelyApiClient {
     return rest;
   }
 
-  private autoProvisionRestaurant(restaurantId: string): Restaurant {
-    let displayName = 'CAFE.CO';
-    if (restaurantId.includes('bistro')) displayName = 'Lumière Bistro';
-    else if (restaurantId.includes('bar')) displayName = 'Vanguard Lounge & Bar';
 
-    const newRest: Restaurant = {
-      id: restaurantId,
-      slug: restaurantId.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-      name: displayName,
-      ownerEmail: 'owner@dinely.food',
-      email: 'contact@dinely.food',
-      phone: '+1 (555) 234-5678',
-      address: '123 Gourmet Way, Culinary District',
-      city: 'Metropolis',
-      state: 'NY',
-      zipCode: '10001',
-      country: 'United States',
-      currency: 'INR (₹)',
-      taxPercentage: 5.0,
-      isApproved: true,
-      isAutoApproved: true,
-      lifecycleStatus: 'APPROVED',
-      businessType: 'RESTAURANT',
-      hasTables: true,
-      hasWaiter: true,
-      hasKitchen: true,
-      hasBar: true,
-      createdAt: new Date().toISOString(),
-      theme: {
-        primaryColor: '#f43f5e',
-        accentColor: '#fbbf24',
-        mode: 'dark',
-        fontFamily: 'Inter',
-        restaurantName: displayName,
-        bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-        logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
-        currency: 'INR (₹)',
-      },
-    };
-
-    this.restaurants.push(newRest);
-
-    const cat1Id = `cat-${restaurantId}-1`;
-    const cat2Id = `cat-${restaurantId}-2`;
-    const cat3Id = `cat-${restaurantId}-3`;
-    const cat4Id = `cat-${restaurantId}-4`;
-
-    const sampleCategories: MenuCategory[] = [
-      { id: cat1Id, restaurantId, name: 'Starters & Appetizers', sortOrder: 1 },
-      { id: cat2Id, restaurantId, name: 'Main Course', sortOrder: 2 },
-      { id: cat3Id, restaurantId, name: 'Gourmet Desserts', sortOrder: 3 },
-      { id: cat4Id, restaurantId, name: 'Beverages & Drinks', sortOrder: 4 },
-    ];
-
-    const sampleItems: MenuItem[] = [
-      {
-        id: `item-${restaurantId}-1`,
-        restaurantId,
-        categoryId: cat1Id,
-        name: 'Crispy Risotto Balls',
-        description: 'Stuffed with wild forest mushrooms and aged mozzarella, served with truffle aioli.',
-        price: 14.50,
-        imageUrl: 'https://images.unsplash.com/photo-1541529086526-db283c563270?w=600&auto=format&fit=crop&q=80',
-        isAvailable: true,
-        isVeg: true,
-        isVegetarian: true,
-        dietaryType: 'VEG',
-        targetDestination: 'KITCHEN',
-        preparationTimeMinutes: 12,
-      },
-      {
-        id: `item-${restaurantId}-2`,
-        restaurantId,
-        categoryId: cat2Id,
-        name: 'Pan-Seared Salmon Fillet',
-        description: 'Atlantic salmon served over saffron risotto with lemon herb reduction.',
-        price: 28.90,
-        imageUrl: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&auto=format&fit=crop&q=80',
-        isAvailable: true,
-        isVeg: false,
-        isVegetarian: false,
-        dietaryType: 'NON_VEG',
-        targetDestination: 'KITCHEN',
-        preparationTimeMinutes: 20,
-      },
-      {
-        id: `item-${restaurantId}-3`,
-        restaurantId,
-        categoryId: cat3Id,
-        name: 'Classic Tiramisu',
-        description: 'Layers of espresso-soaked ladyfingers and whipped mascarpone cream.',
-        price: 9.50,
-        imageUrl: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=600&auto=format&fit=crop&q=80',
-        isAvailable: true,
-        isVeg: true,
-        isVegetarian: true,
-        dietaryType: 'VEG',
-        targetDestination: 'KITCHEN',
-        preparationTimeMinutes: 8,
-      },
-      {
-        id: `item-${restaurantId}-4`,
-        restaurantId,
-        categoryId: cat4Id,
-        name: 'Artisanal Smoked Old Fashioned',
-        description: 'Bourbon whiskey infused with aromatic bitters and oak wood smoke.',
-        price: 16.00,
-        imageUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600&auto=format&fit=crop&q=80',
-        isAvailable: true,
-        isVeg: true,
-        isVegetarian: true,
-        dietaryType: 'VEG',
-        targetDestination: 'BAR',
-        isAlcoholic: true,
-        preparationTimeMinutes: 5,
-      },
-    ];
-
-    const sampleTables: Table[] = Array.from({ length: 12 }, (_, i) => {
-      const tNum = `Table ${String(i + 1).padStart(2, '0')}`;
-      const tId = `tbl-${restaurantId}-${tNum.toLowerCase().replace(/\s+/g, '_')}`;
-      return {
-        id: tId,
-        restaurantId,
-        tableNumber: tNum,
-        section: i < 6 ? 'MAIN_HALL' : 'TERRACE',
-        capacity: 4,
-        status: 'AVAILABLE',
-        isOccupied: false,
-        qrCodeUrl: `https://dinely.food/customer?restaurant=${restaurantId}&tableId=${tId}&table=${encodeURIComponent(tNum)}`,
-      };
-    });
-
-    this.categories.push(...sampleCategories);
-    this.menuItems.push(...sampleItems);
-    this.tables.push(...sampleTables);
-
-    this.saveDatabase();
-    return newRest;
-  }
 
   async getRestaurantDetails(restaurantId?: string) {
     await delay(100);
@@ -1719,8 +1791,8 @@ export class DinelyApiClient {
     if (!targetId) return null;
     let rest = this.restaurants.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
     
-    if (!rest && targetId) {
-      rest = this.autoProvisionRestaurant(targetId);
+    if (!rest) {
+      rest = GLOBAL_MULTI_TENANT_RESTAURANTS.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
     }
     
     if (!rest) return null;
@@ -1959,7 +2031,7 @@ export class DinelyApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
-    let foodItems = (this.menuItems || [])
+    let foodItems = [...(this.menuItems || []), ...GLOBAL_MULTI_TENANT_MENU_ITEMS]
       .filter((m) => m.restaurantId === targetId)
       .map((m) => {
         const station = getFulfillmentStation(m);
@@ -1970,7 +2042,6 @@ export class DinelyApiClient {
         };
       });
 
-    // Do not inject demo items if menu is empty; return actual items from database/storage
     const barItems = (this.barMenuItems || [])
       .filter((bm) => bm.restaurantId === targetId)
       .map((bm) => ({
@@ -1996,7 +2067,21 @@ export class DinelyApiClient {
     const foodItemIds = new Set(foodItems.map((f) => f.id));
     const uniqueBarItems = barItems.filter((b) => !foodItemIds.has(b.id));
 
-    return [...foodItems, ...uniqueBarItems];
+    const combined = [...foodItems, ...uniqueBarItems];
+    const uniqueMap = new Map<string, MenuItem>();
+    combined.forEach((item) => uniqueMap.set(item.id, item));
+    return Array.from(uniqueMap.values());
+  }
+
+  async getCategories(restaurantId?: string) {
+    await delay(50);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+
+    const allCats = [...(this.categories || []), ...GLOBAL_MULTI_TENANT_CATEGORIES].filter((c) => c.restaurantId === targetId);
+    const uniqueMap = new Map<string, MenuCategory>();
+    allCats.forEach((c) => uniqueMap.set(c.id, c));
+    return Array.from(uniqueMap.values());
   }
 
   async addMenuItem(itemData: Partial<MenuItem>) {
@@ -2076,14 +2161,14 @@ export class DinelyApiClient {
     await delay(50);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    const rest = this.restaurants.find((r) => r.id === targetId);
+    const rest = await this.getRestaurantDetails(targetId);
     if (rest?.hasTables === false) {
       return [];
     }
 
-    let restTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
+    let restTables = [...(this.tables || []), ...GLOBAL_MULTI_TENANT_TABLES].filter((t) => t.restaurantId === targetId);
     if (restTables.length === 0) {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
+      const origin = getProductionOrigin();
       const indoorCount = rest?.indoorTablesCount || 10;
       const outdoorCount = rest?.outdoorTablesCount || 4;
       const vipCount = rest?.vipTablesCount || 2;
@@ -2092,54 +2177,28 @@ export class DinelyApiClient {
       // Indoor Tables
       for (let i = 0; i < indoorCount; i++) {
         const tName = `Table ${String(tableNum).padStart(2, '0')}`;
-        this.tables.push({
-          id: `tbl-${targetId}-${tableNum}`,
+        const tId = `tbl-${targetId}-${tName.toLowerCase().replace(/\s+/g, '_')}`;
+        const newTbl: Table = {
+          id: tId,
           restaurantId: targetId,
           tableNumber: tName,
           capacity: 4,
           section: 'Main Dining Room',
           shape: 'RECTANGLE',
           status: 'AVAILABLE',
-          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
-        });
-        tableNum++;
-      }
-      // Outdoor Tables
-      for (let i = 0; i < outdoorCount; i++) {
-        const tName = `Table ${String(tableNum).padStart(2, '0')}`;
-        this.tables.push({
-          id: `tbl-${targetId}-${tableNum}`,
-          restaurantId: targetId,
-          tableNumber: tName,
-          capacity: 4,
-          section: 'Patio & Outdoor',
-          shape: 'ROUND',
-          status: 'AVAILABLE',
-          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
-        });
-        tableNum++;
-      }
-      // VIP Tables
-      for (let i = 0; i < vipCount; i++) {
-        const tName = `VIP Table ${String(i + 1).padStart(2, '0')}`;
-        this.tables.push({
-          id: `tbl-${targetId}-${tableNum}`,
-          restaurantId: targetId,
-          tableNumber: tName,
-          capacity: 6,
-          section: 'VIP Lounge',
-          shape: 'RECTANGLE',
-          status: 'AVAILABLE',
-          isVip: true,
-          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
-        });
+          qrCodeUrl: `${origin}/customer?restaurant=${targetId}&tableId=${tId}&table=${encodeURIComponent(tName)}`,
+        };
+        this.tables.push(newTbl);
+        GLOBAL_MULTI_TENANT_TABLES.push(newTbl);
         tableNum++;
       }
       this.saveDatabase();
-      restTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
+      restTables = [...(this.tables || []), ...GLOBAL_MULTI_TENANT_TABLES].filter((t) => t.restaurantId === targetId);
     }
 
-    return restTables;
+    const uniqueMap = new Map<string, Table>();
+    restTables.forEach((t) => uniqueMap.set(t.id, t));
+    return Array.from(uniqueMap.values());
   }
 
   async getInventory(restaurantId?: string) {
@@ -3016,35 +3075,7 @@ export class DinelyApiClient {
     };
   }
 
-  // --- Dedicated Food Category APIs ---
-  async getCategories(restaurantId?: string) {
-    await delay(100);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetId) return [];
-    let cats = this.categories.filter((c) => c.restaurantId === targetId);
-    if (cats.length === 0) {
-      const defaultNames = [
-        'Starters & Appetizers',
-        'Main Course',
-        'Gourmet Burgers',
-        'Wood-Fired Pizza',
-        'Fresh Salads & Bowls',
-        'Pasta & Risotto',
-        'Desserts & Sweets',
-        'Beverages & Shakes',
-      ];
-      cats = defaultNames.map((name, idx) => ({
-        id: `cat-${targetId.replace(/[^a-zA-Z0-9]/g, '')}-${idx + 1}`,
-        restaurantId: targetId,
-        name,
-        order: idx + 1,
-        isEnabled: true,
-      }));
-      this.categories.push(...cats);
-      this.saveDatabase();
-    }
-    return cats.sort((a, b) => (a.order || 0) - (b.order || 0));
-  }
+
 
   async addCategory(data: { restaurantId?: string; name: string; icon?: string }) {
     await delay(150);
