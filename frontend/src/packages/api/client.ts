@@ -1562,6 +1562,16 @@ export class DinelyApiClient {
     if (!targetId) return null;
     const rest = this.restaurants.find((r) => r.id === targetId && !r.isDeleted);
     if (!rest) return null;
+
+    const scope = getPortalScopeFromPath();
+    const user = this.getCurrentUser(scope);
+    if (user && user.role === 'RESTAURANT_OWNER') {
+      const isOwner = rest.ownerEmail?.toLowerCase() === user.email?.toLowerCase() || rest.email?.toLowerCase() === user.email?.toLowerCase();
+      if (!isOwner && user.role !== 'SUPER_ADMIN' && user.role !== 'PLATFORM_ADMIN') {
+        return null;
+      }
+    }
+
     return this.ensureRestaurantDefaults(rest);
   }
 
@@ -1603,6 +1613,35 @@ export class DinelyApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
     return this.orders.filter((o) => o.restaurantId === targetId);
+  }
+
+  async getCustomerOrders(restaurantId?: string, tableId?: string, tableSessionId?: string): Promise<Order[]> {
+    this.loadDatabase();
+    await delay(50);
+    const targetRestId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetRestId || !tableSessionId) return [];
+
+    const activeSession = this.tableSessions.find(
+      (s) => s.restaurantId === targetRestId && s.id === tableSessionId && s.status !== 'CLOSED'
+    );
+    if (!activeSession) {
+      return [];
+    }
+
+    const filtered = this.orders.filter((o) => {
+      if (o.restaurantId !== targetRestId) return false;
+      if (o.tableSessionId !== tableSessionId) return false;
+      if (o.status === 'CANCELLED') return false;
+
+      if (tableId) {
+        if (o.tableId && o.tableId === tableId) return true;
+        if (o.tableNumber && matchTableNumber(o.tableNumber, tableId)) return true;
+      }
+      return true;
+    });
+
+    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return filtered;
   }
 
   async getFulfillmentTickets(restaurantId?: string, station?: 'KITCHEN' | 'BAR') {
@@ -2199,8 +2238,7 @@ export class DinelyApiClient {
       }
     } else {
       const currentBday = await this.getCurrentBusinessDay(restId);
-      const sessionSeq = (this.tableSessions.filter((s) => s.restaurantId === restId).length + 1);
-      const newSessionId = `S${String(sessionSeq).padStart(3, '0')}`;
+      const newSessionId = `sess-${restId}-${tbl.id}-${Date.now()}`;
 
       activeSession = {
         id: newSessionId,
@@ -3487,17 +3525,18 @@ export class DinelyApiClient {
 
     // Get or create table session and current business day
     let tableSessionId = orderData.tableSessionId;
-    if (!isPickup && orderData.tableNumber) {
-      const rawNum = orderData.tableNumber;
-      let table = this.tables.find(
-        (t) => t.restaurantId === restId && matchTableNumber(t.tableNumber, rawNum)
+    let targetTable: Table | undefined;
+    if (!isPickup && (orderData.tableNumber || orderData.tableId)) {
+      const rawNum = orderData.tableNumber || orderData.tableId;
+      targetTable = this.tables.find(
+        (t) => t.restaurantId === restId && (t.id === orderData.tableId || matchTableNumber(t.tableNumber, rawNum))
       );
 
-      if (!table && rawNum !== 'COUNTER') {
+      if (!targetTable && rawNum && rawNum !== 'COUNTER') {
         const formattedNum = formatStandardTableNumber(rawNum);
         const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
-        table = {
-          id: `tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}`,
+        targetTable = {
+          id: orderData.tableId || `tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}`,
           restaurantId: restId,
           tableNumber: formattedNum,
           capacity: 4,
@@ -3507,20 +3546,19 @@ export class DinelyApiClient {
           sessionStartedAt: new Date().toISOString(),
           qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(formattedNum)}${restId ? `&restaurant=${restId}` : ''}`,
         };
-        this.tables.push(table);
+        this.tables.push(targetTable);
       }
 
-      if (table) {
+      if (targetTable) {
         let session = this.tableSessions.find(
-          (s) => s.restaurantId === restId && matchTableNumber(s.tableNumber, table!.tableNumber) && s.status === 'ACTIVE'
+          (s) => s.restaurantId === restId && (s.id === tableSessionId || s.tableId === targetTable!.id || matchTableNumber(s.tableNumber, targetTable!.tableNumber)) && s.status === 'ACTIVE'
         );
         if (!session) {
-          const sessionSeq = (this.tableSessions.filter((s) => s.restaurantId === restId).length + 1);
           session = {
-            id: `S${String(sessionSeq).padStart(3, '0')}`,
+            id: tableSessionId || `sess-${restId}-${targetTable.id}-${Date.now()}`,
             restaurantId: restId,
-            tableId: table.id,
-            tableNumber: table.tableNumber,
+            tableId: targetTable.id,
+            tableNumber: targetTable.tableNumber,
             status: 'ACTIVE',
             sessionStartedAt: new Date().toISOString(),
           };
@@ -3529,31 +3567,24 @@ export class DinelyApiClient {
           realtimeBus.emit('TableSessionStarted' as any, {
             sessionId: session.id,
             restaurantId: restId,
-            tableId: table.id,
-            tableNumber: table.tableNumber,
+            tableId: targetTable.id,
+            tableNumber: targetTable.tableNumber,
             data: session,
           });
         }
 
         tableSessionId = session.id;
-        table.status = 'OCCUPIED';
-        table.isOccupied = true;
-        table.activeSessionId = session.id;
-        table.sessionStartedAt = table.sessionStartedAt || session.sessionStartedAt;
+        targetTable.status = 'OCCUPIED';
+        targetTable.isOccupied = true;
+        targetTable.activeSessionId = session.id;
+        targetTable.sessionStartedAt = targetTable.sessionStartedAt || session.sessionStartedAt;
 
         realtimeBus.emit('TableStatusUpdated' as any, {
-          tableId: table.id,
+          tableId: targetTable.id,
           restaurantId: restId,
-          tableNumber: table.tableNumber,
+          tableNumber: targetTable.tableNumber,
           status: 'OCCUPIED',
-          data: table,
-        });
-        realtimeBus.emit('TableStatusChanged' as any, {
-          tableId: table.id,
-          restaurantId: restId,
-          tableNumber: table.tableNumber,
-          status: 'OCCUPIED',
-          data: table,
+          data: targetTable,
         });
       }
     }
@@ -3563,7 +3594,8 @@ export class DinelyApiClient {
     const newOrd: Order = {
       id: customOrderId,
       restaurantId: restId,
-      tableNumber: isPickup ? 'COUNTER' : (orderData.tableNumber || 'Table 01'),
+      tableId: targetTable?.id || orderData.tableId,
+      tableNumber: isPickup ? 'COUNTER' : (targetTable?.tableNumber || orderData.tableNumber || 'Table 01'),
       tableSessionId,
       businessDayId: currentBday?.id,
       orderType: isPickup ? 'PICKUP' : 'DINE_IN',
@@ -3652,7 +3684,9 @@ export class DinelyApiClient {
     realtimeBus.emit('OrderCreated' as any, {
       orderId: newOrd.id,
       restaurantId: restId,
+      tableId: newOrd.tableId,
       tableNumber: newOrd.tableNumber,
+      tableSessionId: newOrd.tableSessionId,
       data: newOrd,
     });
     return newOrd;
@@ -3777,28 +3811,7 @@ export class DinelyApiClient {
   }
 
   async createCustomerOrder(orderData: any) {
-    await delay(250);
-    const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
-    const newOrder = {
-      id: `ord-${Date.now()}`,
-      restaurantId: restId,
-      tableNumber: orderData.tableNumber || 'Table 01',
-      items: orderData.items || [],
-      subtotal: orderData.subtotal || 0,
-      tax: orderData.tax || 0,
-      total: orderData.total || 0,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-    };
-    this.orders.unshift(newOrder as any);
-    this.saveDatabase();
-    realtimeBus.emit('OrderCreated' as any, {
-      orderId: newOrder.id,
-      restaurantId: restId,
-      tableNumber: newOrder.tableNumber,
-      data: newOrder,
-    });
-    return newOrder;
+    return this.createOrder(orderData);
   }
 
   async verifyOwnerEmail(email: string, code?: string) {

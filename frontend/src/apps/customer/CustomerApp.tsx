@@ -141,47 +141,70 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         return;
       }
 
+      const activeTableId = currentTable?.id;
+      const activeTableNum = selectedTableNum || targetTableNum;
+      const activeSessionId = currentTableSession?.id;
+
+      // Filter events strictly by table and session
+      const isEventForTable =
+        (!event.tableId && !event.tableNumber) ||
+        (event.tableId && activeTableId && event.tableId === activeTableId) ||
+        (event.tableNumber && matchTableNumber(event.tableNumber, activeTableNum));
+
+      const isEventForSession =
+        !event.tableSessionId || (activeSessionId && event.tableSessionId === activeSessionId);
+
+      if (!isEventForTable || !isEventForSession) {
+        return;
+      }
+
       if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
-        if (!event.tableNumber || matchTableNumber(event.tableNumber, targetTableNum)) {
+        if (!event.tableSessionId || (activeSessionId && event.tableSessionId === activeSessionId)) {
           setIsSessionEnded(true);
           setCurrentTableSession(null);
           setCustomerOrders([]);
           try {
-            const currentRestId = api.getCurrentRestaurantId() || currentRestaurant?.id || 'rest-1';
-            localStorage.removeItem(`dinely_customer_active_orders_${currentRestId}`);
-            localStorage.removeItem(`dinely_customer_active_orders_global`);
+            const currentRestId = api.getCurrentRestaurantId() || currentRestaurant?.id;
+            if (currentRestId) {
+              const key = getTableStorageKey(currentRestId, activeTableNum);
+              localStorage.removeItem(key);
+            }
           } catch (e) {}
         }
+        return;
       }
 
-      if (event.tableNumber && matchTableNumber(event.tableNumber, targetTableNum)) {
-        setIsRecentStatusPulse(true);
-        setTimeout(() => setIsRecentStatusPulse(false), 3500);
-        if (event.type === 'OrderCreated' && event.data) {
-          if (event.data.tableNumber && matchTableNumber(event.data.tableNumber, targetTableNum)) {
-            setCustomerOrders((prev) => {
-              const exists = prev.some((o) => o.id === event.data.id);
-              if (exists) return prev.map((o) => (o.id === event.data.id ? event.data : o));
-              return [event.data, ...prev];
-            });
-          }
-        } else if (event.orderId && event.data) {
+      setIsRecentStatusPulse(true);
+      setTimeout(() => setIsRecentStatusPulse(false), 3500);
+
+      if (event.type === 'OrderCreated' && event.data) {
+        if (activeSessionId && event.data.tableSessionId === activeSessionId) {
+          setCustomerOrders((prev) => {
+            const exists = prev.some((o) => o.id === event.data.id);
+            if (exists) return prev.map((o) => (o.id === event.data.id ? event.data : o));
+            return [event.data, ...prev];
+          });
+        }
+      } else if (event.orderId && event.data) {
+        if (!event.data.tableSessionId || (activeSessionId && event.data.tableSessionId === activeSessionId)) {
           setCustomerOrders((prev) =>
             prev.map((o) => (o.id === event.orderId ? { ...o, ...event.data } : o))
           );
-        } else {
-          loadInitialOrder(undefined, undefined, targetTableNum);
         }
+      } else {
+        if (activeSessionId) {
+          loadInitialOrder(activeSessionId, restId, activeTableNum);
+        }
+      }
 
-        if (event.type === 'ETAUpdated') {
-          addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
-        } else if (event.type === 'OrderAccepted') {
-          addToast('success', 'Order Accepted! 🔥', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
-        } else if (event.type === 'OrderReady') {
-          addToast('success', 'Order Ready! ✨', 'Your food/drinks are prepared and ready.');
-        } else if (event.type === 'OrderDelivered') {
-          addToast('success', 'Served 🍽️', 'Enjoy your order!');
-        }
+      if (event.type === 'ETAUpdated') {
+        addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
+      } else if (event.type === 'OrderAccepted') {
+        addToast('success', 'Order Accepted! 🔥', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
+      } else if (event.type === 'OrderReady') {
+        addToast('success', 'Order Ready! ✨', 'Your food/drinks are prepared and ready.');
+      } else if (event.type === 'OrderDelivered') {
+        addToast('success', 'Served 🍽️', 'Enjoy your order!');
       }
     });
 
@@ -324,63 +347,20 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   };
 
   const loadInitialOrder = async (targetSessionId?: string, overrideRestId?: string, explicitTableNum?: string) => {
-    const restId = overrideRestId || currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
-    const allOrders = await api.getOrders(restId);
+    const restId = overrideRestId || currentRestaurant?.id || api.getCurrentRestaurantId();
+    if (!restId) return;
+
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
+    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber') || urlParams?.get('tableId');
     const activeTableStr = explicitTableNum || (urlTableParam ? formatStandardTableNumber(urlTableParam) : selectedTableNum || tableNumber || 'Table 01');
-    const savedOrderIds = getSavedCustomerOrderIds(restId, activeTableStr);
     const activeSessionId = targetSessionId || currentTableSession?.id;
-    const isNoTableVenue = currentRestaurant?.hasTables === false || currentRestaurant?.businessType === 'FOOD_TRUCK' || currentRestaurant?.businessType === 'QUICK_SERVICE';
 
-    const tableOrds = (allOrders || []).filter((o) => {
-      // Scope order strictly to current restaurant
-      if (o.restaurantId && o.restaurantId !== restId) return false;
+    if (!activeSessionId) {
+      setCustomerOrders([]);
+      return;
+    }
 
-      const isMatchingTable = o.tableNumber && matchTableNumber(o.tableNumber, activeTableStr);
-      const isMatchingSession = activeSessionId && o.tableSessionId === activeSessionId;
-
-      const isFoodCartOrPickup = o.orderType === 'PICKUP' || o.tableNumber === 'COUNTER';
-
-      if (!isNoTableVenue) {
-        if (isFoodCartOrPickup) {
-          // Dine-in table view should NEVER display counter/pickup orders placed elsewhere
-          return false;
-        }
-
-        // ABSOLUTE TABLE ISOLATION: A table view (e.g. Table 1) MUST NOT display orders belonging to Table 2 or any other table!
-        if (!isMatchingTable && !isMatchingSession) {
-          return false;
-        }
-      } else {
-        const isSavedLocally = savedOrderIds.includes(o.id);
-        if (!isSavedLocally && !isMatchingTable && !isMatchingSession) {
-          return false;
-        }
-      }
-
-      if (isFoodCartOrPickup) {
-        // FOOD CART / COUNTER PICKUP:
-        const isDone = o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED';
-        if (isDone && isSavedLocally) {
-          removeSavedCustomerOrderId(o.id, restId, activeTableStr);
-        }
-        return !isDone;
-      }
-
-      // DINE-IN TABLE SECTION:
-      // Active orders (PENDING, ACCEPTED, IN_KITCHEN, PREPARING, READY, DELIVERED) stay visible.
-      // Cleared only when order is COMPLETED or CANCELLED.
-      const isDone = o.status === 'CANCELLED' || o.status === 'COMPLETED';
-      if (isDone) {
-        if (isSavedLocally) {
-          removeSavedCustomerOrderId(o.id, restId, activeTableStr);
-        }
-        return false;
-      }
-      return true;
-    });
-
+    const tableOrds = await api.getCustomerOrders(restId, currentTable?.id || activeTableStr, activeSessionId);
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setCustomerOrders(tableOrds);
   };

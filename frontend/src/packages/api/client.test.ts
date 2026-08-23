@@ -58,6 +58,7 @@ async function runTenantSecurityTests() {
     assert(unauthorizedDetails === null, 'Owner A CANNOT fetch Restaurant B details (Tenant Isolation)');
 
     // Test 4: Log in as Owner B and switch active restaurant to Restaurant B
+    await api.loginOwner('bob@restaurant-b.com', 'passwordB123!');
     const switchedB = await api.switchActiveRestaurant(restB.id);
     assert(switchedB?.id === restB.id, 'Owner B successfully switched context to Restaurant B');
 
@@ -180,6 +181,73 @@ async function runTenantSecurityTests() {
     const tablesAfterClose = await api.getTables(restA.id);
     const closedTable09 = tablesAfterClose.find((t) => t.tableNumber === 'Table 09');
     assert(closedTable09?.status === 'AVAILABLE' && closedTable09?.isOccupied === false, 'Table session closure restores Table 09 status to AVAILABLE');
+
+    // Test 15: Strict Table & Session Order Isolation Test Suite (14 Steps)
+    console.log('\n--- Running 14-Step Table & Session Order Isolation Verification ---');
+
+    // Step 1: Open Table 01 QR session (Session A)
+    const sessionA = await api.getOrCreateTableSession(restA.id, undefined, 'Table 01');
+    assert(sessionA?.status === 'ACTIVE', 'Step 1: Table 01 session A created successfully');
+
+    // Step 2: Place Order A on Table 01 in Session A
+    const orderA = await api.createCustomerOrder({
+      restaurantId: restA.id,
+      tableNumber: 'Table 01',
+      tableSessionId: sessionA.id,
+      items: [itemFood],
+      customerName: 'Customer A',
+    });
+    assert(orderA.tableSessionId === sessionA.id, 'Step 2: Order A linked strictly to Session A');
+
+    // Step 3: Confirm Table 01 query returns Order A
+    const table01Orders = await api.getCustomerOrders(restA.id, 'Table 01', sessionA.id);
+    assert(table01Orders.length === 1 && table01Orders[0].id === orderA.id, 'Step 3: Table 01 query returns ONLY Order A');
+
+    // Step 4: Open Table 02 QR session (Session B)
+    const sessionB = await api.getOrCreateTableSession(restA.id, undefined, 'Table 02');
+    assert(sessionB?.id !== sessionA.id, 'Step 4: Table 02 session B created with distinct session ID');
+
+    // Step 5: Confirm Table 02 query returns NO Order A
+    const table02OrdersBefore = await api.getCustomerOrders(restA.id, 'Table 02', sessionB.id);
+    assert(table02OrdersBefore.length === 0, 'Step 5: Table 02 query returns NO Order A');
+
+    // Step 6: Place Order B from Table 02 in Session B
+    const orderB = await api.createCustomerOrder({
+      restaurantId: restA.id,
+      tableNumber: 'Table 02',
+      tableSessionId: sessionB.id,
+      items: [itemDrink],
+      customerName: 'Customer B',
+    });
+    assert(orderB.tableSessionId === sessionB.id, 'Step 6: Order B created on Table 02 in Session B');
+
+    // Step 7: Confirm Table 01 -> Order A only, Table 02 -> Order B only
+    const table01OrdersCheck = await api.getCustomerOrders(restA.id, 'Table 01', sessionA.id);
+    const table02OrdersCheck = await api.getCustomerOrders(restA.id, 'Table 02', sessionB.id);
+    assert(table01OrdersCheck.length === 1 && table01OrdersCheck[0].id === orderA.id, 'Step 7a: Table 01 returns Order A only');
+    assert(table02OrdersCheck.length === 1 && table02OrdersCheck[0].id === orderB.id, 'Step 7b: Table 02 returns Order B only');
+
+    // Step 8 & 9: Open Table 08 session (Session C) and confirm NO orders
+    const sessionC = await api.getOrCreateTableSession(restA.id, undefined, 'Table 08');
+    const table08Orders = await api.getCustomerOrders(restA.id, 'Table 08', sessionC.id);
+    assert(table08Orders.length === 0, 'Step 8 & 9: Table 08 returns NO orders from Table 01 or Table 02');
+
+    // Step 10 & 11: Open same Table 01 QR on another device (Session A) -> sees ONLY Session A orders
+    const table01OtherDeviceOrders = await api.getCustomerOrders(restA.id, 'Table 01', sessionA.id);
+    assert(table01OtherDeviceOrders.length === 1 && table01OtherDeviceOrders[0].id === orderA.id, 'Step 10 & 11: Second device on Table 01 sees ONLY active Session A orders');
+
+    // Step 12: Close Table 01 session A
+    const table01Obj = (await api.getTables(restA.id)).find((t) => t.tableNumber === 'Table 01');
+    assert(!!table01Obj, 'Table 01 found in database');
+    await api.closeTableSession(table01Obj!.id, 'Waiter Walter');
+
+    // Step 13: Create a NEW Table 01 session (Session D)
+    const sessionD = await api.getOrCreateTableSession(restA.id, table01Obj!.id, 'Table 01');
+    assert(sessionD.id !== sessionA.id, 'Step 13: New session D created for Table 01 with fresh session ID');
+
+    // Step 14: Confirm new session D does NOT inherit previous session A's orders
+    const table01SessionDOrders = await api.getCustomerOrders(restA.id, 'Table 01', sessionD.id);
+    assert(table01SessionDOrders.length === 0, 'Step 14: New session D does NOT inherit closed session A orders');
 
     console.log(`\n=== TEST SUMMARY: ${passed} PASSED, ${failed} FAILED ===`);
     if (failed > 0) {

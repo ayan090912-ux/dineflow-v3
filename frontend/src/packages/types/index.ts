@@ -452,6 +452,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   restaurantId: string;
+  tableId?: string;
   tableNumber: string;
   tableSessionId?: string;
   businessDayId?: string;
