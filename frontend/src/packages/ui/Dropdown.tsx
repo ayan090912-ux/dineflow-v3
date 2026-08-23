@@ -49,7 +49,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
             exit={{ opacity: 0, scale: 0.95, y: -5 }}
             transition={{ duration: 0.15 }}
             className={clsx(
-              'absolute z-40 mt-2 w-48 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden p-1.5',
+              'absolute z-40 mt-2 w-48 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl overflow-hidden p-1.5',
               align === 'right' ? 'right-0' : 'left-0'
             )}
           >
@@ -63,8 +63,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
                 className={clsx(
                   'w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl text-left transition-colors',
                   item.danger
-                    ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'text-rose-400 hover:bg-rose-950/40'
+                    : 'text-slate-200 hover:bg-slate-800 hover:text-white'
                 )}
               >
                 {item.icon}

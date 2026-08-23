@@ -52,7 +52,7 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
       if (requestType === 'BILL') {
         await api.requestBill(tableNumber, restaurantId);
       } else {
-        await api.callWaiter(tableNumber, restaurantId);
+        await api.callWaiter(tableNumber, customTitle, restaurantId);
       }
 
       if (onRequestSuccess) {

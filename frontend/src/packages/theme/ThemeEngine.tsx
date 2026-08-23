@@ -23,6 +23,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode; initialTheme?:
   useEffect(() => {
     // Inject dynamic CSS variables into document element
     const root = document.documentElement;
+    root.classList.add('dark');
     root.style.setProperty('--brand-primary', theme.primaryColor);
     root.style.setProperty('--brand-secondary', theme.secondaryColor);
     root.style.setProperty('--brand-accent', theme.accentColor);

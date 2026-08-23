@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     ARGON2_PARALLELISM: int = 4
 
     # CORS
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: List[str] = ["https://dinely.food", "https://www.dinely.food", "http://localhost:3007"]
     CORS_ALLOW_CREDENTIALS: bool = True
 
     # Rate Limiting
@@ -74,14 +74,20 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = None
 
     # URLs
-    CUSTOMER_APP_URL: str = "https://order.dinely.com"
-    RESTAURANT_DASHBOARD_URL: str = "https://dashboard.dinely.com"
-    PLATFORM_ADMIN_URL: str = "https://admin.dinely.com"
+    CUSTOMER_APP_URL: str = "https://dinely.food/customer"
+    RESTAURANT_DASHBOARD_URL: str = "https://dinely.food/restaurant/dashboard"
+    PLATFORM_ADMIN_URL: str = "https://dinely.food/platform-admin"
+
+    # Platform Admin Security & Firebase
+    PLATFORM_ADMIN_FIREBASE_UID: Optional[str] = None
+    PLATFORM_ADMIN_EMAIL: Optional[str] = "ayan090912@gmail.com"
+    FIREBASE_PROJECT_ID: str = "dinely-cd6cd"
+    FIREBASE_SERVICE_ACCOUNT_KEY_PATH: Optional[str] = None
 
     @validator("CORS_ORIGINS", pre=True)
     def parse_cors_origins(cls, v):
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
 

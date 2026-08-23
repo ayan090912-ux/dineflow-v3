@@ -46,12 +46,14 @@ import { CallWaiterModal } from './CallWaiterModal';
 import { api } from '../../packages/api/client';
 import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, TableSession, MenuCategory, getFulfillmentStation } from '../../packages/types';
 import { CustomerLiveTracker } from './CustomerLiveTracker';
+import { CustomerBillModal } from './CustomerBillModal';
 import { realtimeBus } from '../../packages/api/realtime';
+import { matchTableNumber, formatStandardTableNumber } from '../../packages/utils/tableUtils';
 
 export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   tableNumber = 'Table 01',
 }) => {
-  const { theme, formatPrice } = useTheme();
+  const { theme, formatPrice, setTheme } = useTheme();
   const [currentMenuTab, setCurrentMenuTab] = useState<'FOOD' | 'BAR'>('FOOD');
   const [isAgeConfirmed, setIsAgeConfirmed] = useState<boolean>(false);
   const [isAgeModalOpen, setIsAgeModalOpen] = useState<boolean>(false);
@@ -84,6 +86,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [highlightActiveOrders, setHighlightActiveOrders] = useState(false);
   const [isRecentStatusPulse, setIsRecentStatusPulse] = useState(false);
   const [isOrderStatusModalOpen, setIsOrderStatusModalOpen] = useState(false);
+  const [isBillModalOpen, setIsBillModalOpen] = useState(false);
 
   const handleScrollToActiveOrders = () => {
     const el = document.getElementById('active-orders-section');
@@ -97,12 +100,40 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [isSessionEnded, setIsSessionEnded] = useState(false);
 
   useEffect(() => {
-    const savedAge = typeof window !== 'undefined' && sessionStorage.getItem('dinely_bar_age_verified');
-    if (savedAge === 'true') {
-      setIsAgeConfirmed(true);
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
+    const targetTableNum = urlTableParam ? formatStandardTableNumber(urlTableParam) : formatStandardTableNumber(selectedTableNum || tableNumber || 'Table 01');
+
+    if (selectedTableNum !== targetTableNum) {
+      setSelectedTableNum(targetTableNum);
     }
-    loadRestaurantAndMenu();
-    loadTableInfo();
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('dinely_customer_active_orders_global');
+      try {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith('dinely_customer_active_orders_')) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const list: string[] = JSON.parse(raw);
+              const cleaned = list.filter((id) => id !== 'ORD104' && id !== 'ord-104' && !id.includes('104'));
+              localStorage.setItem(key, JSON.stringify(cleaned));
+            }
+          }
+        });
+      } catch (e) {}
+      const savedAge = sessionStorage.getItem('dinely_bar_age_verified');
+      if (savedAge === 'true') {
+        setIsAgeConfirmed(true);
+      }
+    }
+
+    async function init() {
+      const r = await loadRestaurantAndMenu();
+      const targetRestId = r?.id || api.getCurrentRestaurantId() || undefined;
+      await loadTableInfo(targetTableNum, targetRestId);
+    }
+    init();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       const restId = api.getCurrentRestaurantId() || currentRestaurant?.id;
@@ -111,28 +142,35 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
 
       if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
-        if (!event.tableNumber || event.tableNumber.toLowerCase() === selectedTableNum?.toLowerCase()) {
+        if (!event.tableNumber || matchTableNumber(event.tableNumber, targetTableNum)) {
           setIsSessionEnded(true);
           setCurrentTableSession(null);
           setCustomerOrders([]);
+          try {
+            const currentRestId = api.getCurrentRestaurantId() || currentRestaurant?.id || 'rest-1';
+            localStorage.removeItem(`dinely_customer_active_orders_${currentRestId}`);
+            localStorage.removeItem(`dinely_customer_active_orders_global`);
+          } catch (e) {}
         }
       }
 
-      if (event.tableNumber?.toLowerCase() === selectedTableNum?.toLowerCase()) {
+      if (event.tableNumber && matchTableNumber(event.tableNumber, targetTableNum)) {
         setIsRecentStatusPulse(true);
         setTimeout(() => setIsRecentStatusPulse(false), 3500);
         if (event.type === 'OrderCreated' && event.data) {
-          setCustomerOrders((prev) => {
-            const exists = prev.some((o) => o.id === event.data.id);
-            if (exists) return prev.map((o) => (o.id === event.data.id ? event.data : o));
-            return [event.data, ...prev];
-          });
+          if (event.data.tableNumber && matchTableNumber(event.data.tableNumber, targetTableNum)) {
+            setCustomerOrders((prev) => {
+              const exists = prev.some((o) => o.id === event.data.id);
+              if (exists) return prev.map((o) => (o.id === event.data.id ? event.data : o));
+              return [event.data, ...prev];
+            });
+          }
         } else if (event.orderId && event.data) {
           setCustomerOrders((prev) =>
             prev.map((o) => (o.id === event.orderId ? { ...o, ...event.data } : o))
           );
         } else {
-          loadInitialOrder();
+          loadInitialOrder(undefined, undefined, targetTableNum);
         }
 
         if (event.type === 'ETAUpdated') {
@@ -150,32 +188,65 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     return () => unsubscribe();
   }, [selectedTableNum]);
 
-  const loadTableInfo = async () => {
-    const restId = api.getCurrentRestaurantId() || undefined;
+  const loadTableInfo = async (explicitTableNum?: string, explicitRestId?: string) => {
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId');
+    const restId = explicitRestId || urlRestParam || currentRestaurant?.id || api.getCurrentRestaurantId() || undefined;
+    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber') || urlParams?.get('tableId');
+    const rawTableStr = explicitTableNum || urlTableParam || selectedTableNum || 'Table 01';
+
     const tbls = await api.getTables(restId);
     setAllRestaurantTables(tbls);
-    const targetTable = (selectedTableNum || 'Table 01').toLowerCase();
+
     const tbl = tbls.find(
-      (t) => (t.tableNumber && t.tableNumber.toLowerCase() === targetTable) || t.id === selectedTableNum
+      (t) => t.id === rawTableStr || (t.tableNumber && matchTableNumber(t.tableNumber, rawTableStr)) || t.tableNumber === rawTableStr
     );
+
+    const displayTableNum = tbl ? tbl.tableNumber : formatStandardTableNumber(rawTableStr);
+    if (selectedTableNum !== displayTableNum) {
+      setSelectedTableNum(displayTableNum);
+    }
     if (tbl) {
       setCurrentTable(tbl);
-      const session = await api.getOrCreateTableSession(restId, tbl.id, tbl.tableNumber);
-      if (session) {
-        setCurrentTableSession(session);
-        await loadInitialOrder(session.id);
-      }
-    } else {
-      setCustomerOrders([]);
+    }
+
+    const session = await api.getOrCreateTableSession(restId, tbl?.id, displayTableNum);
+    if (session) {
+      setCurrentTableSession(session);
+      await loadInitialOrder(session.id, restId, displayTableNum);
     }
   };
 
-  const loadRestaurantAndMenu = async () => {
-    const restId = api.getCurrentRestaurantId() || undefined;
-    const rests = await api.getRestaurants();
-    const r = rests.find((x) => x.id === restId) || rests[0];
+  const loadRestaurantAndMenu = async (): Promise<Restaurant | null> => {
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId');
+    const activeRestId =
+      urlRestParam ||
+      api.getCurrentRestaurantId() ||
+      (typeof window !== 'undefined' && window.localStorage
+        ? localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id')
+        : null) ||
+      undefined;
+
+    let r: Restaurant | null = null;
+    if (urlRestParam) {
+      r = await api.getRestaurantDetails(urlRestParam);
+    }
+    if (!r) {
+      const rests = await api.getRestaurants();
+      r = rests.find((x) => x.id === activeRestId || x.slug === activeRestId) || rests.find((x) => x.isApproved) || rests[0];
+    }
+
     if (r) {
       setCurrentRestaurant(r);
+      api.currentRestaurantId = r.id;
+      if (r.theme) {
+        setTheme({
+          ...r.theme,
+          restaurantName: r.name,
+          currency: r.theme.currency || r.currency || 'INR (₹)',
+        });
+      }
       const [items, cats] = await Promise.all([
         api.getMenuItems(r.id),
         api.getCategories(r.id),
@@ -183,15 +254,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setMenuItems(items);
       setFoodCategories(cats);
       await loadInitialOrder(undefined, r.id);
-    } else {
-      const [items, cats] = await Promise.all([
-        api.getMenuItems(restId),
-        api.getCategories(restId),
-      ]);
-      setMenuItems(items);
-      setFoodCategories(cats);
-      await loadInitialOrder(undefined, restId);
     }
+    return r || null;
   };
 
   const handleCheckInAndUnlockTable = async () => {
@@ -221,95 +285,114 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     addToast('success', 'Age Verified 🍸', 'Welcome to the Bar Lounge Menu!');
   };
 
-  const saveCustomerOrderId = (orderId: string, restId?: string) => {
+  const getTableStorageKey = (restId?: string, tableNum?: string) => {
+    const rId = restId || currentRestaurant?.id || 'rest-1';
+    const tNum = (tableNum || selectedTableNum || tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '');
+    return `dinely_customer_active_orders_${rId}_${tNum}`;
+  };
+
+  const saveCustomerOrderId = (orderId: string, restId?: string, tableNum?: string) => {
     try {
-      const globalKey = `dinely_customer_active_orders_global`;
-      const globalList: string[] = JSON.parse(localStorage.getItem(globalKey) || '[]');
-      if (!globalList.includes(orderId)) {
-        globalList.unshift(orderId);
-        localStorage.setItem(globalKey, JSON.stringify(globalList));
+      const key = getTableStorageKey(restId, tableNum);
+      const rId = restId || currentRestaurant?.id || 'rest-1';
+      const keyRestOnly = `dinely_customer_active_orders_${rId}`;
+
+      const listA: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!listA.includes(orderId)) {
+        listA.unshift(orderId);
+        localStorage.setItem(key, JSON.stringify(listA));
       }
 
-      if (restId) {
-        const restKey = `dinely_customer_active_orders_${restId}`;
-        const restList: string[] = JSON.parse(localStorage.getItem(restKey) || '[]');
-        if (!restList.includes(orderId)) {
-          restList.unshift(orderId);
-          localStorage.setItem(restKey, JSON.stringify(restList));
-        }
+      const listB: string[] = JSON.parse(localStorage.getItem(keyRestOnly) || '[]');
+      if (!listB.includes(orderId)) {
+        listB.unshift(orderId);
+        localStorage.setItem(keyRestOnly, JSON.stringify(listB));
       }
     } catch (e) {
       console.error('Failed to save customer order ID', e);
     }
   };
 
-  const getSavedCustomerOrderIds = (restId?: string): string[] => {
+  const getSavedCustomerOrderIds = (restId?: string, tableNum?: string): string[] => {
     try {
-      const globalKey = `dinely_customer_active_orders_global`;
-      const globalList: string[] = JSON.parse(localStorage.getItem(globalKey) || '[]');
-      let restList: string[] = [];
-      if (restId) {
-        const restKey = `dinely_customer_active_orders_${restId}`;
-        restList = JSON.parse(localStorage.getItem(restKey) || '[]');
-      }
-      return Array.from(new Set([...globalList, ...restList]));
+      const key = getTableStorageKey(restId, tableNum);
+      const rId = restId || currentRestaurant?.id || 'rest-1';
+      const keyRestOnly = `dinely_customer_active_orders_${rId}`;
+
+      const listA: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      const listB: string[] = JSON.parse(localStorage.getItem(keyRestOnly) || '[]');
+      return Array.from(new Set([...listA, ...listB]));
     } catch (e) {
       return [];
     }
   };
 
-  const removeSavedCustomerOrderId = (orderId: string, restId?: string) => {
+  const removeSavedCustomerOrderId = (orderId: string, restId?: string, tableNum?: string) => {
     try {
-      const globalKey = `dinely_customer_active_orders_global`;
-      const globalList: string[] = JSON.parse(localStorage.getItem(globalKey) || '[]');
-      localStorage.setItem(globalKey, JSON.stringify(globalList.filter((id) => id !== orderId)));
-
-      if (restId) {
-        const restKey = `dinely_customer_active_orders_${restId}`;
-        const restList: string[] = JSON.parse(localStorage.getItem(restKey) || '[]');
-        localStorage.setItem(restKey, JSON.stringify(restList.filter((id) => id !== orderId)));
-      }
+      const key = getTableStorageKey(restId, tableNum);
+      const list: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      localStorage.setItem(key, JSON.stringify(list.filter((id) => id !== orderId)));
     } catch (e) {
       console.error('Failed to remove customer order ID', e);
     }
   };
 
-  const loadInitialOrder = async (targetSessionId?: string, overrideRestId?: string) => {
+  const loadInitialOrder = async (targetSessionId?: string, overrideRestId?: string, explicitTableNum?: string) => {
     const restId = overrideRestId || currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
-    const allOrders = await api.getOrders('ALL');
-    const savedOrderIds = getSavedCustomerOrderIds(restId);
-    const targetTable = (selectedTableNum || tableNumber || 'Table 01').toLowerCase();
+    const allOrders = await api.getOrders(restId);
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
+    const activeTableStr = explicitTableNum || (urlTableParam ? formatStandardTableNumber(urlTableParam) : selectedTableNum || tableNumber || 'Table 01');
+    const savedOrderIds = getSavedCustomerOrderIds(restId, activeTableStr);
     const activeSessionId = targetSessionId || currentTableSession?.id;
     const isNoTableVenue = currentRestaurant?.hasTables === false || currentRestaurant?.businessType === 'FOOD_TRUCK' || currentRestaurant?.businessType === 'QUICK_SERVICE';
 
     const tableOrds = (allOrders || []).filter((o) => {
-      const isSavedLocally = savedOrderIds.includes(o.id);
-      const isMatchingTable = o.tableNumber && o.tableNumber.toLowerCase() === targetTable;
+      // Scope order strictly to current restaurant
+      if (o.restaurantId && o.restaurantId !== restId) return false;
+
+      const isMatchingTable = o.tableNumber && matchTableNumber(o.tableNumber, activeTableStr);
       const isMatchingSession = activeSessionId && o.tableSessionId === activeSessionId;
+      const isSavedLocally = savedOrderIds.includes(o.id);
 
-      if (!isSavedLocally && !isMatchingTable && !isMatchingSession) {
-        return false;
+      const isFoodCartOrPickup = o.orderType === 'PICKUP' || o.tableNumber === 'COUNTER';
+
+      if (!isNoTableVenue) {
+        if (isFoodCartOrPickup) {
+          // Dine-in table view should NEVER display counter/pickup orders placed elsewhere
+          return false;
+        }
+
+        // ABSOLUTE TABLE ISOLATION: A table view (e.g. Table 1) MUST NOT display orders belonging to Table 8 or any other table!
+        if (!isMatchingTable && !isMatchingSession && !isSavedLocally) {
+          return false;
+        }
+      } else {
+        if (!isSavedLocally && !isMatchingTable && !isMatchingSession) {
+          return false;
+        }
       }
-
-      const isFoodCartOrPickup = isNoTableVenue || o.orderType === 'PICKUP' || o.tableNumber === 'COUNTER';
 
       if (isFoodCartOrPickup) {
         // FOOD CART / COUNTER PICKUP:
-        // Order status ONLY vanishes after Kitchen marks order as DELIVERED or COMPLETED
         const isDone = o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED';
         if (isDone && isSavedLocally) {
-          removeSavedCustomerOrderId(o.id, restId);
+          removeSavedCustomerOrderId(o.id, restId, activeTableStr);
         }
         return !isDone;
       }
 
       // DINE-IN TABLE SECTION:
-      // Order status stays until waiter closes active table session or payment is completed
-      const isDone = o.status === 'CANCELLED' || (o.status === 'COMPLETED' && o.paymentStatus === 'PAID');
-      if (isDone && isSavedLocally && !isMatchingSession) {
-        removeSavedCustomerOrderId(o.id, restId);
+      // Active orders (PENDING, ACCEPTED, IN_KITCHEN, PREPARING, READY, DELIVERED) stay visible.
+      // Cleared only when order is COMPLETED or CANCELLED.
+      const isDone = o.status === 'CANCELLED' || o.status === 'COMPLETED';
+      if (isDone) {
+        if (isSavedLocally) {
+          removeSavedCustomerOrderId(o.id, restId, activeTableStr);
+        }
+        return false;
       }
-      return !isDone;
+      return true;
     });
 
     tableOrds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -354,7 +437,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     if (cart.length === 0) return;
 
     const subtotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
-    const tax = subtotal * 0.09;
+    const taxRatePercent = typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5.0;
+    const tax = Math.round(subtotal * (taxRatePercent / 100) * 100) / 100;
     const total = subtotal + tax;
 
     const orderItems: OrderItem[] = cart.map((c, idx) => {
@@ -393,7 +477,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       paymentStatus: 'UNPAID',
     });
 
-    saveCustomerOrderId(newOrd.id, restId);
+    saveCustomerOrderId(newOrd.id, restId, selectedTableNum);
 
     setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
     setCart([]);
@@ -563,15 +647,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             </button>
           )}
 
-          <button
-            onClick={() => setIsTableSelectorModalOpen(true)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5 transition-all ${
-              isBarTheme ? 'bg-amber-600 hover:bg-amber-500' : 'bg-rose-600 hover:bg-rose-500'
+          <div
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5 ${
+              isBarTheme ? 'bg-amber-600' : 'bg-rose-600'
             }`}
           >
             <span>📍 {selectedTableNum}</span>
-            <span className="text-[10px] bg-black/30 px-1.5 py-0.5 rounded">Switch 🔀</span>
-          </button>
+          </div>
         </div>
 
         {/* Restaurant Header Content */}
@@ -590,26 +672,46 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       </div>
 
-      {/* Quick Action Bar (Call Waiter & Bill for Tables, or Counter Pickup Header for Food Truck) */}
+      {/* Quick Action Bar (Call Waiter, Live Order Tracker & My Bill) */}
       {currentRestaurant?.hasTables !== false ? (
-        <div className="p-4 grid grid-cols-2 gap-3 bg-slate-950 border-b border-slate-800/80 sticky top-0 z-20 backdrop-blur-md bg-slate-950/90">
+        <div className="p-3 grid grid-cols-3 gap-2 bg-slate-950 border-b border-slate-800/80 sticky top-0 z-20 backdrop-blur-md bg-slate-950/90">
           <Button
             variant="outline"
             size="sm"
             onClick={handleCallWaiter}
-            className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 py-2.5 rounded-xl font-bold"
-            icon={<PhoneCall className="w-4 h-4 text-amber-400" />}
+            className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 py-2 rounded-xl font-bold text-xs flex items-center justify-center px-2"
+            icon={<PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
           >
-            Call Waiter
+            <span className="truncate">Waiter</span>
           </Button>
+
           <Button
             variant="outline"
             size="sm"
-            onClick={handleRequestBill}
-            className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 py-2.5 rounded-xl font-bold"
-            icon={<Receipt className="w-4 h-4 text-emerald-400" />}
+            onClick={() => setIsOrderStatusModalOpen(true)}
+            className={`border-rose-500/40 text-rose-300 hover:bg-rose-500/10 py-2 rounded-xl font-bold text-xs flex items-center justify-center px-2 relative ${
+              customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0
+                ? 'bg-rose-500/20 border-rose-500 text-white font-extrabold shadow-md'
+                : ''
+            }`}
+            icon={<Clock className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
           >
-            Request Bill
+            <span className="truncate">Orders</span>
+            {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black shrink-0">
+                {customerOrders.filter((o) => o.status !== 'CANCELLED').length}
+              </span>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsBillModalOpen(true)}
+            className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 py-2 rounded-xl font-bold text-xs flex items-center justify-center px-2"
+            icon={<Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+          >
+            <span className="truncate">My Bill 🧾</span>
           </Button>
         </div>
       ) : (
@@ -839,6 +941,22 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                   <Button
                     size="sm"
                     variant="brand"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const station = getFulfillmentStation(item);
+                      const itemToAdd = {
+                        ...item,
+                        targetDestination: station,
+                      };
+                      setCart((prev) => {
+                        const existing = prev.find((c) => c.item.id === item.id);
+                        if (existing) {
+                          return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+                        }
+                        return [...prev, { item: itemToAdd, quantity: 1 }];
+                      });
+                      addToast('success', 'Added to Order Cart 🛒', `1x ${item.name}`);
+                    }}
                     className={`text-xs py-1 px-3 rounded-lg font-bold ${
                       isBarTheme ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' : 'bg-rose-600 hover:bg-rose-500'
                     }`}
@@ -1045,9 +1163,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
           <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1 font-mono">
             <div className="flex justify-between text-slate-400"><span>Subtotal:</span><span>{formatPrice(subtotal)}</span></div>
-            <div className="flex justify-between text-slate-400"><span>Tax (9%):</span><span>{formatPrice(subtotal * 0.09)}</span></div>
+            <div className="flex justify-between text-slate-400">
+              <span>Tax ({currentRestaurant?.taxPercentage ?? 5}%):</span>
+              <span>{formatPrice(Math.round(subtotal * ((currentRestaurant?.taxPercentage ?? 5) / 100) * 100) / 100)}</span>
+            </div>
             <div className="flex justify-between text-white font-bold text-sm pt-1 border-t border-slate-800">
-              <span>Total:</span><span>{formatPrice(subtotal * 1.09)}</span>
+              <span>Total:</span>
+              <span>{formatPrice(Math.round((subtotal + subtotal * ((currentRestaurant?.taxPercentage ?? 5) / 100)) * 100) / 100)}</span>
             </div>
           </div>
 
@@ -1222,6 +1344,16 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           </div>
         </div>
       )}
+
+      {/* RUNNING TABLE BILL MODAL */}
+      <CustomerBillModal
+        isOpen={isBillModalOpen}
+        onClose={() => setIsBillModalOpen(false)}
+        tableNumber={selectedTableNum}
+        currentRestaurant={currentRestaurant}
+        tableSession={currentTableSession}
+        onCallWaiter={handleCallWaiter}
+      />
     </div>
   );
 };

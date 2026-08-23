@@ -173,7 +173,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   const safeRestName = (restaurantName || 'Dinely Restaurant').trim();
 
   // Requirement 1 & 3: Construct the EXACT Destination URL
-  const defaultOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  const defaultOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
   let defaultUrl = '';
   if (isPickup || safeTableNum.toUpperCase() === 'COUNTER') {
     defaultUrl = `${defaultOrigin}/customer${restaurantId ? `?restaurant=${restaurantId}` : ''}`;

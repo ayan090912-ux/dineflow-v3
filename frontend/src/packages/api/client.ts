@@ -7,6 +7,7 @@ import {
   Table,
   Employee,
   InventoryItem,
+  Supplier,
   AuditLog,
   ThemeConfig,
   User,
@@ -22,15 +23,64 @@ import {
   DailySummaryData,
   getFulfillmentStation,
   FulfillmentTicket,
+  Bill,
+  BillItem,
+  BillStatus,
+  PaymentMethod,
   BusinessType,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
+import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
 
 // Simulated API delay helper
 const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const SESSION_STORAGE_KEY = 'dinely_user_session';
+export type PortalScope = 'ADMIN' | 'OWNER' | 'STAFF' | 'CUSTOMER';
+
+const SESSION_KEYS: Record<PortalScope, string> = {
+  ADMIN: 'dinely_session_admin',
+  OWNER: 'dinely_session_owner',
+  STAFF: 'dinely_session_staff',
+  CUSTOMER: 'dinely_session_customer',
+};
+
+export function getPortalScopeFromPath(path?: string): PortalScope {
+  const p = (path || (typeof window !== 'undefined' ? window.location.pathname : '')).toLowerCase();
+  if (p.startsWith('/admin') || p.startsWith('/platform')) {
+    return 'ADMIN';
+  }
+  if (
+    p.startsWith('/restaurant') ||
+    p.startsWith('/owner') ||
+    p.startsWith('/wizard') ||
+    p.startsWith('/create-restaurant') ||
+    p.startsWith('/restaurant-setup') ||
+    p.startsWith('/workspace')
+  ) {
+    return 'OWNER';
+  }
+  if (p.startsWith('/kitchen') || p.startsWith('/waiter') || p.startsWith('/bar') || p.startsWith('/inventory')) {
+    return 'STAFF';
+  }
+  if (p.startsWith('/customer')) {
+    return 'CUSTOMER';
+  }
+  return 'OWNER';
+}
+
+export function getApiBaseUrl(): string {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return `${window.location.origin}/api/v1`;
+    }
+  }
+  return 'http://localhost:8000/api/v1';
+}
+
 const DATABASE_STORAGE_KEY = 'dinely_production_db_v3';
 
 export class DinelyApiClient {
@@ -44,26 +94,88 @@ export class DinelyApiClient {
   private fulfillmentTickets: FulfillmentTicket[] = [];
   private tables: Table[] = [];
   private tableSessions: TableSession[] = [];
+  private bills: Bill[] = [];
   private businessDays: BusinessDay[] = [];
   private employees: Employee[] = [];
   private inventory: InventoryItem[] = [];
+  private suppliers: Supplier[] = [];
   private auditLogs: AuditLog[] = [];
   private customerRequests: CustomerRequest[] = [];
   private platformNotifications: PlatformNotification[] = [];
   private notifications: WaiterNotification[] = [];
   private users: User[] = [];
 
-  private currentUser: User | null = null;
-  private currentTokens: AuthTokens | null = null;
-  private currentRestaurantId: string | null = null;
+  private currentUsersByScope: Record<PortalScope, User | null> = {
+    ADMIN: null,
+    OWNER: null,
+    STAFF: null,
+    CUSTOMER: null,
+  };
+  private currentTokensByScope: Record<PortalScope, AuthTokens | null> = {
+    ADMIN: null,
+    OWNER: null,
+    STAFF: null,
+    CUSTOMER: null,
+  };
+  private _currentRestaurantId: string | null = null;
+  private currentRestaurantIdsByScope: Record<PortalScope, string | null> = {
+    ADMIN: null,
+    OWNER: null,
+    STAFF: null,
+    CUSTOMER: null,
+  };
+
+  public get currentRestaurantId(): string | null {
+    const scope = getPortalScopeFromPath();
+    return this._currentRestaurantId || this.currentRestaurantIdsByScope[scope] || (typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id')) : null);
+  }
+
+  public set currentRestaurantId(val: string | null) {
+    this._currentRestaurantId = val;
+    if (val && typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('dinely_active_restaurant_id', val);
+      window.localStorage.setItem('dinely_restaurant_id', val);
+    }
+  }
+
+  public get currentUser(): User | null {
+    return this.getCurrentUser();
+  }
+
+  public set currentUser(user: User | null) {
+    const scope = getPortalScopeFromPath();
+    this.currentUsersByScope[scope] = user;
+  }
+
+  public get currentTokens(): AuthTokens | null {
+    const scope = getPortalScopeFromPath();
+    return this.currentTokensByScope[scope];
+  }
+
+  public set currentTokens(tokens: AuthTokens | null) {
+    const scope = getPortalScopeFromPath();
+    this.currentTokensByScope[scope] = tokens;
+  }
 
   constructor() {
     this.loadDatabase();
     this.restoreSession();
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('storage', (e) => {
+        if (e.key === DATABASE_STORAGE_KEY) {
+          this.loadDatabase();
+          realtimeBus.emit('OrderCreated' as any, {
+            type: 'OrderCreated',
+            timestamp: new Date().toISOString(),
+          });
+        }
+      });
+    }
   }
 
   // --- Persistent Storage Engine ---
-  private loadDatabase() {
+  public loadDatabase() {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const raw = localStorage.getItem(DATABASE_STORAGE_KEY);
@@ -79,15 +191,11 @@ export class DinelyApiClient {
           this.fulfillmentTickets = db.fulfillmentTickets || [];
           this.tables = db.tables || [];
           this.tableSessions = db.tableSessions || [];
+          this.bills = db.bills || [];
           this.businessDays = db.businessDays || [];
           this.employees = db.employees || [];
-          this.inventory = (db.inventory || []).filter(
-            (i: InventoryItem) =>
-              i.name !== 'Organic Extra Virgin Olive Oil' &&
-              i.name !== 'Prime Wagyu Beef Tenderloin' &&
-              i.name !== 'Fresh Puglia Burrata & Mozzarella' &&
-              i.name !== 'Organic San Marzano Tomatoes'
-          );
+          this.inventory = db.inventory || [];
+          this.suppliers = db.suppliers || [];
           this.auditLogs = db.auditLogs || [];
           this.customerRequests = db.customerRequests || [];
           this.platformNotifications = db.platformNotifications || [];
@@ -98,24 +206,7 @@ export class DinelyApiClient {
       console.error('Failed to load database from localStorage:', e);
     }
 
-    // Ensure default System Super Admin exists if users list is empty
-    const hasAdmin = this.users.some((u) => u.role === 'PLATFORM_ADMIN');
-    if (!hasAdmin) {
-      const defaultAdmin: User = {
-        id: 'usr-sys-admin',
-        firstName: 'Platform',
-        lastName: 'Admin',
-        name: 'Platform Administrator',
-        email: 'admin@dinely.com',
-        phone: '+1 800-DINELY',
-        role: 'PLATFORM_ADMIN',
-        isEmailVerified: true,
-        password: 'admin123',
-      };
-      this.users.unshift(defaultAdmin);
-      this.sanitizeTableSessions();
-      this.saveDatabase();
-    }
+    this.sanitizeTableSessions();
   }
 
   private sanitizeTableSessions() {
@@ -138,23 +229,24 @@ export class DinelyApiClient {
       }
     });
 
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
     this.tables.forEach((tbl) => {
       if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app')) {
         tbl.qrCodeUrl = `${origin}/customer?table=${encodeURIComponent(tbl.tableNumber)}${tbl.restaurantId ? `&restaurant=${tbl.restaurantId}` : ''}`;
       }
-      const activeSession = this.tableSessions.find((s) => s.tableId === tbl.id && s.status === 'ACTIVE');
+      const activeSession = this.tableSessions.find(
+        (s) => s.status === 'ACTIVE' && (s.restaurantId === tbl.restaurantId || !s.restaurantId) && (s.tableId === tbl.id || matchTableNumber(s.tableNumber, tbl.tableNumber))
+      );
       if (activeSession) {
         tbl.status = 'OCCUPIED';
         tbl.isOccupied = true;
         tbl.activeSessionId = activeSession.id;
         tbl.sessionStartedAt = activeSession.sessionStartedAt;
-      } else {
+      } else if (tbl.status !== 'RESERVED' && tbl.status !== 'MERGED') {
         tbl.status = 'AVAILABLE';
         tbl.isOccupied = false;
         tbl.activeSessionId = undefined;
         tbl.sessionStartedAt = undefined;
-        tbl.reservationDetails = undefined;
       }
     });
   }
@@ -173,9 +265,11 @@ export class DinelyApiClient {
           fulfillmentTickets: this.fulfillmentTickets,
           tables: this.tables,
           tableSessions: this.tableSessions,
+          bills: this.bills,
           businessDays: this.businessDays,
           employees: this.employees,
           inventory: this.inventory,
+          suppliers: this.suppliers,
           auditLogs: this.auditLogs,
           customerRequests: this.customerRequests,
           platformNotifications: this.platformNotifications,
@@ -188,71 +282,59 @@ export class DinelyApiClient {
     }
   }
 
-  private restoreSession() {
+  public restoreSession(targetScope?: PortalScope) {
     try {
       if (typeof window !== 'undefined') {
-        const path = window.location.pathname || '';
-        let targetRoleKey = '';
-        if (path.startsWith('/admin')) {
-          targetRoleKey = `${SESSION_STORAGE_KEY}_PLATFORM_ADMIN`;
-        } else if (path.startsWith('/restaurant') || path.startsWith('/owner')) {
-          targetRoleKey = `${SESSION_STORAGE_KEY}_RESTAURANT_OWNER`;
-        } else if (path.startsWith('/kitchen')) {
-          targetRoleKey = `${SESSION_STORAGE_KEY}_CHEF`;
-        } else if (path.startsWith('/waiter')) {
-          targetRoleKey = `${SESSION_STORAGE_KEY}_WAITER`;
-        } else if (path.startsWith('/bar')) {
-          targetRoleKey = `${SESSION_STORAGE_KEY}_BARTENDER`;
-        }
+        const scope = targetScope || getPortalScopeFromPath(window.location.pathname);
+        const storageKey = SESSION_KEYS[scope];
 
-        // 1. Check tab-isolated sessionStorage
-        const tabSession = sessionStorage.getItem(SESSION_STORAGE_KEY);
+        // 1. Check tab-isolated sessionStorage for this portal scope
+        const tabSession = sessionStorage.getItem(storageKey);
         if (tabSession) {
           const parsed = JSON.parse(tabSession);
           if (parsed && parsed.user) {
             const freshUser = this.users.find((u) => u.email?.toLowerCase() === parsed.user.email?.toLowerCase());
+            const activeRestFromStorage = typeof window !== 'undefined' && window.localStorage
+              ? (localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id'))
+              : null;
+            const effectiveRestId = activeRestFromStorage || parsed.restaurantId || freshUser?.restaurantId || parsed.user?.restaurantId || null;
+
             const mergedUser = freshUser
-              ? { ...parsed.user, ...freshUser, restaurantId: parsed.restaurantId || freshUser.restaurantId || parsed.user.restaurantId }
-              : parsed.user;
-            this.currentUser = mergedUser;
-            this.currentTokens = parsed.tokens || mergedUser.tokens || null;
-            this.currentRestaurantId = parsed.restaurantId || mergedUser.restaurantId || null;
-            return;
-          }
-        }
+              ? { ...parsed.user, ...freshUser, restaurantId: effectiveRestId || freshUser.restaurantId || parsed.user.restaurantId }
+              : { ...parsed.user, restaurantId: effectiveRestId || parsed.user.restaurantId };
 
-        // 2. Check role-specific localStorage session if available for this route
-        if (window.localStorage && targetRoleKey) {
-          const roleSession = localStorage.getItem(targetRoleKey);
-          if (roleSession) {
-            const parsed = JSON.parse(roleSession);
-            if (parsed && parsed.user) {
-              const freshUser = this.users.find((u) => u.email?.toLowerCase() === parsed.user.email?.toLowerCase());
-              const mergedUser = freshUser
-                ? { ...parsed.user, ...freshUser, restaurantId: parsed.restaurantId || freshUser.restaurantId || parsed.user.restaurantId }
-                : parsed.user;
-              this.currentUser = mergedUser;
-              this.currentTokens = parsed.tokens || mergedUser.tokens || null;
-              this.currentRestaurantId = parsed.restaurantId || mergedUser.restaurantId || null;
-              return;
+            this.currentUsersByScope[scope] = mergedUser;
+            this.currentTokensByScope[scope] = parsed.tokens || mergedUser.tokens || null;
+            this.currentRestaurantIdsByScope[scope] = effectiveRestId;
+            if (effectiveRestId) {
+              this._currentRestaurantId = effectiveRestId;
             }
+            return mergedUser;
           }
         }
 
-        // 3. Fallback to default localStorage session
+        // 2. Check scope-isolated localStorage for this portal scope
         if (window.localStorage) {
-          const savedSession = localStorage.getItem(SESSION_STORAGE_KEY);
-          if (savedSession) {
-            const parsed = JSON.parse(savedSession);
+          const localSession = localStorage.getItem(storageKey);
+          if (localSession) {
+            const parsed = JSON.parse(localSession);
             if (parsed && parsed.user) {
               const freshUser = this.users.find((u) => u.email?.toLowerCase() === parsed.user.email?.toLowerCase());
+              const activeRestFromStorage = localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id');
+              const effectiveRestId = activeRestFromStorage || parsed.restaurantId || freshUser?.restaurantId || parsed.user?.restaurantId || null;
+
               const mergedUser = freshUser
-                ? { ...parsed.user, ...freshUser, restaurantId: parsed.restaurantId || freshUser.restaurantId || parsed.user.restaurantId }
-                : parsed.user;
-              this.currentUser = mergedUser;
-              this.currentTokens = parsed.tokens || mergedUser.tokens || null;
-              this.currentRestaurantId = parsed.restaurantId || mergedUser.restaurantId || null;
-              return;
+                ? { ...parsed.user, ...freshUser, restaurantId: effectiveRestId || freshUser.restaurantId || parsed.user.restaurantId }
+                : { ...parsed.user, restaurantId: effectiveRestId || parsed.user.restaurantId };
+
+              this.currentUsersByScope[scope] = mergedUser;
+              this.currentTokensByScope[scope] = parsed.tokens || mergedUser.tokens || null;
+              this.currentRestaurantIdsByScope[scope] = effectiveRestId;
+              if (effectiveRestId) {
+                this._currentRestaurantId = effectiveRestId;
+              }
+              sessionStorage.setItem(storageKey, JSON.stringify({ ...parsed, user: mergedUser, restaurantId: effectiveRestId }));
+              return mergedUser;
             }
           }
         }
@@ -261,21 +343,37 @@ export class DinelyApiClient {
       console.error('Failed to restore session', e);
     }
 
-    this.currentUser = null;
-    this.currentRestaurantId = null;
+    const scope = targetScope || getPortalScopeFromPath(typeof window !== 'undefined' ? window.location.pathname : '');
+    this.currentUsersByScope[scope] = null;
+    this.currentRestaurantIdsByScope[scope] = null;
+    return null;
   }
 
-  private saveSession(user: User, tokens: AuthTokens, restaurantId?: string | null) {
-    this.currentUser = user;
-    this.currentTokens = tokens;
-    this.currentRestaurantId = restaurantId || user.restaurantId || null;
+  public saveSession(user: User, tokens: AuthTokens, restaurantId?: string | null, scopeOverride?: PortalScope) {
+    let scope: PortalScope = scopeOverride || 'OWNER';
+    if (!scopeOverride) {
+      if (user.role === 'PLATFORM_ADMIN' || user.role === 'SUPER_ADMIN') {
+        scope = 'ADMIN';
+      } else if (user.role === 'RESTAURANT_OWNER') {
+        scope = 'OWNER';
+      } else if (user.role === 'CHEF' || user.role === 'WAITER' || user.role === 'BARTENDER' || user.role === 'BAR_STAFF' || user.role === 'INVENTORY_MANAGER' || user.role === 'MANAGER') {
+        scope = 'STAFF';
+      } else if (user.role === 'CUSTOMER') {
+        scope = 'CUSTOMER';
+      }
+    }
+
+    const targetRestId = restaurantId || user.restaurantId || null;
+    this.currentUsersByScope[scope] = user;
+    this.currentTokensByScope[scope] = tokens;
+    this.currentRestaurantIdsByScope[scope] = targetRestId;
 
     const existingIdx = this.users.findIndex((u) => u.email?.toLowerCase() === user.email?.toLowerCase());
     if (existingIdx >= 0) {
       this.users[existingIdx] = {
         ...this.users[existingIdx],
         ...user,
-        restaurantId: this.currentRestaurantId || this.users[existingIdx].restaurantId,
+        restaurantId: targetRestId || this.users[existingIdx].restaurantId,
       };
     } else {
       this.users.unshift(user);
@@ -286,13 +384,14 @@ export class DinelyApiClient {
         const payload = JSON.stringify({
           user,
           tokens,
-          restaurantId: this.currentRestaurantId,
+          restaurantId: targetRestId,
           orgId: user.orgId,
+          scope,
         });
-        sessionStorage.setItem(SESSION_STORAGE_KEY, payload);
+        const storageKey = SESSION_KEYS[scope];
+        sessionStorage.setItem(storageKey, payload);
         if (window.localStorage) {
-          localStorage.setItem(SESSION_STORAGE_KEY, payload);
-          localStorage.setItem(`${SESSION_STORAGE_KEY}_${user.role}`, payload);
+          localStorage.setItem(storageKey, payload);
         }
       }
     } catch (e) {
@@ -374,21 +473,7 @@ export class DinelyApiClient {
     }
 
     if (!user) {
-      // Auto-synthesize owner account for seamless onboarding/demo access
-      const rest = this.restaurants.find((r) => !r.isDeleted && r.ownerEmail?.toLowerCase() === normalizedEmail) || this.restaurants[0];
-      user = {
-        id: `usr-owner-${Date.now()}`,
-        name: normalizedEmail.split('@')[0].toUpperCase() + ' Owner',
-        email: normalizedEmail,
-        phone: '+1 555-0199',
-        role: 'RESTAURANT_OWNER',
-        restaurantId: rest?.id || 'rest-1',
-        orgId: rest?.orgId || 'org-1',
-        isEmailVerified: true,
-        password: password || 'owner123',
-      };
-      this.users.push(user);
-      this.saveDatabase();
+      throw new Error('No registered account found for this email address. Please sign up or sign in using Google.');
     }
 
     if (password && user.password && user.password !== password) {
@@ -527,58 +612,138 @@ export class DinelyApiClient {
     };
   }
 
-  async loginPlatformAdmin(email: string, password?: string) {
+  async loginPlatformAdmin(idTokenOrEmail: string, userEmailOrPassword?: string) {
     await delay(300);
-    const normalizedEmail = email.trim().toLowerCase();
+    let firebaseIdToken = idTokenOrEmail;
 
-    if (normalizedEmail !== 'admin@dinely.com' && !normalizedEmail.includes('admin')) {
-      throw new Error('Access Denied: This portal is strictly reserved for Platform Administrators.');
+    const emailCandidate = (
+      userEmailOrPassword && userEmailOrPassword.includes('@')
+        ? userEmailOrPassword
+        : (idTokenOrEmail.includes('@') ? idTokenOrEmail : '')
+    ).trim().toLowerCase();
+
+    // STRICT IDENTITY SECURITY BOUNDARY:
+    if (emailCandidate && emailCandidate !== 'ayan090912@gmail.com') {
+      throw new Error(`Access denied. This Google account (${emailCandidate}) is not authorized to access Dinely Platform Administration. Only ayan090912@gmail.com is permitted.`);
     }
 
-    if (password && password !== 'admin123') {
-      throw new Error('Invalid Platform Admin password. Default demo password is admin123');
+    if (!firebaseIdToken.startsWith('eyJ') && !firebaseIdToken.startsWith('firebase_token_')) {
+      firebaseIdToken = `firebase_token_admin_${encodeURIComponent((emailCandidate || 'ayan090912@gmail.com').toLowerCase())}`;
     }
 
-    const adminUser: User = {
-      id: 'usr-sys-admin',
-      firstName: 'Platform',
-      lastName: 'Admin',
-      name: 'Platform Administrator',
-      email: normalizedEmail || 'admin@dinely.com',
-      phone: '+1 800-DINELY',
-      role: 'PLATFORM_ADMIN',
-      isEmailVerified: true,
-    };
+    try {
+      const apiBase = getApiBaseUrl();
+      const response = await fetch(`${apiBase}/admin/verify-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${firebaseIdToken}`,
+        },
+        body: JSON.stringify({ id_token: firebaseIdToken }),
+      });
 
-    const tokens: AuthTokens = {
-      accessToken: `df_admin_jwt_${Date.now()}`,
-      refreshToken: `df_admin_ref_${Date.now()}`,
-      expiresIn: 86400,
-      tokenType: 'Bearer',
-    };
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Access denied. This Google account is not authorized to access Dinely Platform Administration.');
+        } else if (response.status === 401) {
+          throw new Error('Authentication token invalid or expired. Please sign in again.');
+        }
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Platform Admin authorization failed.');
+      }
 
-    adminUser.tokens = tokens;
-    this.saveSession(adminUser, tokens);
+      const verified = await response.json();
+      const adminEmail = (verified.email || emailCandidate || 'ayan090912@gmail.com').toLowerCase();
+      if (adminEmail !== 'ayan090912@gmail.com') {
+        throw new Error('Access denied. Only ayan090912@gmail.com is authorized as Platform Administrator.');
+      }
+      const adminUid = verified.uid || 'admin_uid';
 
-    this.auditLogs.unshift({
-      id: `log-${Date.now()}`,
-      actor: 'Platform Administrator',
-      action: 'Authenticated Platform Admin Control Plane',
-      target: 'Dinely Cloud',
-      timestamp: 'Just now',
-      ipAddress: '127.0.0.1',
-      status: 'SUCCESS',
-    });
+      let adminUser = this.users.find((u) => u.role === 'PLATFORM_ADMIN' && u.email.toLowerCase() === adminEmail);
+      if (!adminUser) {
+        adminUser = {
+          id: `usr-admin-${adminUid}`,
+          firstName: 'Platform',
+          lastName: 'Admin',
+          name: 'Platform Administrator',
+          email: adminEmail,
+          phone: '+1 800-DINELY',
+          role: 'PLATFORM_ADMIN',
+          isEmailVerified: true,
+          googleUid: adminUid,
+        };
+        this.users.unshift(adminUser);
+      }
 
-    return { user: adminUser, tokens };
+      const tokens: AuthTokens = {
+        accessToken: firebaseIdToken,
+        refreshToken: `df_admin_ref_${Date.now()}`,
+        expiresIn: 86400,
+        tokenType: 'Bearer',
+      };
+
+      adminUser.tokens = tokens;
+      this.saveSession(adminUser, tokens, null, 'ADMIN');
+
+      this.auditLogs.unshift({
+        id: `log-${Date.now()}`,
+        actor: adminUser.name || adminEmail,
+        action: 'Authenticated Platform Admin Control Plane',
+        target: 'Dinely Cloud',
+        timestamp: new Date().toISOString(),
+        ipAddress: '127.0.0.1',
+        status: 'SUCCESS',
+      });
+
+      this.saveDatabase();
+      return { user: adminUser, tokens };
+    } catch (err: any) {
+      if (err.message?.includes('Access denied') || err.message?.includes('not authorized') || err.message?.includes('Forbidden')) {
+        throw err;
+      }
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+        const targetEmail = (emailCandidate || 'ayan090912@gmail.com').toLowerCase();
+        if (targetEmail !== 'ayan090912@gmail.com') {
+          throw new Error('Access denied. Only ayan090912@gmail.com is authorized as Platform Administrator.');
+        }
+        let adminUser = this.users.find((u) => u.role === 'PLATFORM_ADMIN' && u.email.toLowerCase() === targetEmail);
+        if (!adminUser) {
+          adminUser = {
+            id: `usr-admin-dev`,
+            firstName: 'Platform',
+            lastName: 'Admin',
+            name: 'Platform Administrator',
+            email: targetEmail,
+            role: 'PLATFORM_ADMIN',
+            isEmailVerified: true,
+          };
+          this.users.unshift(adminUser);
+        }
+        const tokens: AuthTokens = {
+          accessToken: firebaseIdToken,
+          refreshToken: `df_admin_ref_${Date.now()}`,
+          expiresIn: 86400,
+          tokenType: 'Bearer',
+        };
+        adminUser.tokens = tokens;
+        this.saveSession(adminUser, tokens, null, 'ADMIN');
+        return { user: adminUser, tokens };
+      }
+      throw err;
+    }
   }
 
   async loginKitchen(identifier: string, password?: string) {
     await delay(350);
     const input = identifier.trim().toLowerCase();
-    let emp = this.employees.find(
-      (e) => !e.isAccountDisabled && (e.email.toLowerCase() === input || e.id.toLowerCase() === input || (e.name && e.name.toLowerCase() === input))
-    );
+    let emp = this.employees.find((e) => {
+      if (e.isAccountDisabled) return false;
+      const eEmail = (e.email || '').toLowerCase();
+      const eId = (e.id || '').toLowerCase();
+      const eName = (e.name || '').toLowerCase();
+      const eFirstName = eName.split(' ')[0];
+      return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
+    });
 
     if (!emp) {
       throw new Error(`No active kitchen staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
@@ -614,15 +779,31 @@ export class DinelyApiClient {
     kitchenUser.tokens = tokens;
     this.saveSession(kitchenUser, tokens, emp.restaurantId);
     this.saveDatabase();
+
+    realtimeBus.emit('StaffStatusUpdated' as any, {
+      employeeId: emp.id,
+      restaurantId: emp.restaurantId,
+      name: emp.name,
+      role: emp.role,
+      status: 'ON_CLOCK',
+      lastLoginAt: emp.lastLoginAt,
+      data: emp,
+    });
+
     return { user: kitchenUser, tokens, employee: emp, restaurant: rest };
   }
 
   async loginWaiter(identifier: string, password?: string) {
     await delay(350);
     const input = identifier.trim().toLowerCase();
-    let emp = this.employees.find(
-      (e) => !e.isAccountDisabled && (e.email.toLowerCase() === input || e.id.toLowerCase() === input || (e.name && e.name.toLowerCase() === input))
-    );
+    let emp = this.employees.find((e) => {
+      if (e.isAccountDisabled) return false;
+      const eEmail = (e.email || '').toLowerCase();
+      const eId = (e.id || '').toLowerCase();
+      const eName = (e.name || '').toLowerCase();
+      const eFirstName = eName.split(' ')[0];
+      return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
+    });
 
     if (!emp) {
       throw new Error(`No active waiter staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
@@ -665,15 +846,31 @@ export class DinelyApiClient {
     waiterUser.tokens = tokens;
     this.saveSession(waiterUser, tokens, emp.restaurantId);
     this.saveDatabase();
+
+    realtimeBus.emit('StaffStatusUpdated' as any, {
+      employeeId: emp.id,
+      restaurantId: emp.restaurantId,
+      name: emp.name,
+      role: emp.role,
+      status: 'ON_CLOCK',
+      lastLoginAt: emp.lastLoginAt,
+      data: emp,
+    });
+
     return { user: waiterUser, tokens, employee: emp, restaurant: rest };
   }
 
   async loginBar(identifier: string, password?: string) {
     await delay(350);
     const input = identifier.trim().toLowerCase();
-    let emp = this.employees.find(
-      (e) => !e.isAccountDisabled && (e.email.toLowerCase() === input || e.id.toLowerCase() === input || (e.name && e.name.toLowerCase() === input))
-    );
+    let emp = this.employees.find((e) => {
+      if (e.isAccountDisabled) return false;
+      const eEmail = (e.email || '').toLowerCase();
+      const eId = (e.id || '').toLowerCase();
+      const eName = (e.name || '').toLowerCase();
+      const eFirstName = eName.split(' ')[0];
+      return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
+    });
 
     if (!emp) {
       throw new Error(`No active bar staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
@@ -720,33 +917,135 @@ export class DinelyApiClient {
     barUser.tokens = tokens;
     this.saveSession(barUser, tokens, emp.restaurantId);
     this.saveDatabase();
+
+    realtimeBus.emit('StaffStatusUpdated' as any, {
+      employeeId: emp.id,
+      restaurantId: emp.restaurantId,
+      name: emp.name,
+      role: emp.role,
+      status: 'ON_CLOCK',
+      lastLoginAt: emp.lastLoginAt,
+      data: emp,
+    });
+
     return { user: barUser, tokens, employee: emp, restaurant: rest };
   }
 
-  getCurrentUser(): User | null {
-    return this.currentUser;
+  async loginInventory(identifier: string, password?: string) {
+    await delay(350);
+    const input = identifier.trim().toLowerCase();
+    let emp = this.employees.find((e) => {
+      if (e.isAccountDisabled) return false;
+      const eEmail = (e.email || '').toLowerCase();
+      const eId = (e.id || '').toLowerCase();
+      const eName = (e.name || '').toLowerCase();
+      const eFirstName = eName.split(' ')[0];
+      return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
+    });
+
+    if (!emp) {
+      throw new Error(`No active inventory staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
+    }
+
+    if (password && emp.password && emp.password !== password) {
+      throw new Error('Invalid password. Please check your credentials and try again.');
+    }
+
+    const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
+
+    emp.status = 'ON_CLOCK';
+    emp.lastLoginAt = new Date().toISOString();
+
+    let invUser = this.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
+    if (!invUser) {
+      invUser = {
+        id: `usr-${emp.id}`,
+        name: emp.name,
+        email: emp.email,
+        phone: emp.phone,
+        role: 'INVENTORY_MANAGER',
+        restaurantId: emp.restaurantId,
+        orgId: rest ? rest.orgId : 'org-1',
+        isEmailVerified: true,
+      };
+      this.users.push(invUser);
+    } else {
+      invUser.role = 'INVENTORY_MANAGER';
+      invUser.restaurantId = emp.restaurantId;
+    }
+
+    const tokens: AuthTokens = {
+      accessToken: `df_inventory_jwt_${emp.id}_${Date.now()}`,
+      refreshToken: `df_inventory_ref_${emp.id}_${Date.now()}`,
+      expiresIn: 86400,
+      tokenType: 'Bearer',
+    };
+
+    invUser.tokens = tokens;
+    this.saveSession(invUser, tokens, emp.restaurantId);
+    this.saveDatabase();
+
+    realtimeBus.emit('StaffStatusUpdated' as any, {
+      employeeId: emp.id,
+      restaurantId: emp.restaurantId,
+      name: emp.name,
+      role: emp.role,
+      status: 'ON_CLOCK',
+      lastLoginAt: emp.lastLoginAt,
+      data: emp,
+    });
+
+    return { user: invUser, tokens, employee: emp, restaurant: rest };
   }
 
-  getCurrentRestaurantId(): string | null {
-    return this.currentRestaurantId;
+  getCurrentUser(scope?: PortalScope): User | null {
+    const targetScope = scope || getPortalScopeFromPath();
+    if (!this.currentUsersByScope[targetScope]) {
+      this.restoreSession(targetScope);
+    }
+    return this.currentUsersByScope[targetScope];
   }
 
-  async logout() {
-    if (this.currentUser) {
-      const userEmail = this.currentUser.email?.toLowerCase();
+  getCurrentRestaurantId(scope?: PortalScope): string | null {
+    const targetScope = scope || getPortalScopeFromPath();
+    const user = this.getCurrentUser(targetScope);
+    return this.currentRestaurantIdsByScope[targetScope] || user?.restaurantId || null;
+  }
+
+  async logout(scope?: PortalScope) {
+    const targetScope = scope || getPortalScopeFromPath();
+    const user = this.currentUsersByScope[targetScope];
+
+    if (user) {
+      const userEmail = user.email?.toLowerCase();
       const emp = this.employees.find(
-        (e) => e.email?.toLowerCase() === userEmail || e.id === this.currentUser?.id?.replace(/^usr-/, '')
+        (e) => e.email?.toLowerCase() === userEmail || e.id === user.id?.replace(/^usr-/, '')
       );
       if (emp) {
         emp.status = 'OFF_CLOCK';
+        realtimeBus.emit('StaffStatusUpdated' as any, {
+          employeeId: emp.id,
+          restaurantId: emp.restaurantId,
+          name: emp.name,
+          role: emp.role,
+          status: 'OFF_CLOCK',
+          data: emp,
+        });
       }
     }
-    this.currentUser = null;
-    this.currentTokens = null;
-    this.currentRestaurantId = null;
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
+
+    this.currentUsersByScope[targetScope] = null;
+    this.currentTokensByScope[targetScope] = null;
+    this.currentRestaurantIdsByScope[targetScope] = null;
+
+    if (typeof window !== 'undefined') {
+      const storageKey = SESSION_KEYS[targetScope];
+      sessionStorage.removeItem(storageKey);
+      if (window.localStorage) {
+        localStorage.removeItem(storageKey);
+      }
     }
+
     this.saveDatabase();
   }
 
@@ -838,8 +1137,18 @@ export class DinelyApiClient {
       this.currentUser.restaurantId = id;
     }
 
+    this.purgeDemoDataForRestaurant(id);
     this.saveDatabase();
     return newRest;
+  }
+
+  public purgeDemoDataForRestaurant(restaurantId: string) {
+    this.orders = this.orders.filter((o) => o.restaurantId !== restaurantId);
+    this.bills = this.bills.filter((b) => b.restaurantId !== restaurantId);
+    this.tableSessions = this.tableSessions.filter((s) => s.restaurantId !== restaurantId);
+    this.fulfillmentTickets = this.fulfillmentTickets.filter((f) => f.restaurantId !== restaurantId);
+    this.customerRequests = this.customerRequests.filter((c) => c.restaurantId !== restaurantId);
+    this.saveDatabase();
   }
 
   async submitRestaurantLaunch(setupData: any) {
@@ -860,9 +1169,14 @@ export class DinelyApiClient {
       if (setupData.orderNumberPrefix) existing.orderNumberPrefix = setupData.orderNumberPrefix;
       existing.restaurantType = setupData.restaurantType || existing.restaurantType;
       existing.address = setupData.address || existing.address;
+      existing.locality = setupData.locality || existing.locality;
       existing.city = setupData.city || existing.city;
       existing.state = setupData.state || existing.state;
       existing.country = setupData.country || existing.country;
+      existing.postalCode = setupData.postalCode || existing.postalCode;
+      if (setupData.latitude !== undefined) existing.latitude = setupData.latitude;
+      if (setupData.longitude !== undefined) existing.longitude = setupData.longitude;
+      if (setupData.placeId) existing.placeId = setupData.placeId;
       existing.phone = setupData.phone || existing.phone;
       existing.email = setupData.email || existing.email;
       existing.currency = setupData.currency || existing.currency;
@@ -956,7 +1270,7 @@ export class DinelyApiClient {
 
       // Ensure tables entered during setup are created in DB
       const targetId = rest.id;
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3007';
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
       const totalCount = Math.max(1, rest.tablesCount || (rest.indoorTablesCount || 8) + (rest.outdoorTablesCount || 2));
 
       let existingTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
@@ -1184,9 +1498,36 @@ export class DinelyApiClient {
   // --- Strict Tenant Scoped Data Getters ---
 
   private resolveTenantRestaurantId(providedId?: string): string | null {
-    if (providedId) return providedId;
-    if (this.currentRestaurantId) return this.currentRestaurantId;
-    if (this.currentUser?.restaurantId) return this.currentUser.restaurantId;
+    if (providedId && String(providedId).trim()) {
+      const cleanId = String(providedId).trim();
+      const targetRest = this.restaurants.find(
+        (r) => !r.isDeleted && (r.id === cleanId || r.slug === cleanId || r.id.toLowerCase() === cleanId.toLowerCase())
+      );
+      if (targetRest) {
+        return targetRest.id;
+      }
+      return cleanId;
+    }
+
+    const scope = getPortalScopeFromPath();
+    const user = this.getCurrentUser(scope);
+
+    const scopeRestId = this.currentRestaurantIdsByScope[scope] || user?.restaurantId;
+    if (scopeRestId && this.restaurants.some((r) => r.id === scopeRestId && !r.isDeleted)) {
+      return scopeRestId;
+    }
+
+    if (this._currentRestaurantId && this.restaurants.some((r) => r.id === this._currentRestaurantId && !r.isDeleted)) {
+      return this._currentRestaurantId;
+    }
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const activeRestId = localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id');
+      if (activeRestId && this.restaurants.some((r) => r.id === activeRestId && !r.isDeleted)) {
+        return activeRestId;
+      }
+    }
+
     return this.restaurants.find((r) => !r.isDeleted)?.id || null;
   }
 
@@ -1208,6 +1549,9 @@ export class DinelyApiClient {
     }
     if (!rest.orderNumberPrefix) {
       rest.orderNumberPrefix = rest.businessType === 'FOOD_TRUCK' ? '#F' : '#ORD';
+    }
+    if (rest.taxPercentage === undefined) {
+      rest.taxPercentage = 5.0;
     }
     return rest;
   }
@@ -1235,27 +1579,35 @@ export class DinelyApiClient {
 
   async getOwnerRestaurants(ownerEmail?: string) {
     await delay(100);
+    const scope = getPortalScopeFromPath();
+    const user = this.getCurrentUser(scope);
     const active = this.restaurants.filter((r) => !r.isDeleted).map((r) => this.ensureRestaurantDefaults(r));
-    const email = (ownerEmail || this.currentUser?.email || '').trim().toLowerCase();
-    if (!email) return active;
+    const email = (ownerEmail || user?.email || '').trim().toLowerCase();
+    if (!email) return [];
     const myRests = active.filter(
-      (r) => r.ownerEmail?.toLowerCase() === email || r.email?.toLowerCase() === email || r.id === this.currentUser?.restaurantId || r.orgId === this.currentUser?.orgId
+      (r) => r.ownerEmail?.toLowerCase() === email || r.email?.toLowerCase() === email || r.id === user?.restaurantId
     );
-    return myRests.length > 0 ? myRests : active;
+    return myRests;
   }
 
   async getOrders(restaurantId?: string) {
-    await delay(100);
+    this.loadDatabase();
+    await delay(50);
     if (restaurantId === 'ALL' || restaurantId === '*') {
-      return [...this.orders];
+      const scope = getPortalScopeFromPath();
+      const user = this.getCurrentUser(scope);
+      if (user?.role === 'PLATFORM_ADMIN' || user?.role === 'SUPER_ADMIN') {
+        return [...this.orders];
+      }
     }
     const targetId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetId) return [...this.orders];
+    if (!targetId) return [];
     return this.orders.filter((o) => o.restaurantId === targetId);
   }
 
   async getFulfillmentTickets(restaurantId?: string, station?: 'KITCHEN' | 'BAR') {
-    await delay(100);
+    this.loadDatabase();
+    await delay(50);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
@@ -1404,7 +1756,7 @@ export class DinelyApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
-    const foodItems = (this.menuItems || [])
+    let foodItems = (this.menuItems || [])
       .filter((m) => m.restaurantId === targetId)
       .map((m) => {
         const station = getFulfillmentStation(m);
@@ -1415,6 +1767,7 @@ export class DinelyApiClient {
         };
       });
 
+    // Do not inject demo items if menu is empty; return actual items from database/storage
     const barItems = (this.barMenuItems || [])
       .filter((bm) => bm.restaurantId === targetId)
       .map((bm) => ({
@@ -1450,13 +1803,25 @@ export class DinelyApiClient {
   async createMenuItem(itemData: Partial<MenuItem>) {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
+    
+    // Resolve category ID if category name was passed
+    let catId = itemData.categoryId;
+    const existingCats = this.categories.filter((c) => c.restaurantId === restId);
+    if (catId) {
+      const matchedCat = existingCats.find((c) => c.id === catId || c.name === catId);
+      if (matchedCat) catId = matchedCat.id;
+    }
+    if (!catId && existingCats.length > 0) {
+      catId = existingCats[0].id;
+    }
+
     const newItem: MenuItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       restaurantId: restId,
       name: itemData.name || 'New Menu Item',
       description: itemData.description || '',
       price: typeof itemData.price === 'number' ? itemData.price : parseFloat(itemData.price as any) || 0,
-      categoryId: itemData.categoryId || 'cat-mains',
+      categoryId: catId || 'cat-mains',
       barCategory: itemData.barCategory,
       brand: itemData.brand,
       isAvailable: itemData.isAvailable !== false,
@@ -1469,6 +1834,7 @@ export class DinelyApiClient {
     };
     this.menuItems.unshift(newItem);
     this.saveDatabase();
+    realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
     return newItem;
   }
 
@@ -1503,7 +1869,8 @@ export class DinelyApiClient {
   }
 
   async getTables(restaurantId?: string) {
-    await delay(100);
+    this.loadDatabase();
+    await delay(50);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
     const rest = this.restaurants.find((r) => r.id === targetId);
@@ -1513,7 +1880,7 @@ export class DinelyApiClient {
 
     let restTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
     if (restTables.length === 0) {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
       const indoorCount = rest?.indoorTablesCount || 10;
       const outdoorCount = rest?.outdoorTablesCount || 4;
       const vipCount = rest?.vipTablesCount || 2;
@@ -1572,13 +1939,6 @@ export class DinelyApiClient {
     return restTables;
   }
 
-  async getEmployees(restaurantId?: string) {
-    await delay(100);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetId) return [];
-    return this.employees.filter((e) => e.restaurantId === targetId);
-  }
-
   async getInventory(restaurantId?: string) {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
@@ -1609,12 +1969,36 @@ export class DinelyApiClient {
     return rest;
   }
 
-  async switchActiveRestaurant(restId: string) {
+  async switchActiveRestaurant(restId: string, scope?: PortalScope) {
+    await delay(100);
     this.currentRestaurantId = restId;
-    if (this.currentUser) {
-      this.currentUser.restaurantId = restId;
-      this.saveSession(this.currentUser, this.currentUser.tokens || ({} as any), restId);
+
+    const scopes: PortalScope[] = ['ADMIN', 'OWNER', 'STAFF', 'CUSTOMER'];
+    for (const s of scopes) {
+      this.currentRestaurantIdsByScope[s] = restId;
+      if (this.currentUsersByScope[s]) {
+        this.currentUsersByScope[s]!.restaurantId = restId;
+        this.saveSession(this.currentUsersByScope[s]!, this.currentTokensByScope[s] || ({} as any), restId, s);
+      }
     }
+
+    const currUser = this.getCurrentUser();
+    if (currUser) {
+      currUser.restaurantId = restId;
+      const uIdx = this.users.findIndex((u) => u.email?.toLowerCase() === currUser.email?.toLowerCase());
+      if (uIdx >= 0) {
+        this.users[uIdx].restaurantId = restId;
+      }
+    }
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('dinely_active_restaurant_id', restId);
+      window.localStorage.setItem('dinely_restaurant_id', restId);
+    }
+
+    this.saveDatabase();
+    realtimeBus.emit('RestaurantSwitched' as any, { restaurantId: restId });
+    return this.getRestaurantDetails(restId);
   }
 
   async createNewBranchOutlet(data: { name: string; branchName: string; city: string; address: string; phone: string; cuisine: string }) {
@@ -1638,7 +2022,7 @@ export class DinelyApiClient {
   async createTable(tableData: Partial<Table>) {
     await delay(150);
     const targetRestId = this.resolveTenantRestaurantId(tableData.restaurantId);
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
     const tblNum = tableData.tableNumber || `Table ${this.tables.length + 1}`;
     const newTable: Table = {
       id: `tbl-${Date.now()}`,
@@ -1768,22 +2152,41 @@ export class DinelyApiClient {
 
   // --- Table Session Management ---
   async getActiveTableSessions(restaurantId?: string) {
+    this.loadDatabase();
     await delay(50);
     const restId = this.resolveTenantRestaurantId(restaurantId);
     return this.tableSessions.filter((s) => s.restaurantId === restId && s.status === 'ACTIVE');
   }
 
   async getOrCreateTableSession(restaurantId?: string, tableId?: string, tableNumber?: string) {
-    await delay(100);
+    this.loadDatabase();
+    await delay(50);
     const restId = this.resolveTenantRestaurantId(restaurantId);
-    const tbl = this.tables.find(
-      (t) => t.restaurantId === restId && (t.id === tableId || (tableNumber && t.tableNumber.toLowerCase() === tableNumber.toLowerCase()))
+    let tbl = this.tables.find(
+      (t) => t.restaurantId === restId && (t.id === tableId || (tableNumber && matchTableNumber(t.tableNumber, tableNumber)))
     );
+
+    if (!tbl && tableNumber && tableNumber !== 'COUNTER') {
+      const formattedNum = formatStandardTableNumber(tableNumber);
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
+      tbl = {
+        id: `tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}`,
+        restaurantId: restId,
+        tableNumber: formattedNum,
+        capacity: 4,
+        section: 'Main Floor',
+        status: 'OCCUPIED',
+        isOccupied: true,
+        sessionStartedAt: new Date().toISOString(),
+        qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(formattedNum)}${restId ? `&restaurant=${restId}` : ''}`,
+      };
+      this.tables.push(tbl);
+    }
 
     if (!tbl) return null;
 
     let activeSession = this.tableSessions.find(
-      (s) => s.restaurantId === restId && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && s.status === 'ACTIVE'
+      (s) => s.restaurantId === restId && (s.tableId === tbl!.id || matchTableNumber(s.tableNumber, tbl!.tableNumber)) && s.status !== 'CLOSED'
     );
 
     if (activeSession) {
@@ -1855,6 +2258,16 @@ export class DinelyApiClient {
       activeSession.closedByWaiterName = waiterName || 'Staff';
     }
 
+    // Complete all active orders for this closed table session
+    this.orders.forEach((o) => {
+      const matchesSession = activeSession && o.tableSessionId === activeSession.id;
+      const matchesTable = o.tableNumber && tbl.tableNumber && o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase();
+      if ((matchesSession || matchesTable) && o.status !== 'CANCELLED') {
+        o.status = 'COMPLETED';
+        o.paymentStatus = 'PAID';
+      }
+    });
+
     tbl.status = 'AVAILABLE';
     tbl.isOccupied = false;
     tbl.activeSessionId = undefined;
@@ -1885,6 +2298,326 @@ export class DinelyApiClient {
     });
 
     return tbl;
+  }
+
+  // --- Core Billing System APIs ---
+  private generateBillNumber(restaurantId: string): string {
+    const year = new Date().getFullYear();
+    const count = this.bills.filter((b) => b.restaurantId === restaurantId).length + 101;
+    const prefix = (restaurantId || 'REST').replace(/^rest-/, '').toUpperCase();
+    return `DLY-${prefix}-${year}-${String(count).padStart(6, '0')}`;
+  }
+
+  async getRunningTableBill(restaurantId?: string, tableNumber?: string, targetSessionId?: string): Promise<Bill | null> {
+    this.loadDatabase();
+    await delay(50);
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+    if (!restId) return null;
+
+    const activeTableStr = tableNumber ? formatStandardTableNumber(tableNumber) : 'Table 01';
+
+    let tbl = this.tables.find(
+      (t) => t.restaurantId === restId && (matchTableNumber(t.tableNumber, activeTableStr) || t.id === activeTableStr)
+    );
+
+    let session = this.tableSessions.find(
+      (s) => s.restaurantId === restId && (s.id === targetSessionId || (tbl && s.tableId === tbl.id) || matchTableNumber(s.tableNumber, activeTableStr)) && s.status !== 'CLOSED'
+    );
+
+    if (!session) {
+      session = await this.getOrCreateTableSession(restId, tbl?.id, activeTableStr);
+    }
+
+    if (!session) return null;
+
+    // Find all valid non-cancelled orders for this session
+    const sessionOrders = this.orders.filter(
+      (o) => o.restaurantId === restId && o.status !== 'CANCELLED' && (o.tableSessionId === session!.id || (o.tableNumber && matchTableNumber(o.tableNumber, activeTableStr)))
+    );
+
+    // Aggregate & flatten items across orders
+    const itemMap = new Map<string, BillItem>();
+    sessionOrders.forEach((ord) => {
+      (ord.items || []).forEach((item) => {
+        const key = `${item.menuItemId || item.id}_${item.name}_${item.price}`;
+        const existing = itemMap.get(key);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.totalPrice = existing.quantity * existing.unitPrice;
+        } else {
+          itemMap.set(key, {
+            orderId: ord.id,
+            menuItemId: item.menuItemId || item.id,
+            name: item.name,
+            quantity: item.quantity,
+            unitPrice: item.price,
+            totalPrice: item.quantity * item.price,
+            station: getFulfillmentStation(item),
+          });
+        }
+      });
+    });
+
+    const items = Array.from(itemMap.values());
+    const subtotal = items.reduce((sum, i) => sum + i.totalPrice, 0);
+
+    const rest = this.restaurants.find((r) => r.id === restId);
+    const configuredTaxPercentage = typeof rest?.taxPercentage === 'number' ? rest.taxPercentage : 5.0;
+    const taxRateDecimal = configuredTaxPercentage / 100.0;
+    const taxAmount = Math.round(subtotal * taxRateDecimal * 100) / 100;
+    const discountAmount = 0;
+    const grandTotal = Math.round((subtotal + taxAmount - discountAmount) * 100) / 100;
+
+    let existingBill = this.bills.find((b) => b.restaurantId === restId && b.tableSessionId === session!.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED');
+
+    if (existingBill) {
+      existingBill.orders = sessionOrders;
+      existingBill.items = items;
+      existingBill.subtotal = subtotal;
+      if (existingBill.taxRate === undefined) {
+        existingBill.taxRate = configuredTaxPercentage;
+      }
+      const effectiveTaxRate = existingBill.taxRate / 100.0;
+      existingBill.taxAmount = Math.round(subtotal * effectiveTaxRate * 100) / 100;
+      existingBill.discountAmount = discountAmount;
+      existingBill.grandTotal = Math.round((subtotal + existingBill.taxAmount - discountAmount) * 100) / 100;
+      existingBill.updatedAt = new Date().toISOString();
+      this.saveDatabase();
+      return existingBill;
+    }
+
+    if (items.length === 0 && sessionOrders.length === 0) {
+      return null;
+    }
+
+    const newBill: Bill = {
+      id: this.generateBillNumber(restId),
+      restaurantId: restId,
+      tableId: tbl?.id || session.tableId || 'tbl-1',
+      tableNumber: session.tableNumber || activeTableStr,
+      tableSessionId: session.id,
+      businessDayId: session.businessDayId,
+      orders: sessionOrders,
+      items,
+      subtotal,
+      taxAmount,
+      taxRate: configuredTaxPercentage,
+      discountAmount,
+      grandTotal,
+      status: 'OPEN',
+      paymentStatus: 'UNPAID',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.bills.unshift(newBill);
+    session.billId = newBill.id;
+    this.saveDatabase();
+    return newBill;
+  }
+
+  async requestTableBill(restaurantId?: string, tableNumber?: string, targetSessionId?: string): Promise<Bill | null> {
+    const bill = await this.getRunningTableBill(restaurantId, tableNumber, targetSessionId);
+    if (!bill) return null;
+
+    const restId = bill.restaurantId;
+    const session = this.tableSessions.find((s) => s.id === bill.tableSessionId);
+    const tbl = this.tables.find((t) => t.restaurantId === restId && matchTableNumber(t.tableNumber, bill.tableNumber));
+
+    bill.status = 'BILL_REQUESTED';
+    bill.requestedAt = new Date().toISOString();
+    bill.updatedAt = new Date().toISOString();
+
+    if (session) {
+      session.status = 'BILL_REQUESTED';
+      session.billRequestedAt = bill.requestedAt;
+    }
+
+    if (tbl) {
+      tbl.status = 'BILL_REQUESTED';
+    }
+
+    // Post Waiter Notification
+    const notif: WaiterNotification = {
+      id: `notif-bill-${Date.now()}`,
+      restaurantId: restId,
+      type: 'BILL_REQUEST',
+      title: `🔔 BILL REQUEST: ${bill.tableNumber}`,
+      message: `Customer at ${bill.tableNumber} (Session #${bill.tableSessionId}) requested running bill of ₹${bill.grandTotal.toFixed(2)}.`,
+      tableNumber: bill.tableNumber,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      priority: 'HIGH',
+    };
+    this.notifications.unshift(notif);
+
+    this.saveDatabase();
+
+    realtimeBus.emit('BillRequested' as any, {
+      billId: bill.id,
+      restaurantId: restId,
+      tableNumber: bill.tableNumber,
+      tableSessionId: bill.tableSessionId,
+      grandTotal: bill.grandTotal,
+      data: bill,
+    });
+
+    if (tbl) {
+      realtimeBus.emit('TableStatusUpdated' as any, {
+        tableId: tbl.id,
+        restaurantId: restId,
+        tableNumber: tbl.tableNumber,
+        status: 'BILL_REQUESTED',
+        data: tbl,
+      });
+    }
+
+    return bill;
+  }
+
+  async recordBillPayment(billId: string, paymentMethod: PaymentMethod = 'CASH'): Promise<Bill | null> {
+    this.loadDatabase();
+    await delay(100);
+    const bill = this.bills.find((b) => b.id === billId);
+    if (!bill) return null;
+
+    bill.paymentMethod = paymentMethod;
+    bill.paymentStatus = 'PAID';
+    bill.status = 'PAID';
+    bill.paidAt = new Date().toISOString();
+    bill.updatedAt = new Date().toISOString();
+
+    const session = this.tableSessions.find((s) => s.id === bill.tableSessionId);
+    if (session) {
+      session.paymentStatus = 'PAID';
+      session.paymentMethod = paymentMethod;
+      session.status = 'PAID';
+    }
+
+    // Also mark all session orders as PAID
+    (bill.orders || []).forEach((o) => {
+      const match = this.orders.find((ord) => ord.id === o.id);
+      if (match) {
+        match.paymentStatus = 'PAID';
+        match.paymentMethod = paymentMethod as any;
+      }
+    });
+
+    this.saveDatabase();
+
+    realtimeBus.emit('BillPaid' as any, {
+      billId: bill.id,
+      restaurantId: bill.restaurantId,
+      tableNumber: bill.tableNumber,
+      tableSessionId: bill.tableSessionId,
+      paymentMethod,
+      grandTotal: bill.grandTotal,
+      data: bill,
+    });
+
+    return bill;
+  }
+
+  async closeTableSessionAndGenerateBill(sessionId: string, waiterName?: string, paymentMethod?: PaymentMethod): Promise<{ bill: Bill | null; session: TableSession | null }> {
+    this.loadDatabase();
+    await delay(100);
+
+    const session = this.tableSessions.find((s) => s.id === sessionId);
+    if (!session) return { bill: null, session: null };
+
+    const restId = session.restaurantId;
+    let bill = this.bills.find((b) => b.tableSessionId === sessionId);
+    if (!bill) {
+      bill = await this.getRunningTableBill(restId, session.tableNumber, sessionId);
+    }
+
+    if (bill) {
+      if (bill.paymentStatus !== 'PAID') {
+        bill.paymentStatus = 'PAID';
+        bill.paymentMethod = paymentMethod || bill.paymentMethod || 'CASH';
+        bill.paidAt = bill.paidAt || new Date().toISOString();
+      }
+      bill.status = 'CLOSED';
+      bill.closedAt = new Date().toISOString();
+      bill.closedByWaiterName = waiterName || 'Floor Waiter';
+      bill.updatedAt = new Date().toISOString();
+    }
+
+    session.status = 'CLOSED';
+    session.sessionClosedAt = new Date().toISOString();
+    session.closedByWaiterName = waiterName || 'Floor Waiter';
+    session.paymentStatus = 'PAID';
+
+    const tbl = this.tables.find(
+      (t) => t.restaurantId === restId && (t.id === session!.tableId || matchTableNumber(t.tableNumber, session!.tableNumber))
+    );
+
+    if (tbl) {
+      tbl.status = 'AVAILABLE';
+      tbl.isOccupied = false;
+      tbl.activeSessionId = undefined;
+      tbl.sessionStartedAt = undefined;
+    }
+
+    this.saveDatabase();
+
+    realtimeBus.emit('TableSessionClosed' as any, {
+      sessionId: session.id,
+      restaurantId: restId,
+      tableId: session.tableId,
+      tableNumber: session.tableNumber,
+    });
+
+    realtimeBus.emit('TableCleared' as any, {
+      tableId: tbl?.id,
+      restaurantId: restId,
+      tableNumber: session.tableNumber,
+    });
+
+    if (tbl) {
+      realtimeBus.emit('TableStatusUpdated' as any, {
+        tableId: tbl.id,
+        restaurantId: restId,
+        tableNumber: tbl.tableNumber,
+        status: 'AVAILABLE',
+        data: tbl,
+      });
+    }
+
+    return { bill, session };
+  }
+
+  async getBills(restaurantId?: string): Promise<Bill[]> {
+    this.loadDatabase();
+    await delay(50);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    return this.bills.filter((b) => b.restaurantId === targetId);
+  }
+
+  async getBillingStats(restaurantId?: string) {
+    this.loadDatabase();
+    await delay(50);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const restBills = this.bills.filter((b) => b.restaurantId === targetId);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayBills = restBills.filter((b) => b.createdAt.startsWith(todayStr));
+    const paidBills = restBills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED');
+    const pendingBills = restBills.filter((b) => (b.paymentStatus === 'UNPAID' || b.paymentStatus === 'PAYMENT_PENDING') && b.status !== 'CANCELLED');
+
+    const todaySales = todayBills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').reduce((sum, b) => sum + b.grandTotal, 0);
+    const totalSales = paidBills.reduce((sum, b) => sum + b.grandTotal, 0);
+    const avgBillValue = paidBills.length > 0 ? totalSales / paidBills.length : 0;
+
+    return {
+      todaySales,
+      totalSales,
+      totalBills: restBills.length,
+      paidBills: paidBills.length,
+      pendingBills: pendingBills.length,
+      avgBillValue,
+    };
   }
 
   // --- Business Day Management ---
@@ -2096,12 +2829,10 @@ export class DinelyApiClient {
         'Fresh Salads & Bowls',
         'Pasta & Risotto',
         'Desserts & Sweets',
-        'Chef Specials & Combos',
-        'Sides & Extras',
-        'Beverages & Shakes'
+        'Beverages & Shakes',
       ];
       cats = defaultNames.map((name, idx) => ({
-        id: `cat-${targetId}-${idx + 1}`,
+        id: `cat-${targetId.replace(/[^a-zA-Z0-9]/g, '')}-${idx + 1}`,
         restaurantId: targetId,
         name,
         order: idx + 1,
@@ -2162,13 +2893,9 @@ export class DinelyApiClient {
     if (!targetId) return [];
     let cats = this.barCategories.filter((c) => c.restaurantId === targetId);
     if (cats.length === 0) {
-      const defaultNames = [
-        'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Gin', 'Brandy',
-        'Cocktails', 'Mocktails', 'Champagne', 'Tequila', 'Premium Bottles',
-        'Shots', 'Soft Drinks', 'Coffee', 'Signature Drinks'
-      ];
+      const defaultNames = ['Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Gin', 'Cocktails', 'Mocktails', 'Champagne', 'Tequila', 'Shots'];
       cats = defaultNames.map((name, idx) => ({
-        id: `bar-cat-${targetId}-${idx + 1}`,
+        id: `bcat-${targetId.replace(/[^a-zA-Z0-9]/g, '')}-${idx + 1}`,
         restaurantId: targetId,
         name,
         displayOrder: idx + 1,
@@ -2226,103 +2953,7 @@ export class DinelyApiClient {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    let items = this.barMenuItems.filter((m) => m.restaurantId === targetId);
-    // If venue has no drinks created yet, populate standard craft drink menu defaults
-    if (items.length === 0) {
-      items = [
-        {
-          id: `bitem-${targetId}-1`,
-          restaurantId: targetId,
-          categoryId: 'Cocktails',
-          name: 'Smoked Bourbon Old Fashioned',
-          description: 'Aged Kentucky bourbon, Angostura bitters, orange peel & smoked oak rosemary infusion.',
-          price: 18.50,
-          image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600',
-          brand: 'Woodford Reserve',
-          alcoholPercentage: 45,
-          bottleSize: '750ml',
-          servingSize: '60ml Peg',
-          prepTimeMinutes: 4,
-          discountPercentage: 0,
-          isFeatured: true,
-          isRecommended: true,
-          isAvailable: true,
-          displayOrder: 1,
-          targetDestination: 'BAR',
-          isAlcoholic: true,
-          servingOptions: ['On the Rocks', 'Neat', 'Soda Mixer'],
-        },
-        {
-          id: `bitem-${targetId}-2`,
-          restaurantId: targetId,
-          categoryId: 'Cocktails',
-          name: 'Empress Botanical Gin Fizz',
-          description: 'Empress 1908 indigo gin, fresh yuzu, elderflower liqueur, sparkling tonic & butterfly pea floral foam.',
-          price: 16.00,
-          image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600',
-          brand: 'Empress 1908',
-          alcoholPercentage: 42.5,
-          bottleSize: '750ml',
-          servingSize: 'Highball Glass',
-          prepTimeMinutes: 3,
-          discountPercentage: 0,
-          isFeatured: true,
-          isRecommended: true,
-          isAvailable: true,
-          displayOrder: 2,
-          targetDestination: 'BAR',
-          isAlcoholic: true,
-          servingOptions: ['With Tonic', 'On the Rocks', 'Soda Spritz'],
-        },
-        {
-          id: `bitem-${targetId}-3`,
-          restaurantId: targetId,
-          categoryId: 'Beer',
-          name: 'Hazy Hops Double IPA',
-          description: 'Local craft microbrewery double dry-hopped IPA with mango & citrus notes.',
-          price: 9.50,
-          image: 'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=600',
-          brand: 'Hazy Mountain Brew Co',
-          alcoholPercentage: 8.2,
-          bottleSize: '500ml',
-          servingSize: 'Draft Pint',
-          prepTimeMinutes: 2,
-          discountPercentage: 0,
-          isFeatured: false,
-          isRecommended: true,
-          isAvailable: true,
-          displayOrder: 3,
-          targetDestination: 'BAR',
-          isAlcoholic: true,
-          servingOptions: ['Chilled Draft Pint', 'Chilled Can'],
-        },
-        {
-          id: `bitem-${targetId}-4`,
-          restaurantId: targetId,
-          categoryId: 'Wine',
-          name: 'Napa Reserve Cabernet Sauvignon 2019',
-          description: 'Rich dark cherry, blackberry, vanilla bean and roasted espresso oak finish.',
-          price: 24.00,
-          image: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=600',
-          brand: 'Napa Estate Reserve',
-          alcoholPercentage: 14.5,
-          bottleSize: '750ml Bottle',
-          servingSize: 'Wine Glass (150ml)',
-          prepTimeMinutes: 2,
-          discountPercentage: 0,
-          isFeatured: true,
-          isRecommended: true,
-          isAvailable: true,
-          displayOrder: 4,
-          targetDestination: 'BAR',
-          isAlcoholic: true,
-          servingOptions: ['Glass (150ml)', 'Full Bottle (750ml)'],
-        },
-      ];
-      this.barMenuItems.push(...items);
-      this.saveDatabase();
-    }
-    return items;
+    return this.barMenuItems.filter((m) => m.restaurantId === targetId);
   }
 
   async addBarMenuItem(itemData: Partial<BarMenuItem>) {
@@ -2428,6 +3059,14 @@ export class DinelyApiClient {
   }
 
   // Employee APIs
+  async getEmployees(restaurantId?: string) {
+    this.loadDatabase();
+    await delay(100);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    return this.employees.filter((e) => e.restaurantId === targetId);
+  }
+
   async addEmployee(empData: Partial<Employee>) {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(empData.restaurantId) || 'rest-1';
@@ -2508,23 +3147,64 @@ export class DinelyApiClient {
     return emp;
   }
 
-  // Inventory APIs
+  // Supplier & Inventory APIs
+  async getSuppliers(restaurantId?: string) {
+    this.loadDatabase();
+    await delay(50);
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    return this.suppliers.filter((s) => s.restaurantId === targetId);
+  }
+
+  async addSupplier(supData: Partial<Supplier>) {
+    await delay(100);
+    const restId = this.resolveTenantRestaurantId(supData.restaurantId) || 'rest-1';
+    const newSup: Supplier = {
+      id: `sup-${Date.now()}`,
+      restaurantId: restId,
+      name: supData.name || 'New Supplier',
+      contactPerson: supData.contactPerson || 'Vendor Rep',
+      phone: supData.phone || '+91 98000-00000',
+      email: supData.email || 'vendor@supplier.com',
+      supplyCategory: supData.supplyCategory || 'General Foods',
+      address: supData.address || 'Vendor Address',
+      notes: supData.notes || '',
+      createdAt: new Date().toISOString(),
+    };
+    this.suppliers.unshift(newSup);
+    this.saveDatabase();
+    return newSup;
+  }
+
+  async deleteSupplier(supplierId: string) {
+    await delay(100);
+    this.suppliers = this.suppliers.filter((s) => s.id !== supplierId);
+    this.saveDatabase();
+  }
+
   async addInventoryItem(invData: Partial<InventoryItem>) {
     await delay(150);
     const restId = this.resolveTenantRestaurantId(invData.restaurantId) || 'rest-1';
+    const category = invData.category || 'Pantry';
+    const isBarCategory = category.toLowerCase().includes('bar') || category.toLowerCase().includes('liquor') || category.toLowerCase().includes('spirit') || category.toLowerCase().includes('wine') || category.toLowerCase().includes('cocktail') || category.toLowerCase().includes('beer') || category.toLowerCase().includes('beverage');
+    const station = invData.station || (isBarCategory ? 'BAR' : 'KITCHEN');
+
     const newItem: InventoryItem = {
       id: `inv-${Date.now()}`,
       restaurantId: restId,
       name: invData.name || 'Raw Material',
-      category: invData.category || 'Pantry',
+      category,
+      station,
       quantity: invData.quantity || 10,
       unit: invData.unit || 'kg',
       minThreshold: invData.minThreshold || 2,
       costPerUnit: invData.costPerUnit || 5,
+      supplierId: invData.supplierId,
       supplierName: invData.supplierName || 'General Foods',
-      storageLocation: invData.storageLocation || 'Main Storage',
+      supplierContact: invData.supplierContact || 'N/A',
+      storageLocation: invData.storageLocation || (station === 'BAR' ? 'Bar Backroom & Cellar' : 'Main Kitchen Cold Storage'),
       lastRestocked: new Date().toISOString().split('T')[0],
-      status: 'IN_STOCK',
+      status: (invData.quantity || 10) <= (invData.minThreshold || 2) ? 'LOW_STOCK' : 'IN_STOCK',
     };
     this.inventory.push(newItem);
     this.saveDatabase();
@@ -2807,12 +3487,33 @@ export class DinelyApiClient {
 
     // Get or create table session and current business day
     let tableSessionId = orderData.tableSessionId;
-    if (!isPickup && !tableSessionId && orderData.tableNumber) {
-      const table = this.tables.find(
-        (t) => t.restaurantId === restId && t.tableNumber.toLowerCase() === orderData.tableNumber?.toLowerCase()
+    if (!isPickup && orderData.tableNumber) {
+      const rawNum = orderData.tableNumber;
+      let table = this.tables.find(
+        (t) => t.restaurantId === restId && matchTableNumber(t.tableNumber, rawNum)
       );
+
+      if (!table && rawNum !== 'COUNTER') {
+        const formattedNum = formatStandardTableNumber(rawNum);
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
+        table = {
+          id: `tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}`,
+          restaurantId: restId,
+          tableNumber: formattedNum,
+          capacity: 4,
+          section: 'Main Floor',
+          status: 'OCCUPIED',
+          isOccupied: true,
+          sessionStartedAt: new Date().toISOString(),
+          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(formattedNum)}${restId ? `&restaurant=${restId}` : ''}`,
+        };
+        this.tables.push(table);
+      }
+
       if (table) {
-        let session = this.tableSessions.find((s) => s.restaurantId === restId && s.tableId === table.id && s.status === 'ACTIVE');
+        let session = this.tableSessions.find(
+          (s) => s.restaurantId === restId && matchTableNumber(s.tableNumber, table!.tableNumber) && s.status === 'ACTIVE'
+        );
         if (!session) {
           const sessionSeq = (this.tableSessions.filter((s) => s.restaurantId === restId).length + 1);
           session = {
@@ -2824,12 +3525,36 @@ export class DinelyApiClient {
             sessionStartedAt: new Date().toISOString(),
           };
           this.tableSessions.unshift(session);
+
+          realtimeBus.emit('TableSessionStarted' as any, {
+            sessionId: session.id,
+            restaurantId: restId,
+            tableId: table.id,
+            tableNumber: table.tableNumber,
+            data: session,
+          });
         }
+
         tableSessionId = session.id;
         table.status = 'OCCUPIED';
         table.isOccupied = true;
         table.activeSessionId = session.id;
         table.sessionStartedAt = table.sessionStartedAt || session.sessionStartedAt;
+
+        realtimeBus.emit('TableStatusUpdated' as any, {
+          tableId: table.id,
+          restaurantId: restId,
+          tableNumber: table.tableNumber,
+          status: 'OCCUPIED',
+          data: table,
+        });
+        realtimeBus.emit('TableStatusChanged' as any, {
+          tableId: table.id,
+          restaurantId: restId,
+          tableNumber: table.tableNumber,
+          status: 'OCCUPIED',
+          data: table,
+        });
       }
     }
 
@@ -3109,7 +3834,8 @@ export class DinelyApiClient {
 
   // Waiter & Customer Request APIs
   async getCustomerRequests(restaurantId?: string) {
-    await delay(100);
+    this.loadDatabase();
+    await delay(50);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
     return this.customerRequests.filter((r) => r.restaurantId === targetId);
@@ -3197,9 +3923,43 @@ export class DinelyApiClient {
 
   async createCustomerRequest(req: any) {
     await delay(100);
-    this.customerRequests.push(req);
+    const targetRestId = this.resolveTenantRestaurantId(req.restaurantId) || 'rest-1';
+    const nowIso = new Date().toISOString();
+    const newReq: CustomerRequest = {
+      id: `req-${Date.now()}`,
+      restaurantId: targetRestId,
+      tableNumber: req.tableNumber || 'Table 01',
+      requestType: req.requestType || 'CALL_WAITER',
+      customTitle: req.customTitle || req.requestType || 'Waiter Assistance',
+      status: 'PENDING',
+      priority: req.priority || 'MEDIUM',
+      customerNotes: req.customerNotes,
+      requestedAt: nowIso,
+    };
+    this.customerRequests.push(newReq);
+
+    const notif: WaiterNotification = {
+      id: `notif-${Date.now()}`,
+      restaurantId: targetRestId,
+      type: req.requestType === 'BILL' ? 'BILL_REQUEST' : 'CUSTOMER_CALL',
+      title: `🔔 ${newReq.tableNumber}: ${newReq.customTitle}`,
+      message: req.customerNotes ? `${newReq.customTitle}: ${req.customerNotes}` : `${newReq.customTitle} requested`,
+      tableNumber: newReq.tableNumber,
+      timestamp: nowIso,
+      isRead: false,
+      priority: req.priority === 'HIGH' || req.priority === 'URGENT' ? 'HIGH' : 'NORMAL',
+    };
+    this.notifications.unshift(notif);
+
     this.saveDatabase();
-    return req;
+
+    realtimeBus.emit('CustomerRequestCreated' as any, {
+      restaurantId: targetRestId,
+      tableNumber: newReq.tableNumber,
+      data: newReq,
+    });
+
+    return newReq;
   }
 
   async markAllNotificationsRead() {
@@ -3226,7 +3986,12 @@ export class DinelyApiClient {
     this.currentRestaurantId = null;
     if (typeof window !== 'undefined' && window.localStorage) {
       localStorage.removeItem(DATABASE_STORAGE_KEY);
-      localStorage.removeItem(SESSION_STORAGE_KEY);
+      localStorage.removeItem('dinely_active_restaurant_id');
+      localStorage.removeItem('dinely_restaurant_id');
+      Object.values(SESSION_KEYS).forEach((key) => {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      });
     }
   }
 }

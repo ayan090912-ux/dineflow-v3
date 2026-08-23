@@ -5,8 +5,10 @@ from app.core.config.settings import get_settings
 from app.core.middlewares.logging import LoggingMiddleware
 from app.core.middlewares.rate_limit import RateLimitMiddleware
 from app.modules.auth.router import router as auth_router
+from app.modules.platform.router import router as platform_router
 
 settings = get_settings()
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -19,12 +21,13 @@ app = FastAPI(
 # Middleware
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware)
+cors_origins = ["*"] if ("*" in settings.CORS_ORIGINS or settings.DEBUG) else settings.CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=cors_origins,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 # Health checks
@@ -39,6 +42,8 @@ async def readiness_check():
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(platform_router, prefix="/api/v1/admin", tags=["Platform Admin"])
+
 
 # TODO: Add remaining routers as sprints progress
 # app.include_router(platform_router, prefix="/api/v1/platform", tags=["Platform"])

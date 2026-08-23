@@ -78,33 +78,131 @@
   }
 }
 
-/* Isolated Print Styles for QR Code Standees & Signs */
+/* High-Fidelity & Isolated Print Design System */
 @media print {
   @page {
-    size: A4 portrait;
+    size: auto;
     margin: 10mm;
   }
 
-  /* Hide header, navigation bars, sidebars, and full dashboard wrapper */
-  body > * {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide interactive elements, buttons, and non-printable screen UI */
+  .no-print,
+  .print\:hidden,
+  button,
+  header:not(.printable-header),
+  nav,
+  aside {
     display: none !important;
   }
 
-  body > #root {
-    display: block !important;
-  }
-
+  /* Ensure root container remains visible for print components */
+  body > #root,
+  #root,
   #root > * {
-    display: none !important;
-  }
-
-  .printable-card-wrapper,
-  .printable-card-wrapper * {
     display: block !important;
     visibility: visible !important;
+    background: transparent !important;
   }
 
+  /* Remove modal fixed backdrops and overlays during print */
+  div.fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
+  div.fixed.inset-0 > div.bg-slate-900\/60,
+  div.fixed.inset-0 > div.bg-slate-900\/80,
+  .backdrop-blur-sm {
+    display: none !important;
+  }
+
+  /* Printable Digital Receipt / Bill Styling */
+  .printable-receipt {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 480px !important;
+    margin: 0 auto !important;
+    padding: 24px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 2px solid #0f172a !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .printable-receipt * {
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  .printable-receipt .bg-slate-950,
+  .printable-receipt .bg-slate-900,
+  .printable-receipt .bg-gradient-to-br,
+  .printable-receipt .bg-slate-900\/60 {
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+  }
+
+  .printable-receipt .text-white,
+  .printable-receipt .text-slate-100,
+  .printable-receipt .text-slate-200,
+  .printable-receipt .text-slate-300,
+  .printable-receipt .text-slate-400,
+  .printable-receipt .text-slate-500 {
+    color: #0f172a !important;
+  }
+
+  .printable-receipt .text-emerald-400,
+  .printable-receipt .text-emerald-300 {
+    color: #047857 !important;
+    font-weight: 800 !important;
+  }
+
+  .printable-receipt .text-rose-400 {
+    color: #be123c !important;
+    font-weight: 800 !important;
+  }
+
+  .printable-receipt .text-amber-400,
+  .printable-receipt .text-amber-300 {
+    color: #b45309 !important;
+    font-weight: 700 !important;
+  }
+
+  .printable-receipt .border-slate-800,
+  .printable-receipt .border-slate-800\/80 {
+    border-color: #cbd5e1 !important;
+  }
+
+  .printable-receipt .no-print {
+    display: none !important;
+  }
+
+  /* Printable Standee Card Styling */
   .printable-card-wrapper {
+    display: block !important;
+    visibility: visible !important;
     position: fixed !important;
     left: 50% !important;
     top: 50% !important;
@@ -121,5 +219,10 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
+  .printable-card-wrapper * {
+    visibility: visible !important;
+  }
 }
+
 

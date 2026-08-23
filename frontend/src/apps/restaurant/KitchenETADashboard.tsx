@@ -209,7 +209,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station === 'BAR') {
         return; // Ignore Bar-only ticket updates in Kitchen KDS
       }
-      onRefreshOrders();
+
+      api.loadDatabase();
+      const restId = currentRestId || undefined;
+      api.getOrders(restId).then((freshOrders) => {
+        setOrders(freshOrders);
+      });
+      if (onRefreshOrders) {
+        onRefreshOrders();
+      }
+
       if (!isMuted && (event.type === 'OrderCreated' || event.type === 'WaiterCalled')) {
         playKitchenChime('NEW_ORDER');
       }
@@ -602,7 +611,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                     <div className="text-xs text-slate-300 flex items-center justify-between bg-slate-950 p-2 rounded-xl border border-slate-800">
                       <span>Submitted: <strong className="text-amber-400">{getElapsedMinutes(order.createdAt)} mins ago</strong></span>
-                      <span className="font-mono text-emerald-400 font-bold">${order.totalAmount.toFixed(2)}</span>
+                      <span className="font-mono text-emerald-400 font-bold">₹{order.totalAmount.toFixed(2)}</span>
                     </div>
 
                     {/* Dish Items list with check toggles */}

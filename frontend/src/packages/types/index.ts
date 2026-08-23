@@ -1,4 +1,4 @@
-export type UserRole = 'SUPER_ADMIN' | 'PLATFORM_ADMIN' | 'RESTAURANT_OWNER' | 'MANAGER' | 'CHEF' | 'WAITER' | 'CUSTOMER' | 'BAR_STAFF' | 'BARTENDER';
+export type UserRole = 'SUPER_ADMIN' | 'PLATFORM_ADMIN' | 'RESTAURANT_OWNER' | 'MANAGER' | 'CHEF' | 'WAITER' | 'CUSTOMER' | 'BAR_STAFF' | 'BARTENDER' | 'INVENTORY_MANAGER';
 
 export interface AuthTokens {
   accessToken: string;
@@ -106,9 +106,14 @@ export interface Restaurant {
   restaurantType?: string;
   description?: string;
   address: string;
+  locality?: string;
   city?: string;
   state?: string;
   country?: string;
+  postalCode?: string;
+  latitude?: number;
+  longitude?: number;
+  placeId?: string;
   phone: string;
   email?: string;
   website?: string;
@@ -256,18 +261,60 @@ export interface TableReservation {
   reservedBy?: string;
 }
 
+export type BillStatus = 'OPEN' | 'BILL_REQUESTED' | 'PAYMENT_PENDING' | 'PAID' | 'CLOSED' | 'CANCELLED';
+export type PaymentMethod = 'CASH' | 'CARD' | 'UPI' | 'QR_CODE' | 'OTHER';
+
+export interface BillItem {
+  orderId: string;
+  menuItemId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  station?: 'KITCHEN' | 'BAR';
+}
+
+export interface Bill {
+  id: string;
+  restaurantId: string;
+  tableId: string;
+  tableNumber: string;
+  tableSessionId: string;
+  businessDayId?: string;
+  orders: Order[];
+  items: BillItem[];
+  subtotal: number;
+  taxAmount: number;
+  taxRate?: number;
+  discountAmount: number;
+  grandTotal: number;
+  status: BillStatus;
+  paymentMethod?: PaymentMethod;
+  paymentStatus: 'UNPAID' | 'PAYMENT_PENDING' | 'PAID' | 'FAILED';
+  requestedAt?: string;
+  paidAt?: string;
+  closedAt?: string;
+  closedByWaiterId?: string;
+  closedByWaiterName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TableSession {
   id: string;
   restaurantId: string;
   tableId: string;
   tableNumber: string;
-  status: 'ACTIVE' | 'CLOSED';
+  status: 'ACTIVE' | 'BILL_REQUESTED' | 'PAYMENT_PENDING' | 'PAID' | 'CLOSED';
   customerSessionId?: string;
   sessionStartedAt: string;
   sessionClosedAt?: string;
   closedByWaiterName?: string;
   businessDayId?: string;
   paymentStatus?: 'UNPAID' | 'PAYMENT_PENDING' | 'PAID';
+  paymentMethod?: PaymentMethod;
+  billId?: string;
+  billRequestedAt?: string;
 }
 
 export interface DailySummaryData {
@@ -422,7 +469,7 @@ export interface Order {
   kitchenCompletedAt?: string;
   barCompletedAt?: string;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED';
-  paymentMethod?: 'CASH' | 'CARD' | 'APPLE_PAY' | 'QR_CODE';
+  paymentMethod?: 'CASH' | 'CARD' | 'APPLE_PAY' | 'QR_CODE' | 'UPI';
   createdAt: string;
   updatedAt: string;
   waiterCalledAt?: string;
@@ -515,7 +562,7 @@ export interface Employee {
   id: string;
   restaurantId: string;
   name: string;
-  role: 'MANAGER' | 'CHEF' | 'WAITER' | 'HOST' | 'CASHIER' | 'BARTENDER' | 'BAR_STAFF';
+  role: 'MANAGER' | 'CHEF' | 'WAITER' | 'HOST' | 'CASHIER' | 'BARTENDER' | 'BAR_STAFF' | 'INVENTORY_MANAGER';
   email: string;
   phone: string;
   status: 'ON_CLOCK' | 'OFF_CLOCK' | 'ON_BREAK';
@@ -530,17 +577,32 @@ export interface Employee {
   lastLoginAt?: string;
 }
 
+export interface Supplier {
+  id: string;
+  restaurantId: string;
+  name: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  supplyCategory?: string;
+  address?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface InventoryItem {
   id: string;
   restaurantId: string;
   name: string;
   category: string;
+  station?: 'KITCHEN' | 'BAR';
   quantity: number;
   unit: string;
   minThreshold: number;
   costPerUnit: number;
   lastRestocked: string;
   status: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+  supplierId?: string;
   supplierName?: string;
   supplierContact?: string;
   storageLocation?: string;

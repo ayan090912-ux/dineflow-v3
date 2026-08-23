@@ -13,6 +13,8 @@ export type RealTimeEventType =
   | 'OrderCompleted'
   | 'WaiterCalled'
   | 'BillRequested'
+  | 'BillPaid'
+  | 'BillClosed'
   | 'CustomerRequestCreated'
   | 'CustomerRequestAccepted'
   | 'CustomerRequestUpdated'
@@ -28,11 +30,17 @@ export type RealTimeEventType =
   | 'BusinessDayClosed'
   | 'BusinessDayOpened'
   | 'RESTAURANT_APPROVED'
-  | 'RESTAURANT_REJECTED';
+  | 'RESTAURANT_REJECTED'
+  | 'RestaurantSwitched'
+  | 'StaffStatusUpdated';
 
 export interface RealTimeEventPayload {
   type: RealTimeEventType;
   orderId?: string;
+  billId?: string;
+  tableSessionId?: string;
+  grandTotal?: number;
+  paymentMethod?: string;
   parentOrderId?: string;
   ticketId?: string;
   station?: 'KITCHEN' | 'BAR';
@@ -54,6 +62,11 @@ export interface RealTimeEventPayload {
   status?: string;
   sessionId?: string;
   businessDayId?: string;
+  employeeId?: string;
+  menuItemId?: string;
+  name?: string;
+  role?: string;
+  lastLoginAt?: string;
   data?: any;
 }
 

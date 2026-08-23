@@ -58,7 +58,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
 
   return (
     <div className={`w-full space-y-1.5 ${className}`}>
-      {label && <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">{label}</label>}
+      {label && <label className="block text-xs font-semibold text-slate-300">{label}</label>}
 
       {/* Hidden file input for Local Drive Selection */}
       <input
@@ -70,9 +70,9 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       />
 
       {value ? (
-        <div className="relative group rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 h-40 bg-slate-900 shadow-md">
+        <div className="relative group rounded-2xl overflow-hidden border border-slate-800 h-40 bg-slate-900 shadow-md">
           <img src={value} alt="Uploaded preview" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+          <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
             <Button
               type="button"
               variant="secondary"
@@ -94,7 +94,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           </div>
         </div>
       ) : showUrlInput ? (
-        <form onSubmit={handleUrlSubmit} className="p-4 border border-slate-700 rounded-2xl bg-slate-900 space-y-3">
+        <form onSubmit={handleUrlSubmit} className="p-4 border border-slate-800 rounded-2xl bg-slate-950 space-y-3">
           <div className="flex items-center justify-between text-xs font-bold text-slate-300">
             <span>Enter Image URL</span>
             <button type="button" onClick={() => setShowUrlInput(false)} className="text-slate-400 hover:text-white">
@@ -106,7 +106,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
             value={customUrl}
             onChange={(e) => setCustomUrl(e.target.value)}
             placeholder="https://images.unsplash.com/photo-..."
-            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
           />
           <div className="flex items-center gap-2 justify-end">
             <Button type="button" variant="outline" size="sm" onClick={() => setShowUrlInput(false)}>
@@ -128,18 +128,18 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
             isDragging
               ? 'border-rose-500 bg-rose-500/10'
-              : 'border-slate-300 dark:border-slate-800 hover:border-rose-500/50 bg-slate-50/50 dark:bg-slate-950/60'
+              : 'border-slate-800 hover:border-rose-500/50 bg-slate-950/70 text-slate-200'
           }`}
         >
-          <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl shadow-sm mb-2 text-rose-500">
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm mb-2 text-rose-500">
             <HardDrive className="w-5 h-5" />
           </div>
-          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 text-center">
+          <p className="text-xs font-bold text-slate-200 text-center">
             Upload picture from local drive or drag & drop
           </p>
           <p className="text-[10px] text-slate-400 mt-1">PNG, JPG, WEBP, GIF supported</p>
 
-          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-200 dark:border-slate-800/80 w-full justify-center">
+          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-800/80 w-full justify-center">
             <Button
               type="button"
               variant="brand"

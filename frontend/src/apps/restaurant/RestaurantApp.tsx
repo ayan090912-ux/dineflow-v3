@@ -25,6 +25,8 @@ import {
   Sparkles,
   PhoneCall,
   Receipt,
+  Printer,
+  Download,
   Eye,
   Edit,
   Save,
@@ -51,8 +53,10 @@ import {
   Unlink,
   Phone,
   Wine,
+  Utensils,
   LogOut,
   Truck,
+  Search,
 } from 'lucide-react';
 import {
   Button,
@@ -75,11 +79,12 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api } from '../../packages/api/client';
-import { Order, MenuItem, Table, Employee, InventoryItem, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation } from '../../packages/types';
+import { Order, MenuItem, Table, Employee, InventoryItem, Supplier, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation, Bill } from '../../packages/types';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
 import { BarTerminal } from '../bar/BarTerminal';
 import { realtimeBus } from '../../packages/api/realtime';
+import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
 
 interface RestaurantAppProps {
   onEditSetup?: () => void;
@@ -88,13 +93,18 @@ interface RestaurantAppProps {
 
 export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLogout }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'theme' | 'waiter' | 'qr_pickup'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup'>('dashboard');
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [selectedBillDetails, setSelectedBillDetails] = useState<Bill | null>(null);
+  const [billingSearchQuery, setBillingSearchQuery] = useState('');
+  const [billingStatusFilter, setBillingStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'CANCELLED'>('ALL');
+  const [billingPaymentFilter, setBillingPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'UPI'>('ALL');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Category Management State
@@ -175,14 +185,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [isResetPassModalOpen, setIsResetPassModalOpen] = useState(false);
 
   // Inventory & Raw Material State
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [inventorySubTab, setInventorySubTab] = useState<'ALL' | 'KITCHEN' | 'BAR' | 'SUPPLIERS'>('ALL');
+  const [isAddSupplierModalOpen, setIsAddSupplierModalOpen] = useState(false);
+  const [newSupplier, setNewSupplier] = useState({
+    name: '',
+    contactPerson: '',
+    phone: '',
+    email: '',
+    supplyCategory: 'Dairy & Cheese',
+    address: '',
+    notes: '',
+  });
+
   const [isAddInventoryModalOpen, setIsAddInventoryModalOpen] = useState(false);
   const [newInventory, setNewInventory] = useState({
     name: '',
     category: 'Meat & Poultry',
+    station: 'KITCHEN' as 'KITCHEN' | 'BAR',
     quantity: '25',
     unit: 'kg',
     minThreshold: '5',
     costPerUnit: '12.00',
+    supplierId: '',
     supplierName: 'Prime Choice Foods',
     supplierContact: '+1 800-555-0199',
     storageLocation: 'Cold Storage #1',
@@ -274,10 +299,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   });
 
   const handleSwitchRestaurant = async (restId: string) => {
-    api.switchActiveRestaurant(restId);
+    const updatedRest = await api.switchActiveRestaurant(restId);
+    if (updatedRest) {
+      setCurrentRestaurant(updatedRest);
+    }
     await loadData();
     setIsOutletModalOpen(false);
-    addToast('success', 'Switched Active Restaurant Outlet 🏪', `Now viewing operational dashboard.`);
+    addToast('success', 'Switched Active Restaurant Outlet 🏪', `Now viewing operational dashboard for ${updatedRest?.name || 'selected venue'}.`);
   };
 
   const handleCreateBranch = async () => {
@@ -429,6 +457,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         addToast('warning', 'Business Day Closed 🌅', 'Daily closing summary archived in history.');
       } else if (event.type === 'BusinessDayOpened') {
         addToast('success', 'New Business Day Opened ☀️', 'Now recording orders for new business day.');
+      } else if (event.type === 'StaffStatusUpdated') {
+        if (event.status === 'ON_CLOCK') {
+          addToast('success', 'Staff Member Online 🟢', `${event.name} (${event.role}) logged in and is now ACTIVE in app.`);
+        } else {
+          addToast('info', 'Staff Member Offline ⚪', `${event.name} logged out.`);
+        }
       }
     });
 
@@ -460,17 +494,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       });
     }
 
-    const [o, m, t, e, i, fc, bc, bDay, bHistory, activeSess] = await Promise.all([
+    const [o, m, t, e, i, sup, fc, bc, bDay, bHistory, activeSess, bList] = await Promise.all([
       api.getOrders(rest?.id),
       api.getMenuItems(rest?.id),
       api.getTables(rest?.id),
       api.getEmployees(rest?.id),
       api.getInventory(rest?.id),
+      api.getSuppliers(rest?.id),
       api.getCategories(rest?.id),
       api.getBarCategories(rest?.id),
       api.getCurrentBusinessDay(rest?.id),
       api.getBusinessDayHistory(rest?.id),
       api.getActiveTableSessions(rest?.id),
+      api.getBills(rest?.id),
     ]);
 
     setOrders(o);
@@ -478,11 +514,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     setTables(t);
     setEmployees(e);
     setInventory(i);
+    setSuppliers(sup || []);
     setFoodCategories(fc);
     setBarCategories(bc);
     setCurrentBusinessDay(bDay);
     setBusinessDayHistory(bHistory);
     setActiveSessions(activeSess || []);
+    setBills(bList || []);
   };
 
   // Category CRUD Handlers
@@ -761,36 +799,77 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     loadData();
   };
 
-  // Raw Material Inventory Handlers
+  // Raw Material & Supplier Handlers
+  const handleAddSupplier = async () => {
+    if (!newSupplier.name) {
+      addToast('error', 'Validation Failed', 'Supplier company name is required');
+      return;
+    }
+    const restId = currentRestaurant?.id || 'rest-1';
+    await api.addSupplier({
+      restaurantId: restId,
+      name: newSupplier.name,
+      contactPerson: newSupplier.contactPerson,
+      phone: newSupplier.phone,
+      email: newSupplier.email,
+      supplyCategory: newSupplier.supplyCategory,
+      address: newSupplier.address,
+      notes: newSupplier.notes,
+    });
+    addToast('success', 'Supplier Registered', `${newSupplier.name} registered successfully.`);
+    setIsAddSupplierModalOpen(false);
+    setNewSupplier({
+      name: '',
+      contactPerson: '',
+      phone: '',
+      email: '',
+      supplyCategory: 'Dairy & Cheese',
+      address: '',
+      notes: '',
+    });
+    loadData();
+  };
+
+  const handleDeleteSupplier = async (supplierId: string, name: string) => {
+    await api.deleteSupplier(supplierId);
+    addToast('info', 'Supplier Deleted', `${name} removed from vendor registry.`);
+    loadData();
+  };
+
   const handleAddInventory = async () => {
     if (!newInventory.name) {
       addToast('error', 'Validation Failed', 'Item name is required');
       return;
     }
     const restId = currentRestaurant?.id || 'rest-1';
+    const selectedSup = suppliers.find((s) => s.id === newInventory.supplierId);
+
     await api.addInventoryItem({
       restaurantId: restId,
       name: newInventory.name,
       category: newInventory.category,
+      station: newInventory.station,
       quantity: parseFloat(newInventory.quantity) || 10,
       unit: newInventory.unit,
       minThreshold: parseFloat(newInventory.minThreshold) || 5,
       costPerUnit: parseFloat(newInventory.costPerUnit) || 10,
-      status: 'IN_STOCK',
-      lastRestocked: new Date().toISOString().split('T')[0],
-      supplierName: newInventory.supplierName,
-      supplierContact: newInventory.supplierContact,
+      supplierId: selectedSup?.id || undefined,
+      supplierName: selectedSup?.name || newInventory.supplierName || 'General Supplier',
+      supplierContact: selectedSup?.phone || newInventory.supplierContact || 'N/A',
       storageLocation: newInventory.storageLocation,
     });
-    addToast('success', 'Raw Material Added', `${newInventory.name} added to inventory.`);
+
+    addToast('success', 'Raw Material Added', `${newInventory.name} added to ${newInventory.station === 'BAR' ? 'Bar' : 'Kitchen'} inventory.`);
     setIsAddInventoryModalOpen(false);
     setNewInventory({
       name: '',
       category: 'Meat & Poultry',
+      station: 'KITCHEN',
       quantity: '25',
       unit: 'kg',
       minThreshold: '5',
       costPerUnit: '12.00',
+      supplierId: '',
       supplierName: 'Prime Choice Foods',
       supplierContact: '+1 800-555-0199',
       storageLocation: 'Cold Storage #1',
@@ -1066,6 +1145,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
                 { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
                 { id: 'inventory', label: 'Inventory', icon: <Package className="w-4 h-4" /> },
+                { id: 'billing', label: 'Billing & Receipts', icon: <Receipt className="w-4 h-4 text-emerald-400" /> },
                 {
                   id: 'business_day',
                   label: 'Business Day & Daily Closing',
@@ -1442,7 +1522,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-white">${order.totalAmount.toFixed(2)}</span>
+                        <span className="font-mono font-bold text-white">₹{order.totalAmount.toFixed(2)}</span>
                         <Button
                           variant="secondary"
                           size="sm"
@@ -1555,7 +1635,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 {
                   key: 'totalAmount',
                   header: 'Total',
-                  render: (o) => <span className="font-mono font-bold text-emerald-400">${o.totalAmount.toFixed(2)}</span>,
+                  render: (o) => <span className="font-mono font-bold text-emerald-400">₹{o.totalAmount.toFixed(2)}</span>,
                 },
                 {
                   key: 'status',
@@ -2257,12 +2337,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
               <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
                 <span className="text-[11px] text-emerald-400 font-semibold uppercase flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> On Clock Now
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Active In App Now
                 </span>
                 <p className="text-2xl font-black text-emerald-400">
                   {employees.filter((e) => e.status === 'ON_CLOCK').length}
                 </p>
-                <span className="text-[10px] text-slate-500">Active on floor & kitchen</span>
+                <span className="text-[10px] text-emerald-400/80">Logged in & operating terminals</span>
               </Card>
 
               <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
@@ -2274,142 +2354,148 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               </Card>
 
               <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-                <span className="text-[11px] text-slate-400 font-semibold uppercase">Off Clock</span>
+                <span className="text-[11px] text-slate-400 font-semibold uppercase">Offline (Off Clock)</span>
                 <p className="text-2xl font-black text-slate-400">
                   {employees.filter((e) => e.status === 'OFF_CLOCK').length}
                 </p>
-                <span className="text-[10px] text-slate-500">Off-duty or next shift</span>
+                <span className="text-[10px] text-slate-500">Not logged in / off-duty</span>
               </Card>
             </div>
 
             {/* Staff Data Table */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
               <DataTable<Employee>
                 data={employees}
                 keyExtractor={(e) => e.id}
                 columns={[
                   {
                     key: 'name',
-                    header: 'Staff Member',
+                    header: 'Staff Profile & Credentials',
                     render: (e) => (
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 py-1">
                         <Avatar name={e.name} size="sm" status={e.status === 'ON_CLOCK' ? 'online' : 'offline'} />
-                        <div>
-                          <p className="font-bold text-white text-xs">{e.name}</p>
-                          <p className="text-[10px] text-slate-400 font-mono">{e.email}</p>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-white text-xs">{e.name}</p>
+                            <Badge variant={e.role === 'MANAGER' ? 'brand' : e.role === 'CHEF' ? 'warning' : 'info'}>
+                              {e.role}
+                            </Badge>
+                            {e.status === 'ON_CLOCK' && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                ACTIVE
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono flex-wrap">
+                            <span>User: <strong className="text-slate-200">{e.email}</strong></span>
+                            <span>• Pass: <strong className="text-amber-300">{e.password || '••••••••'}</strong></span>
+                            <span>• Tel: <strong className="text-slate-300">{e.phone}</strong></span>
+                          </div>
                         </div>
                       </div>
                     ),
                   },
                   {
-                    key: 'role',
-                    header: 'Role',
-                    render: (e) => (
-                      <Badge variant={e.role === 'MANAGER' ? 'brand' : e.role === 'CHEF' ? 'warning' : 'info'}>
-                        {e.role}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    key: 'phone',
-                    header: 'Contact Phone',
-                    render: (e) => <span className="text-xs font-mono text-slate-300">{e.phone}</span>,
-                  },
-                  {
                     key: 'shift',
-                    header: 'Assigned Shift',
+                    header: 'Shift & Station',
                     render: (e) => (
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-amber-400 font-medium text-[11px] flex items-center gap-1.5 w-fit">
-                        <Clock className="w-3 h-3 text-amber-400" />
-                        {e.shift || 'Evening (4PM - 12AM)'}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'assignedSection',
-                    header: 'Station / Section',
-                    render: (e) => (
-                      <span className="text-xs font-bold text-slate-200 bg-slate-800 px-2.5 py-1 rounded-lg">
-                        {e.assignedSection || 'Front Floor & POS'}
-                      </span>
+                      <div className="space-y-1 py-1">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-amber-400 font-medium text-[11px] inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                          {e.shift || 'Evening (4PM - 12AM)'}
+                        </span>
+                        <p className="text-[11px] font-semibold text-slate-300">
+                          {e.assignedSection || 'Main Dining Floor'}
+                        </p>
+                      </div>
                     ),
                   },
                   {
                     key: 'status',
-                    header: 'Clock Status',
+                    header: 'App & Portal Status',
                     render: (e) => (
-                      <button
-                        onClick={() => handleToggleStaffStatus(e.id, e.status)}
-                        className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
-                          e.status === 'ON_CLOCK'
-                            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20'
-                            : e.status === 'ON_BREAK'
-                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
-                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-                        }`}
-                        title="Click to toggle status"
-                      >
-                        {e.status === 'ON_CLOCK' ? '● ON CLOCK' : e.status === 'ON_BREAK' ? '☕ ON BREAK' : '○ OFF CLOCK'}
-                      </button>
-                    ),
-                  },
-                  {
-                    key: 'accountStatus',
-                    header: 'Portal Access',
-                    render: (e) => (
-                      <button
-                        onClick={() => handleToggleAccountDisabled(e.id, e.name)}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
-                          e.isAccountDisabled
-                            ? 'bg-rose-500/10 border-rose-500/40 text-rose-400 hover:bg-rose-500/20'
-                            : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20'
-                        }`}
-                        title={e.isAccountDisabled ? 'Click to Enable Account Login' : 'Click to Disable Account Login'}
-                      >
-                        {e.isAccountDisabled ? (
-                          <>
-                            <ShieldX className="w-3 h-3 text-rose-400" />
-                            <span>DISABLED</span>
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                            <span>ACTIVE</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-1.5 py-1">
+                        <button
+                          onClick={() => handleToggleStaffStatus(e.id, e.status)}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                            e.status === 'ON_CLOCK'
+                              ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-sm shadow-emerald-500/20'
+                              : e.status === 'ON_BREAK'
+                              ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                              : 'bg-slate-800 border-slate-700 text-slate-400'
+                          }`}
+                          title="Click to toggle live status"
+                        >
+                          {e.status === 'ON_CLOCK' ? (
+                            <>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                              <span>ON CLOCK</span>
+                            </>
+                          ) : e.status === 'ON_BREAK' ? (
+                            <span>☕ BREAK</span>
+                          ) : (
+                            <span>○ OFF CLOCK</span>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleAccountDisabled(e.id, e.name)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                            e.isAccountDisabled
+                              ? 'bg-rose-500/10 border-rose-500/40 text-rose-400 hover:bg-rose-500/20'
+                              : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20'
+                          }`}
+                          title={e.isAccountDisabled ? 'Enable Portal Account' : 'Disable Portal Account'}
+                        >
+                          {e.isAccountDisabled ? (
+                            <>
+                              <ShieldX className="w-3 h-3 text-rose-400" />
+                              <span>DISABLED</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                              <span>ACTIVE</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     ),
                   },
                   {
                     key: 'actions',
                     header: 'Staff Actions',
                     render: (e) => (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5 py-1">
                         <button
                           onClick={() => {
                             setEditingStaff({ ...e });
                             setIsEditStaffModalOpen(true);
                           }}
-                          className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/60 text-[11px] font-semibold transition-all duration-150 shadow-sm active:scale-95 cursor-pointer group"
                           title="Edit Staff Member Details"
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
+                          <Edit3 className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
+                          <span>Edit</span>
                         </button>
 
                         <button
                           onClick={() => handleOpenResetPasswordModal(e)}
-                          className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
-                          title="Reset Portal Password"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/25 text-[11px] font-semibold transition-all duration-150 shadow-sm active:scale-95 cursor-pointer group"
+                          title="Reset Staff Password"
                         >
-                          <KeyRound className="w-3.5 h-3.5" />
+                          <KeyRound className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+                          <span>Reset</span>
                         </button>
 
                         <button
                           onClick={() => handleDeleteStaff(e.id, e.name)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                          title="Remove Staff Member"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 hover:text-rose-200 border border-rose-500/30 text-[11px] font-semibold transition-all duration-150 shadow-sm active:scale-95 cursor-pointer group"
+                          title="Delete Staff Member"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                          <span>Delete</span>
                         </button>
                       </div>
                     ),
@@ -2428,16 +2514,27 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Package className="w-5 h-5 text-rose-500" /> Raw Materials & Inventory Control
                 </h3>
-                <p className="text-xs text-slate-400">Track raw ingredient levels, unit costs, low stock thresholds, and suppliers.</p>
+                <p className="text-xs text-slate-400">Track kitchen and bar raw ingredients, stock levels, unit costs, low stock alerts, and verified vendors.</p>
               </div>
-              <Button
-                variant="brand"
-                size="sm"
-                onClick={() => setIsAddInventoryModalOpen(true)}
-                icon={<Plus className="w-3.5 h-3.5" />}
-              >
-                Add Raw Material / Stock
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddSupplierModalOpen(true)}
+                  className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                  icon={<Users className="w-3.5 h-3.5 text-amber-400" />}
+                >
+                  + Add Supplier
+                </Button>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => setIsAddInventoryModalOpen(true)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Add Raw Material
+                </Button>
+              </div>
             </div>
 
             {/* Inventory KPI Cards */}
@@ -2445,7 +2542,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
                 <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Tracked Items</span>
                 <p className="text-2xl font-black text-white">{inventory.length}</p>
-                <span className="text-[10px] text-slate-500">Raw materials in database</span>
+                <span className="text-[10px] text-slate-500">
+                  {inventory.filter((i) => i.station !== 'BAR').length} Kitchen • {inventory.filter((i) => i.station === 'BAR').length} Bar
+                </span>
               </Card>
 
               <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
@@ -2466,122 +2565,441 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 <span className="text-[10px] text-slate-500">Valued at current cost</span>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-                <span className="text-[11px] text-sky-400 font-semibold uppercase">Active Suppliers</span>
-                <p className="text-2xl font-black text-sky-400">
-                  {new Set(inventory.map((i) => i.supplierName).filter(Boolean)).size || 1}
-                </p>
-                <span className="text-[10px] text-slate-500">Verified raw vendor contacts</span>
+              <Card
+                onClick={() => setInventorySubTab('SUPPLIERS')}
+                className="bg-slate-900 border-slate-800 hover:border-sky-500/50 cursor-pointer transition-all p-4 space-y-1 group"
+              >
+                <span className="text-[11px] text-sky-400 font-semibold uppercase flex items-center justify-between">
+                  <span>Active Suppliers</span>
+                  <span className="text-[10px] text-sky-300 group-hover:underline">Manage →</span>
+                </span>
+                <p className="text-2xl font-black text-sky-400">{suppliers.length}</p>
+                <span className="text-[10px] text-slate-500">Click to view & add suppliers</span>
               </Card>
             </div>
 
-            {/* Raw Material Inventory Table */}
+            {/* Sub-Tabs: All Items, Kitchen Inventory, Bar Inventory, Suppliers Directory */}
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
+              <button
+                onClick={() => setInventorySubTab('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  inventorySubTab === 'ALL'
+                    ? 'bg-rose-600 text-white shadow'
+                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>All Stock ({inventory.length})</span>
+              </button>
+
+              <button
+                onClick={() => setInventorySubTab('KITCHEN')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  inventorySubTab === 'KITCHEN'
+                    ? 'bg-amber-600 text-white shadow'
+                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Utensils className="w-3.5 h-3.5 text-amber-300" />
+                <span>Kitchen Inventory ({inventory.filter((i) => i.station !== 'BAR').length})</span>
+              </button>
+
+              <button
+                onClick={() => setInventorySubTab('BAR')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  inventorySubTab === 'BAR'
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Wine className="w-3.5 h-3.5 text-indigo-300" />
+                <span>Bar Inventory ({inventory.filter((i) => i.station === 'BAR').length})</span>
+              </button>
+
+              <button
+                onClick={() => setInventorySubTab('SUPPLIERS')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  inventorySubTab === 'SUPPLIERS'
+                    ? 'bg-sky-600 text-white shadow'
+                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5 text-sky-300" />
+                <span>Suppliers Directory ({suppliers.length})</span>
+              </button>
+            </div>
+
+            {/* TAB CONTENT: SUPPLIERS DIRECTORY */}
+            {inventorySubTab === 'SUPPLIERS' ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Active Vendors & Suppliers ({suppliers.length})</h4>
+                  <Button
+                    size="sm"
+                    variant="brand"
+                    onClick={() => setIsAddSupplierModalOpen(true)}
+                    icon={<Plus className="w-3.5 h-3.5" />}
+                  >
+                    Add New Supplier
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {suppliers.map((sup) => (
+                    <Card key={sup.id} className="p-4 bg-slate-900 border-slate-800 rounded-2xl space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <Badge variant="outline">{sup.supplyCategory || 'General'}</Badge>
+                          <h5 className="font-bold text-white text-sm mt-1">{sup.name}</h5>
+                          {sup.contactPerson && <p className="text-xs text-slate-400">Rep: {sup.contactPerson}</p>}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteSupplier(sup.id, sup.name)}
+                          className="p-1 text-slate-500 hover:text-rose-400 rounded transition-colors"
+                          title="Delete Supplier"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1 text-xs text-slate-300 border-t border-slate-800 pt-2 font-mono">
+                        {sup.phone && <div>📞 {sup.phone}</div>}
+                        {sup.email && <div className="truncate">✉️ {sup.email}</div>}
+                        {sup.address && <div className="text-[11px] text-slate-400 truncate">📍 {sup.address}</div>}
+                      </div>
+
+                      {sup.notes && (
+                        <p className="text-[11px] text-slate-400 italic bg-slate-950 p-2 rounded-xl border border-slate-800">
+                          "{sup.notes}"
+                        </p>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* TAB CONTENT: RAW MATERIAL INVENTORY TABLE */
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <DataTable<InventoryItem>
+                  data={inventory.filter((i) => {
+                    if (inventorySubTab === 'KITCHEN') return i.station !== 'BAR';
+                    if (inventorySubTab === 'BAR') return i.station === 'BAR';
+                    return true;
+                  })}
+                  keyExtractor={(i) => i.id}
+                  columns={[
+                    {
+                      key: 'name',
+                      header: 'Raw Material / Item',
+                      render: (i) => (
+                        <div>
+                          <p className="font-bold text-white text-xs">{i.name}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{i.storageLocation || 'Main Pantry'}</p>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'station',
+                      header: 'Division',
+                      render: (i) => (
+                        <Badge variant={i.station === 'BAR' ? 'warning' : 'info'}>
+                          {i.station === 'BAR' ? 'BAR' : 'KITCHEN'}
+                        </Badge>
+                      ),
+                    },
+                    {
+                      key: 'category',
+                      header: 'Category',
+                      render: (i) => <Badge variant="outline">{i.category}</Badge>,
+                    },
+                    {
+                      key: 'quantity',
+                      header: 'Stock Quantity',
+                      render: (i) => (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-mono font-bold text-sm ${
+                              i.quantity <= i.minThreshold ? 'text-rose-400' : 'text-emerald-400'
+                            }`}
+                          >
+                            {i.quantity} {i.unit}
+                          </span>
+                          <div className="flex items-center gap-1 ml-2">
+                            <button
+                              onClick={() => handleAdjustInventory(i.id, -1)}
+                              className="w-6 h-6 rounded-md bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 flex items-center justify-center transition-colors"
+                              title="Decrease 1 unit"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleAdjustInventory(i.id, 1)}
+                              className="w-6 h-6 rounded-md bg-slate-800 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-400 flex items-center justify-center transition-colors"
+                              title="Increase 1 unit"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'minThreshold',
+                      header: 'Min Alert',
+                      render: (i) => (
+                        <span className="text-xs font-mono text-slate-400">
+                          {i.minThreshold} {i.unit}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'costPerUnit',
+                      header: 'Unit Cost & Value',
+                      render: (i) => (
+                        <div>
+                          <p className="font-mono text-xs text-white">{formatCurrency(i.costPerUnit, theme.currency || 'INR (₹)')} / {i.unit}</p>
+                          <p className="font-mono text-[10px] text-emerald-400 font-bold">
+                            Total: {formatCurrency(i.quantity * i.costPerUnit, theme.currency || 'INR (₹)')}
+                          </p>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'supplierName',
+                      header: 'Supplier Contact',
+                      render: (i) => (
+                        <div>
+                          <p className="text-xs font-bold text-slate-200">{i.supplierName || 'Primary Vendor'}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{i.supplierContact || 'N/A'}</p>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'status',
+                      header: 'Status',
+                      render: (i) => (
+                        <Badge
+                          variant={
+                            i.quantity === 0 ? 'danger' : i.quantity <= i.minThreshold ? 'warning' : 'success'
+                          }
+                        >
+                          {i.quantity === 0 ? 'OUT OF STOCK' : i.quantity <= i.minThreshold ? 'LOW STOCK' : 'IN STOCK'}
+                        </Badge>
+                      ),
+                    },
+                    {
+                      key: 'actions',
+                      header: 'Actions',
+                      render: (i) => (
+                        <button
+                          onClick={() => handleDeleteInventory(i.id, i.name)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                          title="Remove Inventory Item"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ),
+                    },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab: Billing & Digital Receipt OS */}
+        {activeTab === 'billing' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-emerald-400" /> Restaurant Billing & Digital Receipts
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Track running table bills, session receipts, payment status, and complete transaction history.
+                </p>
+              </div>
+            </div>
+
+            {/* Billing KPI Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                <span className="text-[11px] text-emerald-400 font-semibold uppercase">Today's Sales</span>
+                <p className="text-2xl font-black text-emerald-400">
+                  {formatCurrency(
+                    bills
+                      .filter((b) => b.createdAt.startsWith(new Date().toISOString().split('T')[0]) && (b.paymentStatus === 'PAID' || b.status === 'CLOSED'))
+                      .reduce((sum, b) => sum + b.grandTotal, 0),
+                    theme.currency || 'INR (₹)'
+                  )}
+                </p>
+                <span className="text-[10px] text-slate-500">Verified paid revenue today</span>
+              </Card>
+
+              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Receipts</span>
+                <p className="text-2xl font-black text-white">{bills.length}</p>
+                <span className="text-[10px] text-slate-500">Generated invoices & sessions</span>
+              </Card>
+
+              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                <span className="text-[11px] text-emerald-400 font-semibold uppercase">Paid Invoices</span>
+                <p className="text-2xl font-black text-emerald-300">
+                  {bills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').length}
+                </p>
+                <span className="text-[10px] text-slate-500">Completed table bills</span>
+              </Card>
+
+              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                <span className="text-[11px] text-amber-400 font-semibold uppercase">Pending / Open Bills</span>
+                <p className="text-2xl font-black text-amber-300">
+                  {bills.filter((b) => (b.paymentStatus === 'UNPAID' || b.paymentStatus === 'PAYMENT_PENDING') && b.status !== 'CANCELLED').length}
+                </p>
+                <span className="text-[10px] text-slate-500">Active table sessions</span>
+              </Card>
+            </div>
+
+            {/* Filters Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+                <select
+                  value={billingStatusFilter}
+                  onChange={(e: any) => setBillingStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PAID">Paid Only</option>
+                  <option value="PENDING">Pending / Unpaid</option>
+                </select>
+
+                <select
+                  value={billingPaymentFilter}
+                  onChange={(e: any) => setBillingPaymentFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="ALL">All Payment Methods</option>
+                  <option value="UPI">UPI / Digital</option>
+                  <option value="CASH">Cash</option>
+                  <option value="CARD">Credit/Debit Card</option>
+                </select>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="text"
+                  value={billingSearchQuery}
+                  onChange={(e) => setBillingSearchQuery(e.target.value)}
+                  placeholder="Search invoice #, table #, session..."
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Bills DataTable */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-              <DataTable<InventoryItem>
-                data={inventory}
-                keyExtractor={(i) => i.id}
+              <DataTable<Bill>
+                data={bills.filter((b) => {
+                  if (billingStatusFilter === 'PAID' && !(b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
+                  if (billingStatusFilter === 'PENDING' && (b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
+                  if (billingPaymentFilter !== 'ALL' && b.paymentMethod !== billingPaymentFilter) return false;
+                  if (billingSearchQuery) {
+                    const q = billingSearchQuery.toLowerCase();
+                    return (
+                      b.id.toLowerCase().includes(q) ||
+                      b.tableNumber.toLowerCase().includes(q) ||
+                      b.tableSessionId.toLowerCase().includes(q)
+                    );
+                  }
+                  return true;
+                })}
+                keyExtractor={(b) => b.id}
                 columns={[
                   {
-                    key: 'name',
-                    header: 'Raw Material / Item',
-                    render: (i) => (
+                    key: 'id',
+                    header: 'Invoice #',
+                    render: (b) => (
                       <div>
-                        <p className="font-bold text-white text-xs">{i.name}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{i.storageLocation || 'Main Pantry'}</p>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'category',
-                    header: 'Category',
-                    render: (i) => <Badge variant="outline">{i.category}</Badge>,
-                  },
-                  {
-                    key: 'quantity',
-                    header: 'Stock Quantity',
-                    render: (i) => (
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`font-mono font-bold text-sm ${
-                            i.quantity <= i.minThreshold ? 'text-rose-400' : 'text-emerald-400'
-                          }`}
-                        >
-                          {i.quantity} {i.unit}
-                        </span>
-                        <div className="flex items-center gap-1 ml-2">
-                          <button
-                            onClick={() => handleAdjustInventory(i.id, -1)}
-                            className="w-6 h-6 rounded-md bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 flex items-center justify-center transition-colors"
-                            title="Decrease 1 unit"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => handleAdjustInventory(i.id, 1)}
-                            className="w-6 h-6 rounded-md bg-slate-800 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-400 flex items-center justify-center transition-colors"
-                            title="Increase 1 unit"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'minThreshold',
-                    header: 'Min Alert',
-                    render: (i) => (
-                      <span className="text-xs font-mono text-slate-400">
-                        {i.minThreshold} {i.unit}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'costPerUnit',
-                    header: 'Unit Cost & Value',
-                    render: (i) => (
-                      <div>
-                        <p className="font-mono text-xs text-white">{formatCurrency(i.costPerUnit, theme.currency || 'INR (₹)')} / {i.unit}</p>
-                        <p className="font-mono text-[10px] text-emerald-400 font-bold">
-                          Total: {formatCurrency(i.quantity * i.costPerUnit, theme.currency || 'INR (₹)')}
+                        <p className="font-mono font-bold text-emerald-400 text-xs">{b.id}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          {new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
                     ),
                   },
                   {
-                    key: 'supplierName',
-                    header: 'Supplier Contact',
-                    render: (i) => (
+                    key: 'tableNumber',
+                    header: 'Table & Session',
+                    render: (b) => (
                       <div>
-                        <p className="text-xs font-bold text-slate-200">{i.supplierName || 'Primary Vendor'}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{i.supplierContact || 'N/A'}</p>
+                        <p className="font-bold text-white text-xs">{b.tableNumber}</p>
+                        <p className="text-[10px] text-emerald-400 font-mono">Session #{b.tableSessionId}</p>
                       </div>
+                    ),
+                  },
+                  {
+                    key: 'items',
+                    header: 'Items Breakdown',
+                    render: (b) => (
+                      <span className="text-xs font-mono text-slate-300">
+                        {b.items.reduce((sum, i) => sum + i.quantity, 0)} Items ({b.orders.length} Orders)
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'grandTotal',
+                    header: 'Grand Total',
+                    render: (b) => (
+                      <div>
+                        <p className="font-mono font-bold text-white text-sm">
+                          {formatCurrency(b.grandTotal, theme.currency || 'INR (₹)')}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">Tax: {formatCurrency(b.taxAmount, theme.currency || 'INR (₹)')}</p>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'paymentMethod',
+                    header: 'Payment Method',
+                    render: (b) => (
+                      <Badge variant="outline" className="font-mono">
+                        {b.paymentMethod || 'CASH'}
+                      </Badge>
                     ),
                   },
                   {
                     key: 'status',
                     header: 'Status',
-                    render: (i) => (
+                    render: (b) => (
                       <Badge
                         variant={
-                          i.quantity === 0 ? 'danger' : i.quantity <= i.minThreshold ? 'warning' : 'success'
+                          b.paymentStatus === 'PAID' || b.status === 'CLOSED'
+                            ? 'success'
+                            : b.status === 'BILL_REQUESTED'
+                            ? 'warning'
+                            : 'info'
                         }
                       >
-                        {i.quantity === 0 ? 'OUT OF STOCK' : i.quantity <= i.minThreshold ? 'LOW STOCK' : 'IN STOCK'}
+                        {b.paymentStatus === 'PAID' || b.status === 'CLOSED'
+                          ? 'PAID'
+                          : b.status === 'BILL_REQUESTED'
+                          ? 'BILL REQUESTED'
+                          : 'OPEN'}
                       </Badge>
                     ),
                   },
                   {
                     key: 'actions',
                     header: 'Actions',
-                    render: (i) => (
-                      <button
-                        onClick={() => handleDeleteInventory(i.id, i.name)}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                        title="Remove Inventory Item"
+                    render: (b) => (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedBillDetails(b)}
+                        className="border-slate-800 text-xs font-bold text-slate-300 hover:text-white"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        View Receipt 🧾
+                      </Button>
                     ),
                   },
                 ]}
@@ -2709,7 +3127,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                     )}
                     <div>
                       <p className="text-xs font-bold text-white">{theme.restaurantName || 'Restaurant Name'}</p>
-                      <p className="text-[10px] text-slate-400">Sample Menu Item • Special Chef Curry</p>
+                      <p className="text-[10px] text-slate-400">Featured Menu Item • Special Chef Curry</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -3030,7 +3448,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 ? selectedTableQR.qrCodeUrl
                 : (typeof window !== 'undefined'
                   ? `${window.location.origin}/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`
-                  : `http://localhost:3000/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`)
+                  : `https://dinely.food/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`)
             }
             tableNumber={selectedTableQR.tableNumber}
             restaurantName={currentRestaurant?.name || theme.restaurantName || 'Lumière Bistro'}
@@ -3348,9 +3766,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             </div>
 
             <Input
-              label="Hourly Wage ($)"
+              label="Hourly Wage (₹ INR)"
               type="number"
-              placeholder="18.50"
+              placeholder="350"
               value={newStaff.hourlyRate}
               onChange={(e) => setNewStaff({ ...newStaff, hourlyRate: e.target.value })}
             />
@@ -3448,10 +3866,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               </div>
 
               <Input
-                label="Hourly Rate ($)"
+                label="Hourly Rate (₹ INR)"
                 type="number"
-                value={editingStaff.hourlyRate || 18.5}
-                onChange={(e) => setEditingStaff({ ...editingStaff, hourlyRate: parseFloat(e.target.value) || 18.5 })}
+                value={editingStaff.hourlyRate || 350}
+                onChange={(e) => setEditingStaff({ ...editingStaff, hourlyRate: parseFloat(e.target.value) || 350 })}
               />
             </div>
 
@@ -3535,17 +3953,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       <Modal
         isOpen={isAddInventoryModalOpen}
         onClose={() => setIsAddInventoryModalOpen(false)}
-        title="Add Raw Material / Stock Item"
+        title="Add Raw Material / Stock Item 📦"
       >
         <div className="space-y-4">
           <Input
             label="Raw Material / Item Name *"
-            placeholder="e.g. Organic Extra Virgin Olive Oil"
+            placeholder="e.g. Organic Extra Virgin Olive Oil, Gin, Wagyu"
             value={newInventory.name}
             onChange={(e) => setNewInventory({ ...newInventory, name: e.target.value })}
           />
 
           <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Inventory Division *</label>
+              <select
+                value={newInventory.station}
+                onChange={(e) => setNewInventory({ ...newInventory, station: e.target.value as 'KITCHEN' | 'BAR' })}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-100 focus:outline-none focus:border-rose-500"
+              >
+                <option value="KITCHEN">👨‍🍳 Kitchen Inventory</option>
+                <option value="BAR">🍸 Bar Inventory</option>
+              </select>
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">Category *</label>
               <select
@@ -3559,21 +3989,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 <option value="Grains & Flour">Grains & Flour</option>
                 <option value="Produce & Herbs">Produce & Herbs</option>
                 <option value="Beverages & Wine">Beverages & Wine</option>
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Unit of Measure *</label>
-              <select
-                value={newInventory.unit}
-                onChange={(e) => setNewInventory({ ...newInventory, unit: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-              >
-                <option value="kg">Kilograms (kg)</option>
-                <option value="liters">Liters (L)</option>
-                <option value="pcs">Pieces (pcs)</option>
-                <option value="packs">Packs / Boxes</option>
-                <option value="bags">Bags</option>
+                <option value="Spirits & Mixers">Spirits & Mixers</option>
               </select>
             </div>
           </div>
@@ -3601,36 +4017,110 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Supplier Name"
-              placeholder="e.g. Tuscan Imports Co."
-              value={newInventory.supplierName}
-              onChange={(e) => setNewInventory({ ...newInventory, supplierName: e.target.value })}
-            />
-            <Input
-              label="Supplier Contact"
-              placeholder="+1 800-555-0199"
-              value={newInventory.supplierContact}
-              onChange={(e) => setNewInventory({ ...newInventory, supplierContact: e.target.value })}
-            />
-          </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Select Active Supplier</label>
+              <select
+                value={newInventory.supplierId}
+                onChange={(e) => {
+                  const sId = e.target.value;
+                  const s = suppliers.find((x) => x.id === sId);
+                  setNewInventory({
+                    ...newInventory,
+                    supplierId: sId,
+                    supplierName: s?.name || '',
+                    supplierContact: s?.phone || '',
+                  });
+                }}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+              >
+                <option value="">-- Pick Active Vendor --</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.supplyCategory || 'Vendor'})
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Storage Location</label>
-            <select
+            <Input
+              label="Storage Location"
+              placeholder="Cold Storage #1 / Bar Cellar"
               value={newInventory.storageLocation}
               onChange={(e) => setNewInventory({ ...newInventory, storageLocation: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-            >
-              <option value="Cold Storage #1">Cold Storage #1</option>
-              <option value="Dry Pantry Vault">Dry Pantry Vault</option>
-              <option value="Wine & Beverage Cellar">Wine & Beverage Cellar</option>
-              <option value="Deep Freezer #2">Deep Freezer #2</option>
-            </select>
+            />
           </div>
 
           <Button variant="brand" className="w-full mt-2" onClick={handleAddInventory}>
             Add Item to Inventory
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Register Supplier Modal */}
+      <Modal
+        isOpen={isAddSupplierModalOpen}
+        onClose={() => setIsAddSupplierModalOpen(false)}
+        title="Register New Vendor & Supplier 🏢"
+      >
+        <div className="space-y-4 text-xs">
+          <Input
+            label="Supplier Company Name *"
+            placeholder="e.g. Ayaan Food Industry, Apex Beverages Co."
+            value={newSupplier.name}
+            onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Contact Person / Rep"
+              placeholder="e.g. Ayaan Ahmad"
+              value={newSupplier.contactPerson}
+              onChange={(e) => setNewSupplier({ ...newSupplier, contactPerson: e.target.value })}
+            />
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Supply Category</label>
+              <select
+                value={newSupplier.supplyCategory}
+                onChange={(e) => setNewSupplier({ ...newSupplier, supplyCategory: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+              >
+                <option value="Dairy & Cheese">Dairy & Cheese</option>
+                <option value="Produce & Veggies">Produce & Veggies</option>
+                <option value="Spirits & Wines">Spirits & Wines</option>
+                <option value="Meat & Poultry">Meat & Poultry</option>
+                <option value="Bakery & Flour">Bakery & Flour</option>
+                <option value="General Pantry">General Pantry</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Phone Number"
+              placeholder="+91 98765-43210"
+              value={newSupplier.phone}
+              onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })}
+            />
+
+            <Input
+              label="Email Address"
+              type="email"
+              placeholder="supply@vendor.com"
+              value={newSupplier.email}
+              onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
+            />
+          </div>
+
+          <Input
+            label="Warehouse Address"
+            placeholder="Warehouse #4, Industrial Zone"
+            value={newSupplier.address}
+            onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
+          />
+
+          <Button variant="brand" className="w-full mt-2" onClick={handleAddSupplier}>
+            Save Supplier & Add to Registry
           </Button>
         </div>
       </Modal>
@@ -4219,6 +4709,74 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               </Button>
               <Button variant="danger" size="sm" onClick={handleDeleteCategory} icon={<Trash2 className="w-3.5 h-3.5" />}>
                 Delete Category
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Bill Details Modal for Owner */}
+      <Modal
+        isOpen={!!selectedBillDetails}
+        onClose={() => setSelectedBillDetails(null)}
+        title={`Invoice Details — ${selectedBillDetails?.id} 🧾`}
+      >
+        {selectedBillDetails && (
+          <div className="space-y-4 text-xs printable-receipt">
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-2 font-mono">
+                <span className="text-slate-400">Invoice #: <strong className="text-emerald-400">{selectedBillDetails.id}</strong></span>
+                <span className="text-slate-400">{new Date(selectedBillDetails.createdAt).toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                <div>Table: <strong className="text-white">{selectedBillDetails.tableNumber}</strong></div>
+                <div>Session: <strong className="text-emerald-400">#{selectedBillDetails.tableSessionId}</strong></div>
+                <div>Payment Method: <strong className="text-amber-400">{selectedBillDetails.paymentMethod || 'CASH'}</strong></div>
+                <div>Status: <strong className="text-emerald-300">{selectedBillDetails.paymentStatus}</strong></div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h5 className="font-bold text-slate-300 uppercase text-[11px]">Itemized Breakdown</h5>
+              <div className="divide-y divide-slate-800 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                {selectedBillDetails.items.map((i, idx) => (
+                  <div key={idx} className="py-1.5 flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-white">{i.name}</span> × {i.quantity}
+                      {i.station === 'BAR' && <span className="ml-1.5 text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono">BAR</span>}
+                    </div>
+                    <span className="font-mono font-bold text-white">{formatCurrency(i.totalPrice, theme.currency || 'INR (₹)')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-1 font-mono text-xs">
+              <div className="flex justify-between text-slate-400">
+                <span>Subtotal</span>
+                <span>{formatCurrency(selectedBillDetails.subtotal, theme.currency || 'INR (₹)')}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>GST / Tax (5%)</span>
+                <span>{formatCurrency(selectedBillDetails.taxAmount, theme.currency || 'INR (₹)')}</span>
+              </div>
+              <div className="flex justify-between text-emerald-400 font-bold pt-2 border-t border-slate-800 text-sm">
+                <span>GRAND TOTAL</span>
+                <span>{formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button
+                onClick={() => downloadDigitalReceiptPNG(selectedBillDetails, currentRestaurant?.name || theme.restaurantName || 'Restaurant')}
+                variant="brand"
+                className="flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Digital Receipt (.png)</span>
+              </Button>
+              <Button onClick={() => setSelectedBillDetails(null)} variant="outline" className="border-slate-800 text-slate-300">
+                Close Invoice
               </Button>
             </div>
           </div>

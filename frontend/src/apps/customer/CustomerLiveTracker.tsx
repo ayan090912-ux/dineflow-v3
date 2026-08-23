@@ -3,6 +3,7 @@ import { Clock, Flame, CheckCircle2, Sparkles, ChefHat, BellRing } from 'lucide-
 import { Badge, Card } from '../../packages/ui';
 import { Order } from '../../packages/types';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
+import { formatCurrency } from '../../packages/utils/currency';
 
 interface CustomerLiveTrackerProps {
   order: Order;
@@ -202,7 +203,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       <div className="border-t border-slate-800/80 pt-3 space-y-1.5">
         <div className="flex justify-between items-center text-xs text-slate-400">
           <span>Items Ordered ({currentOrder.items.length})</span>
-          <span className="font-mono font-bold text-slate-200">${currentOrder.totalAmount.toFixed(2)}</span>
+          <span className="font-mono font-bold text-slate-200">{formatCurrency(currentOrder.totalAmount)}</span>
         </div>
         <div className="flex flex-wrap gap-1">
           {currentOrder.items.map((i) => (

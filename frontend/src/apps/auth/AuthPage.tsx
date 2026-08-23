@@ -741,7 +741,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 /* 6-Digit Code Verification Form */
                 <form onSubmit={handleVerifyEmailSubmit} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Enter 6-Digit Code (Demo: 123456)</label>
+                    <label className="text-xs font-semibold text-slate-300">Enter 6-Digit Verification Code</label>
                     <input
                       type="text"
                       maxLength={6}

@@ -19,3 +19,5 @@ export * from './Skeleton';
 export * from './EmptyState';
 export * from './ErrorBoundary';
 export * from './DinelyLogo';
+export * from './AddressAutocomplete';
+

@@ -6,6 +6,7 @@ import { CustomerApp } from './apps/customer/CustomerApp';
 import { WaiterTerminalOS } from './apps/waiter/WaiterTerminalOS';
 import { KitchenETADashboard } from './apps/restaurant/KitchenETADashboard';
 import { BarTerminal } from './apps/bar/BarTerminal';
+import { InventoryTerminalOS } from './apps/inventory/InventoryTerminalOS';
 import { AuthPage } from './apps/auth/AuthPage';
 import { RoleLoginPage, PortalType } from './apps/auth/RoleLoginPage';
 import { UnauthorizedPage } from './apps/auth/UnauthorizedPage';
@@ -14,7 +15,8 @@ import { PendingApprovalPage } from './apps/onboarding/PendingApprovalPage';
 import { WorkspaceSelector } from './apps/onboarding/WorkspaceSelector';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
 import { ErrorBoundary, DinelyLogo } from './packages/ui';
-import { api } from './packages/api/client';
+import { api, getPortalScopeFromPath } from './packages/api/client';
+import { realtimeBus } from './packages/api/realtime';
 import {
   Building2,
   Utensils,
@@ -22,6 +24,7 @@ import {
   ChefHat,
   PhoneCall,
   Wine,
+  Package,
   Globe,
   LogOut,
   ShieldAlert,
@@ -29,15 +32,28 @@ import {
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
-  const [currentUser, setCurrentUser] = useState<any>(() => api.getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<any>(() => api.getCurrentUser(getPortalScopeFromPath(window.location.pathname)));
   const [activeOwnerData, setActiveOwnerData] = useState<any>(null);
   const [showDomainBar, setShowDomainBar] = useState(true);
   const [kitchenOrders, setKitchenOrders] = useState<any[]>([]);
 
   const [currentRestaurant, setCurrentRestaurant] = useState<any>(null);
 
+  const cleanPath = (currentPath || '/').split('?')[0];
+
   useEffect(() => {
     api.getRestaurantDetails().then((r) => setCurrentRestaurant(r));
+
+    const unsubscribe = realtimeBus.subscribe((event) => {
+      if (event.type === 'RestaurantSwitched' || event.type === 'RESTAURANT_APPROVED') {
+        const restId = (event as any).restaurantId || api.getCurrentRestaurantId();
+        api.getRestaurantDetails(restId).then((r) => {
+          if (r) setCurrentRestaurant(r);
+        });
+      }
+    });
+
+    return () => unsubscribe();
   }, [currentPath, currentUser]);
 
   // Sync state with browser location & popstate
@@ -45,7 +61,7 @@ export default function App() {
     const handleLocationChange = () => {
       const path = window.location.pathname || '/';
       setCurrentPath(path);
-      setCurrentUser(api.getCurrentUser());
+      setCurrentUser(api.getCurrentUser(getPortalScopeFromPath(path)));
     };
 
     window.addEventListener('popstate', handleLocationChange);
@@ -55,11 +71,12 @@ export default function App() {
   const navigateTo = (path: string) => {
     window.history.pushState({}, '', path);
     setCurrentPath(path);
-    setCurrentUser(api.getCurrentUser());
+    setCurrentUser(api.getCurrentUser(getPortalScopeFromPath(path)));
   };
 
   const handleLogout = async (redirectLoginPath: string = '/restaurant/login') => {
-    await api.logout();
+    const activeScope = getPortalScopeFromPath(currentPath);
+    await api.logout(activeScope);
     setCurrentUser(null);
     navigateTo(redirectLoginPath);
   };
@@ -75,6 +92,9 @@ export default function App() {
   // Helper to check role authorization
   const checkRoleAccess = (allowedRoles: string[]) => {
     if (!currentUser) return false;
+    if (allowedRoles.includes('PLATFORM_ADMIN')) {
+      return (currentUser.role === 'PLATFORM_ADMIN' || currentUser.role === 'SUPER_ADMIN') && currentUser.email?.toLowerCase() === 'ayan090912@gmail.com';
+    }
     return allowedRoles.includes(currentUser.role);
   };
 
@@ -82,8 +102,8 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-          {/* Sleek Subdomain & Environment Switcher Bar */}
-          {showDomainBar ? (
+          {/* Sleek Subdomain & Environment Switcher Bar (Hidden on Customer Ordering Interface for authentic SaaS experience) */}
+          {showDomainBar && !currentPath.startsWith('/customer') && !currentPath.startsWith('/order') ? (
             <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-sm">
               <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigateTo('/')}>
                 <DinelyLogo size="sm" />
@@ -145,6 +165,18 @@ export default function App() {
                     <span>Bar Terminal</span>
                   </button>
                 )}
+
+                <button
+                  onClick={() => navigateTo(currentUser ? '/inventory/terminal' : '/inventory/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/inventory')
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Package className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Inventory OS</span>
+                </button>
 
                 <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
 
@@ -288,8 +320,48 @@ export default function App() {
               <RoleLoginPage
                 portal="waiter"
                 onNavigate={navigateTo}
-                onLoginSuccess={(_, user) => setCurrentUser(user)}
+                onLoginSuccess={(_, user) => {
+                  setCurrentUser(user);
+                  navigateTo('/waiter');
+                }}
               />
+            )}
+
+            {currentPath === '/inventory/login' && (
+              <RoleLoginPage
+                portal="inventory"
+                onNavigate={navigateTo}
+                onLoginSuccess={(_, user) => {
+                  setCurrentUser(user);
+                  navigateTo('/inventory/terminal');
+                }}
+              />
+            )}
+
+            {(currentPath === '/inventory/terminal' || currentPath === '/inventory/dashboard' || currentPath === '/inventory') && (
+              checkRoleAccess(['INVENTORY_MANAGER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                <InventoryTerminalOS
+                  onLogout={() => handleLogout('/inventory/login')}
+                  activeRestaurantId={currentRestaurant?.id}
+                />
+              ) : currentUser ? (
+                <UnauthorizedPage
+                  requiredRole="INVENTORY MANAGER / OWNER"
+                  userRole={currentUser?.role}
+                  userEmail={currentUser?.email}
+                  targetPath="/inventory/terminal"
+                  onNavigate={navigateTo}
+                />
+              ) : (
+                <RoleLoginPage
+                  portal="inventory"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/inventory/terminal');
+                  }}
+                />
+              )
             )}
 
             {/* Dashboards with Role-Based Access Control (RBAC) */}
@@ -442,6 +514,7 @@ export default function App() {
                 />
               )
             )}
+
 
             {(currentPath === '/waiter' || currentPath === '/waiter/dashboard') && (
               (currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) ? (

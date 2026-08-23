@@ -45,6 +45,7 @@ import {
   getFulfillmentStation,
 } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
+import { matchTableNumber } from '../../packages/utils/tableUtils';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 
 // Web Audio API Chime Synthesizer for notifications
@@ -248,26 +249,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
   // Computed data collections
   const activeTablesList = useMemo(() => {
-    const activeTableIdSet = new Set<string>();
-    const activeTableNumSet = new Set<string>();
-
-    activeSessions.forEach((s) => {
-      if (s.status === 'ACTIVE') {
-        if (s.tableId) activeTableIdSet.add(s.tableId);
-        if (s.tableNumber) activeTableNumSet.add(s.tableNumber.toLowerCase());
-      }
-    });
-
-    const activeOrderTableNums = new Set(
-      orders
-        .filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')
-        .map((o) => o.tableNumber.toLowerCase())
-    );
+    const activeOrderTableNums = orders
+      .filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')
+      .map((o) => o.tableNumber);
 
     return tables.filter((t) => {
-      const isSessionActive = activeTableIdSet.has(t.id) || activeTableNumSet.has(t.tableNumber.toLowerCase());
+      const isSessionActive = activeSessions.some(
+        (s) => s.status === 'ACTIVE' && (s.tableId === t.id || matchTableNumber(s.tableNumber, t.tableNumber))
+      );
       const isStatusOccupied = t.status === 'OCCUPIED' || t.status === 'MERGED' || Boolean(t.isOccupied);
-      const hasActiveOrder = activeOrderTableNums.has(t.tableNumber.toLowerCase());
+      const hasActiveOrder = activeOrderTableNums.some((num) => matchTableNumber(num, t.tableNumber));
 
       const isActive = isSessionActive || isStatusOccupied || hasActiveOrder;
       if (!isActive) return false;
@@ -645,7 +636,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {activeTablesList.slice(0, 6).map((table) => {
                       const tableOrders = orders.filter(
-                        (o) => o.tableNumber.toLowerCase() === table.tableNumber.toLowerCase() && o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+                        (o) => matchTableNumber(o.tableNumber, table.tableNumber) && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
                       );
                       const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
                       const latestOrder = tableOrders[0];
@@ -843,11 +834,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {activeTablesList.map((table) => {
-                    const activeSession = activeSessions.find((s) => s.status === 'ACTIVE' && (s.tableId === table.id || s.tableNumber.toLowerCase() === table.tableNumber.toLowerCase()));
-                    const tableOrders = orders.filter((o) => {
-                      if (activeSession && o.tableSessionId === activeSession.id) return true;
-                      return o.tableNumber.toLowerCase() === table.tableNumber.toLowerCase() && o.status !== 'COMPLETED' && o.status !== 'CANCELLED';
-                    });
+                    const activeSession = activeSessions.find((s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber)));
+                    const tableOrders = orders.filter(
+                      (o) => matchTableNumber(o.tableNumber, table.tableNumber) && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+                    );
                     const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
                     const latestOrder = tableOrders[0];
 

@@ -7,7 +7,9 @@ import {
   Input,
   Badge,
   DinelyLogo,
+  AddressAutocomplete,
 } from '../../packages/ui';
+import { StructuredAddress } from '../../packages/utils/addressGeocoding';
 import {
   Building,
   MapPin,
@@ -89,6 +91,24 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [city, setCity] = useState('');
   const [address, setAddress] = useState(initialOwnerData?.address || '');
   const [postalCode, setPostalCode] = useState('');
+  const [locality, setLocality] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [placeId, setPlaceId] = useState<string | null>(null);
+  const [selectedLocationObj, setSelectedLocationObj] = useState<StructuredAddress | null>(null);
+
+  const handleSelectAddress = (loc: StructuredAddress) => {
+    setAddress(loc.fullAddress);
+    if (loc.city) setCity(loc.city);
+    if (loc.state) setState(loc.state);
+    if (loc.country) setCountry(loc.country);
+    if (loc.postalCode) setPostalCode(loc.postalCode);
+    if (loc.locality) setLocality(loc.locality);
+    if (loc.latitude !== null) setLatitude(loc.latitude);
+    if (loc.longitude !== null) setLongitude(loc.longitude);
+    if (loc.placeId) setPlaceId(loc.placeId);
+    setSelectedLocationObj(loc);
+  };
 
   // Step 3: Tables
   const [hasSeating, setHasSeating] = useState<boolean>(true);
@@ -208,7 +228,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     setIsSubmitting(true);
 
     try {
-      let user = currentUser || api.getCurrentUser();
+      let user = api.getCurrentUser() || currentUser;
+      if (!user) {
+        api.restoreSession();
+        user = api.getCurrentUser();
+      }
       if (!user) {
         throw new Error('Owner account session not found. Please authenticate with Google first.');
       }
@@ -239,9 +263,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         hasTables: !isNoSeating,
         hasWaiter: !isNoSeating,
         address: fullAddress,
+        locality,
         city,
         state,
         country,
+        postalCode,
+        latitude,
+        longitude,
+        placeId,
         phone: user.phone || '+91 98765 43210',
         email: user.email,
         tables: {
@@ -471,49 +500,69 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 <p className="text-xs text-slate-400">Provide official address details for venue verification.</p>
               </div>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label="Country *"
-                    placeholder="e.g. India"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    icon={<Globe className="w-4 h-4 text-slate-500" />}
-                    required
-                  />
-                  <Input
-                    label="State / Region"
-                    placeholder="e.g. West Bengal"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label="City *"
-                    placeholder="e.g. Kolkata"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    icon={<Building className="w-4 h-4 text-slate-500" />}
-                    required
-                  />
-                  <Input
-                    label="Postal / PIN Code"
-                    placeholder="e.g. 700016"
-                    value={postalCode}
-                    onChange={(e) => setPostalCode(e.target.value)}
-                  />
-                </div>
-
-                <Input
-                  label="Full Street Address *"
-                  placeholder="e.g. 45 Park Street, Block B"
+              <div className="space-y-5">
+                <AddressAutocomplete
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  icon={<MapPin className="w-4 h-4 text-slate-500" />}
-                  required
+                  onSelectAddress={handleSelectAddress}
+                  onChangeText={(txt) => setAddress(txt)}
+                  selectedLocation={
+                    selectedLocationObj ||
+                    (city ? {
+                      fullAddress: address,
+                      locality,
+                      city,
+                      state,
+                      country,
+                      postalCode,
+                      latitude,
+                      longitude,
+                      placeId,
+                    } : null)
+                  }
                 />
+
+                <div className="pt-2 space-y-3 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Auto-Populated Location Details
+                    </p>
+                    <span className="text-[10px] text-slate-500 font-mono">Auto-filled from address selection</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      label="Country *"
+                      placeholder="e.g. India"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      icon={<Globe className="w-4 h-4 text-slate-500" />}
+                      required
+                    />
+                    <Input
+                      label="State / Region"
+                      placeholder="e.g. West Bengal"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      label="City *"
+                      placeholder="e.g. Kolkata"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      icon={<Building className="w-4 h-4 text-slate-500" />}
+                      required
+                    />
+                    <Input
+                      label="Postal / PIN Code"
+                      placeholder="e.g. 700016"
+                      value={postalCode}
+                      onChange={(e) => setPostalCode(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

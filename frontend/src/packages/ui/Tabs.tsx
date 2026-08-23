@@ -25,7 +25,7 @@ export const Tabs: React.FC<TabsProps> = ({
 }) => {
   if (variant === 'pills') {
     return (
-      <div className={clsx('inline-flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl gap-1 overflow-x-auto max-w-full', className)}>
+      <div className={clsx('inline-flex p-1 bg-slate-950 border border-slate-800 rounded-2xl gap-1 overflow-x-auto max-w-full', className)}>
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
           return (
@@ -33,10 +33,10 @@ export const Tabs: React.FC<TabsProps> = ({
               key={tab.id}
               onClick={() => onChange(tab.id)}
               className={clsx(
-                'flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all duration-200 whitespace-nowrap select-none',
+                'flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all duration-200 whitespace-nowrap select-none cursor-pointer',
                 isActive
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900'
               )}
             >
               {tab.icon}
@@ -46,8 +46,8 @@ export const Tabs: React.FC<TabsProps> = ({
                   className={clsx(
                     'px-1.5 py-0.2 rounded-full text-[10px]',
                     isActive
-                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-800 text-slate-300'
                   )}
                 >
                   {tab.badge}
@@ -61,7 +61,7 @@ export const Tabs: React.FC<TabsProps> = ({
   }
 
   return (
-    <div className={clsx('flex border-b border-slate-200 dark:border-slate-800 gap-6 overflow-x-auto', className)}>
+    <div className={clsx('flex border-b border-slate-800 gap-6 overflow-x-auto', className)}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         return (
@@ -69,16 +69,16 @@ export const Tabs: React.FC<TabsProps> = ({
             key={tab.id}
             onClick={() => onChange(tab.id)}
             className={clsx(
-              'flex items-center gap-2 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap',
+              'flex items-center gap-2 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer',
               isActive
-                ? 'border-[var(--brand-primary,#e11d48)] text-[var(--brand-primary,#e11d48)]'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                ? 'border-rose-500 text-rose-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
             )}
           >
             {tab.icon}
             {tab.label}
             {tab.badge !== undefined && (
-              <span className="px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <span className="px-2 py-0.5 rounded-full text-xs bg-slate-800 text-slate-300">
                 {tab.badge}
               </span>
             )}

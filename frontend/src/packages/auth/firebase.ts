@@ -39,7 +39,7 @@ export interface GoogleAuthResult {
  * Triggers real Firebase Google Authentication with popup flow.
  * Returns the authenticated Google user details.
  */
-export async function signInWithGooglePopup(): Promise<GoogleAuthResult> {
+export async function signInWithGooglePopup(forceRefreshIdToken: boolean = false): Promise<GoogleAuthResult> {
   try {
     const result: UserCredential = await signInWithPopup(firebaseAuth, googleProvider);
     const user = result.user;
@@ -48,7 +48,7 @@ export async function signInWithGooglePopup(): Promise<GoogleAuthResult> {
       throw new Error('No email address associated with this Google account.');
     }
 
-    const idToken = await user.getIdToken();
+    const idToken = await user.getIdToken(forceRefreshIdToken);
 
     return {
       uid: user.uid,
@@ -63,7 +63,7 @@ export async function signInWithGooglePopup(): Promise<GoogleAuthResult> {
     if (error.code === 'auth/popup-closed-by-user') {
       throw new Error('Google sign-in popup was closed before completing authentication.');
     } else if (error.code === 'auth/popup-blocked') {
-      throw new Error('Google sign-in popup was blocked by your browser. Please allow popups for localhost.');
+      throw new Error('Google sign-in popup was blocked by your browser. Please allow popups for this domain.');
     } else if (error.code === 'auth/cancelled-popup-request') {
       throw new Error('Sign-in process cancelled.');
     } else if (error.code === 'auth/account-exists-with-different-credential') {
@@ -74,6 +74,14 @@ export async function signInWithGooglePopup(): Promise<GoogleAuthResult> {
 
     throw new Error(error.message || 'Google Authentication failed. Please try again.');
   }
+}
+
+/**
+ * Platform Admin Google Login Flow.
+ * Obtains fresh Firebase ID token for backend Platform Admin verification.
+ */
+export async function signInPlatformAdminWithGoogle(): Promise<GoogleAuthResult> {
+  return signInWithGooglePopup(true);
 }
 
 export async function signOutFirebase(): Promise<void> {
