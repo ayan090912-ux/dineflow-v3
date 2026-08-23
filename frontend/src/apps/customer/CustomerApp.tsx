@@ -294,19 +294,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const saveCustomerOrderId = (orderId: string, restId?: string, tableNum?: string) => {
     try {
       const key = getTableStorageKey(restId, tableNum);
-      const rId = restId || currentRestaurant?.id || 'rest-1';
-      const keyRestOnly = `dinely_customer_active_orders_${rId}`;
-
       const listA: string[] = JSON.parse(localStorage.getItem(key) || '[]');
       if (!listA.includes(orderId)) {
         listA.unshift(orderId);
         localStorage.setItem(key, JSON.stringify(listA));
-      }
-
-      const listB: string[] = JSON.parse(localStorage.getItem(keyRestOnly) || '[]');
-      if (!listB.includes(orderId)) {
-        listB.unshift(orderId);
-        localStorage.setItem(keyRestOnly, JSON.stringify(listB));
       }
     } catch (e) {
       console.error('Failed to save customer order ID', e);
@@ -316,12 +307,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const getSavedCustomerOrderIds = (restId?: string, tableNum?: string): string[] => {
     try {
       const key = getTableStorageKey(restId, tableNum);
-      const rId = restId || currentRestaurant?.id || 'rest-1';
-      const keyRestOnly = `dinely_customer_active_orders_${rId}`;
-
-      const listA: string[] = JSON.parse(localStorage.getItem(key) || '[]');
-      const listB: string[] = JSON.parse(localStorage.getItem(keyRestOnly) || '[]');
-      return Array.from(new Set([...listA, ...listB]));
+      return JSON.parse(localStorage.getItem(key) || '[]');
     } catch (e) {
       return [];
     }
@@ -353,7 +339,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       const isMatchingTable = o.tableNumber && matchTableNumber(o.tableNumber, activeTableStr);
       const isMatchingSession = activeSessionId && o.tableSessionId === activeSessionId;
-      const isSavedLocally = savedOrderIds.includes(o.id);
 
       const isFoodCartOrPickup = o.orderType === 'PICKUP' || o.tableNumber === 'COUNTER';
 
@@ -363,11 +348,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           return false;
         }
 
-        // ABSOLUTE TABLE ISOLATION: A table view (e.g. Table 1) MUST NOT display orders belonging to Table 8 or any other table!
-        if (!isMatchingTable && !isMatchingSession && !isSavedLocally) {
+        // ABSOLUTE TABLE ISOLATION: A table view (e.g. Table 1) MUST NOT display orders belonging to Table 2 or any other table!
+        if (!isMatchingTable && !isMatchingSession) {
           return false;
         }
       } else {
+        const isSavedLocally = savedOrderIds.includes(o.id);
         if (!isSavedLocally && !isMatchingTable && !isMatchingSession) {
           return false;
         }

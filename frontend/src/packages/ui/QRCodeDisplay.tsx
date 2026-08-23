@@ -174,23 +174,29 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
   // Requirement 1 & 3: Construct the EXACT Destination URL
   const defaultOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
+  const effectiveRestId =
+    restaurantId ||
+    (typeof window !== 'undefined' && localStorage
+      ? localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id')
+      : null) ||
+    undefined;
+
   let defaultUrl = '';
   if (isPickup || safeTableNum.toUpperCase() === 'COUNTER') {
-    defaultUrl = `${defaultOrigin}/customer${restaurantId ? `?restaurant=${restaurantId}` : ''}`;
+    defaultUrl = `${defaultOrigin}/customer${effectiveRestId ? `?restaurant=${effectiveRestId}` : ''}`;
   } else {
     defaultUrl = `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}${
-      restaurantId ? `&restaurant=${restaurantId}` : ''
+      effectiveRestId ? `&restaurant=${effectiveRestId}` : ''
     }`;
   }
 
   // Exact encoded customer destination URL (single source of truth for display, QR code, copy link, and live view)
-  const rawUrl =
-    url && !url.includes('qrserver.com') && !url.includes('.dinely.app')
-      ? url
-      : value && !value.includes('qrserver.com') && !value.includes('.dinely.app')
-      ? value
-      : '';
-  const qrUrl = rawUrl || defaultUrl;
+  const candidateUrl = url || value;
+  const isValidCandidateUrl =
+    candidateUrl &&
+    candidateUrl.includes('/customer') &&
+    (candidateUrl.includes('table=') || candidateUrl.includes('restaurant='));
+  const qrUrl = isValidCandidateUrl ? candidateUrl : defaultUrl;
 
   // Copy link to clipboard
   const handleCopyLink = () => {
