@@ -3444,12 +3444,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         {selectedTableQR && (
           <QRCodeDisplay
             url={
-              (selectedTableQR.qrCodeUrl && selectedTableQR.qrCodeUrl.includes('/customer') && selectedTableQR.qrCodeUrl.includes('table='))
+              (selectedTableQR.qrCodeUrl && selectedTableQR.qrCodeUrl.includes('/customer') && selectedTableQR.qrCodeUrl.includes('tableId='))
                 ? selectedTableQR.qrCodeUrl
                 : (typeof window !== 'undefined'
-                  ? `${window.location.origin}/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`
-                  : `https://dinely.food/customer?table=${encodeURIComponent(selectedTableQR.tableNumber)}${currentRestaurant?.id ? `&restaurant=${currentRestaurant.id}` : ''}`)
+                  ? `${window.location.origin}/customer?restaurant=${currentRestaurant?.id || ''}&tableId=${selectedTableQR.id}&table=${encodeURIComponent(selectedTableQR.tableNumber)}`
+                  : `https://dinely.food/customer?restaurant=${currentRestaurant?.id || ''}&tableId=${selectedTableQR.id}&table=${encodeURIComponent(selectedTableQR.tableNumber)}`)
             }
+            tableId={selectedTableQR.id}
             tableNumber={selectedTableQR.tableNumber}
             restaurantName={currentRestaurant?.name || theme.restaurantName || 'Lumière Bistro'}
             restaurantLogo={theme.logo}

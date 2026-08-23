@@ -100,77 +100,64 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [isSessionEnded, setIsSessionEnded] = useState(false);
 
   useEffect(() => {
-    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
-    const targetTableNum = urlTableParam ? formatStandardTableNumber(urlTableParam) : formatStandardTableNumber(selectedTableNum || tableNumber || 'Table 01');
+    async function initCustomerApp() {
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId') || undefined;
+      const urlTableIdParam = urlParams?.get('tableId') || undefined;
+      const urlTableNumParam = urlParams?.get('table') || urlParams?.get('tableNumber') || undefined;
 
-    if (selectedTableNum !== targetTableNum) {
-      setSelectedTableNum(targetTableNum);
-    }
-
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('dinely_customer_active_orders_global');
-      try {
-        Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith('dinely_customer_active_orders_')) {
-            const raw = localStorage.getItem(key);
-            if (raw) {
-              const list: string[] = JSON.parse(raw);
-              const cleaned = list.filter((id) => id !== 'ORD104' && id !== 'ord-104' && !id.includes('104'));
-              localStorage.setItem(key, JSON.stringify(cleaned));
-            }
-          }
-        });
-      } catch (e) {}
-      const savedAge = sessionStorage.getItem('dinely_bar_age_verified');
-      if (savedAge === 'true') {
-        setIsAgeConfirmed(true);
+      // 1. Purge stale customer state when opening an explicit QR code URL
+      if (typeof window !== 'undefined' && (urlRestParam || urlTableIdParam || urlTableNumParam)) {
+        setCustomerOrders([]);
+        setCurrentTableSession(null);
+        setCurrentTable(null);
       }
+
+      // 2. Load restaurant details & menu items
+      const r = await loadRestaurantAndMenu();
+      const targetRestId = r?.id || urlRestParam || api.getCurrentRestaurantId() || undefined;
+
+      // 3. Load table & active session details
+      await loadTableInfo(urlTableNumParam, targetRestId, urlTableIdParam);
     }
 
-    async function init() {
-      const r = await loadRestaurantAndMenu();
-      const targetRestId = r?.id || api.getCurrentRestaurantId() || undefined;
-      await loadTableInfo(targetTableNum, targetRestId);
-    }
-    init();
+    initCustomerApp();
+  }, [typeof window !== 'undefined' ? window.location.search : '']);
+
+  // Reactive Realtime Event Listener bound strictly to (restaurantId, tableId, tableSessionId)
+  useEffect(() => {
+    const restId = currentRestaurant?.id;
+    const tId = currentTable?.id;
+    const tNum = selectedTableNum;
+    const sId = currentTableSession?.id;
+
+    if (!restId || !sId) return;
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      const restId = api.getCurrentRestaurantId() || currentRestaurant?.id;
-      if (event.restaurantId && restId && event.restaurantId !== restId) {
+      if (event.restaurantId && event.restaurantId !== restId) {
         return;
       }
 
-      const activeTableId = currentTable?.id;
-      const activeTableNum = selectedTableNum || targetTableNum;
-      const activeSessionId = currentTableSession?.id;
-
-      // Filter events strictly by table and session
-      const isEventForTable =
+      const isMatchingTable =
         (!event.tableId && !event.tableNumber) ||
-        (event.tableId && activeTableId && event.tableId === activeTableId) ||
-        (event.tableNumber && matchTableNumber(event.tableNumber, activeTableNum));
+        (event.tableId && tId && event.tableId === tId) ||
+        (event.tableNumber && tNum && matchTableNumber(event.tableNumber, tNum));
 
-      const isEventForSession =
-        !event.tableSessionId || (activeSessionId && event.tableSessionId === activeSessionId);
+      if (!isMatchingTable) {
+        return;
+      }
 
-      if (!isEventForTable || !isEventForSession) {
+      const isMatchingSession =
+        !event.tableSessionId || (sId && event.tableSessionId === sId);
+
+      if (!isMatchingSession) {
         return;
       }
 
       if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
-        if (!event.tableSessionId || (activeSessionId && event.tableSessionId === activeSessionId)) {
-          setIsSessionEnded(true);
-          setCurrentTableSession(null);
-          setCustomerOrders([]);
-          try {
-            const currentRestId = api.getCurrentRestaurantId() || currentRestaurant?.id;
-            if (currentRestId) {
-              const key = getTableStorageKey(currentRestId, activeTableNum);
-              localStorage.removeItem(key);
-            }
-          } catch (e) {}
-        }
+        setIsSessionEnded(true);
+        setCurrentTableSession(null);
+        setCustomerOrders([]);
         return;
       }
 
@@ -178,7 +165,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setTimeout(() => setIsRecentStatusPulse(false), 3500);
 
       if (event.type === 'OrderCreated' && event.data) {
-        if (activeSessionId && event.data.tableSessionId === activeSessionId) {
+        if (event.data.tableSessionId === sId) {
           setCustomerOrders((prev) => {
             const exists = prev.some((o) => o.id === event.data.id);
             if (exists) return prev.map((o) => (o.id === event.data.id ? event.data : o));
@@ -186,15 +173,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           });
         }
       } else if (event.orderId && event.data) {
-        if (!event.data.tableSessionId || (activeSessionId && event.data.tableSessionId === activeSessionId)) {
+        if (event.data.tableSessionId === sId) {
           setCustomerOrders((prev) =>
             prev.map((o) => (o.id === event.orderId ? { ...o, ...event.data } : o))
           );
         }
       } else {
-        if (activeSessionId) {
-          loadInitialOrder(activeSessionId, restId, activeTableNum);
-        }
+        loadInitialOrder(sId, restId, tNum, tId);
       }
 
       if (event.type === 'ETAUpdated') {
@@ -209,23 +194,34 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     });
 
     return () => unsubscribe();
-  }, [selectedTableNum]);
+  }, [currentRestaurant?.id, currentTable?.id, selectedTableNum, currentTableSession?.id]);
 
-  const loadTableInfo = async (explicitTableNum?: string, explicitRestId?: string) => {
+  const loadTableInfo = async (explicitTableNum?: string, explicitRestId?: string, explicitTableId?: string) => {
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
     const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId');
     const restId = explicitRestId || urlRestParam || currentRestaurant?.id || api.getCurrentRestaurantId() || undefined;
-    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber') || urlParams?.get('tableId');
+    const urlTableIdParam = explicitTableId || urlParams?.get('tableId') || undefined;
+    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
     const rawTableStr = explicitTableNum || urlTableParam || selectedTableNum || 'Table 01';
+
+    if (!restId) return;
 
     const tbls = await api.getTables(restId);
     setAllRestaurantTables(tbls);
 
-    const tbl = tbls.find(
-      (t) => t.id === rawTableStr || (t.tableNumber && matchTableNumber(t.tableNumber, rawTableStr)) || t.tableNumber === rawTableStr
-    );
+    let tbl: Table | undefined;
+    if (urlTableIdParam) {
+      tbl = tbls.find((t) => t.id === urlTableIdParam);
+    }
+    if (!tbl) {
+      tbl = tbls.find(
+        (t) => t.id === rawTableStr || (t.tableNumber && matchTableNumber(t.tableNumber, rawTableStr)) || t.tableNumber === rawTableStr
+      );
+    }
 
     const displayTableNum = tbl ? tbl.tableNumber : formatStandardTableNumber(rawTableStr);
+    const resolvedTableId = tbl ? tbl.id : (urlTableIdParam || `tbl-${restId}-${displayTableNum.toLowerCase().replace(/\s+/g, '_')}`);
+
     if (selectedTableNum !== displayTableNum) {
       setSelectedTableNum(displayTableNum);
     }
@@ -233,10 +229,20 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setCurrentTable(tbl);
     }
 
-    const session = await api.getOrCreateTableSession(restId, tbl?.id, displayTableNum);
+    const session = await api.getOrCreateTableSession(restId, resolvedTableId, displayTableNum);
     if (session) {
       setCurrentTableSession(session);
-      await loadInitialOrder(session.id, restId, displayTableNum);
+
+      if (typeof window !== 'undefined' && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.search.includes('debug'))) {
+        console.log('[DINELY DEBUG]', {
+          restaurantId: restId,
+          tableId: resolvedTableId,
+          tableNumber: displayTableNum,
+          tableSessionId: session.id,
+        });
+      }
+
+      await loadInitialOrder(session.id, restId, displayTableNum, resolvedTableId);
     }
   };
 
@@ -591,6 +597,24 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       isBarTheme ? 'bg-gradient-to-b from-slate-950 via-slate-900 to-amber-950/40 text-slate-100' : 'bg-slate-900 text-slate-100'
     }`}>
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
+
+      {/* DINELY CUSTOMER DEV DEBUG PANEL */}
+      {(import.meta.env.DEV || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.search.includes('debug')))) && (
+        <div className="bg-slate-950/95 border-b border-amber-500/40 p-2.5 text-[10px] font-mono text-amber-300 space-y-1 z-50 sticky top-0 shadow-lg">
+          <div className="font-bold text-amber-400 flex items-center justify-between">
+            <span>[DINELY CUSTOMER DEBUG]</span>
+            <span className="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">DEV MODE</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-300">
+            <div>Restaurant: <span className="text-white font-bold">{currentRestaurant?.id || 'N/A'}</span></div>
+            <div>Table ID: <span className="text-white font-bold">{currentTable?.id || 'N/A'}</span></div>
+            <div>Table Number: <span className="text-white font-bold">{selectedTableNum}</span></div>
+            <div>Session: <span className="text-amber-200 font-bold">{currentTableSession?.id || 'N/A'}</span></div>
+            <div>Orders Returned: <span className="text-emerald-400 font-bold">{customerOrders.length}</span></div>
+            <div>First Order Table: <span className="text-white font-bold">{customerOrders[0]?.tableId || customerOrders[0]?.tableNumber || 'None'}</span></div>
+          </div>
+        </div>
+      )}
 
       {/* Hero Banner Header */}
       <div className="relative h-52 w-full bg-slate-800 overflow-hidden">

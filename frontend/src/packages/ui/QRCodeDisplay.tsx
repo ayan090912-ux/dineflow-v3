@@ -181,13 +181,13 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
       : null) ||
     undefined;
 
+  const cleanTableId = (tableId || (effectiveRestId ? `tbl-${effectiveRestId}-${safeTableNum.toLowerCase().replace(/\s+/g, '_')}` : '')).trim();
+
   let defaultUrl = '';
   if (isPickup || safeTableNum.toUpperCase() === 'COUNTER') {
     defaultUrl = `${defaultOrigin}/customer${effectiveRestId ? `?restaurant=${effectiveRestId}` : ''}`;
   } else {
-    defaultUrl = `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}${
-      effectiveRestId ? `&restaurant=${effectiveRestId}` : ''
-    }`;
+    defaultUrl = `${defaultOrigin}/customer?restaurant=${effectiveRestId || ''}&tableId=${cleanTableId}&table=${encodeURIComponent(safeTableNum)}`;
   }
 
   // Exact encoded customer destination URL (single source of truth for display, QR code, copy link, and live view)

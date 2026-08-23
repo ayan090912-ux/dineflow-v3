@@ -231,8 +231,8 @@ export class DinelyApiClient {
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
     this.tables.forEach((tbl) => {
-      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app')) {
-        tbl.qrCodeUrl = `${origin}/customer?table=${encodeURIComponent(tbl.tableNumber)}${tbl.restaurantId ? `&restaurant=${tbl.restaurantId}` : ''}`;
+      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app') || !tbl.qrCodeUrl.includes('tableId=')) {
+        tbl.qrCodeUrl = `${origin}/customer?restaurant=${tbl.restaurantId || ''}&tableId=${tbl.id}&table=${encodeURIComponent(tbl.tableNumber)}`;
       }
       const activeSession = this.tableSessions.find(
         (s) => s.status === 'ACTIVE' && (s.restaurantId === tbl.restaurantId || !s.restaurantId) && (s.tableId === tbl.id || matchTableNumber(s.tableNumber, tbl.tableNumber))
