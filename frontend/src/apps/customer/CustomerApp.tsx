@@ -198,9 +198,16 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const loadTableInfo = async (explicitTableNum?: string, explicitRestId?: string, explicitTableId?: string) => {
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const pathParts = pathname.split('/').filter(Boolean);
+    let pathTableIdParam: string | undefined = undefined;
+    if (pathParts.length >= 2 && (pathParts[0] === 'qr' || pathParts[0] === 'customer' || pathParts[0] === 'order')) {
+      pathTableIdParam = pathParts.length >= 3 ? pathParts[2] : pathParts[1];
+    }
+
     const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId');
     const restId = explicitRestId || urlRestParam || currentRestaurant?.id || api.getCurrentRestaurantId() || undefined;
-    const urlTableIdParam = explicitTableId || urlParams?.get('tableId') || undefined;
+    const urlTableIdParam = explicitTableId || urlParams?.get('tableId') || pathTableIdParam || undefined;
     const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
     const rawTableStr = explicitTableNum || urlTableParam || selectedTableNum || 'Table 01';
 
@@ -248,7 +255,23 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const loadRestaurantAndMenu = async (): Promise<Restaurant | null> => {
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId');
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const pathParts = pathname.split('/').filter(Boolean);
+
+    let pathRestParam: string | undefined = undefined;
+    let pathTableIdParam: string | undefined = undefined;
+
+    if (pathParts.length >= 2 && (pathParts[0] === 'qr' || pathParts[0] === 'customer' || pathParts[0] === 'order')) {
+      if (pathParts.length >= 3) {
+        pathRestParam = pathParts[1];
+        pathTableIdParam = pathParts[2];
+      } else if (pathParts.length === 2) {
+        pathTableIdParam = pathParts[1];
+      }
+    }
+
+    const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId') || pathRestParam;
+    const urlTableIdParam = urlParams?.get('tableId') || pathTableIdParam;
     const activeRestId =
       urlRestParam ||
       api.getCurrentRestaurantId() ||
@@ -260,6 +283,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     let r: Restaurant | null = null;
     if (urlRestParam) {
       r = await api.getRestaurantDetails(urlRestParam);
+    }
+    if (!r && urlTableIdParam) {
+      const rests = await api.getRestaurants();
+      for (const restItem of rests) {
+        const tbls = await api.getTables(restItem.id);
+        const matchTbl = tbls.find((t) => t.id === urlTableIdParam);
+        if (matchTbl) {
+          r = restItem;
+          break;
+        }
+      }
     }
     if (!r) {
       const rests = await api.getRestaurants();

@@ -195,15 +195,30 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   const candidateUrl = url || value;
   const isValidCandidateUrl =
     candidateUrl &&
-    candidateUrl.includes('/customer') &&
-    (candidateUrl.includes('table=') || candidateUrl.includes('restaurant='));
-  const qrUrl = isValidCandidateUrl ? candidateUrl : defaultUrl;
+    (candidateUrl.includes('/customer') || candidateUrl.includes('/order') || candidateUrl.includes('/qr')) &&
+    (candidateUrl.includes('table=') || candidateUrl.includes('tableId=') || candidateUrl.includes('restaurant='));
+
+  let rawUrl = isValidCandidateUrl ? candidateUrl : defaultUrl;
+
+  // Sanitize rawUrl to ALWAYS use production HTTPS origin, purging any localhost/http/IP addresses
+  let qrUrl = rawUrl;
+  if (rawUrl) {
+    qrUrl = rawUrl
+      .replace(/^http:\/\/[^/]+/, defaultOrigin)
+      .replace(/^https:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/, defaultOrigin);
+  }
 
   // Copy link to clipboard
   const handleCopyLink = () => {
     navigator.clipboard.writeText(qrUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2200);
+  };
+
+  // Share via WhatsApp
+  const handleShareWhatsApp = () => {
+    const text = `Scan QR code or tap link to view live menu & order for ${safeRestName} (${safeTableNum}): ${qrUrl}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   // Open exact URL in live new tab
@@ -491,7 +506,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -500,6 +515,16 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
               icon={copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             >
               {copied ? 'Link Copied!' : 'Copy Link'}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleShareWhatsApp}
+              className="text-xs font-bold border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
+              icon={<Smartphone className="w-3.5 h-3.5 text-emerald-400" />}
+            >
+              Share on WhatsApp 💬
             </Button>
 
             <Button

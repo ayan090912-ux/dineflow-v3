@@ -51,7 +51,7 @@ export function getProductionOrigin(): string {
     const envDomain = (import.meta.env.VITE_PUBLIC_DOMAIN || import.meta.env.VITE_PRODUCTION_DOMAIN || '').trim();
     return envDomain ? `https://${envDomain.replace(/^https?:\/\//, '')}` : 'https://dinely.food';
   }
-  return window.location.origin;
+  return window.location.origin.replace(/^http:\/\//, 'https://');
 }
 
 export type PortalScope = 'ADMIN' | 'OWNER' | 'STAFF' | 'CUSTOMER';
@@ -63,37 +63,35 @@ const SESSION_KEYS: Record<PortalScope, string> = {
   CUSTOMER: 'dinely_session_customer',
 };
 
-export function getPortalScopeFromPath(path?: string): PortalScope {
-  const p = (path || (typeof window !== 'undefined' ? window.location.pathname : '')).toLowerCase();
-  if (p.startsWith('/admin') || p.startsWith('/platform')) {
+const TOKEN_KEYS: Record<PortalScope, string> = {
+  ADMIN: 'dinely_tokens_admin',
+  OWNER: 'dinely_tokens_owner',
+  STAFF: 'dinely_tokens_staff',
+  CUSTOMER: 'dinely_tokens_customer',
+};
+
+export function getPortalScopeFromPath(pathname?: string): PortalScope {
+  const p = pathname || (typeof window !== 'undefined' ? window.location.pathname : '/');
+  if (p.startsWith('/admin')) {
     return 'ADMIN';
-  }
-  if (
-    p.startsWith('/restaurant') ||
-    p.startsWith('/owner') ||
-    p.startsWith('/wizard') ||
-    p.startsWith('/create-restaurant') ||
-    p.startsWith('/restaurant-setup') ||
-    p.startsWith('/workspace')
-  ) {
-    return 'OWNER';
   }
   if (p.startsWith('/kitchen') || p.startsWith('/waiter') || p.startsWith('/bar') || p.startsWith('/inventory')) {
     return 'STAFF';
   }
-  if (p.startsWith('/customer')) {
+  if (p.startsWith('/customer') || p.startsWith('/order') || p.startsWith('/qr')) {
     return 'CUSTOMER';
   }
   return 'OWNER';
 }
 
 export function getApiBaseUrl(): string {
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
+  if (typeof import.meta !== 'undefined') {
+    const envUrl = (import.meta.env?.VITE_API_BASE_URL || import.meta.env?.VITE_API_URL || '').trim();
+    if (envUrl) return envUrl;
   }
   if (typeof window !== 'undefined') {
     if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return `${window.location.origin}/api/v1`;
+      return `https://api.dinely.food/api/v1`;
     }
   }
   return 'http://localhost:8000/api/v1';
