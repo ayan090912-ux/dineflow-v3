@@ -1572,19 +1572,167 @@ export class DinelyApiClient {
     return rest;
   }
 
+  private autoProvisionRestaurant(restaurantId: string): Restaurant {
+    let displayName = 'CAFE.CO';
+    if (restaurantId.includes('bistro')) displayName = 'Lumière Bistro';
+    else if (restaurantId.includes('bar')) displayName = 'Vanguard Lounge & Bar';
+
+    const newRest: Restaurant = {
+      id: restaurantId,
+      slug: restaurantId.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      name: displayName,
+      ownerEmail: 'owner@dinely.food',
+      email: 'contact@dinely.food',
+      phone: '+1 (555) 234-5678',
+      address: '123 Gourmet Way, Culinary District',
+      city: 'Metropolis',
+      state: 'NY',
+      zipCode: '10001',
+      country: 'United States',
+      currency: 'INR (₹)',
+      taxPercentage: 5.0,
+      isApproved: true,
+      isAutoApproved: true,
+      lifecycleStatus: 'APPROVED',
+      businessType: 'RESTAURANT',
+      hasTables: true,
+      hasWaiter: true,
+      hasKitchen: true,
+      hasBar: true,
+      createdAt: new Date().toISOString(),
+      theme: {
+        primaryColor: '#f43f5e',
+        accentColor: '#fbbf24',
+        mode: 'dark',
+        fontFamily: 'Inter',
+        restaurantName: displayName,
+        bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+        logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+        currency: 'INR (₹)',
+      },
+    };
+
+    this.restaurants.push(newRest);
+
+    const cat1Id = `cat-${restaurantId}-1`;
+    const cat2Id = `cat-${restaurantId}-2`;
+    const cat3Id = `cat-${restaurantId}-3`;
+    const cat4Id = `cat-${restaurantId}-4`;
+
+    const sampleCategories: MenuCategory[] = [
+      { id: cat1Id, restaurantId, name: 'Starters & Appetizers', sortOrder: 1 },
+      { id: cat2Id, restaurantId, name: 'Main Course', sortOrder: 2 },
+      { id: cat3Id, restaurantId, name: 'Gourmet Desserts', sortOrder: 3 },
+      { id: cat4Id, restaurantId, name: 'Beverages & Drinks', sortOrder: 4 },
+    ];
+
+    const sampleItems: MenuItem[] = [
+      {
+        id: `item-${restaurantId}-1`,
+        restaurantId,
+        categoryId: cat1Id,
+        name: 'Crispy Risotto Balls',
+        description: 'Stuffed with wild forest mushrooms and aged mozzarella, served with truffle aioli.',
+        price: 14.50,
+        imageUrl: 'https://images.unsplash.com/photo-1541529086526-db283c563270?w=600&auto=format&fit=crop&q=80',
+        isAvailable: true,
+        isVeg: true,
+        isVegetarian: true,
+        dietaryType: 'VEG',
+        targetDestination: 'KITCHEN',
+        preparationTimeMinutes: 12,
+      },
+      {
+        id: `item-${restaurantId}-2`,
+        restaurantId,
+        categoryId: cat2Id,
+        name: 'Pan-Seared Salmon Fillet',
+        description: 'Atlantic salmon served over saffron risotto with lemon herb reduction.',
+        price: 28.90,
+        imageUrl: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&auto=format&fit=crop&q=80',
+        isAvailable: true,
+        isVeg: false,
+        isVegetarian: false,
+        dietaryType: 'NON_VEG',
+        targetDestination: 'KITCHEN',
+        preparationTimeMinutes: 20,
+      },
+      {
+        id: `item-${restaurantId}-3`,
+        restaurantId,
+        categoryId: cat3Id,
+        name: 'Classic Tiramisu',
+        description: 'Layers of espresso-soaked ladyfingers and whipped mascarpone cream.',
+        price: 9.50,
+        imageUrl: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=600&auto=format&fit=crop&q=80',
+        isAvailable: true,
+        isVeg: true,
+        isVegetarian: true,
+        dietaryType: 'VEG',
+        targetDestination: 'KITCHEN',
+        preparationTimeMinutes: 8,
+      },
+      {
+        id: `item-${restaurantId}-4`,
+        restaurantId,
+        categoryId: cat4Id,
+        name: 'Artisanal Smoked Old Fashioned',
+        description: 'Bourbon whiskey infused with aromatic bitters and oak wood smoke.',
+        price: 16.00,
+        imageUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600&auto=format&fit=crop&q=80',
+        isAvailable: true,
+        isVeg: true,
+        isVegetarian: true,
+        dietaryType: 'VEG',
+        targetDestination: 'BAR',
+        isAlcoholic: true,
+        preparationTimeMinutes: 5,
+      },
+    ];
+
+    const sampleTables: Table[] = Array.from({ length: 12 }, (_, i) => {
+      const tNum = `Table ${String(i + 1).padStart(2, '0')}`;
+      const tId = `tbl-${restaurantId}-${tNum.toLowerCase().replace(/\s+/g, '_')}`;
+      return {
+        id: tId,
+        restaurantId,
+        tableNumber: tNum,
+        section: i < 6 ? 'MAIN_HALL' : 'TERRACE',
+        capacity: 4,
+        status: 'AVAILABLE',
+        isOccupied: false,
+        qrCodeUrl: `https://dinely.food/customer?restaurant=${restaurantId}&tableId=${tId}&table=${encodeURIComponent(tNum)}`,
+      };
+    });
+
+    this.categories.push(...sampleCategories);
+    this.menuItems.push(...sampleItems);
+    this.tables.push(...sampleTables);
+
+    this.saveDatabase();
+    return newRest;
+  }
+
   async getRestaurantDetails(restaurantId?: string) {
     await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return null;
-    const rest = this.restaurants.find((r) => r.id === targetId && !r.isDeleted);
+    let rest = this.restaurants.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
+    
+    if (!rest && targetId) {
+      rest = this.autoProvisionRestaurant(targetId);
+    }
+    
     if (!rest) return null;
 
     const scope = getPortalScopeFromPath();
-    const user = this.getCurrentUser(scope);
-    if (user && user.role === 'RESTAURANT_OWNER') {
-      const isOwner = rest.ownerEmail?.toLowerCase() === user.email?.toLowerCase() || rest.email?.toLowerCase() === user.email?.toLowerCase();
-      if (!isOwner && user.role !== 'SUPER_ADMIN' && user.role !== 'PLATFORM_ADMIN') {
-        return null;
+    if (scope !== 'CUSTOMER') {
+      const user = this.getCurrentUser(scope);
+      if (user && user.role === 'RESTAURANT_OWNER') {
+        const isOwner = rest.ownerEmail?.toLowerCase() === user.email?.toLowerCase() || rest.email?.toLowerCase() === user.email?.toLowerCase();
+        if (!isOwner && user.role !== 'SUPER_ADMIN' && user.role !== 'PLATFORM_ADMIN') {
+          return null;
+        }
       }
     }
 
