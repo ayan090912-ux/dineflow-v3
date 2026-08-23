@@ -36,6 +36,24 @@ import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils
 // Simulated API delay helper
 const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export function getProductionOrigin(): string {
+  if (typeof window === 'undefined') return 'https://dinely.food';
+  const host = window.location.hostname;
+  const isDevHost =
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '0.0.0.0' ||
+    /^192\.168\./.test(host) ||
+    /^10\./.test(host) ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+
+  if (isDevHost) {
+    const envDomain = (import.meta.env.VITE_PUBLIC_DOMAIN || import.meta.env.VITE_PRODUCTION_DOMAIN || '').trim();
+    return envDomain ? `https://${envDomain.replace(/^https?:\/\//, '')}` : 'https://dinely.food';
+  }
+  return window.location.origin;
+}
+
 export type PortalScope = 'ADMIN' | 'OWNER' | 'STAFF' | 'CUSTOMER';
 
 const SESSION_KEYS: Record<PortalScope, string> = {
@@ -229,9 +247,9 @@ export class DinelyApiClient {
       }
     });
 
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
+    const origin = getProductionOrigin();
     this.tables.forEach((tbl) => {
-      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app') || !tbl.qrCodeUrl.includes('tableId=')) {
+      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app') || tbl.qrCodeUrl.includes('localhost') || tbl.qrCodeUrl.includes('127.0.0.1') || !tbl.qrCodeUrl.includes('tableId=')) {
         tbl.qrCodeUrl = `${origin}/customer?restaurant=${tbl.restaurantId || ''}&tableId=${tbl.id}&table=${encodeURIComponent(tbl.tableNumber)}`;
       }
       const activeSession = this.tableSessions.find(

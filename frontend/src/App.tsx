@@ -568,8 +568,8 @@ export default function App() {
               />
             )}
 
-            {/* Customer Ordering Mobile Web App */}
-            {(currentPath === '/customer' || currentPath === '/order') && <CustomerApp />}
+            {/* Customer Ordering Mobile Web App - Deep Linking Support */}
+            {(currentPath.startsWith('/customer') || currentPath.startsWith('/order') || currentPath.startsWith('/qr')) && <CustomerApp />}
           </div>
         </div>
       </ThemeProvider>
