@@ -30,6 +30,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from sqlalchemy import text
+from app.core.database.connection import AsyncSessionLocal
+
 # Health checks
 @app.get("/healthz")
 async def health_check():
@@ -37,20 +40,32 @@ async def health_check():
 
 @app.get("/readyz")
 async def readiness_check():
-    # TODO: Check DB and Redis connectivity
-    return {"status": "ready", "database": "connected", "redis": "connected"}
+    db_status = "unknown"
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+            db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    return {
+        "status": "ready" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "version": settings.APP_VERSION
+    }
+
+from app.modules.restaurants.router import router as restaurant_router
+from app.modules.menu.router import router as menu_router
+from app.modules.tables.router import router as table_router
+from app.modules.orders.router import router as order_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(platform_router, prefix="/api/v1/admin", tags=["Platform Admin"])
-
-
-# TODO: Add remaining routers as sprints progress
-# app.include_router(platform_router, prefix="/api/v1/platform", tags=["Platform"])
-# app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Restaurants"])
-# app.include_router(menu_router, prefix="/api/v1/menu", tags=["Menu"])
-# app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
-# etc.
+app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Restaurants"])
+app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
+app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
+app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
 
 if __name__ == "__main__":
     import uvicorn

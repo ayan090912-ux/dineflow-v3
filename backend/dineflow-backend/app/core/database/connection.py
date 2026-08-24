@@ -10,7 +10,12 @@ from app.core.config.settings import get_settings
 settings = get_settings()
 
 db_url = settings.DATABASE_URL
-if "postgresql" in db_url:
+if db_url.startswith("postgres"):
+    if not db_url.startswith("postgresql+asyncpg://"):
+        import urllib.parse
+        parsed = urllib.parse.urlparse(db_url)
+        parsed = parsed._replace(scheme="postgresql+asyncpg")
+        db_url = urllib.parse.urlunparse(parsed)
     try:
         import asyncpg  # type: ignore
     except ImportError:
