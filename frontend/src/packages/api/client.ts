@@ -353,8 +353,7 @@ export class DinelyApiClient {
   };
 
   public get currentRestaurantId(): string | null {
-    const scope = getPortalScopeFromPath();
-    return this._currentRestaurantId || this.currentRestaurantIdsByScope[scope] || (typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id')) : null);
+    return this.getCurrentRestaurantId();
   }
 
   public set currentRestaurantId(val: string | null) {
@@ -1233,10 +1232,11 @@ export class DinelyApiClient {
     return this.currentUsersByScope[targetScope];
   }
 
-  getCurrentRestaurantId(scope?: PortalScope): string | null {
+  getCurrentRestaurantId(scope?: PortalScope): string {
     const targetScope = scope || getPortalScopeFromPath();
     const user = this.getCurrentUser(targetScope);
-    return this.currentRestaurantIdsByScope[targetScope] || user?.restaurantId || null;
+    const candidateId = this.currentRestaurantIdsByScope[targetScope] || user?.restaurantId || this._currentRestaurantId || undefined;
+    return this.resolveTenantRestaurantId(candidateId) || 'rest-1787446097984';
   }
 
   async logout(scope?: PortalScope) {
