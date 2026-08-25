@@ -1,8 +1,8 @@
 import { Organization, Restaurant, MenuItem, MenuCategory, Table, Order, Employee, InventoryItem, Subscription, AuditLog, ThemeConfig } from '../types';
 
 export const DEFAULT_THEME: ThemeConfig = {
-  restaurantId: 'rest-default',
-  restaurantName: 'New Restaurant',
+  restaurantId: 'rest-1787446097984',
+  restaurantName: 'CAFE.CO',
   logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
   bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
   primaryColor: '#e11d48',

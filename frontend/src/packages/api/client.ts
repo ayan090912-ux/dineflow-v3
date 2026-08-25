@@ -1834,7 +1834,7 @@ export class DinelyApiClient {
       }
     }
 
-    return this.restaurants.find((r) => !r.isDeleted)?.id || null;
+    return this.restaurants.find((r) => !r.isDeleted)?.id || 'rest-1787446097984';
   }
 
   private ensureRestaurantDefaults(rest: Restaurant): Restaurant {
