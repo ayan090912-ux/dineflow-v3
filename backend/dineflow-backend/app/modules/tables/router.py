@@ -58,9 +58,13 @@ async def create_table(restaurant_id: str, payload: CreateTableSchema, db: Async
 
 @router.get("/{restaurant_id}/tables/{table_id}/session")
 async def get_or_create_table_session(restaurant_id: str, table_id: str, table_number: Optional[str] = None, db: AsyncSession = Depends(get_db)):
-    query_tbl = select(Table).where((Table.id == table_id) | (Table.table_number == table_number))
+    query_tbl = select(Table).where(
+        (Table.restaurant_id == restaurant_id) &
+        ((Table.id == table_id) | (Table.table_number == table_number))
+    )
     res_tbl = await db.execute(query_tbl)
-    tbl = res_tbl.scalar_one_or_none()
+    tbls = res_tbl.scalars().all()
+    tbl = tbls[0] if tbls else None
     
     resolved_tbl_id = tbl.id if tbl else table_id
     resolved_tbl_num = tbl.table_number if tbl else (table_number or "Table 01")
@@ -71,14 +75,15 @@ async def get_or_create_table_session(restaurant_id: str, table_id: str, table_n
         (TableSession.status == "ACTIVE")
     )
     res_sess = await db.execute(query_sess)
-    active_sess = res_sess.scalar_one_or_none()
+    active_sesses = res_sess.scalars().all()
+    active_sess = active_sesses[0] if active_sesses else None
 
     if active_sess:
         return active_sess
 
     # Create new active session
     new_sess = TableSession(
-        id=f"sess-{restaurant_id}-{resolved_tbl_id}-{int(datetime.utcnow().timestamp() * 1000)}",
+        id=f"sess-{int(datetime.utcnow().timestamp() * 1000)}",
         restaurant_id=restaurant_id,
         table_id=resolved_tbl_id,
         table_number=resolved_tbl_num,

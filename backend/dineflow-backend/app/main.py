@@ -12,6 +12,11 @@ settings = get_settings()
 
 from contextlib import asynccontextmanager
 from app.core.database.connection import engine, Base
+import app.modules.restaurants.models
+import app.modules.menu.models
+import app.modules.tables.models
+import app.modules.orders.models
+import app.modules.customer_requests.models
 from app.scripts.cafe_co_migration import run_migration
 
 @asynccontextmanager

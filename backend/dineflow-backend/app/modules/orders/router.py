@@ -58,6 +58,19 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
     )
     db.add(new_order)
 
+    # Lock table as occupied
+    query_tbl = select(Table).where(
+        (Table.restaurant_id == payload.restaurantId) &
+        ((Table.id == payload.tableId) | (Table.table_number == payload.tableNumber))
+    )
+    res_tbl = await db.execute(query_tbl)
+    tbls = res_tbl.scalars().all()
+    if tbls:
+        tbl = tbls[0]
+        tbl.status = "OCCUPIED"
+        tbl.is_occupied = True
+        tbl.active_session_id = payload.tableSessionId
+
     for i in payload.items:
         new_item = OrderItem(
             id=f"oi-{order_id}-{i.name.lower().replace(' ', '_')}",
