@@ -1864,6 +1864,86 @@ export class DinelyApiClient {
 
 
 
+  async syncRestaurantToBackend(rest: Restaurant) {
+    if (!rest || !rest.id) return;
+    try {
+      const apiBase = getApiBaseUrl();
+      const payload = {
+        id: rest.id,
+        name: rest.name,
+        cuisine: rest.cuisine || 'Multi-Cuisine',
+        businessType: rest.businessType || 'RESTAURANT',
+        phone: rest.phone || '+1 555-0100',
+        email: rest.email || 'contact@dinely.food',
+        address: rest.address || 'Main Street Center',
+        currency: rest.currency || 'INR (₹)',
+        taxPercentage: rest.taxPercentage || 5.0,
+      };
+      const res = await fetch(`${apiBase}/restaurants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        if (rest.theme) {
+          await fetch(`${apiBase}/restaurants/${encodeURIComponent(rest.id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: rest.theme }),
+          });
+        }
+
+        // Sync Categories
+        const cats = (this.categories || []).filter((c) => c.restaurantId === rest.id);
+        for (const cat of cats) {
+          await fetch(`${apiBase}/restaurants/${encodeURIComponent(rest.id)}/categories`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: cat.id, name: cat.name, sortOrder: cat.sortOrder || 1 }),
+          });
+        }
+
+        // Sync Menu Items
+        const items = (this.menuItems || []).filter((m) => m.restaurantId === rest.id);
+        for (const item of items) {
+          await fetch(`${apiBase}/restaurants/${encodeURIComponent(rest.id)}/menu`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: item.id,
+              categoryId: item.categoryId || 'cat-mains',
+              name: item.name,
+              description: item.description || '',
+              price: item.price || 0,
+              imageUrl: item.imageUrl || item.image,
+              isAvailable: item.isAvailable !== false,
+              isVegetarian: item.isVegetarian !== false,
+              targetDestination: item.targetDestination || 'KITCHEN',
+            }),
+          });
+        }
+
+        // Sync Tables
+        const tbls = (this.tables || []).filter((t) => t.restaurantId === rest.id);
+        for (const t of tbls) {
+          await fetch(`${apiBase}/restaurants/${encodeURIComponent(rest.id)}/tables`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: t.id,
+              tableNumber: t.tableNumber,
+              section: t.section || 'Main Hall',
+              capacity: t.capacity || 4,
+            }),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('syncRestaurantToBackend notice:', e);
+    }
+  }
+
   async getRestaurantDetails(restaurantId?: string) {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return null;
@@ -1961,6 +2041,8 @@ export class DinelyApiClient {
     }
 
     if (!rest) return null;
+
+    this.syncRestaurantToBackend(rest).catch(() => {});
 
     const scope = getPortalScopeFromPath();
     if (scope !== 'CUSTOMER') {
@@ -2331,6 +2413,48 @@ export class DinelyApiClient {
     const uniqueMap = new Map<string, MenuCategory>();
     allCats.forEach((c) => uniqueMap.set(c.id, c));
     return Array.from(uniqueMap.values());
+  }
+
+  async createCategory(catData: Partial<MenuCategory>): Promise<MenuCategory> {
+    const restId = this.resolveTenantRestaurantId(catData.restaurantId) || 'rest-1';
+    try {
+      const apiBase = getApiBaseUrl();
+      const payload = {
+        id: catData.id,
+        name: catData.name || 'New Category',
+        sortOrder: catData.sortOrder || 1,
+      };
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const c = await res.json();
+        const newCat: MenuCategory = {
+          id: c.id,
+          restaurantId: c.restaurant_id || restId,
+          name: c.name,
+          sortOrder: c.sort_order || 1,
+          isEnabled: c.is_enabled !== false,
+        };
+        this.categories.push(newCat);
+        this.saveDatabase();
+        return newCat;
+      }
+    } catch (e) {
+      console.warn('API POST for createCategory failed:', e);
+    }
+    const newCat: MenuCategory = {
+      id: catData.id || `cat-${restId}-${Date.now()}`,
+      restaurantId: restId,
+      name: catData.name || 'New Category',
+      sortOrder: catData.sortOrder || 1,
+      isEnabled: true,
+    };
+    this.categories.push(newCat);
+    this.saveDatabase();
+    return newCat;
   }
 
   async addMenuItem(itemData: Partial<MenuItem>) {
