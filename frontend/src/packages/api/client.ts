@@ -2843,10 +2843,21 @@ export class DinelyApiClient {
     return table;
   }
 
-  async deleteTable(tableId: string) {
-    await delay(150);
-    this.tables = this.tables.filter((t) => t.id !== tableId);
+  async deleteTable(tableId: string, restaurantId?: string) {
+    const targetRestId = this.resolveTenantRestaurantId(restaurantId);
+    if (targetRestId) {
+      try {
+        const apiBase = getApiBaseUrl();
+        await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetRestId)}/tables/${encodeURIComponent(tableId)}`, {
+          method: 'DELETE',
+        });
+      } catch (e) {
+        console.warn('API DELETE for deleteTable failed:', e);
+      }
+    }
+    this.tables = this.tables.filter((t) => t.id !== tableId && t.tableNumber !== tableId);
     this.saveDatabase();
+    return true;
   }
 
   async mergeTables(tableIds: string[], customLabel?: string) {

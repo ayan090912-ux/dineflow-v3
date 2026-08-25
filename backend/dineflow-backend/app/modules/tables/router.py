@@ -56,6 +56,22 @@ async def create_table(restaurant_id: str, payload: CreateTableSchema, db: Async
     await db.refresh(new_tbl)
     return new_tbl
 
+@router.delete("/{restaurant_id}/tables/{table_id}")
+async def delete_table(restaurant_id: str, table_id: str, db: AsyncSession = Depends(get_db)):
+    query = select(Table).where(
+        (Table.restaurant_id == restaurant_id) &
+        ((Table.id == table_id) | (Table.table_number == table_id))
+    )
+    result = await db.execute(query)
+    tbls = result.scalars().all()
+    if not tbls:
+        return {"status": "success", "message": "Table already removed"}
+    
+    for tbl in tbls:
+        await db.delete(tbl)
+    await db.commit()
+    return {"status": "success", "message": "Table deleted successfully"}
+
 @router.get("/{restaurant_id}/tables/{table_id}/session")
 async def get_or_create_table_session(restaurant_id: str, table_id: str, table_number: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     query_tbl = select(Table).where(

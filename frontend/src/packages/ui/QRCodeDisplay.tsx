@@ -25,6 +25,7 @@ import {
 export interface QRCodeDisplayProps {
   url?: string;
   value?: string;
+  tableId?: string;
   tableNumber?: string;
   restaurantName?: string;
   restaurantLogo?: string;
@@ -144,6 +145,7 @@ export const printQRCodeCard = (
 export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   url,
   value,
+  tableId,
   tableNumber,
   restaurantName,
   restaurantLogo = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
