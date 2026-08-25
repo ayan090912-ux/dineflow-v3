@@ -342,6 +342,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       return;
     }
     await api.createTable({
+      restaurantId: currentRestaurant?.id || 'rest-1787446097984',
       tableNumber: newTableData.tableNumber,
       capacity: parseInt(newTableData.capacity) || 4,
       section: newTableData.section,
@@ -895,6 +896,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     addToast('info', 'Inventory Item Removed', `${name} removed from inventory.`);
     loadData();
   };
+
+
 
   if (currentRestaurant && (
     currentRestaurant.lifecycleStatus === 'PENDING_APPROVAL' ||

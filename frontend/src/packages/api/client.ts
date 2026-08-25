@@ -2668,9 +2668,9 @@ export class DinelyApiClient {
       const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/tables`);
       if (res.ok) {
         const tables = await res.json();
-        if (Array.isArray(tables) && tables.length > 0) {
+        if (Array.isArray(tables)) {
           const origin = getProductionOrigin();
-          return tables.map((t: any) => ({
+          const mappedTables: Table[] = tables.map((t: any) => ({
             id: t.id,
             restaurantId: t.restaurant_id || targetId,
             tableNumber: t.table_number || t.tableNumber,
@@ -2680,6 +2680,7 @@ export class DinelyApiClient {
             isOccupied: t.is_occupied || false,
             qrCodeUrl: t.qr_code_url || `${origin}/customer?restaurant=${targetId}&tableId=${t.id}&table=${encodeURIComponent(t.table_number || t.tableNumber)}`,
           }));
+          return mappedTables;
         }
       }
     } catch (e) {
