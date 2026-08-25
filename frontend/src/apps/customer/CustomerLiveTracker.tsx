@@ -93,7 +93,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
           </span>
           <div>
             <h3 className="text-sm font-black text-white flex items-center gap-1.5">
-              Order #{currentOrder.id} <span className="text-xs text-rose-400 font-normal">({currentOrder.tableNumber})</span>
+              Order {currentOrder.id.length > 10 ? `#ORD-${currentOrder.id.slice(-4)}` : `#${currentOrder.id}`} <span className="text-xs text-rose-400 font-normal">({currentOrder.tableNumber?.startsWith('Table') ? currentOrder.tableNumber : `Table ${currentOrder.tableNumber}`})</span>
             </h3>
             <p className="text-[11px] text-slate-400">Live Kitchen Synchronization</p>
           </div>

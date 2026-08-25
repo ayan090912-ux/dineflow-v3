@@ -595,7 +595,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-black text-amber-400 text-xl">#{order.id}</span>
+                          <span className="font-mono font-black text-amber-400 text-xl">{order.id.length > 10 ? `#ORD-${order.id.slice(-4)}` : `#${order.id}`}</span>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                             NEW
                           </span>
@@ -605,7 +605,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         </p>
                       </div>
                       <Badge variant={order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'warning' : 'brand'} className="px-3 py-1 text-xs font-black">
-                        {order.tableNumber && order.tableNumber !== 'COUNTER' ? `📍 Table ${order.tableNumber}` : '🛍️ PICKUP ORDER'}
+                        {order.tableNumber && order.tableNumber !== 'COUNTER' ? `📍 ${order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`}` : '🛍️ PICKUP ORDER'}
                       </Badge>
                     </div>
 
@@ -701,7 +701,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-black text-white text-xl">#{order.id}</span>
+                            <span className="font-mono font-black text-white text-xl">{order.id.length > 10 ? `#ORD-${order.id.slice(-4)}` : `#${order.id}`}</span>
                             {timerData.isOverdue && (
                               <Badge variant="danger" className="text-[10px] font-black animate-bounce px-2 py-0.5">
                                 OVERDUE
@@ -713,7 +713,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           </p>
                         </div>
                         <Badge variant={order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'warning' : 'brand'} className="px-3 py-1 text-xs font-black">
-                          {order.tableNumber && order.tableNumber !== 'COUNTER' ? `📍 Table ${order.tableNumber}` : '🛍️ PICKUP ORDER'}
+                          {order.tableNumber && order.tableNumber !== 'COUNTER' ? `📍 ${order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`}` : '🛍️ PICKUP ORDER'}
                         </Badge>
                       </div>
 
