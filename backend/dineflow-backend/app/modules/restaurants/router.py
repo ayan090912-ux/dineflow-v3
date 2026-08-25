@@ -61,6 +61,13 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
     await db.refresh(new_rest)
     return new_rest
 
+@router.get("")
+async def get_all_restaurants(db: AsyncSession = Depends(get_db)):
+    query = select(Restaurant)
+    result = await db.execute(query)
+    rests = result.scalars().all()
+    return rests
+
 @router.get("/{restaurant_id}")
 async def get_restaurant(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     query = select(Restaurant).where(

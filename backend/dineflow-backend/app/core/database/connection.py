@@ -11,11 +11,13 @@ settings = get_settings()
 
 db_url = settings.DATABASE_URL
 if db_url.startswith("postgres"):
-    if not db_url.startswith("postgresql+asyncpg://"):
-        import urllib.parse
-        parsed = urllib.parse.urlparse(db_url)
-        parsed = parsed._replace(scheme="postgresql+asyncpg")
-        db_url = urllib.parse.urlunparse(parsed)
+    import urllib.parse
+    parsed = urllib.parse.urlparse(db_url)
+    q_params = urllib.parse.parse_qs(parsed.query)
+    clean_params = {k: v for k, v in q_params.items() if k not in ["sslmode", "channel_binding", "gssencmode", "ssl"]}
+    new_query = urllib.parse.urlencode(clean_params, doseq=True)
+    parsed = parsed._replace(scheme="postgresql+asyncpg", query=new_query)
+    db_url = urllib.parse.urlunparse(parsed)
     try:
         import asyncpg  # type: ignore
     except ImportError:
@@ -30,6 +32,7 @@ if "sqlite" not in db_url:
         "pool_size": settings.DB_POOL_SIZE,
         "max_overflow": settings.DB_MAX_OVERFLOW,
         "pool_pre_ping": settings.DB_POOL_PRE_PING,
+        "connect_args": {"ssl": True} if "localhost" not in db_url and "127.0.0.1" not in db_url else {}
     })
 
 # Create async engine

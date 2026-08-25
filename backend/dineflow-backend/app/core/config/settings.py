@@ -36,26 +36,40 @@ def normalize_database_urls(raw_url: str, env: str) -> tuple[str, str]:
             query_str = f"{parsed.query}&sslmode=require" if parsed.query else "sslmode=require"
             parsed = parsed._replace(query=query_str)
 
-    # Build Async URL for SQLAlchemy create_async_engine & asyncpg
+    # Determine base schemes
     if scheme.startswith("postgres"):
         async_scheme = "postgresql+asyncpg"
-    elif scheme.startswith("sqlite"):
-        async_scheme = "sqlite+aiosqlite"
-    else:
-        async_scheme = scheme
-
-    async_parsed = parsed._replace(scheme=async_scheme)
-    async_url = urllib.parse.urlunparse(async_parsed)
-
-    # Build Sync URL
-    if scheme.startswith("postgres"):
         sync_scheme = "postgresql"
     elif scheme.startswith("sqlite"):
+        async_scheme = "sqlite+aiosqlite"
         sync_scheme = "sqlite"
     else:
+        async_scheme = scheme
         sync_scheme = scheme
 
-    sync_parsed = parsed._replace(scheme=sync_scheme)
+    # Query params handling for SSL
+    query_params = urllib.parse.parse_qs(parsed.query)
+
+    # Build Async URL (asyncpg requires 'ssl=require', NOT 'sslmode=require')
+    async_params = dict(query_params)
+    if "postgres" in scheme and (not is_local or env.lower() == "production"):
+        if "sslmode" in async_params:
+            del async_params["sslmode"]
+        if "ssl" not in async_params:
+            async_params["ssl"] = ["require"]
+    async_query_str = urllib.parse.urlencode(async_params, doseq=True)
+    async_parsed = parsed._replace(scheme=async_scheme, query=async_query_str)
+    async_url = urllib.parse.urlunparse(async_parsed)
+
+    # Build Sync URL (libpq / psycopg2 uses 'sslmode=require')
+    sync_params = dict(query_params)
+    if "postgres" in scheme and (not is_local or env.lower() == "production"):
+        if "ssl" in sync_params:
+            del sync_params["ssl"]
+        if "sslmode" not in sync_params:
+            sync_params["sslmode"] = ["require"]
+    sync_query_str = urllib.parse.urlencode(sync_params, doseq=True)
+    sync_parsed = parsed._replace(scheme=sync_scheme, query=sync_query_str)
     sync_url = urllib.parse.urlunparse(sync_parsed)
 
     return async_url, sync_url

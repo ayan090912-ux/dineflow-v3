@@ -91,7 +91,7 @@ export function getApiBaseUrl(): string {
   }
   if (typeof window !== 'undefined') {
     if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return `https://api.dinely.food/api/v1`;
+      return `https://dineflow-v3.onrender.com/api/v1`;
     }
   }
   return 'http://localhost:8000/api/v1';
@@ -1478,8 +1478,47 @@ export class DinelyApiClient {
     return [...this.restaurants];
   }
 
-  async getRestaurants() {
-    await delay(100);
+  async getRestaurants(): Promise<Restaurant[]> {
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data.map((r: any) => ({
+            id: r.id,
+            orgId: r.org_id || 'org-dinely',
+            name: r.name,
+            slug: r.slug || r.name.toLowerCase().replace(/\s+/g, '-'),
+            cuisine: r.cuisine || 'Multi-Cuisine',
+            businessType: r.business_type || 'RESTAURANT',
+            hasBar: r.has_bar !== false,
+            hasTables: r.has_tables !== false,
+            hasKitchen: r.has_kitchen !== false,
+            hasWaiter: r.has_waiter !== false,
+            orderNumberPrefix: r.order_number_prefix || '#ORD',
+            address: r.address || '',
+            phone: r.phone || '',
+            email: r.email || '',
+            ownerName: r.owner_name || '',
+            ownerEmail: r.owner_email || '',
+            domain: r.domain || '',
+            isApproved: r.is_approved !== false,
+            status: r.status || 'OPEN',
+            currency: r.currency || 'INR (₹)',
+            taxPercentage: r.tax_percentage || 5.0,
+            theme: r.theme_json || {
+              primaryColor: '#f43f5e',
+              accentColor: '#fbbf24',
+              restaurantName: r.name,
+              currency: r.currency || 'INR (₹)',
+            },
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for getRestaurants failed:', e);
+    }
     return this.restaurants.filter((r) => !r.isDeleted);
   }
 
@@ -1786,9 +1825,51 @@ export class DinelyApiClient {
 
 
   async getRestaurantDetails(restaurantId?: string) {
-    await delay(100);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return null;
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.id) {
+          const mappedRest: Restaurant = {
+            id: data.id,
+            orgId: data.org_id || 'org-dinely',
+            name: data.name,
+            slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-'),
+            cuisine: data.cuisine || 'Multi-Cuisine',
+            businessType: data.business_type || 'RESTAURANT',
+            hasBar: data.has_bar !== false,
+            hasTables: data.has_tables !== false,
+            hasKitchen: data.has_kitchen !== false,
+            hasWaiter: data.has_waiter !== false,
+            orderNumberPrefix: data.order_number_prefix || '#ORD',
+            address: data.address || '',
+            phone: data.phone || '',
+            email: data.email || '',
+            ownerName: data.owner_name || '',
+            ownerEmail: data.owner_email || '',
+            domain: data.domain || '',
+            isApproved: data.is_approved !== false,
+            status: data.status || 'OPEN',
+            currency: data.currency || 'INR (₹)',
+            taxPercentage: data.tax_percentage || 5.0,
+            theme: data.theme_json || {
+              primaryColor: '#f43f5e',
+              accentColor: '#fbbf24',
+              restaurantName: data.name,
+              currency: data.currency || 'INR (₹)',
+            },
+          };
+          return this.ensureRestaurantDefaults(mappedRest);
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for restaurant details failed, using synchronized multi-tenant store:', e);
+    }
+
     let rest = this.restaurants.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
     
     if (!rest) {
@@ -1896,11 +1977,49 @@ export class DinelyApiClient {
   }
 
   async getCustomerOrders(restaurantId?: string, tableId?: string, tableSessionId?: string): Promise<Order[]> {
-    this.loadDatabase();
-    await delay(50);
     const targetRestId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetRestId || !tableSessionId) return [];
 
+    try {
+      const apiBase = getApiBaseUrl();
+      const resolvedTblId = tableId || `tbl-${targetRestId}`;
+      const url = `${apiBase}/orders/customer?restaurant_id=${encodeURIComponent(targetRestId)}&table_id=${encodeURIComponent(resolvedTblId)}&table_session_id=${encodeURIComponent(tableSessionId)}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const rawOrds = await res.json();
+        if (Array.isArray(rawOrds)) {
+          const remoteOrds: Order[] = rawOrds.map((data: any) => ({
+            id: data.id,
+            restaurantId: data.restaurant_id || targetRestId,
+            tableId: data.table_id || tableId,
+            tableNumber: data.table_number,
+            tableSessionId: data.table_session_id || tableSessionId,
+            status: data.status || 'PENDING',
+            kitchenStatus: data.kitchen_status || 'PENDING',
+            barStatus: data.bar_status || 'PENDING',
+            customerName: data.customer_name || 'Guest',
+            notes: data.notes || '',
+            items: (data.items_json || []).map((i: any) => ({
+              id: i.id || `oi-${data.id}`,
+              menuItemId: i.menuItemId || i.menu_item_id || i.id,
+              name: i.name,
+              quantity: i.quantity,
+              price: typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0,
+              notes: i.notes || '',
+              targetDestination: i.targetDestination || 'KITCHEN',
+            })),
+            totalAmount: data.total_amount || 0,
+            paymentStatus: data.payment_status || 'UNPAID',
+            createdAt: data.created_at || new Date().toISOString(),
+          }));
+          return remoteOrds;
+        }
+      }
+    } catch (e) {
+      console.warn('API GET for customer orders failed:', e);
+    }
+
+    this.loadDatabase();
     const activeSession = this.tableSessions.find(
       (s) => s.restaurantId === targetRestId && s.id === tableSessionId && s.status !== 'CLOSED'
     );
@@ -2070,10 +2189,38 @@ export class DinelyApiClient {
     return ticket;
   }
 
-  async getMenuItems(restaurantId?: string) {
-    await delay(100);
+  async getMenuItems(restaurantId?: string): Promise<MenuItem[]> {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/menu`);
+      if (res.ok) {
+        const data = await res.json();
+        const rawItems = data.items || (Array.isArray(data) ? data : []);
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
+          return rawItems.map((m: any) => ({
+            id: m.id,
+            restaurantId: m.restaurant_id || targetId,
+            categoryId: m.category_id || m.categoryId,
+            name: m.name,
+            description: m.description || '',
+            price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
+            imageUrl: m.image_url || m.imageUrl || m.image,
+            image: m.image_url || m.imageUrl || m.image,
+            isAvailable: m.is_available !== false,
+            isVegetarian: m.is_vegetarian !== false,
+            dietaryType: m.dietary_type || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
+            targetDestination: m.target_destination || 'KITCHEN',
+            isAlcoholic: m.is_alcoholic || m.target_destination === 'BAR',
+            prepTimeMinutes: m.prep_time_minutes || 15,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for menu items failed:', e);
+    }
 
     let foodItems = [...(this.menuItems || []), ...GLOBAL_MULTI_TENANT_MENU_ITEMS]
       .filter((m) => m.restaurantId === targetId)
@@ -2117,10 +2264,28 @@ export class DinelyApiClient {
     return Array.from(uniqueMap.values());
   }
 
-  async getCategories(restaurantId?: string) {
-    await delay(50);
+  async getCategories(restaurantId?: string): Promise<MenuCategory[]> {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/categories`);
+      if (res.ok) {
+        const cats = await res.json();
+        if (Array.isArray(cats) && cats.length > 0) {
+          return cats.map((c: any) => ({
+            id: c.id,
+            restaurantId: c.restaurant_id || targetId,
+            name: c.name,
+            sortOrder: c.sort_order || 1,
+            isEnabled: c.is_enabled !== false,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for categories failed:', e);
+    }
 
     const allCats = [...(this.categories || []), ...GLOBAL_MULTI_TENANT_CATEGORIES].filter((c) => c.restaurantId === targetId);
     const uniqueMap = new Map<string, MenuCategory>();
@@ -2132,10 +2297,56 @@ export class DinelyApiClient {
     return this.createMenuItem(itemData);
   }
 
-  async createMenuItem(itemData: Partial<MenuItem>) {
-    await delay(150);
+  async createMenuItem(itemData: Partial<MenuItem>): Promise<MenuItem> {
     const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
-    
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const payload = {
+        id: itemData.id,
+        categoryId: itemData.categoryId || 'cat-mains',
+        name: itemData.name || 'New Menu Item',
+        description: itemData.description || '',
+        price: typeof itemData.price === 'number' ? itemData.price : parseFloat(itemData.price as any) || 0,
+        imageUrl: itemData.imageUrl || itemData.image,
+        isAvailable: itemData.isAvailable !== false,
+        isVegetarian: itemData.isVegetarian !== false,
+        targetDestination: itemData.targetDestination || 'KITCHEN',
+      };
+
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const m = await res.json();
+        if (m && m.id) {
+          const newItem: MenuItem = {
+            id: m.id,
+            restaurantId: m.restaurant_id || restId,
+            categoryId: m.category_id || payload.categoryId,
+            name: m.name,
+            description: m.description || '',
+            price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
+            imageUrl: m.image_url || payload.imageUrl,
+            image: m.image_url || payload.imageUrl,
+            isAvailable: m.is_available !== false,
+            isVegetarian: m.is_vegetarian !== false,
+            dietaryType: m.dietary_type || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
+            targetDestination: m.target_destination || 'KITCHEN',
+          };
+          this.menuItems.unshift(newItem);
+          this.saveDatabase();
+          realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
+          return newItem;
+        }
+      }
+    } catch (e) {
+      console.warn('API POST for createMenuItem failed:', e);
+    }
+
     let catId = itemData.categoryId;
     const existingCats = await this.getCategories(restId);
     if (catId) {
@@ -2166,32 +2377,42 @@ export class DinelyApiClient {
     };
 
     this.menuItems.unshift(newItem);
-    const existingSharedIdx = GLOBAL_MULTI_TENANT_MENU_ITEMS.findIndex((m) => m.id === newItem.id);
-    if (existingSharedIdx >= 0) {
-      GLOBAL_MULTI_TENANT_MENU_ITEMS[existingSharedIdx] = newItem;
-    } else {
-      GLOBAL_MULTI_TENANT_MENU_ITEMS.unshift(newItem);
-    }
     this.saveDatabase();
-
     realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
     return newItem;
   }
 
   async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
-    await delay(150);
     const item = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
+    const restId = item?.restaurantId || this.resolveTenantRestaurantId();
+
+    if (restId) {
+      try {
+        const apiBase = getApiBaseUrl();
+        const payload = {
+          name: updates.name,
+          description: updates.description,
+          price: updates.price,
+          categoryId: updates.categoryId,
+          imageUrl: updates.imageUrl || updates.image,
+          isAvailable: updates.isAvailable,
+          isVegetarian: updates.isVegetarian,
+          targetDestination: updates.targetDestination,
+        };
+        await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {
+        console.warn('API PUT for updateMenuItem failed:', e);
+      }
+    }
+
     if (item) {
       Object.assign(item, updates);
       if (updates.isVegetarian !== undefined) {
         item.dietaryType = updates.isVegetarian ? 'VEG' : 'NON_VEG';
-      }
-      const sharedItem = GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
-      if (sharedItem) {
-        Object.assign(sharedItem, updates);
-        if (updates.isVegetarian !== undefined) {
-          sharedItem.dietaryType = updates.isVegetarian ? 'VEG' : 'NON_VEG';
-        }
       }
       this.saveDatabase();
       realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: item.id, restaurantId: item.restaurantId, data: item });
@@ -2200,14 +2421,21 @@ export class DinelyApiClient {
   }
 
   async deleteMenuItem(itemId: string) {
-    await delay(150);
     const target = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
-    const restId = target?.restaurantId;
-    this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
-    const sIdx = GLOBAL_MULTI_TENANT_MENU_ITEMS.findIndex((m) => m.id === itemId);
-    if (sIdx >= 0) {
-      GLOBAL_MULTI_TENANT_MENU_ITEMS.splice(sIdx, 1);
+    const restId = target?.restaurantId || this.resolveTenantRestaurantId();
+
+    if (restId) {
+      try {
+        const apiBase = getApiBaseUrl();
+        await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`, {
+          method: 'DELETE',
+        });
+      } catch (e) {
+        console.warn('API DELETE for deleteMenuItem failed:', e);
+      }
     }
+
+    this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
     this.saveDatabase();
     if (restId) {
       realtimeBus.emit('MenuItemDeleted' as any, { menuItemId: itemId, restaurantId: restId });
@@ -2216,58 +2444,42 @@ export class DinelyApiClient {
   }
 
   async toggleMenuItemAvailability(itemId: string) {
-    await delay(100);
     const item = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
     if (item) {
-      item.isAvailable = !item.isAvailable;
-      const sharedItem = GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
-      if (sharedItem) sharedItem.isAvailable = item.isAvailable;
-      this.saveDatabase();
-      realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: item.id, restaurantId: item.restaurantId, data: item });
+      const newAvail = !item.isAvailable;
+      return this.updateMenuItem(itemId, { isAvailable: newAvail });
     }
     return item;
   }
 
-  async getTables(restaurantId?: string) {
-    this.loadDatabase();
-    await delay(50);
+  async getTables(restaurantId?: string): Promise<Table[]> {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
-    const rest = await this.getRestaurantDetails(targetId);
-    if (rest?.hasTables === false) {
-      return [];
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/tables`);
+      if (res.ok) {
+        const tables = await res.json();
+        if (Array.isArray(tables) && tables.length > 0) {
+          const origin = getProductionOrigin();
+          return tables.map((t: any) => ({
+            id: t.id,
+            restaurantId: t.restaurant_id || targetId,
+            tableNumber: t.table_number || t.tableNumber,
+            section: t.section || 'Main Hall',
+            capacity: t.capacity || 4,
+            status: t.status || 'AVAILABLE',
+            isOccupied: t.is_occupied || false,
+            qrCodeUrl: t.qr_code_url || `${origin}/customer?restaurant=${targetId}&tableId=${t.id}&table=${encodeURIComponent(t.table_number || t.tableNumber)}`,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for tables failed:', e);
     }
 
     let restTables = [...(this.tables || []), ...GLOBAL_MULTI_TENANT_TABLES].filter((t) => t.restaurantId === targetId);
-    if (restTables.length === 0) {
-      const origin = getProductionOrigin();
-      const indoorCount = rest?.indoorTablesCount || 10;
-      const outdoorCount = rest?.outdoorTablesCount || 4;
-      const vipCount = rest?.vipTablesCount || 2;
-
-      let tableNum = 1;
-      // Indoor Tables
-      for (let i = 0; i < indoorCount; i++) {
-        const tName = `Table ${String(tableNum).padStart(2, '0')}`;
-        const tId = `tbl-${targetId}-${tName.toLowerCase().replace(/\s+/g, '_')}`;
-        const newTbl: Table = {
-          id: tId,
-          restaurantId: targetId,
-          tableNumber: tName,
-          capacity: 4,
-          section: 'Main Dining Room',
-          shape: 'RECTANGLE',
-          status: 'AVAILABLE',
-          qrCodeUrl: `${origin}/customer?restaurant=${targetId}&tableId=${tId}&table=${encodeURIComponent(tName)}`,
-        };
-        this.tables.push(newTbl);
-        GLOBAL_MULTI_TENANT_TABLES.push(newTbl);
-        tableNum++;
-      }
-      this.saveDatabase();
-      restTables = [...(this.tables || []), ...GLOBAL_MULTI_TENANT_TABLES].filter((t) => t.restaurantId === targetId);
-    }
-
     const uniqueMap = new Map<string, Table>();
     restTables.forEach((t) => uniqueMap.set(t.id, t));
     return Array.from(uniqueMap.values());
@@ -2353,20 +2565,59 @@ export class DinelyApiClient {
   }
 
   // Table Management APIs
-  async createTable(tableData: Partial<Table>) {
-    await delay(150);
+  async createTable(tableData: Partial<Table>): Promise<Table> {
     const targetRestId = this.resolveTenantRestaurantId(tableData.restaurantId);
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
     const tblNum = tableData.tableNumber || `Table ${this.tables.length + 1}`;
+    const tId = tableData.id || (targetRestId ? `tbl-${targetRestId}-${tblNum.toLowerCase().replace(/\s+/g, '_')}` : `tbl-${Date.now()}`);
+
+    if (targetRestId) {
+      try {
+        const apiBase = getApiBaseUrl();
+        const payload = {
+          id: tId,
+          tableNumber: tblNum,
+          section: tableData.section || 'Main Hall',
+          capacity: tableData.capacity || 4,
+        };
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetRestId)}/tables`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const t = await res.json();
+          const origin = getProductionOrigin();
+          const mapped: Table = {
+            id: t.id,
+            restaurantId: t.restaurant_id || targetRestId,
+            tableNumber: t.table_number || tblNum,
+            section: t.section || 'Main Hall',
+            capacity: t.capacity || 4,
+            status: t.status || 'AVAILABLE',
+            isOccupied: t.is_occupied || false,
+            qrCodeUrl: t.qr_code_url || `${origin}/customer?restaurant=${targetRestId}&tableId=${t.id}&table=${encodeURIComponent(t.table_number || tblNum)}`,
+          };
+          const existingIdx = this.tables.findIndex((x) => x.id === mapped.id);
+          if (existingIdx >= 0) this.tables[existingIdx] = mapped;
+          else this.tables.push(mapped);
+          this.saveDatabase();
+          return mapped;
+        }
+      } catch (e) {
+        console.warn('API POST for createTable failed:', e);
+      }
+    }
+
+    const origin = getProductionOrigin();
     const newTable: Table = {
-      id: `tbl-${Date.now()}`,
-      restaurantId: targetRestId || 'rest-1',
+      id: tId,
+      restaurantId: targetRestId || 'rest-1787446097984',
       tableNumber: tblNum,
       capacity: tableData.capacity || 4,
       section: tableData.section || 'Main Hall',
       shape: tableData.shape || 'RECTANGLE',
       status: 'AVAILABLE',
-      qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tblNum)}${targetRestId ? `&restaurant=${targetRestId}` : ''}`,
+      qrCodeUrl: `${origin}/customer?restaurant=${targetRestId || ''}&tableId=${tId}&table=${encodeURIComponent(tblNum)}`,
       isVip: tableData.isVip || false,
     };
     this.tables.push(newTable);
@@ -2492,10 +2743,33 @@ export class DinelyApiClient {
     return this.tableSessions.filter((s) => s.restaurantId === restId && s.status === 'ACTIVE');
   }
 
-  async getOrCreateTableSession(restaurantId?: string, tableId?: string, tableNumber?: string) {
-    this.loadDatabase();
-    await delay(50);
+  async getOrCreateTableSession(restaurantId?: string, tableId?: string, tableNumber?: string): Promise<TableSession | null> {
     const restId = this.resolveTenantRestaurantId(restaurantId);
+    if (!restId) return null;
+    const resolvedTblId = tableId || `tbl-${restId}-${(tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '_')}`;
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const qParams = tableNumber ? `?table_number=${encodeURIComponent(tableNumber)}` : '';
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(resolvedTblId)}/session${qParams}`);
+      if (res.ok) {
+        const s = await res.json();
+        if (s && s.id) {
+          return {
+            id: s.id,
+            restaurantId: s.restaurant_id || restId,
+            tableId: s.table_id || resolvedTblId,
+            tableNumber: s.table_number || tableNumber || 'Table 01',
+            status: s.status || 'ACTIVE',
+            sessionStartedAt: s.session_started_at || new Date().toISOString(),
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for getOrCreateTableSession failed:', e);
+    }
+
+    this.loadDatabase();
     let tbl = this.tables.find(
       (t) => t.restaurantId === restId && (t.id === tableId || (tableNumber && matchTableNumber(t.tableNumber, tableNumber)))
     );
@@ -3765,9 +4039,79 @@ export class DinelyApiClient {
     return order;
   }
 
-  async createOrder(orderData: Partial<Order>) {
-    await delay(150);
+  async createOrder(orderData: Partial<Order>): Promise<Order> {
     const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const payload = {
+        restaurantId: restId,
+        tableId: orderData.tableId || `tbl-${restId}-${(orderData.tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '_')}`,
+        tableNumber: orderData.tableNumber || 'Table 01',
+        tableSessionId: orderData.tableSessionId || `sess-${restId}-${Date.now()}`,
+        customerName: orderData.customerName || 'Guest',
+        notes: orderData.notes || '',
+        items: (orderData.items || []).map((i) => ({
+          id: i.id,
+          menuItemId: i.menuItemId || i.id,
+          name: i.name,
+          price: i.price,
+          quantity: i.quantity,
+          notes: i.notes || '',
+        })),
+      };
+
+      const res = await fetch(`${apiBase}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.id) {
+          const createdOrd: Order = {
+            id: data.id,
+            restaurantId: data.restaurant_id || restId,
+            tableId: data.table_id || payload.tableId,
+            tableNumber: data.table_number || payload.tableNumber,
+            tableSessionId: data.table_session_id || payload.tableSessionId,
+            status: data.status || 'PENDING',
+            kitchenStatus: data.kitchen_status || 'PENDING',
+            barStatus: data.bar_status || 'PENDING',
+            customerName: data.customer_name || 'Guest',
+            notes: data.notes || '',
+            items: (data.items_json || payload.items).map((i: any) => ({
+              id: i.id || `oi-${data.id}`,
+              menuItemId: i.menuItemId || i.menu_item_id || i.id,
+              name: i.name,
+              quantity: i.quantity,
+              price: typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0,
+              notes: i.notes || '',
+              targetDestination: i.targetDestination || 'KITCHEN',
+            })),
+            totalAmount: data.total_amount || orderData.totalAmount || 0,
+            paymentStatus: data.payment_status || 'UNPAID',
+            createdAt: data.created_at || new Date().toISOString(),
+          };
+
+          this.orders.unshift(createdOrd);
+          this.saveDatabase();
+          realtimeBus.emit('OrderCreated' as any, {
+            orderId: createdOrd.id,
+            restaurantId: createdOrd.restaurantId,
+            tableId: createdOrd.tableId,
+            tableNumber: createdOrd.tableNumber,
+            tableSessionId: createdOrd.tableSessionId,
+            data: createdOrd,
+          });
+          return createdOrd;
+        }
+      }
+    } catch (e) {
+      console.warn('API POST for createOrder failed:', e);
+    }
+
     const rest = this.restaurants.find((r) => r.id === restId);
 
     const isNoTableFoodTruck = rest?.businessType === 'FOOD_TRUCK' && rest?.hasTables === false;

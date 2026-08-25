@@ -8,7 +8,7 @@ def test_standard_postgresql_conversion():
     
     assert async_url.startswith("postgresql+asyncpg://")
     assert sync_url.startswith("postgresql://")
-    assert "sslmode=require" in async_url
+    assert "ssl=require" in async_url
     assert "sslmode=require" in sync_url
 
 
@@ -18,7 +18,7 @@ def test_legacy_postgres_scheme_conversion():
     
     assert async_url.startswith("postgresql+asyncpg://")
     assert sync_url.startswith("postgresql://")
-    assert "sslmode=require" in async_url
+    assert "ssl=require" in async_url
     assert "sslmode=require" in sync_url
 
 
@@ -26,8 +26,10 @@ def test_already_async_scheme_preservation():
     raw = "postgresql+asyncpg://user:pass@ep-cool-flower-123456.us-east-2.aws.neon.tech/neondb?sslmode=require"
     async_url, sync_url = normalize_database_urls(raw, env="development")
     
-    assert async_url == "postgresql+asyncpg://user:pass@ep-cool-flower-123456.us-east-2.aws.neon.tech/neondb?sslmode=require"
-    assert sync_url == "postgresql://user:pass@ep-cool-flower-123456.us-east-2.aws.neon.tech/neondb?sslmode=require"
+    assert async_url.startswith("postgresql+asyncpg://")
+    assert sync_url.startswith("postgresql://")
+    assert "ssl=require" in async_url
+    assert "sslmode=require" in sync_url
 
 
 def test_localhost_allowed_in_development():
@@ -56,7 +58,7 @@ def test_settings_model_validation(monkeypatch):
     s = Settings()
     assert s.DATABASE_URL.startswith("postgresql+asyncpg://")
     assert s.DATABASE_URL_SYNC.startswith("postgresql://")
-    assert "sslmode=require" in s.DATABASE_URL
+    assert "ssl=require" in s.DATABASE_URL
     assert "ep-neon-123.neon.tech" in s.DATABASE_URL
 
 
@@ -66,7 +68,7 @@ def test_psycopg2_scheme_conversion():
     
     assert async_url.startswith("postgresql+asyncpg://")
     assert sync_url.startswith("postgresql://")
-    assert "sslmode=require" in async_url
+    assert "ssl=require" in async_url
     assert "sslmode=require" in sync_url
 
 
@@ -76,6 +78,6 @@ def test_psycopg_scheme_conversion():
     
     assert async_url.startswith("postgresql+asyncpg://")
     assert sync_url.startswith("postgresql://")
-    assert "sslmode=require" in async_url
+    assert "ssl=require" in async_url
     assert "sslmode=require" in sync_url
 

@@ -28,6 +28,19 @@ async def create_table(restaurant_id: str, payload: CreateTableSchema, db: Async
     t_num = payload.tableNumber
     t_id = payload.id or f"tbl-{restaurant_id}-{t_num.lower().replace(' ', '_')}"
 
+    query_existing = select(Table).where((Table.id == t_id) | ((Table.restaurant_id == restaurant_id) & (Table.table_number == t_num)))
+    res_existing = await db.execute(query_existing)
+    existing = res_existing.scalar_one_or_none()
+
+    if existing:
+        if payload.section:
+            existing.section = payload.section
+        if payload.capacity:
+            existing.capacity = payload.capacity
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+
     new_tbl = Table(
         id=t_id,
         restaurant_id=restaurant_id,
