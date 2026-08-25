@@ -195,17 +195,18 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   const candidateUrl = url || value;
   const isValidCandidateUrl =
     candidateUrl &&
-    (candidateUrl.includes('/customer') || candidateUrl.includes('/order') || candidateUrl.includes('/qr')) &&
-    (candidateUrl.includes('table=') || candidateUrl.includes('tableId=') || candidateUrl.includes('restaurant='));
+    candidateUrl.includes('/customer') &&
+    (candidateUrl.includes('table=') || candidateUrl.includes('tableId=')) &&
+    candidateUrl.includes('restaurant=') &&
+    !candidateUrl.includes('.dinely.app/order');
 
   let rawUrl = isValidCandidateUrl ? candidateUrl : defaultUrl;
 
-  // Sanitize rawUrl to ALWAYS use production HTTPS origin, purging any localhost/http/IP addresses
+  // Sanitize rawUrl to ALWAYS use production HTTPS origin, purging any localhost/http/IP/subdomain addresses
   let qrUrl = rawUrl;
   if (rawUrl) {
     qrUrl = rawUrl
-      .replace(/^http:\/\/[^/]+/, defaultOrigin)
-      .replace(/^https:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/, defaultOrigin);
+      .replace(/^https?:\/\/[^/]+/, defaultOrigin);
   }
 
   // Copy link to clipboard

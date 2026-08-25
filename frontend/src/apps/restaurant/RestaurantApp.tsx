@@ -1706,10 +1706,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <Card className="bg-slate-900 border-slate-800 p-8 max-w-xl mx-auto text-center space-y-6 shadow-2xl">
               <div className="p-6 bg-slate-950 rounded-3xl border border-sky-500/30 inline-block shadow-inner">
                 <QRCodeDisplay
-                  url={`https://${currentRestaurant?.slug || 'foodtruck'}.dinely.app/order`}
+                  url={`${getProductionOrigin()}/customer?restaurant=${currentRestaurant?.id || ''}&table=COUNTER`}
                   tableNumber="COUNTER"
                   restaurantName={currentRestaurant?.name || theme?.restaurantName || 'Food Truck'}
                   restaurantLogo={theme?.logo}
+                  restaurantId={currentRestaurant?.id}
                   isPickup={true}
                   size={240}
                 />
@@ -3443,13 +3444,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       >
         {selectedTableQR && (
           <QRCodeDisplay
-            url={
-              (selectedTableQR.qrCodeUrl && selectedTableQR.qrCodeUrl.includes('/customer') && selectedTableQR.qrCodeUrl.includes('tableId='))
-                ? selectedTableQR.qrCodeUrl
-                : (typeof window !== 'undefined'
-                  ? `${window.location.origin}/customer?restaurant=${currentRestaurant?.id || ''}&tableId=${selectedTableQR.id}&table=${encodeURIComponent(selectedTableQR.tableNumber)}`
-                  : `https://dinely.food/customer?restaurant=${currentRestaurant?.id || ''}&tableId=${selectedTableQR.id}&table=${encodeURIComponent(selectedTableQR.tableNumber)}`)
-            }
+            url={`${getProductionOrigin()}/customer?restaurant=${currentRestaurant?.id || ''}&tableId=${selectedTableQR.id}&table=${encodeURIComponent(selectedTableQR.tableNumber)}`}
             tableId={selectedTableQR.id}
             tableNumber={selectedTableQR.tableNumber}
             restaurantName={currentRestaurant?.name || theme.restaurantName || 'Lumière Bistro'}

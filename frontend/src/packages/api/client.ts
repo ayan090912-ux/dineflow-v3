@@ -1594,7 +1594,7 @@ export class DinelyApiClient {
             section: isOutdoor ? 'Patio & Outdoor' : 'Main Dining Hall',
             shape: isOutdoor ? 'ROUND' : 'RECTANGLE',
             status: 'AVAILABLE',
-            qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(tName)}&restaurant=${targetId}`,
+            qrCodeUrl: `${origin}/customer?restaurant=${targetId}&tableId=tbl-${targetId}-${tableNum}&table=${encodeURIComponent(tName)}`,
           });
           tableNum++;
         }
@@ -2826,7 +2826,7 @@ export class DinelyApiClient {
         status: 'OCCUPIED',
         isOccupied: true,
         sessionStartedAt: new Date().toISOString(),
-        qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(formattedNum)}${restId ? `&restaurant=${restId}` : ''}`,
+        qrCodeUrl: `${origin}/customer?restaurant=${restId}&tableId=tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}&table=${encodeURIComponent(formattedNum)}`,
       };
       this.tables.push(tbl);
     }
@@ -4195,7 +4195,7 @@ export class DinelyApiClient {
           status: 'OCCUPIED',
           isOccupied: true,
           sessionStartedAt: new Date().toISOString(),
-          qrCodeUrl: `${origin}/customer?table=${encodeURIComponent(formattedNum)}${restId ? `&restaurant=${restId}` : ''}`,
+          qrCodeUrl: `${origin}/customer?restaurant=${restId}&tableId=${orderData.tableId || `tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}`}&table=${encodeURIComponent(formattedNum)}`,
         };
         this.tables.push(targetTable);
       }
