@@ -48,6 +48,13 @@ async def run_migration():
     fix_fk_sqls = [
         "ALTER TABLE menu_items DROP CONSTRAINT IF EXISTS menu_items_category_id_fkey;",
         "ALTER TABLE menu_items ADD CONSTRAINT menu_items_category_id_fkey FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE CASCADE;",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS restaurant_id VARCHAR(255);",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS table_number VARCHAR(50);",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS request_type VARCHAR(50) DEFAULT 'WATER';",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS message TEXT;",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING';",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS waiter_name VARCHAR(255);",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS table_session_id VARCHAR(255);",
     ]
     for sql in fix_fk_sqls:
         try:

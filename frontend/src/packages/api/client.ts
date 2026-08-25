@@ -1364,6 +1364,46 @@ export class DinelyApiClient {
       this.currentUser.restaurantId = id;
     }
 
+    try {
+      const apiBase = this.getApiBaseUrl();
+      fetch(`${apiBase}/restaurants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          name: restData.name,
+          cuisine: restData.cuisine || 'Multi-Cuisine',
+          businessType: bType,
+          phone: restData.phone || '+1 555-0100',
+          email: restData.email || 'contact@dinely.com',
+          address: restData.address || 'Main Street Center',
+          currency: 'INR (₹)',
+          taxPercentage: 5.0,
+        }),
+      }).then(res => {
+        if (res.ok) {
+          fetch(`${apiBase}/restaurants/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: newRest.theme }),
+          });
+          if (hasTables) {
+            for (let i = 1; i <= 8; i++) {
+              const tableNum = i < 10 ? `Table 0${i}` : `Table ${i}`;
+              const tableId = `tbl-${id}-table_${i < 10 ? '0' + i : i}`;
+              this.createTable({
+                id: tableId,
+                restaurantId: id,
+                tableNumber: tableNum,
+                capacity: 4,
+                section: i <= 6 ? 'Main Hall' : 'Terrace',
+              });
+            }
+          }
+        }
+      }).catch(err => console.warn("Notice saving restaurant to backend:", err));
+    } catch (e) {}
+
     this.purgeDemoDataForRestaurant(id);
     this.saveDatabase();
     return newRest;
@@ -4378,7 +4418,6 @@ export class DinelyApiClient {
 
   // Customer & Portal Helper APIs
   async requestBill(tableNumber: string, restaurantId?: string) {
-    await delay(150);
     const targetRestId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
     const req = {
       id: `req-${Date.now()}`,
@@ -4389,18 +4428,30 @@ export class DinelyApiClient {
       status: 'PENDING',
       timestamp: 'Just now',
     };
+    try {
+      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantId: targetRestId,
+          tableNumber,
+          requestType: 'BILL',
+          message: `Table ${tableNumber} requested the final bill.`,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (err) {
+      console.warn("Failed to request bill via API:", err);
+    }
     this.customerRequests.push(req as any);
     this.saveDatabase();
-    realtimeBus.emit('BillRequested', {
-      restaurantId: targetRestId,
-      tableNumber,
-      data: req,
-    });
     return req;
   }
 
   async callWaiter(tableNumber: string, reason: string, restaurantId?: string) {
-    await delay(150);
     const targetRestId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
     const req = {
       id: `req-${Date.now()}`,
@@ -4411,13 +4462,26 @@ export class DinelyApiClient {
       status: 'PENDING',
       timestamp: 'Just now',
     };
+    try {
+      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantId: targetRestId,
+          tableNumber,
+          requestType: 'WATER',
+          message: `Table ${tableNumber} called waiter: ${reason}`,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (err) {
+      console.warn("Failed to call waiter via API:", err);
+    }
     this.customerRequests.push(req as any);
     this.saveDatabase();
-    realtimeBus.emit('WaiterCalled', {
-      restaurantId: targetRestId,
-      tableNumber,
-      data: req,
-    });
     return req;
   }
 
@@ -4458,10 +4522,20 @@ export class DinelyApiClient {
 
   // Waiter & Customer Request APIs
   async getCustomerRequests(restaurantId?: string) {
-    this.loadDatabase();
-    await delay(50);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
+    try {
+      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests?restaurant_id=${encodeURIComponent(targetId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch customer requests from API:", err);
+    }
+    this.loadDatabase();
     return this.customerRequests.filter((r) => r.restaurantId === targetId);
   }
 
@@ -4483,54 +4557,34 @@ export class DinelyApiClient {
   }
 
   async acceptCustomerRequest(reqId: string, waiterName?: string) {
-    await delay(100);
-    const req = this.customerRequests.find((r) => r.id === reqId);
-    if (req) {
-      req.status = 'ACCEPTED';
-      req.acceptedAt = new Date().toISOString();
-      if (waiterName) req.assignedWaiterName = waiterName;
-      this.saveDatabase();
-
-      realtimeBus.emit('CustomerRequestUpdated', {
-        restaurantId: req.restaurantId,
-        tableNumber: req.tableNumber,
-        data: req,
-      });
-    }
-    return req;
+    return this.updateCustomerRequestStatus(reqId, 'ACCEPTED', waiterName);
   }
 
   async rejectCustomerRequest(reqId: string, waiterName?: string) {
-    await delay(100);
-    const req = this.customerRequests.find((r) => r.id === reqId);
-    if (req) {
-      req.status = 'REJECTED';
-      this.saveDatabase();
-
-      realtimeBus.emit('CustomerRequestUpdated', {
-        restaurantId: req.restaurantId,
-        tableNumber: req.tableNumber,
-        data: req,
-      });
-    }
-    return req;
+    return this.updateCustomerRequestStatus(reqId, 'REJECTED', waiterName);
   }
 
   async updateCustomerRequestStatus(reqId: string, status: any, waiterName?: string) {
-    await delay(100);
+    try {
+      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests/${encodeURIComponent(reqId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          waiterName: waiterName || 'Waiter',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (err) {
+      console.warn("Failed to update customer request status via API:", err);
+    }
     const req = this.customerRequests.find((r) => r.id === reqId);
     if (req) {
       req.status = status;
-      if (waiterName) req.assignedWaiterName = waiterName;
-      if (status === 'ACCEPTED') req.acceptedAt = new Date().toISOString();
-      if (status === 'COMPLETED') req.completedAt = new Date().toISOString();
       this.saveDatabase();
-
-      realtimeBus.emit('CustomerRequestUpdated', {
-        restaurantId: req.restaurantId,
-        tableNumber: req.tableNumber,
-        data: req,
-      });
     }
     return req;
   }
@@ -4546,44 +4600,7 @@ export class DinelyApiClient {
   }
 
   async createCustomerRequest(req: any) {
-    await delay(100);
-    const targetRestId = this.resolveTenantRestaurantId(req.restaurantId) || 'rest-1';
-    const nowIso = new Date().toISOString();
-    const newReq: CustomerRequest = {
-      id: `req-${Date.now()}`,
-      restaurantId: targetRestId,
-      tableNumber: req.tableNumber || 'Table 01',
-      requestType: req.requestType || 'CALL_WAITER',
-      customTitle: req.customTitle || req.requestType || 'Waiter Assistance',
-      status: 'PENDING',
-      priority: req.priority || 'MEDIUM',
-      customerNotes: req.customerNotes,
-      requestedAt: nowIso,
-    };
-    this.customerRequests.push(newReq);
-
-    const notif: WaiterNotification = {
-      id: `notif-${Date.now()}`,
-      restaurantId: targetRestId,
-      type: req.requestType === 'BILL' ? 'BILL_REQUEST' : 'CUSTOMER_CALL',
-      title: `🔔 ${newReq.tableNumber}: ${newReq.customTitle}`,
-      message: req.customerNotes ? `${newReq.customTitle}: ${req.customerNotes}` : `${newReq.customTitle} requested`,
-      tableNumber: newReq.tableNumber,
-      timestamp: nowIso,
-      isRead: false,
-      priority: req.priority === 'HIGH' || req.priority === 'URGENT' ? 'HIGH' : 'NORMAL',
-    };
-    this.notifications.unshift(notif);
-
-    this.saveDatabase();
-
-    realtimeBus.emit('CustomerRequestCreated' as any, {
-      restaurantId: targetRestId,
-      tableNumber: newReq.tableNumber,
-      data: newReq,
-    });
-
-    return newReq;
+    return this.callWaiter(req.tableNumber || 'Table 01', req.customTitle || req.requestType || 'Water', req.restaurantId);
   }
 
   async markAllNotificationsRead() {

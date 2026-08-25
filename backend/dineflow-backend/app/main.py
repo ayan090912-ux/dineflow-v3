@@ -73,6 +73,7 @@ from app.modules.restaurants.router import router as restaurant_router
 from app.modules.menu.router import router as menu_router
 from app.modules.tables.router import router as table_router
 from app.modules.orders.router import router as order_router
+from app.modules.customer_requests.router import router as customer_requests_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -81,6 +82,7 @@ app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Resta
 app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
 app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
+app.include_router(customer_requests_router, prefix="/api/v1/customer-requests", tags=["Customer Requests"])
 
 if __name__ == "__main__":
     import uvicorn

@@ -173,9 +173,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     }
   };
 
-  // Setup Real-time WebSockets / Event Bus Listener (Scoped by restaurant_id)
+  // Setup Real-time WebSockets / Event Bus Listener (Scoped by restaurant_id) & Polling
   useEffect(() => {
     loadData();
+    const pollInterval = setInterval(loadData, 3000);
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       // Filter events strictly by restaurantId for multi-tenant isolation

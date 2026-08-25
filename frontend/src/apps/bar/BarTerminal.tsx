@@ -42,6 +42,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
   useEffect(() => {
     loadBarOrders(true);
+    const pollInterval = setInterval(() => loadBarOrders(false), 3000);
 
     const unsubscribe = realtimeBus.subscribe((event: any) => {
       const currentRestId = api.getCurrentRestaurantId();
@@ -73,7 +74,10 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearInterval(pollInterval);
+      unsubscribe();
+    };
   }, [soundEnabled]);
 
   const playNotificationSound = () => {
