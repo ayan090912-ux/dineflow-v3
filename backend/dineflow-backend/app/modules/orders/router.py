@@ -97,6 +97,25 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
     tbl_id = payload.tableId or f"tbl-{payload.restaurantId}-{(tbl_num).lower().replace(' ', '_')}"
     session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(datetime.utcnow().timestamp())}"
 
+    try:
+        query_sess = select(TableSession).where(TableSession.id == session_id)
+        res_sess = await db.execute(query_sess)
+        active_sess = res_sess.scalar_one_or_none()
+        if not active_sess:
+            new_sess = TableSession(
+                id=session_id,
+                restaurant_id=payload.restaurantId,
+                table_id=tbl_id,
+                table_number=tbl_num,
+                status="ACTIVE",
+                session_started_at=datetime.utcnow()
+            )
+            db.add(new_sess)
+            await db.flush()
+    except Exception as sess_err:
+        print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
+
+
     items_list_dict = [i.model_dump() for i in payload.items]
     subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
     tax_amount = 0.0

@@ -13,7 +13,8 @@ class Order(Base, TimestampMixin):
     restaurant_id: Mapped[str] = mapped_column(String(255), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
     table_id: Mapped[Optional[str]] = mapped_column(String(255), ForeignKey("tables.id", ondelete="SET NULL"), nullable=True, index=True)
     table_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    table_session_id: Mapped[str] = mapped_column(String(255), ForeignKey("table_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    table_session_id: Mapped[Optional[str]] = mapped_column(String(255), ForeignKey("table_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+
     status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False, index=True)  # PENDING | ACCEPTED | PREPARING | READY | COMPLETED | CANCELLED
     kitchen_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True)
     bar_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True)
