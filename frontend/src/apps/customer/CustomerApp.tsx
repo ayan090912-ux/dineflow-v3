@@ -195,7 +195,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
     });
 
-    return () => unsubscribe();
+    const pollInterval = setInterval(() => {
+      if (sId && restId && tNum && tId) {
+        loadInitialOrder(sId, restId, tNum, tId);
+      }
+      loadRestaurantAndMenu();
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
   }, [currentRestaurant?.id, currentTable?.id, selectedTableNum, currentTableSession?.id]);
 
   const loadTableInfo = async (explicitTableNum?: string, explicitRestId?: string, explicitTableId?: string) => {

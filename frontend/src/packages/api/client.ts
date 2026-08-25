@@ -2083,18 +2083,55 @@ export class DinelyApiClient {
     return myRests;
   }
 
-  async getOrders(restaurantId?: string) {
-    this.loadDatabase();
-    await delay(50);
-    if (restaurantId === 'ALL' || restaurantId === '*') {
-      const scope = getPortalScopeFromPath();
-      const user = this.getCurrentUser(scope);
-      if (user?.role === 'PLATFORM_ADMIN' || user?.role === 'SUPER_ADMIN') {
-        return [...this.orders];
-      }
-    }
+  async getOrders(restaurantId?: string): Promise<Order[]> {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/orders/restaurant/${encodeURIComponent(targetId)}`);
+      if (res.ok) {
+        const rawOrds = await res.json();
+        if (Array.isArray(rawOrds) && rawOrds.length > 0) {
+          const remoteOrds: Order[] = rawOrds.map((data: any) => ({
+            id: data.id,
+            restaurantId: data.restaurant_id || targetId,
+            tableId: data.table_id,
+            tableNumber: data.table_number,
+            tableSessionId: data.table_session_id,
+            status: data.status || 'PENDING',
+            kitchenStatus: data.kitchen_status || 'PENDING',
+            barStatus: data.bar_status || 'PENDING',
+            customerName: data.customer_name || 'Guest',
+            notes: data.notes || '',
+            items: (data.items_json || []).map((i: any) => ({
+              id: i.id || `oi-${data.id}`,
+              menuItemId: i.menuItemId || i.menu_item_id || i.id,
+              name: i.name,
+              quantity: i.quantity,
+              price: typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0,
+              notes: i.notes || '',
+              targetDestination: i.targetDestination || 'KITCHEN',
+            })),
+            totalAmount: data.total_amount || 0,
+            paymentStatus: data.payment_status || 'UNPAID',
+            createdAt: data.created_at || new Date().toISOString(),
+          }));
+
+          remoteOrds.forEach((ro) => {
+            const idx = this.orders.findIndex((o) => o.id === ro.id);
+            if (idx >= 0) this.orders[idx] = ro;
+            else this.orders.push(ro);
+          });
+          this.saveDatabase();
+          return remoteOrds;
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for getOrders failed:', e);
+    }
+
+    this.loadDatabase();
     return this.orders.filter((o) => o.restaurantId === targetId);
   }
 
@@ -4110,7 +4147,17 @@ export class DinelyApiClient {
   }
 
   async updateOrderStatus(orderId: string, status: any) {
-    await delay(150);
+    try {
+      const apiBase = getApiBaseUrl();
+      await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    } catch (e) {
+      console.warn('API PUT for updateOrderStatus failed:', e);
+    }
+
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
       order.status = status;
@@ -4120,7 +4167,6 @@ export class DinelyApiClient {
   }
 
   async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
-    await delay(100);
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
       order.kitchenStatus = status;
@@ -4136,6 +4182,17 @@ export class DinelyApiClient {
         if (order.status !== 'READY' && order.status !== 'DELIVERED' && order.status !== 'COMPLETED') {
           order.status = 'PREPARING';
         }
+      }
+
+      try {
+        const apiBase = getApiBaseUrl();
+        await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: order.status, kitchenStatus: status }),
+        });
+      } catch (e) {
+        console.warn('API PUT for updateKitchenStatus failed:', e);
       }
 
       order.updatedAt = new Date().toISOString();
@@ -4162,7 +4219,6 @@ export class DinelyApiClient {
   }
 
   async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
-    await delay(100);
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
       order.barStatus = status;
@@ -4178,6 +4234,17 @@ export class DinelyApiClient {
         if (order.status !== 'READY' && order.status !== 'DELIVERED' && order.status !== 'COMPLETED') {
           order.status = 'PREPARING';
         }
+      }
+
+      try {
+        const apiBase = getApiBaseUrl();
+        await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: order.status, barStatus: status }),
+        });
+      } catch (e) {
+        console.warn('API PUT for updateBarStatus failed:', e);
       }
 
       order.updatedAt = new Date().toISOString();

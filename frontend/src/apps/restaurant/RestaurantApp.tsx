@@ -466,7 +466,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       }
     });
 
-    return () => unsubscribe();
+    const interval = setInterval(() => {
+      loadData();
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, []);
 
   const loadData = async () => {

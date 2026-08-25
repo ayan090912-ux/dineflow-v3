@@ -28,7 +28,9 @@ class CreateOrderSchema(BaseModel):
     notes: Optional[str] = ""
 
 class UpdateOrderStatusSchema(BaseModel):
-    status: str
+    status: Optional[str] = None
+    kitchenStatus: Optional[str] = None
+    barStatus: Optional[str] = None
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(get_db)):
@@ -104,7 +106,13 @@ async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, d
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
-    order.status = payload.status
+    if payload.status:
+        order.status = payload.status
+    if payload.kitchenStatus:
+        order.kitchen_status = payload.kitchenStatus
+    if payload.barStatus:
+        order.bar_status = payload.barStatus
+
     await db.commit()
     await db.refresh(order)
     return order

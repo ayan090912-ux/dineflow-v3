@@ -87,11 +87,23 @@ async def get_or_create_table_session(restaurant_id: str, table_id: str, table_n
     )
     db.add(new_sess)
 
-    if tbl:
+    if not tbl:
+        tbl = Table(
+            id=resolved_tbl_id,
+            restaurant_id=restaurant_id,
+            table_number=resolved_tbl_num,
+            section="Main Hall",
+            capacity=4,
+            status="OCCUPIED",
+            is_occupied=True,
+            qr_code_url=f"https://dinely.food/customer?restaurant={restaurant_id}&tableId={resolved_tbl_id}&table={resolved_tbl_num}"
+        )
+        db.add(tbl)
+    else:
         tbl.status = "OCCUPIED"
         tbl.is_occupied = True
-        tbl.active_session_id = new_sess.id
 
+    tbl.active_session_id = new_sess.id
     await db.commit()
     await db.refresh(new_sess)
     return new_sess
