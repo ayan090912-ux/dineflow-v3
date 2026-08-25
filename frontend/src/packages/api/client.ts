@@ -2092,7 +2092,7 @@ export class DinelyApiClient {
       const res = await fetch(`${apiBase}/orders/restaurant/${encodeURIComponent(targetId)}`);
       if (res.ok) {
         const rawOrds = await res.json();
-        if (Array.isArray(rawOrds) && rawOrds.length > 0) {
+        if (Array.isArray(rawOrds)) {
           const remoteOrds: Order[] = rawOrds.map((data: any) => ({
             id: data.id,
             displayOrderNumber: data.order_number || `#ORD-${data.id.slice(-4)}`,
@@ -2121,11 +2121,7 @@ export class DinelyApiClient {
             createdAt: data.created_at || new Date().toISOString(),
           }));
 
-          remoteOrds.forEach((ro) => {
-            const idx = this.orders.findIndex((o) => o.id === ro.id);
-            if (idx >= 0) this.orders[idx] = ro;
-            else this.orders.push(ro);
-          });
+          this.orders = this.orders.filter((o) => o.restaurantId !== targetId).concat(remoteOrds);
           this.saveDatabase();
           return remoteOrds;
         }
@@ -4151,7 +4147,17 @@ export class DinelyApiClient {
   }
 
   async markOrderReady(orderId: string) {
-    await delay(150);
+    try {
+      const apiBase = getApiBaseUrl();
+      await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'READY', kitchenStatus: 'READY' }),
+      });
+    } catch (e) {
+      console.warn('API PUT for markOrderReady failed:', e);
+    }
+
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
       order.status = 'READY';
@@ -4169,25 +4175,31 @@ export class DinelyApiClient {
   }
 
   async deliverOrder(orderId: string) {
-    await delay(150);
     const order = this.orders.find((o) => o.id === orderId);
-    if (!order) {
-      throw new Error('Order not found.');
+    try {
+      const apiBase = getApiBaseUrl();
+      await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'DELIVERED', kitchenStatus: 'COMPLETED' }),
+      });
+    } catch (e) {
+      console.warn('API PUT for deliverOrder failed:', e);
     }
-    if (order.status !== 'READY') {
-      throw new Error(`Invalid status transition: Only READY orders can be marked DELIVERED (current status: ${order.status}).`);
-    }
-    order.status = 'DELIVERED';
-    order.deliveredAt = new Date().toISOString();
-    order.updatedAt = new Date().toISOString();
-    this.saveDatabase();
 
-    realtimeBus.emit('OrderDelivered', {
-      orderId: order.id,
-      restaurantId: order.restaurantId,
-      tableNumber: order.tableNumber,
-      data: order,
-    });
+    if (order) {
+      order.status = 'DELIVERED';
+      order.deliveredAt = new Date().toISOString();
+      order.updatedAt = new Date().toISOString();
+      this.saveDatabase();
+
+      realtimeBus.emit('OrderDelivered', {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
+    }
 
     return order;
   }

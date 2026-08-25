@@ -199,26 +199,44 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     }
   }, [viewMode]);
 
-  // Subscribe to Realtime Bus Events (Scoped by restaurant_id)
+  // Subscribe to Realtime Bus Events & 3-Second Background Polling (Scoped by restaurant_id)
   useEffect(() => {
+    const fetchFreshOrders = () => {
+      const currentRestId = api.getCurrentRestaurantId();
+      const restId = currentRestId || undefined;
+      api.getOrders(restId).then((freshOrders) => {
+        setOrders((prevOrders) => {
+          if (!isMuted && freshOrders.length > prevOrders.length) {
+            const hasNewPending = freshOrders.some(
+              (fo) => fo.status === 'PENDING' && !prevOrders.some((po) => po.id === fo.id)
+            );
+            if (hasNewPending) {
+              playKitchenChime('NEW_ORDER');
+            }
+          }
+          return freshOrders;
+        });
+      });
+      if (onRefreshOrders) {
+        onRefreshOrders();
+      }
+    };
+
+    // Initial fetch
+    fetchFreshOrders();
+
+    // 3-Second Poll Interval for cross-device synchronization
+    const pollInterval = setInterval(fetchFreshOrders, 3000);
+
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
       const currentRestId = api.getCurrentRestaurantId();
       if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
         return;
       }
       if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station === 'BAR') {
-        return; // Ignore Bar-only ticket updates in Kitchen KDS
+        return;
       }
-
-      api.loadDatabase();
-      const restId = currentRestId || undefined;
-      api.getOrders(restId).then((freshOrders) => {
-        setOrders(freshOrders);
-      });
-      if (onRefreshOrders) {
-        onRefreshOrders();
-      }
-
+      fetchFreshOrders();
       if (!isMuted && (event.type === 'OrderCreated' || event.type === 'WaiterCalled')) {
         playKitchenChime('NEW_ORDER');
       }
@@ -226,7 +244,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         showToast(`🔗 Large Gathering Table Merge: ${event.data?.mergedGroupLabel || 'Tables Combined'}`, 'info');
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      clearInterval(pollInterval);
+      unsubscribe();
+    };
   }, [onRefreshOrders, isMuted]);
 
   // Handlers

@@ -126,35 +126,31 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     initCustomerApp();
   }, [typeof window !== 'undefined' ? window.location.search : '']);
 
-  // Reactive Realtime Event Listener bound strictly to (restaurantId, tableId, tableSessionId)
+  // Reactive Realtime Event Listener & 3-Second Polling bound strictly to (restaurantId, tableId, tableSessionId)
   useEffect(() => {
     const restId = currentRestaurant?.id;
     const tId = currentTable?.id;
-    const tNum = selectedTableNum;
     const sId = currentTableSession?.id;
 
     if (!restId || !sId) return;
+
+    const fetchLiveCustomerOrders = () => {
+      api.getCustomerOrders(restId, tId, sId).then((orders) => {
+        if (Array.isArray(orders)) {
+          setCustomerOrders(orders);
+        }
+      });
+    };
+
+    fetchLiveCustomerOrders();
+    const pollInterval = setInterval(fetchLiveCustomerOrders, 3000);
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       if (event.restaurantId && event.restaurantId !== restId) {
         return;
       }
 
-      const isMatchingTable =
-        (!event.tableId && !event.tableNumber) ||
-        (event.tableId && tId && event.tableId === tId) ||
-        (event.tableNumber && tNum && matchTableNumber(event.tableNumber, tNum));
-
-      if (!isMatchingTable) {
-        return;
-      }
-
-      const isMatchingSession =
-        !event.tableSessionId || (sId && event.tableSessionId === sId);
-
-      if (!isMatchingSession) {
-        return;
-      }
+      fetchLiveCustomerOrders();
 
       if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
         setIsSessionEnded(true);
@@ -165,24 +161,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       setIsRecentStatusPulse(true);
       setTimeout(() => setIsRecentStatusPulse(false), 3500);
-
-      if (event.type === 'OrderCreated' && event.data) {
-        if (event.data.tableSessionId === sId) {
-          setCustomerOrders((prev) => {
-            const exists = prev.some((o) => o.id === event.data.id);
-            if (exists) return prev.map((o) => (o.id === event.data.id ? event.data : o));
-            return [event.data, ...prev];
-          });
-        }
-      } else if (event.orderId && event.data) {
-        if (event.data.tableSessionId === sId) {
-          setCustomerOrders((prev) =>
-            prev.map((o) => (o.id === event.orderId ? { ...o, ...event.data } : o))
-          );
-        }
-      } else {
-        loadInitialOrder(sId, restId, tNum, tId);
-      }
 
       if (event.type === 'ETAUpdated') {
         addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
@@ -195,16 +173,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
     });
 
-    const pollInterval = setInterval(() => {
-      if (sId && restId && tNum && tId) {
-        loadInitialOrder(sId, restId, tNum, tId);
-      }
-      loadRestaurantAndMenu();
-    }, 3000);
-
     return () => {
-      unsubscribe();
       clearInterval(pollInterval);
+      unsubscribe();
     };
   }, [currentRestaurant?.id, currentTable?.id, selectedTableNum, currentTableSession?.id]);
 
