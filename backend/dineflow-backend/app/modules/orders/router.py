@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.core.database.connection import get_db
 from app.modules.orders.models import Order, OrderItem, Bill
+from app.modules.tables.models import Table
 
 router = APIRouter()
 
