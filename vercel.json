@@ -1,8 +1,10 @@
 {
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
     {
       "source": "/((?!assets/|.*\\..*).*)",
-      "destination": "/frontend/dist/index.html"
+      "destination": "/index.html"
     }
   ]
 }
