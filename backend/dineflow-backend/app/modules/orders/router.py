@@ -78,34 +78,41 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
     tbl_id = payload.tableId or f"tbl-{payload.restaurantId}-{(tbl_num).lower().replace(' ', '_')}"
     session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(datetime.utcnow().timestamp())}"
 
-    # Calculate backend authoritative taxes using Tax Calculation Engine
-    res_taxes = await db.execute(
-        select(Tax).where((Tax.restaurant_id == payload.restaurantId) & (Tax.status == "ACTIVE"))
-    )
-    active_taxes = res_taxes.scalars().all()
-
-    tax_cats_map: Dict[str, List[str]] = {}
-    tax_items_map: Dict[str, List[str]] = {}
-    for t in active_taxes:
-        c_res = await db.execute(select(TaxCategory.category_id).where(TaxCategory.tax_id == t.id))
-        tax_cats_map[t.id] = [r[0] for r in c_res.all()]
-
-        i_res = await db.execute(select(TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id == t.id))
-        tax_items_map[t.id] = [r[0] for r in i_res.all()]
-
     items_list_dict = [i.model_dump() for i in payload.items]
-    calc = calculate_taxes(
-        items=items_list_dict,
-        active_taxes=active_taxes,
-        tax_categories_map=tax_cats_map,
-        tax_items_map=tax_items_map,
-        order_type=payload.orderType or "DINE_IN"
-    )
+    subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
+    tax_amount = 0.0
+    total = subtotal
+    tax_breakdown = []
 
-    subtotal = calc["subtotal"]
-    tax_amount = calc["total_tax_amount"]
-    total = calc["grand_total"]
-    tax_breakdown = calc["tax_breakdown"]
+    try:
+        res_taxes = await db.execute(
+            select(Tax).where((Tax.restaurant_id == payload.restaurantId) & (Tax.status == "ACTIVE"))
+        )
+        active_taxes = res_taxes.scalars().all()
+
+        tax_cats_map: Dict[str, List[str]] = {}
+        tax_items_map: Dict[str, List[str]] = {}
+        for t in active_taxes:
+            c_res = await db.execute(select(TaxCategory.category_id).where(TaxCategory.tax_id == t.id))
+            tax_cats_map[t.id] = [r[0] for r in c_res.all()]
+
+            i_res = await db.execute(select(TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id == t.id))
+            tax_items_map[t.id] = [r[0] for r in i_res.all()]
+
+        calc = calculate_taxes(
+            items=items_list_dict,
+            active_taxes=active_taxes,
+            tax_categories_map=tax_cats_map,
+            tax_items_map=tax_items_map,
+            order_type=payload.orderType or "DINE_IN"
+        )
+
+        subtotal = calc["subtotal"]
+        tax_amount = calc["total_tax_amount"]
+        total = calc["grand_total"]
+        tax_breakdown = calc["tax_breakdown"]
+    except Exception as tax_err:
+        print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
 
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     query_count = select(func.count(Order.id)).where(
@@ -166,23 +173,27 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
             unit_price=i.price,
             subtotal=i.price * i.quantity,
             notes=i.notes or "",
-            target_destination=i.targetDestination or "KITCHEN",
+            target_destination=i.target_destination if hasattr(i, 'target_destination') else (getattr(i, 'targetDestination', None) or "KITCHEN"),
         )
         db.add(new_item)
 
     # Save historical invoice tax snapshots for auditability
-    for t_snap in tax_breakdown:
-        snapshot_rec = InvoiceTaxSnapshot(
-            id=f"its-{order_id}-{t_snap['tax_id']}",
-            order_id=order_id,
-            tax_id=t_snap["tax_id"],
-            tax_name_snapshot=t_snap["name"],
-            tax_type_snapshot=t_snap["type"],
-            tax_rate_snapshot=t_snap["rate"],
-            tax_amount=t_snap["amount"],
-            is_inclusive=t_snap["is_inclusive"],
-        )
-        db.add(snapshot_rec)
+    try:
+        for t_snap in tax_breakdown:
+            snapshot_rec = InvoiceTaxSnapshot(
+                id=f"its-{order_id}-{t_snap['tax_id']}",
+                order_id=order_id,
+                tax_id=t_snap["tax_id"],
+                tax_name_snapshot=t_snap["name"],
+                tax_type_snapshot=t_snap["type"],
+                tax_rate_snapshot=t_snap["rate"],
+                tax_amount=t_snap["amount"],
+                is_inclusive=t_snap["is_inclusive"],
+            )
+            db.add(snapshot_rec)
+    except Exception as snap_err:
+        print("[TAX_SNAPSHOT_NOTICE] Exception writing tax snapshots:", snap_err)
+
 
     await db.commit()
     print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={payload.restaurantId} total={total}")
