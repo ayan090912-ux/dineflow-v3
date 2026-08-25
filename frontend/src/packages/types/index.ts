@@ -274,6 +274,54 @@ export interface BillItem {
   station?: 'KITCHEN' | 'BAR';
 }
 
+export type TaxType = 'PERCENTAGE' | 'FIXED';
+export type TaxAppliesTo = 'ORDER' | 'CATEGORY' | 'ITEM';
+export type TaxStatus = 'ACTIVE' | 'INACTIVE';
+export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+
+export interface Tax {
+  id: string;
+  restaurantId: string;
+  name: string;
+  type: TaxType;
+  rate: number;
+  fixedAmount?: number;
+  isInclusive: boolean;
+  appliesTo: TaxAppliesTo;
+  applicableOrderTypes: OrderType[];
+  categoryIds?: string[];
+  menuItemIds?: string[];
+  status: TaxStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TaxSnapshot {
+  taxId?: string;
+  tax_id?: string;
+  taxName?: string;
+  name: string;
+  type: TaxType;
+  taxType?: TaxType;
+  rate: number;
+  taxRate?: number;
+  amount: number;
+  taxAmount?: number;
+  isInclusive: boolean;
+  is_inclusive?: boolean;
+}
+
+export interface TaxAuditLog {
+  id: string;
+  restaurantId: string;
+  userId?: string;
+  action: string;
+  taxId: string;
+  previousValues?: any;
+  newValues?: any;
+  createdAt: string;
+}
+
 export interface Bill {
   id: string;
   restaurantId: string;
@@ -286,6 +334,7 @@ export interface Bill {
   subtotal: number;
   taxAmount: number;
   taxRate?: number;
+  taxBreakdown?: TaxSnapshot[];
   discountAmount: number;
   grandTotal: number;
   status: BillStatus;
@@ -299,6 +348,7 @@ export interface Bill {
   createdAt: string;
   updatedAt: string;
 }
+
 
 export interface TableSession {
   id: string;

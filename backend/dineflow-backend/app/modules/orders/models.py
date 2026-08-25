@@ -26,6 +26,8 @@ class Order(Base, TimestampMixin):
     estimated_prep_time_minutes: Mapped[Optional[int]] = mapped_column(Integer, default=15, nullable=True)
     eta_target_timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     items_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    tax_breakdown_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+
 
 class OrderItem(Base, TimestampMixin):
     __tablename__ = "order_items"
@@ -38,6 +40,7 @@ class OrderItem(Base, TimestampMixin):
     unit_price: Mapped[float] = mapped_column(Float, nullable=False)
     subtotal: Mapped[float] = mapped_column(Float, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_destination: Mapped[Optional[str]] = mapped_column(String(20), default="KITCHEN", nullable=True)
 
 class Bill(Base, TimestampMixin):
     __tablename__ = "bills"
@@ -53,3 +56,5 @@ class Bill(Base, TimestampMixin):
     grand_total: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     payment_status: Mapped[str] = mapped_column(String(20), default="UNPAID", nullable=False)  # UNPAID | PAID
     payment_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    tax_breakdown_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+

@@ -113,8 +113,18 @@ class Settings(BaseSettings):
     ARGON2_PARALLELISM: int = 4
 
     # CORS
-    CORS_ORIGINS: List[str] = ["https://dinely.food", "https://www.dinely.food", "http://localhost:3007"]
+    CORS_ORIGINS: List[str] = [
+        "https://dinely.food",
+        "https://www.dinely.food",
+        "https://dineflow-v3.onrender.com",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
+    ]
     CORS_ALLOW_CREDENTIALS: bool = True
+
 
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = True

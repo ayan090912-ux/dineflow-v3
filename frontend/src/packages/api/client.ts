@@ -39,6 +39,9 @@ const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 export function getProductionOrigin(): string {
   if (typeof window === 'undefined') return 'https://dinely.food';
   const host = window.location.hostname;
+  const port = window.location.port ? `:${window.location.port}` : '';
+  const protocol = window.location.protocol;
+
   const isDevHost =
     host === 'localhost' ||
     host === '127.0.0.1' ||
@@ -49,7 +52,10 @@ export function getProductionOrigin(): string {
 
   if (isDevHost) {
     const envDomain = (import.meta.env.VITE_PUBLIC_DOMAIN || import.meta.env.VITE_PRODUCTION_DOMAIN || '').trim();
-    return envDomain ? `https://${envDomain.replace(/^https?:\/\//, '')}` : 'https://dinely.food';
+    if (envDomain) {
+      return `https://${envDomain.replace(/^https?:\/\//, '')}`;
+    }
+    return `${protocol}//${host}${port}`;
   }
   return window.location.origin.replace(/^http:\/\//, 'https://');
 }
@@ -90,12 +96,25 @@ export function getApiBaseUrl(): string {
     if (envUrl) return envUrl;
   }
   if (typeof window !== 'undefined') {
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return `https://dineflow-v3.onrender.com/api/v1`;
+    const host = window.location.hostname;
+    const isDevHost =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      /^192\.168\./.test(host) ||
+      /^10\./.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+
+    if (isDevHost) {
+      const protocol = window.location.protocol;
+      return `${protocol}//${host}:8000/api/v1`;
     }
+
+    return `https://dineflow-v3.onrender.com/api/v1`;
   }
   return 'http://localhost:8000/api/v1';
 }
+
 
 // Global Multi-Tenant SaaS Central Store (Multi-tenant persistent registry across all browser contexts & devices)
 export const GLOBAL_MULTI_TENANT_RESTAURANTS: Restaurant[] = [
@@ -1365,8 +1384,9 @@ export class DinelyApiClient {
     }
 
     try {
-      const apiBase = this.getApiBaseUrl();
+      const apiBase = getApiBaseUrl();
       fetch(`${apiBase}/restaurants`, {
+
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2136,12 +2156,17 @@ export class DinelyApiClient {
 
   async getCustomerOrders(restaurantId?: string, tableId?: string, tableSessionId?: string): Promise<Order[]> {
     const targetRestId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetRestId || !tableSessionId) return [];
+    if (!targetRestId) return [];
 
     try {
       const apiBase = getApiBaseUrl();
-      const resolvedTblId = tableId || `tbl-${targetRestId}`;
-      const url = `${apiBase}/orders/customer?restaurant_id=${encodeURIComponent(targetRestId)}&table_id=${encodeURIComponent(resolvedTblId)}&table_session_id=${encodeURIComponent(tableSessionId)}`;
+      let url = `${apiBase}/orders/customer?restaurant_id=${encodeURIComponent(targetRestId)}`;
+      if (tableSessionId) {
+        url += `&table_session_id=${encodeURIComponent(tableSessionId)}`;
+      }
+      if (tableId) {
+        url += `&table_id=${encodeURIComponent(tableId)}`;
+      }
       const res = await fetch(url);
       if (res.ok) {
         const rawOrds = await res.json();
@@ -2181,28 +2206,13 @@ export class DinelyApiClient {
     }
 
     this.loadDatabase();
-    const activeSession = this.tableSessions.find(
-      (s) => s.restaurantId === targetRestId && s.id === tableSessionId && s.status !== 'CLOSED'
+    return this.orders.filter(
+      (o) =>
+        o.restaurantId === targetRestId &&
+        (tableSessionId ? o.tableSessionId === tableSessionId : tableId ? o.tableId === tableId || o.tableNumber === tableId : true)
     );
-    if (!activeSession) {
-      return [];
-    }
-
-    const filtered = this.orders.filter((o) => {
-      if (o.restaurantId !== targetRestId) return false;
-      if (o.tableSessionId !== tableSessionId) return false;
-      if (o.status === 'CANCELLED') return false;
-
-      if (tableId) {
-        if (o.tableId && o.tableId === tableId) return true;
-        if (o.tableNumber && matchTableNumber(o.tableNumber, tableId)) return true;
-      }
-      return true;
-    });
-
-    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return filtered;
   }
+
 
   async getFulfillmentTickets(restaurantId?: string, station?: 'KITCHEN' | 'BAR') {
     this.loadDatabase();
@@ -4328,6 +4338,164 @@ export class DinelyApiClient {
     return order;
   }
 
+  // --- Tax Management APIs ---
+  async getTaxes(restaurantId?: string): Promise<Tax[]> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data.map((t: any) => ({
+            id: t.id,
+            restaurantId: t.restaurant_id || targetId,
+            name: t.name,
+            type: t.type || 'PERCENTAGE',
+            rate: typeof t.rate === 'number' ? t.rate : parseFloat(t.rate) || 0,
+            fixedAmount: typeof t.fixed_amount === 'number' ? t.fixed_amount : parseFloat(t.fixed_amount) || 0,
+            isInclusive: t.is_inclusive !== False && t.is_inclusive !== false,
+            appliesTo: t.applies_to || 'ORDER',
+            applicableOrderTypes: t.applicable_order_types || ['DINE_IN', 'TAKEAWAY', 'DELIVERY'],
+            categoryIds: t.category_ids || [],
+            menuItemIds: t.menu_item_ids || [],
+            status: t.status || 'ACTIVE',
+            createdAt: t.created_at,
+            updatedAt: t.updated_at,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for getTaxes failed:', e);
+    }
+    return [];
+  }
+
+  async createTax(restaurantId: string, taxData: Partial<Tax>): Promise<Tax> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const apiBase = getApiBaseUrl();
+    const payload = {
+      name: taxData.name,
+      type: taxData.type || 'PERCENTAGE',
+      rate: taxData.rate || 0,
+      fixedAmount: taxData.fixedAmount || 0,
+      isInclusive: !!taxData.isInclusive,
+      appliesTo: taxData.appliesTo || 'ORDER',
+      applicableOrderTypes: taxData.applicableOrderTypes || ['DINE_IN', 'TAKEAWAY', 'DELIVERY'],
+      categoryIds: taxData.categoryIds || [],
+      menuItemIds: taxData.menuItemIds || [],
+      status: taxData.status || 'ACTIVE',
+    };
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to create tax' }));
+      throw new Error(err.detail || 'Failed to create tax');
+    }
+    const t = await res.json();
+    return {
+      id: t.id,
+      restaurantId: t.restaurant_id || targetId,
+      name: t.name,
+      type: t.type,
+      rate: t.rate,
+      fixedAmount: t.fixed_amount,
+      isInclusive: t.is_inclusive,
+      appliesTo: t.applies_to,
+      applicableOrderTypes: t.applicable_order_types,
+      categoryIds: t.category_ids,
+      menuItemIds: t.menu_item_ids,
+      status: t.status,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+    };
+  }
+
+  async updateTax(restaurantId: string, taxId: string, updates: Partial<Tax>): Promise<Tax> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const apiBase = getApiBaseUrl();
+    const payload = {
+      name: updates.name,
+      type: updates.type,
+      rate: updates.rate,
+      fixedAmount: updates.fixedAmount,
+      isInclusive: updates.isInclusive,
+      appliesTo: updates.appliesTo,
+      applicableOrderTypes: updates.applicableOrderTypes,
+      categoryIds: updates.categoryIds,
+      menuItemIds: updates.menuItemIds,
+      status: updates.status,
+    };
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes/${encodeURIComponent(taxId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to update tax' }));
+      throw new Error(err.detail || 'Failed to update tax');
+    }
+    const t = await res.json();
+    return {
+      id: t.id,
+      restaurantId: t.restaurant_id || targetId,
+      name: t.name,
+      type: t.type,
+      rate: t.rate,
+      fixedAmount: t.fixed_amount,
+      isInclusive: t.is_inclusive,
+      appliesTo: t.applies_to,
+      applicableOrderTypes: t.applicable_order_types,
+      categoryIds: t.category_ids,
+      menuItemIds: t.menu_item_ids,
+      status: t.status,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+    };
+  }
+
+  async activateTax(restaurantId: string, taxId: string): Promise<Tax> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes/${encodeURIComponent(taxId)}/activate`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      throw new Error('Failed to activate tax');
+    }
+    return await res.json();
+  }
+
+  async deactivateTax(restaurantId: string, taxId: string): Promise<Tax> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes/${encodeURIComponent(taxId)}/deactivate`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      throw new Error('Failed to deactivate tax');
+    }
+    return await res.json();
+  }
+
+  async calculateTaxes(restaurantId: string, items: any[], orderType: string = 'DINE_IN') {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes/calculate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, orderType }),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return null;
+  }
+
   async createOrder(orderData: Partial<Order>): Promise<Order> {
     const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
 
@@ -4340,6 +4508,7 @@ export class DinelyApiClient {
         tableSessionId: orderData.tableSessionId || `sess-${restId}-${Date.now()}`,
         customerName: orderData.customerName || 'Guest',
         notes: orderData.notes || '',
+        orderType: orderData.orderType || 'DINE_IN',
         items: (orderData.items || []).map((i) => ({
           id: i.id,
           menuItemId: i.menuItemId || i.id,
@@ -4347,6 +4516,8 @@ export class DinelyApiClient {
           price: i.price,
           quantity: i.quantity,
           notes: i.notes || '',
+          targetDestination: i.targetDestination || getFulfillmentStation(i),
+          isAlcoholic: i.isAlcoholic || false,
         })),
       };
 
@@ -4377,11 +4548,17 @@ export class DinelyApiClient {
               quantity: i.quantity,
               price: typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0,
               notes: i.notes || '',
-              targetDestination: i.targetDestination || 'KITCHEN',
+              targetDestination: i.targetDestination || getFulfillmentStation(i),
             })),
             totalAmount: data.total_amount || orderData.totalAmount || 0,
+            taxAmount: data.tax_amount || 0,
+            subtotal: data.subtotal || 0,
+            taxBreakdown: data.tax_breakdown || [],
+            estimatedPrepTimeMinutes: data.estimated_prep_time_minutes || 15,
+            etaTargetTimestamp: data.eta_target_timestamp || undefined,
             paymentStatus: data.payment_status || 'UNPAID',
             createdAt: data.created_at || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           };
 
           this.orders.unshift(createdOrd);
@@ -4396,201 +4573,16 @@ export class DinelyApiClient {
           });
           return createdOrd;
         }
+      } else {
+        const errorText = await res.text();
+        throw new Error(`Server returned status ${res.status}: ${errorText || 'Failed to insert order'}`);
       }
-    } catch (e) {
-      console.warn('API POST for createOrder failed:', e);
+    } catch (e: any) {
+      console.error('API POST for createOrder failed:', e);
+      throw new Error(e?.message || 'Failed to connect to backend database.');
     }
-
-    const rest = this.restaurants.find((r) => r.id === restId);
-
-    const isNoTableFoodTruck = rest?.businessType === 'FOOD_TRUCK' && rest?.hasTables === false;
-    const isPickup = isNoTableFoodTruck || orderData.orderType === 'PICKUP' || orderData.tableNumber === 'COUNTER';
-
-    const processedItems: OrderItem[] = (orderData.items || []).map((item) => {
-      const station = getFulfillmentStation(item);
-      return {
-        ...item,
-        targetDestination: station,
-        isAlcoholic: item.isAlcoholic || station === 'BAR',
-      };
-    });
-
-    const hasKitchenItems = processedItems.some((i) => i.targetDestination === 'KITCHEN');
-    const hasBarItems = processedItems.some((i) => i.targetDestination === 'BAR');
-    const dest: 'KITCHEN' | 'BAR' | 'MIXED' = hasKitchenItems && hasBarItems ? 'MIXED' : hasBarItems ? 'BAR' : 'KITCHEN';
-
-    const orderSeq = (this.orders.filter((o) => o.restaurantId === restId).length + 101);
-    const prefix = isPickup ? (rest?.orderNumberPrefix || 'F') : (rest?.orderNumberPrefix || 'ORD');
-    const customOrderId = orderData.id || `${prefix.replace(/#/g, '')}${orderSeq}`;
-
-    // Get or create table session and current business day
-    let tableSessionId = orderData.tableSessionId;
-    let targetTable: Table | undefined;
-    if (!isPickup && (orderData.tableNumber || orderData.tableId)) {
-      const rawNum = orderData.tableNumber || orderData.tableId;
-      targetTable = this.tables.find(
-        (t) => t.restaurantId === restId && (t.id === orderData.tableId || matchTableNumber(t.tableNumber, rawNum))
-      );
-
-      if (!targetTable && rawNum && rawNum !== 'COUNTER') {
-        const formattedNum = formatStandardTableNumber(rawNum);
-        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
-        targetTable = {
-          id: orderData.tableId || `tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}`,
-          restaurantId: restId,
-          tableNumber: formattedNum,
-          capacity: 4,
-          section: 'Main Floor',
-          status: 'OCCUPIED',
-          isOccupied: true,
-          sessionStartedAt: new Date().toISOString(),
-          qrCodeUrl: `${origin}/customer?restaurant=${restId}&tableId=${orderData.tableId || `tbl-${restId}-${formattedNum.toLowerCase().replace(/\s+/g, '_')}`}&table=${encodeURIComponent(formattedNum)}`,
-        };
-        this.tables.push(targetTable);
-      }
-
-      if (targetTable) {
-        let session = this.tableSessions.find(
-          (s) => s.restaurantId === restId && (s.id === tableSessionId || s.tableId === targetTable!.id || matchTableNumber(s.tableNumber, targetTable!.tableNumber)) && s.status === 'ACTIVE'
-        );
-        if (!session) {
-          session = {
-            id: tableSessionId || `sess-${restId}-${targetTable.id}-${Date.now()}`,
-            restaurantId: restId,
-            tableId: targetTable.id,
-            tableNumber: targetTable.tableNumber,
-            status: 'ACTIVE',
-            sessionStartedAt: new Date().toISOString(),
-          };
-          this.tableSessions.unshift(session);
-
-          realtimeBus.emit('TableSessionStarted' as any, {
-            sessionId: session.id,
-            restaurantId: restId,
-            tableId: targetTable.id,
-            tableNumber: targetTable.tableNumber,
-            data: session,
-          });
-        }
-
-        tableSessionId = session.id;
-        targetTable.status = 'OCCUPIED';
-        targetTable.isOccupied = true;
-        targetTable.activeSessionId = session.id;
-        targetTable.sessionStartedAt = targetTable.sessionStartedAt || session.sessionStartedAt;
-
-        realtimeBus.emit('TableStatusUpdated' as any, {
-          tableId: targetTable.id,
-          restaurantId: restId,
-          tableNumber: targetTable.tableNumber,
-          status: 'OCCUPIED',
-          data: targetTable,
-        });
-      }
-    }
-
-    const currentBday = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
-
-    const newOrd: Order = {
-      id: customOrderId,
-      restaurantId: restId,
-      tableId: targetTable?.id || orderData.tableId,
-      tableNumber: isPickup ? 'COUNTER' : (targetTable?.tableNumber || orderData.tableNumber || 'Table 01'),
-      tableSessionId,
-      businessDayId: currentBday?.id,
-      orderType: isPickup ? 'PICKUP' : 'DINE_IN',
-      customerName: orderData.customerName || 'Guest',
-      customerPhone: orderData.customerPhone,
-      items: processedItems,
-      totalAmount: orderData.totalAmount || 0,
-      taxAmount: orderData.taxAmount || 0,
-      tipAmount: orderData.tipAmount || 0,
-      status: orderData.status || 'PENDING',
-      targetDestination: dest,
-      kitchenStatus: hasKitchenItems ? 'PENDING' : undefined,
-      barStatus: hasBarItems ? 'PENDING' : undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      paymentStatus: orderData.paymentStatus || 'UNPAID',
-      specialInstructions: orderData.specialInstructions,
-    };
-
-    this.orders.unshift(newOrd);
-
-    const kitchenItems = processedItems.filter((i) => i.targetDestination === 'KITCHEN');
-    const barItems = processedItems.filter((i) => i.targetDestination === 'BAR');
-
-    if (kitchenItems.length > 0) {
-      this.fulfillmentTickets.unshift({
-        id: `K-TICKET-${customOrderId}`,
-        parentOrderId: customOrderId,
-        restaurantId: restId,
-        tableNumber: newOrd.tableNumber,
-        tableSessionId,
-        station: 'KITCHEN',
-        status: 'PENDING',
-        items: kitchenItems,
-        createdAt: newOrd.createdAt,
-        updatedAt: newOrd.updatedAt,
-        customerName: newOrd.customerName,
-        orderType: newOrd.orderType,
-      });
-    }
-
-    if (barItems.length > 0) {
-      this.fulfillmentTickets.unshift({
-        id: `B-TICKET-${customOrderId}`,
-        parentOrderId: customOrderId,
-        restaurantId: restId,
-        tableNumber: newOrd.tableNumber,
-        tableSessionId,
-        station: 'BAR',
-        status: 'PENDING',
-        items: barItems,
-        createdAt: newOrd.createdAt,
-        updatedAt: newOrd.updatedAt,
-        customerName: newOrd.customerName,
-        orderType: newOrd.orderType,
-      });
-    }
-
-    // Auto-occupy matching table in database if it was available
-    if (!isPickup && newOrd.tableNumber) {
-      const table = this.tables.find(
-        (t) => t.restaurantId === restId && t.tableNumber.toLowerCase() === newOrd.tableNumber.toLowerCase()
-      );
-      if (table && table.status === 'AVAILABLE') {
-        table.status = 'OCCUPIED';
-        table.isOccupied = true;
-        table.sessionStartedAt = table.sessionStartedAt || new Date().toISOString();
-        realtimeBus.emit('TableStatusUpdated' as any, {
-          tableId: table.id,
-          restaurantId: restId,
-          tableNumber: table.tableNumber,
-          status: 'OCCUPIED',
-          data: table,
-        });
-        realtimeBus.emit('TableStatusChanged' as any, {
-          tableId: table.id,
-          restaurantId: restId,
-          tableNumber: table.tableNumber,
-          status: 'OCCUPIED',
-          data: table,
-        });
-      }
-    }
-
-    this.saveDatabase();
-    realtimeBus.emit('OrderCreated' as any, {
-      orderId: newOrd.id,
-      restaurantId: restId,
-      tableId: newOrd.tableId,
-      tableNumber: newOrd.tableNumber,
-      tableSessionId: newOrd.tableSessionId,
-      data: newOrd,
-    });
-    return newOrd;
   }
+
 
   async getKitchenAnalytics(restaurantId?: string) {
     await delay(50);

@@ -85,6 +85,7 @@ import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
 import { BarTerminal } from '../bar/BarTerminal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
+import { TaxManagement } from './TaxManagement';
 
 interface RestaurantAppProps {
   onEditSetup?: () => void;
@@ -105,7 +106,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [billingSearchQuery, setBillingSearchQuery] = useState('');
   const [billingStatusFilter, setBillingStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'CANCELLED'>('ALL');
   const [billingPaymentFilter, setBillingPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'UPI'>('ALL');
+  const [billingSubTab, setBillingSubTab] = useState<'invoices' | 'taxes'>('invoices');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
 
   // Category Management State
   const [foodCategories, setFoodCategories] = useState<MenuCategory[]>([]);
@@ -2821,16 +2824,53 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         {/* Tab: Billing & Digital Receipt OS */}
         {activeTab === 'billing' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Receipt className="w-5 h-5 text-emerald-400" /> Restaurant Billing & Digital Receipts
+                  <Receipt className="w-5 h-5 text-emerald-400" /> Restaurant Billing & Taxes
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Track running table bills, session receipts, payment status, and complete transaction history.
+                  Manage running table bills, receipts, digital invoicing, and tax configurations.
                 </p>
               </div>
+
+              <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setBillingSubTab('invoices')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    billingSubTab === 'invoices'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Invoices & Receipts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingSubTab('taxes')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    billingSubTab === 'taxes'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Taxes
+                </button>
+              </div>
             </div>
+
+            {billingSubTab === 'taxes' ? (
+              <TaxManagement
+                restaurantId={restaurantId}
+                currencySymbol={theme.currency || '₹'}
+                categories={foodCategories}
+                menuItems={menuItems}
+                addToast={addToast}
+              />
+            ) : (
+              <>
+
 
             {/* Billing KPI Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -3016,8 +3056,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 ]}
               />
             </div>
+              </>
+            )}
           </div>
         )}
+
 
         {/* Tab 8: Branding & Theme Engine */}
         {activeTab === 'theme' && (

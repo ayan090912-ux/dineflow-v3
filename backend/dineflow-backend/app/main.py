@@ -17,7 +17,9 @@ import app.modules.menu.models
 import app.modules.tables.models
 import app.modules.orders.models
 import app.modules.customer_requests.models
+import app.modules.taxes.models
 from app.scripts.cafe_co_migration import run_migration
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,14 +43,18 @@ app = FastAPI(
 # Middleware
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware)
-cors_origins = ["*"] if ("*" in settings.CORS_ORIGINS or settings.DEBUG) else settings.CORS_ORIGINS
+cors_origins = settings.CORS_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_origin_regex=r"https://.*dinely\.food|https://.*onrender\.com|http://.*",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 from sqlalchemy import text
 from app.core.database.connection import AsyncSessionLocal
@@ -79,15 +85,18 @@ from app.modules.menu.router import router as menu_router
 from app.modules.tables.router import router as table_router
 from app.modules.orders.router import router as order_router
 from app.modules.customer_requests.router import router as customer_requests_router
+from app.modules.taxes.router import router as tax_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(platform_router, prefix="/api/v1/admin", tags=["Platform Admin"])
 app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Restaurants"])
+app.include_router(tax_router, prefix="/api/v1/restaurants", tags=["Taxes"])
 app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
 app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
 app.include_router(customer_requests_router, prefix="/api/v1/customer-requests", tags=["Customer Requests"])
+
 
 if __name__ == "__main__":
     import uvicorn

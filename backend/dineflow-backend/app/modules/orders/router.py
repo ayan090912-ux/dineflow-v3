@@ -1,7 +1,7 @@
-from typing import Optional, List, Any
-from datetime import datetime
+from typing import Optional, List, Any, Dict
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -9,6 +9,8 @@ from app.core.database.connection import get_db
 from app.modules.orders.models import Order, OrderItem, Bill
 from app.modules.tables.models import Table
 from app.modules.restaurants.models import Restaurant
+from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
+from app.modules.taxes.calculation import calculate_taxes
 
 router = APIRouter()
 
@@ -17,17 +19,22 @@ class OrderItemInputSchema(BaseModel):
     menuItemId: Optional[str] = None
     name: str
     price: float
-    quantity: int
+    quantity: int = 1
     notes: Optional[str] = ""
+    targetDestination: Optional[str] = "KITCHEN"
+    isAlcoholic: Optional[bool] = False
+    category: Optional[str] = None
+    categoryId: Optional[str] = None
 
 class CreateOrderSchema(BaseModel):
     restaurantId: str
-    tableId: str
-    tableNumber: str
-    tableSessionId: str
+    tableId: Optional[str] = None
+    tableNumber: Optional[str] = "Table 01"
+    tableSessionId: Optional[str] = None
     items: List[OrderItemInputSchema]
     customerName: Optional[str] = "Guest"
     notes: Optional[str] = ""
+    orderType: Optional[str] = "DINE_IN"
 
 class UpdateOrderStatusSchema(BaseModel):
     status: Optional[str] = None
@@ -35,73 +42,6 @@ class UpdateOrderStatusSchema(BaseModel):
     barStatus: Optional[str] = None
     estimatedPrepTimeMinutes: Optional[int] = None
     etaTargetTimestamp: Optional[str] = None
-
-@router.post("", status_code=status.HTTP_201_CREATED)
-async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(get_db)):
-    subtotal = sum(i.price * i.quantity for i in payload.items)
-    tax_amount = round(subtotal * 0.05, 2)
-    total = round(subtotal + tax_amount, 2)
-
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    query_count = select(func.count(Order.id)).where(
-        (Order.restaurant_id == payload.restaurantId) &
-        (Order.created_at >= today_start)
-    )
-    res_count = await db.execute(query_count)
-    daily_seq = (res_count.scalar() or 0) + 1
-    order_num = f"#ORD-{daily_seq}"
-
-    order_id = f"ord-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
-
-    new_order = Order(
-        id=order_id,
-        restaurant_id=payload.restaurantId,
-        table_id=payload.tableId,
-        table_number=payload.tableNumber,
-        table_session_id=payload.tableSessionId,
-        status="PENDING",
-        kitchen_status="PENDING",
-        bar_status="PENDING",
-        customer_name=payload.customerName or "Guest",
-        notes=payload.notes or "",
-        subtotal=subtotal,
-        tax_amount=tax_amount,
-        total_amount=total,
-        order_number=order_num,
-        estimated_prep_time_minutes=15,
-        items_json=[i.model_dump() for i in payload.items],
-    )
-    db.add(new_order)
-
-    # Lock table as occupied
-    query_tbl = select(Table).where(
-        (Table.restaurant_id == payload.restaurantId) &
-        ((Table.id == payload.tableId) | (Table.table_number == payload.tableNumber))
-    )
-    res_tbl = await db.execute(query_tbl)
-    tbls = res_tbl.scalars().all()
-    if tbls:
-        tbl = tbls[0]
-        tbl.status = "OCCUPIED"
-        tbl.is_occupied = True
-        tbl.active_session_id = payload.tableSessionId
-
-    for idx, i in enumerate(payload.items):
-        new_item = OrderItem(
-            id=f"oi-{int(datetime.utcnow().timestamp() * 1000)}-{idx}",
-            order_id=order_id,
-            menu_item_id=i.menuItemId or "item-unknown",
-            name=i.name,
-            quantity=i.quantity,
-            unit_price=i.price,
-            subtotal=i.price * i.quantity,
-            notes=i.notes or "",
-        )
-        db.add(new_item)
-
-    await db.commit()
-    await db.refresh(new_order)
-    return format_order_response(new_order)
 
 def format_order_response(order: Order) -> dict:
     return {
@@ -122,30 +62,161 @@ def format_order_response(order: Order) -> dict:
         "estimated_prep_time_minutes": order.estimated_prep_time_minutes or 15,
         "eta_target_timestamp": order.eta_target_timestamp.isoformat() if order.eta_target_timestamp else None,
         "items_json": order.items_json or [],
+        "tax_breakdown": order.tax_breakdown_json or [],
         "created_at": order.created_at.isoformat() if order.created_at else None,
     }
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(get_db)):
+    print(f"[ORDER_CREATED_REQUEST] restaurant_id={payload.restaurantId} table_number={payload.tableNumber} items_count={len(payload.items or [])}")
+    if not payload.restaurantId:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="restaurantId is required")
+    if not payload.items or len(payload.items) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order items cannot be empty")
+
+    tbl_num = payload.tableNumber or "Table 01"
+    tbl_id = payload.tableId or f"tbl-{payload.restaurantId}-{(tbl_num).lower().replace(' ', '_')}"
+    session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(datetime.utcnow().timestamp())}"
+
+    # Calculate backend authoritative taxes using Tax Calculation Engine
+    res_taxes = await db.execute(
+        select(Tax).where((Tax.restaurant_id == payload.restaurantId) & (Tax.status == "ACTIVE"))
+    )
+    active_taxes = res_taxes.scalars().all()
+
+    tax_cats_map: Dict[str, List[str]] = {}
+    tax_items_map: Dict[str, List[str]] = {}
+    for t in active_taxes:
+        c_res = await db.execute(select(TaxCategory.category_id).where(TaxCategory.tax_id == t.id))
+        tax_cats_map[t.id] = [r[0] for r in c_res.all()]
+
+        i_res = await db.execute(select(TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id == t.id))
+        tax_items_map[t.id] = [r[0] for r in i_res.all()]
+
+    items_list_dict = [i.model_dump() for i in payload.items]
+    calc = calculate_taxes(
+        items=items_list_dict,
+        active_taxes=active_taxes,
+        tax_categories_map=tax_cats_map,
+        tax_items_map=tax_items_map,
+        order_type=payload.orderType or "DINE_IN"
+    )
+
+    subtotal = calc["subtotal"]
+    tax_amount = calc["total_tax_amount"]
+    total = calc["grand_total"]
+    tax_breakdown = calc["tax_breakdown"]
+
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    query_count = select(func.count(Order.id)).where(
+        (Order.restaurant_id == payload.restaurantId) &
+        (Order.created_at >= today_start)
+    )
+    res_count = await db.execute(query_count)
+    daily_seq = (res_count.scalar() or 0) + 1
+    order_num = f"#ORD-{daily_seq}"
+
+    order_id = f"ord-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
+    eta_target = datetime.utcnow() + timedelta(minutes=15)
+
+    print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={payload.restaurantId} table_id={tbl_id} session_id={session_id}")
+
+    new_order = Order(
+        id=order_id,
+        restaurant_id=payload.restaurantId,
+        table_id=tbl_id,
+        table_number=tbl_num,
+        table_session_id=session_id,
+        status="PENDING",
+        kitchen_status="PENDING",
+        bar_status="PENDING",
+        customer_name=payload.customerName or "Guest",
+        notes=payload.notes or "",
+        subtotal=subtotal,
+        tax_amount=tax_amount,
+        total_amount=total,
+        order_number=order_num,
+        estimated_prep_time_minutes=15,
+        eta_target_timestamp=eta_target,
+        items_json=items_list_dict,
+        tax_breakdown_json=tax_breakdown,
+    )
+    db.add(new_order)
+
+    # Lock matching table as occupied in database
+    query_tbl = select(Table).where(
+        (Table.restaurant_id == payload.restaurantId) &
+        ((Table.id == tbl_id) | (Table.table_number == tbl_num))
+    )
+    res_tbl = await db.execute(query_tbl)
+    tbls = res_tbl.scalars().all()
+    if tbls:
+        tbl = tbls[0]
+        tbl.status = "OCCUPIED"
+        tbl.is_occupied = True
+        tbl.active_session_id = session_id
+
+    for idx, i in enumerate(payload.items):
+        new_item = OrderItem(
+            id=f"oi-{int(datetime.utcnow().timestamp() * 1000)}-{idx}",
+            order_id=order_id,
+            menu_item_id=i.menuItemId or i.id or "item-unknown",
+            name=i.name,
+            quantity=i.quantity,
+            unit_price=i.price,
+            subtotal=i.price * i.quantity,
+            notes=i.notes or "",
+            target_destination=i.targetDestination or "KITCHEN",
+        )
+        db.add(new_item)
+
+    # Save historical invoice tax snapshots for auditability
+    for t_snap in tax_breakdown:
+        snapshot_rec = InvoiceTaxSnapshot(
+            id=f"its-{order_id}-{t_snap['tax_id']}",
+            order_id=order_id,
+            tax_id=t_snap["tax_id"],
+            tax_name_snapshot=t_snap["name"],
+            tax_type_snapshot=t_snap["type"],
+            tax_rate_snapshot=t_snap["rate"],
+            tax_amount=t_snap["amount"],
+            is_inclusive=t_snap["is_inclusive"],
+        )
+        db.add(snapshot_rec)
+
+    await db.commit()
+    print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={payload.restaurantId} total={total}")
+    await db.refresh(new_order)
+    return format_order_response(new_order)
 
 @router.get("/customer")
 async def get_customer_orders(
     restaurant_id: str = Query(...),
-    table_id: str = Query(...),
-    table_session_id: str = Query(...),
+    table_id: Optional[str] = Query(None),
+    table_session_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     query = select(Order).where(
         (Order.restaurant_id == restaurant_id) &
-        (Order.table_session_id == table_session_id) &
         (Order.status != "CANCELLED")
-    ).order_by(Order.created_at.desc())
+    )
+    if table_session_id:
+        query = query.where(Order.table_session_id == table_session_id)
+    elif table_id:
+        query = query.where((Order.table_id == table_id) | (Order.table_number == table_id))
+
+    query = query.order_by(Order.created_at.desc())
     result = await db.execute(query)
     orders = result.scalars().all()
     return [format_order_response(o) for o in orders]
+
 
 @router.get("/restaurant/{restaurant_id}")
 async def get_restaurant_orders(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     query = select(Order).where(Order.restaurant_id == restaurant_id).order_by(Order.created_at.desc())
     result = await db.execute(query)
     orders = result.scalars().all()
+    print(f"[KITCHEN_ORDER_FETCH] restaurant_id={restaurant_id} count={len(orders)}")
     return [format_order_response(o) for o in orders]
 
 @router.put("/{order_id}/status")
@@ -164,6 +235,8 @@ async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, d
         order.bar_status = payload.barStatus
     if payload.estimatedPrepTimeMinutes is not None:
         order.estimated_prep_time_minutes = payload.estimatedPrepTimeMinutes
+        if not order.eta_target_timestamp:
+            order.eta_target_timestamp = datetime.utcnow() + timedelta(minutes=payload.estimatedPrepTimeMinutes)
     if payload.etaTargetTimestamp is not None:
         try:
             dt_val = datetime.fromisoformat(payload.etaTargetTimestamp.replace("Z", "+00:00"))
@@ -172,5 +245,7 @@ async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, d
             pass
 
     await db.commit()
+    print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status}")
     await db.refresh(order)
     return format_order_response(order)
+

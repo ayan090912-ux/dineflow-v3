@@ -154,15 +154,32 @@ export function downloadDigitalReceiptPNG(bill: Bill, restaurantName: string = '
   ctx.font = '600 12px monospace';
   ctx.fillText(formatCurrency(bill.subtotal || 0), width - 40, y);
 
-  y += 22;
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 12px Inter, system-ui, sans-serif';
-  ctx.fillText('GST / Restaurant Tax (5%):', 40, y);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#f8fafc';
-  ctx.font = '600 12px monospace';
-  ctx.fillText(formatCurrency(bill.taxAmount || 0), width - 40, y);
+  if (bill.taxBreakdown && bill.taxBreakdown.length > 0) {
+    bill.taxBreakdown.forEach((t) => {
+      y += 22;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 12px Inter, system-ui, sans-serif';
+      const tName = t.name || t.taxName || 'Tax';
+      const tRate = t.rate || t.taxRate || 0;
+      ctx.fillText(`${tName} (${tRate}%):`, 40, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '600 12px monospace';
+      ctx.fillText(formatCurrency(t.amount || t.taxAmount || 0), width - 40, y);
+    });
+  } else {
+    y += 22;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '600 12px Inter, system-ui, sans-serif';
+    ctx.fillText('Taxes & Charges:', 40, y);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '600 12px monospace';
+    ctx.fillText(formatCurrency(bill.taxAmount || 0), width - 40, y);
+  }
+
 
   if ((bill.discountAmount || 0) > 0) {
     y += 22;

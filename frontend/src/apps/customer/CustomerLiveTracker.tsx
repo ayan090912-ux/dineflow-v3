@@ -36,15 +36,20 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
   // Live Second-by-Second Countdown Timer
   useEffect(() => {
     const calculateSecondsLeft = () => {
-      if (!currentOrder.etaTargetTimestamp || currentOrder.isTimerPaused) {
-        return;
+      let target: number;
+      if (currentOrder.etaTargetTimestamp) {
+        target = new Date(currentOrder.etaTargetTimestamp).getTime();
+      } else {
+        const created = new Date(currentOrder.createdAt || Date.now()).getTime();
+        const prepMins = currentOrder.estimatedPrepTimeMinutes || 15;
+        target = created + prepMins * 60000;
       }
-      const target = new Date(currentOrder.etaTargetTimestamp).getTime();
       const now = Date.now();
       const diffSec = Math.max(0, Math.floor((target - now) / 1000));
       setRemainingSeconds(diffSec);
 
       // Dynamic Status Message based on ETA remaining and status
+
       if (currentOrder.status === 'READY') {
         setEtaMessage('Your order is ready! Your waiter is bringing your food.');
       } else if (currentOrder.status === 'DELIVERED') {

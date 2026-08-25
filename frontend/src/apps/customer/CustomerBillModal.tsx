@@ -238,10 +238,20 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   <span>{formatCurrency(bill.subtotal)}</span>
                 </div>
 
-                <div className="flex justify-between text-slate-400">
-                  <span>GST / Restaurant Tax (5%)</span>
-                  <span>{formatCurrency(bill.taxAmount)}</span>
-                </div>
+                {bill.taxBreakdown && bill.taxBreakdown.length > 0 ? (
+                  bill.taxBreakdown.map((t, idx) => (
+                    <div key={idx} className="flex justify-between text-slate-400">
+                      <span>{t.name || t.taxName || 'Tax'} ({t.rate || t.taxRate || 0}%{t.isInclusive || t.is_inclusive ? ' Included' : ''})</span>
+                      <span>{formatCurrency(t.amount || t.taxAmount || 0)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Taxes & Charges</span>
+                    <span>{formatCurrency(bill.taxAmount)}</span>
+                  </div>
+                )}
+
 
                 {bill.discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-400">

@@ -132,15 +132,16 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const tId = currentTable?.id;
     const sId = currentTableSession?.id;
 
-    if (!restId || !sId) return;
+    if (!restId) return;
 
     const fetchLiveCustomerOrders = () => {
-      api.getCustomerOrders(restId, tId, sId).then((orders) => {
+      api.getCustomerOrders(restId, tId || selectedTableNum, sId).then((orders) => {
         if (Array.isArray(orders)) {
           setCustomerOrders(orders);
         }
       });
     };
+
 
     fetchLiveCustomerOrders();
     const pollInterval = setInterval(fetchLiveCustomerOrders, 3000);
@@ -457,27 +458,38 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
     const isNoTable = currentRestaurant?.hasTables === false;
 
-    const newOrd = await api.createOrder({
-      restaurantId: restId,
-      tableNumber: isNoTable ? 'COUNTER' : selectedTableNum,
-      tableSessionId: currentTableSession?.id,
-      orderType: isNoTable ? 'PICKUP' : 'DINE_IN',
-      customerName: 'Guest',
-      items: orderItems,
-      totalAmount: total,
-      status: 'PENDING',
-      targetDestination: targetDest,
-      paymentStatus: 'UNPAID',
-    });
+    try {
+      const newOrd = await api.createOrder({
+        restaurantId: restId,
+        tableId: currentTable?.id,
+        tableNumber: isNoTable ? 'COUNTER' : selectedTableNum,
+        tableSessionId: currentTableSession?.id,
+        orderType: isNoTable ? 'PICKUP' : 'DINE_IN',
+        customerName: 'Guest',
+        items: orderItems,
+        totalAmount: total,
+        status: 'PENDING',
+        targetDestination: targetDest,
+        paymentStatus: 'UNPAID',
+      });
 
-    saveCustomerOrderId(newOrd.id, restId, selectedTableNum);
+      saveCustomerOrderId(newOrd.id, restId, selectedTableNum);
 
-    setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
-    setCart([]);
-    setIsCartOpen(false);
-    setIsOrderStatusModalOpen(true);
-    addToast('success', 'Order Transmitted! 🎉', `Order #${newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`);
+      setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
+      setCart([]);
+      setIsCartOpen(false);
+      setIsOrderStatusModalOpen(true);
+      addToast(
+        'success',
+        'Order Transmitted! 🎉',
+        `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`
+      );
+    } catch (err: any) {
+      console.error('Order checkout failed:', err);
+      addToast('danger', 'Unable to Place Order', err?.message || 'Server network error. Please check connection and try again.');
+    }
   };
+
 
   const handleCallWaiter = () => {
     setIsCallWaiterModalOpen(true);
