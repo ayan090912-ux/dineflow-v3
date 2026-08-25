@@ -10,12 +10,27 @@ from app.modules.platform.router import router as platform_router
 settings = get_settings()
 
 
+from contextlib import asynccontextmanager
+from app.core.database.connection import engine, Base
+from app.scripts.cafe_co_migration import run_migration
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        await run_migration()
+    except Exception as e:
+        print("[STARTUP NOTICE] Database table initialization:", e)
+    yield
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="Dinely Cloud - Multi-tenant Restaurant Operating System",
     docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None
+    redoc_url="/redoc" if settings.DEBUG else None,
+    lifespan=lifespan
 )
 
 # Middleware
