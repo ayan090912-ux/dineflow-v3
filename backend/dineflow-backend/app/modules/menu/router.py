@@ -42,6 +42,26 @@ async def get_categories(restaurant_id: str, db: AsyncSession = Depends(get_db))
     query = select(MenuCategory).where(MenuCategory.restaurant_id == restaurant_id).order_by(MenuCategory.sort_order)
     result = await db.execute(query)
     cats = result.scalars().all()
+    if not cats:
+        categories_data = [
+            (f"cat-{restaurant_id}-1", "Starters & Appetizers", 1),
+            (f"cat-{restaurant_id}-2", "Main Course", 2),
+            (f"cat-{restaurant_id}-3", "Gourmet Desserts", 3),
+            (f"cat-{restaurant_id}-4", "Beverages & Drinks", 4),
+        ]
+        new_cats = []
+        for cat_id, cat_name, sort_ord in categories_data:
+            c = MenuCategory(
+                id=cat_id,
+                restaurant_id=restaurant_id,
+                name=cat_name,
+                sort_order=sort_ord,
+                is_enabled=True,
+            )
+            db.add(c)
+            new_cats.append(c)
+        await db.commit()
+        return new_cats
     return cats
 
 @router.post("/{restaurant_id}/categories", status_code=status.HTTP_201_CREATED)
@@ -70,6 +90,48 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     )
     res_items = await db.execute(query_items)
     items = res_items.scalars().all()
+
+    if not items:
+        # Provision default categories & items if empty
+        cat1 = f"cat-{restaurant_id}-1"
+        cat2 = f"cat-{restaurant_id}-2"
+        cat3 = f"cat-{restaurant_id}-3"
+        cat4 = f"cat-{restaurant_id}-4"
+        if not categories:
+            categories = [
+                MenuCategory(id=cat1, restaurant_id=restaurant_id, name="Starters & Appetizers", sort_order=1, is_enabled=True),
+                MenuCategory(id=cat2, restaurant_id=restaurant_id, name="Main Course", sort_order=2, is_enabled=True),
+                MenuCategory(id=cat3, restaurant_id=restaurant_id, name="Gourmet Desserts", sort_order=3, is_enabled=True),
+                MenuCategory(id=cat4, restaurant_id=restaurant_id, name="Beverages & Drinks", sort_order=4, is_enabled=True),
+            ]
+            for c in categories:
+                db.add(c)
+            await db.commit()
+
+        items_data = [
+            (f"item-{restaurant_id}-1", cat1, "Truffle Mushroom Arancini", "Crispy risotto balls stuffed with wild forest mushrooms and aged mozzarella, served with truffle aioli.", 14.50, "https://images.unsplash.com/photo-1541529086526-db283c563270?w=600", True, "KITCHEN"),
+            (f"item-{restaurant_id}-2", cat2, "Pan-Seared Salmon Fillet", "Atlantic salmon served over saffron risotto with lemon herb reduction.", 28.90, "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600", False, "KITCHEN"),
+            (f"item-{restaurant_id}-3", cat3, "Classic Tiramisu", "Layers of espresso-soaked ladyfingers and whipped mascarpone cream.", 9.50, "https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=600", True, "KITCHEN"),
+            (f"item-{restaurant_id}-4", cat4, "Artisanal Smoked Old Fashioned", "Bourbon whiskey infused with aromatic bitters and oak wood smoke.", 16.00, "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600", True, "BAR"),
+        ]
+        items = []
+        for item_id, c_id, name, desc, price, img_url, is_veg, target in items_data:
+            m = MenuItem(
+                id=item_id,
+                restaurant_id=restaurant_id,
+                category_id=c_id,
+                name=name,
+                description=desc,
+                price=price,
+                image_url=img_url,
+                is_available=True,
+                is_vegetarian=is_veg,
+                dietary_type="VEG" if is_veg else "NON_VEG",
+                target_destination=target,
+            )
+            db.add(m)
+            items.append(m)
+        await db.commit()
 
     return {
         "categories": categories,
