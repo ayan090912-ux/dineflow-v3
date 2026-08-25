@@ -44,27 +44,46 @@ class UpdateOrderStatusSchema(BaseModel):
     etaTargetTimestamp: Optional[str] = None
 
 def format_order_response(order: Order) -> dict:
+    created_at_val = None
+    if getattr(order, "created_at", None):
+        try:
+            created_at_val = order.created_at.isoformat()
+        except Exception:
+            created_at_val = str(order.created_at)
+
+    eta_val = None
+    if getattr(order, "eta_target_timestamp", None):
+        try:
+            eta_val = order.eta_target_timestamp.isoformat()
+        except Exception:
+            eta_val = str(order.eta_target_timestamp)
+
+    ord_num = getattr(order, "order_number", None)
+    if not ord_num and getattr(order, "id", None):
+        ord_num = f"#ORD-{str(order.id)[-4:]}"
+
     return {
-        "id": order.id,
-        "restaurant_id": order.restaurant_id,
-        "table_id": order.table_id,
-        "table_number": order.table_number,
-        "table_session_id": order.table_session_id,
-        "status": order.status,
-        "kitchen_status": order.kitchen_status,
-        "bar_status": order.bar_status,
-        "customer_name": order.customer_name,
-        "notes": order.notes,
-        "subtotal": order.subtotal,
-        "tax_amount": order.tax_amount,
-        "total_amount": order.total_amount,
-        "order_number": order.order_number,
-        "estimated_prep_time_minutes": order.estimated_prep_time_minutes or 15,
-        "eta_target_timestamp": order.eta_target_timestamp.isoformat() if order.eta_target_timestamp else None,
-        "items_json": order.items_json or [],
-        "tax_breakdown": order.tax_breakdown_json or [],
-        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "id": getattr(order, "id", ""),
+        "restaurant_id": getattr(order, "restaurant_id", ""),
+        "table_id": getattr(order, "table_id", None),
+        "table_number": getattr(order, "table_number", "Table 01"),
+        "table_session_id": getattr(order, "table_session_id", None),
+        "status": getattr(order, "status", "PENDING"),
+        "kitchen_status": getattr(order, "kitchen_status", "PENDING"),
+        "bar_status": getattr(order, "bar_status", "PENDING"),
+        "customer_name": getattr(order, "customer_name", "Guest"),
+        "notes": getattr(order, "notes", ""),
+        "subtotal": getattr(order, "subtotal", 0.0) or 0.0,
+        "tax_amount": getattr(order, "tax_amount", 0.0) or 0.0,
+        "total_amount": getattr(order, "total_amount", 0.0) or 0.0,
+        "order_number": ord_num or "#ORD-1",
+        "estimated_prep_time_minutes": getattr(order, "estimated_prep_time_minutes", 15) or 15,
+        "eta_target_timestamp": eta_val,
+        "items_json": getattr(order, "items_json", []) or [],
+        "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
+        "created_at": created_at_val,
     }
+
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(get_db)):
