@@ -22,6 +22,9 @@ class Order(Base, TimestampMixin):
     subtotal: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    order_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    estimated_prep_time_minutes: Mapped[Optional[int]] = mapped_column(Integer, default=15, nullable=True)
+    eta_target_timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     items_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
 class OrderItem(Base, TimestampMixin):

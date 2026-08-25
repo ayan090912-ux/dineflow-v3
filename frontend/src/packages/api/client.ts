@@ -2095,6 +2095,7 @@ export class DinelyApiClient {
         if (Array.isArray(rawOrds) && rawOrds.length > 0) {
           const remoteOrds: Order[] = rawOrds.map((data: any) => ({
             id: data.id,
+            displayOrderNumber: data.order_number || `#ORD-${data.id.slice(-4)}`,
             restaurantId: data.restaurant_id || targetId,
             tableId: data.table_id,
             tableNumber: data.table_number,
@@ -2102,6 +2103,8 @@ export class DinelyApiClient {
             status: data.status || 'PENDING',
             kitchenStatus: data.kitchen_status || 'PENDING',
             barStatus: data.bar_status || 'PENDING',
+            estimatedPrepTimeMinutes: data.estimated_prep_time_minutes || 15,
+            etaTargetTimestamp: data.eta_target_timestamp || undefined,
             customerName: data.customer_name || 'Guest',
             notes: data.notes || '',
             items: (data.items_json || []).map((i: any) => ({
@@ -2149,6 +2152,7 @@ export class DinelyApiClient {
         if (Array.isArray(rawOrds)) {
           const remoteOrds: Order[] = rawOrds.map((data: any) => ({
             id: data.id,
+            displayOrderNumber: data.order_number || `#ORD-${data.id.slice(-4)}`,
             restaurantId: data.restaurant_id || targetRestId,
             tableId: data.table_id || tableId,
             tableNumber: data.table_number,
@@ -2156,6 +2160,8 @@ export class DinelyApiClient {
             status: data.status || 'PENDING',
             kitchenStatus: data.kitchen_status || 'PENDING',
             barStatus: data.bar_status || 'PENDING',
+            estimatedPrepTimeMinutes: data.estimated_prep_time_minutes || 15,
+            etaTargetTimestamp: data.eta_target_timestamp || undefined,
             customerName: data.customer_name || 'Guest',
             notes: data.notes || '',
             items: (data.items_json || []).map((i: any) => ({
@@ -4009,13 +4015,31 @@ export class DinelyApiClient {
 
   // Order & Kitchen APIs
   async acceptOrder(orderId: string, prepTime: number) {
-    await delay(150);
     const order = this.orders.find((o) => o.id === orderId);
+    const targetEta = new Date(Date.now() + prepTime * 60000).toISOString();
+
+    try {
+      const apiBase = getApiBaseUrl();
+      await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'IN_KITCHEN',
+          kitchenStatus: 'PREPARING',
+          estimatedPrepTimeMinutes: prepTime,
+          etaTargetTimestamp: targetEta,
+        }),
+      });
+    } catch (e) {
+      console.warn('API PUT for acceptOrder failed:', e);
+    }
+
     if (order) {
       order.status = 'IN_KITCHEN';
+      order.kitchenStatus = 'PREPARING';
       order.estimatedPrepTimeMinutes = prepTime;
       order.acceptedAt = new Date().toISOString();
-      order.etaTargetTimestamp = new Date(Date.now() + prepTime * 60000).toISOString();
+      order.etaTargetTimestamp = targetEta;
       order.isTimerPaused = false;
       this.saveDatabase();
 
@@ -4037,13 +4061,11 @@ export class DinelyApiClient {
   }
 
   async updateOrderETA(orderId: string, deltaOrMins: number, reason?: string, note?: string) {
-    await delay(100);
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
       const currentMins = order.estimatedPrepTimeMinutes || 15;
       let newMins = currentMins;
 
-      // Handle delta (+5 or -5) vs absolute value
       if (deltaOrMins === 5 || deltaOrMins === -5) {
         newMins = Math.max(1, currentMins + deltaOrMins);
       } else {
@@ -4051,13 +4073,25 @@ export class DinelyApiClient {
       }
 
       order.estimatedPrepTimeMinutes = newMins;
-
-      // Recalculate target timestamp
       const baseTime = order.etaTargetTimestamp ? new Date(order.etaTargetTimestamp).getTime() : Date.now();
       if (deltaOrMins === 5 || deltaOrMins === -5) {
         order.etaTargetTimestamp = new Date(baseTime + deltaOrMins * 60000).toISOString();
       } else {
         order.etaTargetTimestamp = new Date(Date.now() + newMins * 60000).toISOString();
+      }
+
+      try {
+        const apiBase = getApiBaseUrl();
+        await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            estimatedPrepTimeMinutes: newMins,
+            etaTargetTimestamp: order.etaTargetTimestamp,
+          }),
+        });
+      } catch (e) {
+        console.warn('API PUT for updateOrderETA failed:', e);
       }
 
       if (reason || note) {
@@ -4620,7 +4654,8 @@ export class DinelyApiClient {
       timestamp: 'Just now',
     };
     try {
-      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests`, {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/customer-requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4654,7 +4689,8 @@ export class DinelyApiClient {
       timestamp: 'Just now',
     };
     try {
-      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests`, {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/customer-requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4716,7 +4752,8 @@ export class DinelyApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
     try {
-      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests?restaurant_id=${encodeURIComponent(targetId)}`);
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/customer-requests?restaurant_id=${encodeURIComponent(targetId)}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -4757,7 +4794,8 @@ export class DinelyApiClient {
 
   async updateCustomerRequestStatus(reqId: string, status: any, waiterName?: string) {
     try {
-      const res = await fetch(`${this.getApiBaseUrl()}/customer-requests/${encodeURIComponent(reqId)}`, {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/customer-requests/${encodeURIComponent(reqId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
