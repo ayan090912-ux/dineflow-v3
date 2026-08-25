@@ -87,156 +87,163 @@ def format_order_response(order: Order) -> dict:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(get_db)):
-    print(f"[ORDER_CREATED_REQUEST] restaurant_id={payload.restaurantId} table_number={payload.tableNumber} items_count={len(payload.items or [])}")
-    if not payload.restaurantId:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="restaurantId is required")
-    if not payload.items or len(payload.items) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order items cannot be empty")
-
-    tbl_num = payload.tableNumber or "Table 01"
-    tbl_id = payload.tableId or f"tbl-{payload.restaurantId}-{(tbl_num).lower().replace(' ', '_')}"
-    session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(datetime.utcnow().timestamp())}"
-
     try:
-        query_sess = select(TableSession).where(TableSession.id == session_id)
-        res_sess = await db.execute(query_sess)
-        active_sess = res_sess.scalar_one_or_none()
-        if not active_sess:
-            new_sess = TableSession(
-                id=session_id,
-                restaurant_id=payload.restaurantId,
-                table_id=tbl_id,
-                table_number=tbl_num,
-                status="ACTIVE",
-                session_started_at=datetime.utcnow()
+        print(f"[ORDER_CREATED_REQUEST] restaurant_id={payload.restaurantId} table_number={payload.tableNumber} items_count={len(payload.items or [])}")
+        if not payload.restaurantId:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="restaurantId is required")
+        if not payload.items or len(payload.items) == 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order items cannot be empty")
+
+        tbl_num = payload.tableNumber or "Table 01"
+        tbl_id = payload.tableId or f"tbl-{payload.restaurantId}-{(tbl_num).lower().replace(' ', '_')}"
+        session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(datetime.utcnow().timestamp())}"
+
+        try:
+            query_sess = select(TableSession).where(TableSession.id == session_id)
+            res_sess = await db.execute(query_sess)
+            active_sess = res_sess.scalar_one_or_none()
+            if not active_sess:
+                new_sess = TableSession(
+                    id=session_id,
+                    restaurant_id=payload.restaurantId,
+                    table_id=tbl_id,
+                    table_number=tbl_num,
+                    status="ACTIVE",
+                    session_started_at=datetime.utcnow()
+                )
+                db.add(new_sess)
+                await db.flush()
+        except Exception as sess_err:
+            print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
+
+        items_list_dict = [i.model_dump() for i in payload.items]
+        subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
+        tax_amount = 0.0
+        total = subtotal
+        tax_breakdown = []
+
+        try:
+            res_taxes = await db.execute(
+                select(Tax).where((Tax.restaurant_id == payload.restaurantId) & (Tax.status == "ACTIVE"))
             )
-            db.add(new_sess)
-            await db.flush()
-    except Exception as sess_err:
-        print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
+            active_taxes = res_taxes.scalars().all()
 
+            tax_cats_map: Dict[str, List[str]] = {}
+            tax_items_map: Dict[str, List[str]] = {}
+            for t in active_taxes:
+                c_res = await db.execute(select(TaxCategory.category_id).where(TaxCategory.tax_id == t.id))
+                tax_cats_map[t.id] = [r[0] for r in c_res.all()]
 
-    items_list_dict = [i.model_dump() for i in payload.items]
-    subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
-    tax_amount = 0.0
-    total = subtotal
-    tax_breakdown = []
+                i_res = await db.execute(select(TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id == t.id))
+                tax_items_map[t.id] = [r[0] for r in i_res.all()]
 
-    try:
-        res_taxes = await db.execute(
-            select(Tax).where((Tax.restaurant_id == payload.restaurantId) & (Tax.status == "ACTIVE"))
+            calc = calculate_taxes(
+                items=items_list_dict,
+                active_taxes=active_taxes,
+                tax_categories_map=tax_cats_map,
+                tax_items_map=tax_items_map,
+                order_type=payload.orderType or "DINE_IN"
+            )
+
+            subtotal = calc["subtotal"]
+            tax_amount = calc["total_tax_amount"]
+            total = calc["grand_total"]
+            tax_breakdown = calc["tax_breakdown"]
+        except Exception as tax_err:
+            print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
+
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        query_count = select(func.count(Order.id)).where(
+            (Order.restaurant_id == payload.restaurantId) &
+            (Order.created_at >= today_start)
         )
-        active_taxes = res_taxes.scalars().all()
+        res_count = await db.execute(query_count)
+        daily_seq = (res_count.scalar() or 0) + 1
+        order_num = f"#ORD-{daily_seq}"
 
-        tax_cats_map: Dict[str, List[str]] = {}
-        tax_items_map: Dict[str, List[str]] = {}
-        for t in active_taxes:
-            c_res = await db.execute(select(TaxCategory.category_id).where(TaxCategory.tax_id == t.id))
-            tax_cats_map[t.id] = [r[0] for r in c_res.all()]
+        order_id = f"ord-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
+        eta_target = datetime.utcnow() + timedelta(minutes=15)
 
-            i_res = await db.execute(select(TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id == t.id))
-            tax_items_map[t.id] = [r[0] for r in i_res.all()]
+        print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={payload.restaurantId} table_id={tbl_id} session_id={session_id}")
 
-        calc = calculate_taxes(
-            items=items_list_dict,
-            active_taxes=active_taxes,
-            tax_categories_map=tax_cats_map,
-            tax_items_map=tax_items_map,
-            order_type=payload.orderType or "DINE_IN"
+        new_order = Order(
+            id=order_id,
+            restaurant_id=payload.restaurantId,
+            table_id=tbl_id,
+            table_number=tbl_num,
+            table_session_id=session_id,
+            status="PENDING",
+            kitchen_status="PENDING",
+            bar_status="PENDING",
+            customer_name=payload.customerName or "Guest",
+            notes=payload.notes or "",
+            subtotal=subtotal,
+            tax_amount=tax_amount,
+            total_amount=total,
+            order_number=order_num,
+            estimated_prep_time_minutes=15,
+            eta_target_timestamp=eta_target,
+            items_json=items_list_dict,
+            tax_breakdown_json=tax_breakdown,
         )
+        db.add(new_order)
 
-        subtotal = calc["subtotal"]
-        tax_amount = calc["total_tax_amount"]
-        total = calc["grand_total"]
-        tax_breakdown = calc["tax_breakdown"]
-    except Exception as tax_err:
-        print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
+        try:
+            query_tbl = select(Table).where(
+                (Table.restaurant_id == payload.restaurantId) &
+                ((Table.id == tbl_id) | (Table.table_number == tbl_num))
+            )
+            res_tbl = await db.execute(query_tbl)
+            tbls = res_tbl.scalars().all()
+            if tbls:
+                tbl = tbls[0]
+                tbl.status = "OCCUPIED"
+                tbl.is_occupied = True
+                tbl.active_session_id = session_id
+        except Exception as tbl_err:
+            print("[TABLE_UPDATE_NOTICE] Table update skipped:", tbl_err)
 
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    query_count = select(func.count(Order.id)).where(
-        (Order.restaurant_id == payload.restaurantId) &
-        (Order.created_at >= today_start)
-    )
-    res_count = await db.execute(query_count)
-    daily_seq = (res_count.scalar() or 0) + 1
-    order_num = f"#ORD-{daily_seq}"
-
-    order_id = f"ord-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
-    eta_target = datetime.utcnow() + timedelta(minutes=15)
-
-    print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={payload.restaurantId} table_id={tbl_id} session_id={session_id}")
-
-    new_order = Order(
-        id=order_id,
-        restaurant_id=payload.restaurantId,
-        table_id=tbl_id,
-        table_number=tbl_num,
-        table_session_id=session_id,
-        status="PENDING",
-        kitchen_status="PENDING",
-        bar_status="PENDING",
-        customer_name=payload.customerName or "Guest",
-        notes=payload.notes or "",
-        subtotal=subtotal,
-        tax_amount=tax_amount,
-        total_amount=total,
-        order_number=order_num,
-        estimated_prep_time_minutes=15,
-        eta_target_timestamp=eta_target,
-        items_json=items_list_dict,
-        tax_breakdown_json=tax_breakdown,
-    )
-    db.add(new_order)
-
-    # Lock matching table as occupied in database
-    query_tbl = select(Table).where(
-        (Table.restaurant_id == payload.restaurantId) &
-        ((Table.id == tbl_id) | (Table.table_number == tbl_num))
-    )
-    res_tbl = await db.execute(query_tbl)
-    tbls = res_tbl.scalars().all()
-    if tbls:
-        tbl = tbls[0]
-        tbl.status = "OCCUPIED"
-        tbl.is_occupied = True
-        tbl.active_session_id = session_id
-
-    for idx, i in enumerate(payload.items):
-        new_item = OrderItem(
-            id=f"oi-{int(datetime.utcnow().timestamp() * 1000)}-{idx}",
-            order_id=order_id,
-            menu_item_id=i.menuItemId or i.id or "item-unknown",
-            name=i.name,
-            quantity=i.quantity,
-            unit_price=i.price,
-            subtotal=i.price * i.quantity,
-            notes=i.notes or "",
-            target_destination=i.target_destination if hasattr(i, 'target_destination') else (getattr(i, 'targetDestination', None) or "KITCHEN"),
-        )
-        db.add(new_item)
-
-    # Save historical invoice tax snapshots for auditability
-    try:
-        for t_snap in tax_breakdown:
-            snapshot_rec = InvoiceTaxSnapshot(
-                id=f"its-{order_id}-{t_snap['tax_id']}",
+        for idx, i in enumerate(payload.items):
+            new_item = OrderItem(
+                id=f"oi-{int(datetime.utcnow().timestamp() * 1000)}-{idx}",
                 order_id=order_id,
-                tax_id=t_snap["tax_id"],
-                tax_name_snapshot=t_snap["name"],
-                tax_type_snapshot=t_snap["type"],
-                tax_rate_snapshot=t_snap["rate"],
-                tax_amount=t_snap["amount"],
-                is_inclusive=t_snap["is_inclusive"],
+                menu_item_id=i.menuItemId or i.id or "item-unknown",
+                name=i.name,
+                quantity=i.quantity,
+                unit_price=i.price,
+                subtotal=i.price * i.quantity,
+                notes=i.notes or "",
+                target_destination=i.target_destination if hasattr(i, 'target_destination') else (getattr(i, 'targetDestination', None) or "KITCHEN"),
             )
-            db.add(snapshot_rec)
-    except Exception as snap_err:
-        print("[TAX_SNAPSHOT_NOTICE] Exception writing tax snapshots:", snap_err)
+            db.add(new_item)
 
+        try:
+            for t_snap in tax_breakdown:
+                snapshot_rec = InvoiceTaxSnapshot(
+                    id=f"its-{order_id}-{t_snap['tax_id']}",
+                    order_id=order_id,
+                    tax_id=t_snap["tax_id"],
+                    tax_name_snapshot=t_snap["name"],
+                    tax_type_snapshot=t_snap["type"],
+                    tax_rate_snapshot=t_snap["rate"],
+                    tax_amount=t_snap["amount"],
+                    is_inclusive=t_snap["is_inclusive"],
+                )
+                db.add(snapshot_rec)
+        except Exception as snap_err:
+            print("[TAX_SNAPSHOT_NOTICE] Exception writing tax snapshots:", snap_err)
 
-    await db.commit()
-    print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={payload.restaurantId} total={total}")
-    await db.refresh(new_order)
-    return format_order_response(new_order)
+        await db.commit()
+        print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={payload.restaurantId} total={total}")
+        await db.refresh(new_order)
+        return format_order_response(new_order)
+    except HTTPException:
+        raise
+    except Exception as create_err:
+        import traceback
+        print("[CREATE_ORDER_CRITICAL_EXCEPT]:", traceback.format_exc())
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Order creation error: {str(create_err)}")
+
 
 @router.get("/customer")
 async def get_customer_orders(
