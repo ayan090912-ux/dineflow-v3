@@ -243,11 +243,16 @@ async def get_customer_orders(
 
 @router.get("/restaurant/{restaurant_id}")
 async def get_restaurant_orders(restaurant_id: str, db: AsyncSession = Depends(get_db)):
-    query = select(Order).where(Order.restaurant_id == restaurant_id).order_by(Order.created_at.desc())
-    result = await db.execute(query)
-    orders = result.scalars().all()
-    print(f"[KITCHEN_ORDER_FETCH] restaurant_id={restaurant_id} count={len(orders)}")
-    return [format_order_response(o) for o in orders]
+    try:
+        query = select(Order).where(Order.restaurant_id == restaurant_id).order_by(Order.created_at.desc())
+        result = await db.execute(query)
+        orders = result.scalars().all()
+        print(f"[KITCHEN_ORDER_FETCH] restaurant_id={restaurant_id} count={len(orders)}")
+        return [format_order_response(o) for o in orders]
+    except Exception as e:
+        print("[KITCHEN_ORDER_FETCH_EXCEPT]:", e)
+        return []
+
 
 @router.put("/{order_id}/status")
 async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, db: AsyncSession = Depends(get_db)):
