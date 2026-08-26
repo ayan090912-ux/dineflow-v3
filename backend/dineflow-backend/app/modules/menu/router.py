@@ -1,4 +1,5 @@
 from typing import Optional, List
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,12 +7,13 @@ from sqlalchemy import select
 
 from app.core.database.connection import get_db
 from app.modules.menu.models import MenuCategory, MenuItem
+from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
 
 class CreateMenuItemSchema(BaseModel):
     id: Optional[str] = None
-    categoryId: str
+    categoryId: Optional[str] = None
     name: str
     description: Optional[str] = ""
     price: float
@@ -92,7 +94,6 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     items = res_items.scalars().all()
 
     if not items:
-        # Provision default categories & items if empty
         cat1 = f"cat-{restaurant_id}-1"
         cat2 = f"cat-{restaurant_id}-2"
         cat3 = f"cat-{restaurant_id}-3"
@@ -140,13 +141,50 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{restaurant_id}/menu", status_code=status.HTTP_201_CREATED)
 async def create_menu_item(restaurant_id: str, payload: CreateMenuItemSchema, db: AsyncSession = Depends(get_db)):
+    target_category_id = payload.categoryId
+
+    # Category Auto-Resolution
+    cat_obj = None
+    if target_category_id:
+        query_cat = select(MenuCategory).where(
+            (MenuCategory.id == target_category_id) & (MenuCategory.restaurant_id == restaurant_id)
+        )
+        res_cat = await db.execute(query_cat)
+        cat_obj = res_cat.scalar_one_or_none()
+
+    if not cat_obj:
+        query_any_cat = select(MenuCategory).where(MenuCategory.restaurant_id == restaurant_id).order_by(MenuCategory.sort_order)
+        res_any = await db.execute(query_any_cat)
+        existing_cats = res_any.scalars().all()
+        if existing_cats:
+            cat_obj = existing_cats[0]
+            target_category_id = cat_obj.id
+        else:
+            new_cat_id = f"cat-{restaurant_id}-1"
+            cat_obj = MenuCategory(
+                id=new_cat_id,
+                restaurant_id=restaurant_id,
+                name="Main Course",
+                sort_order=1,
+                is_enabled=True,
+            )
+            db.add(cat_obj)
+            await db.flush()
+            target_category_id = cat_obj.id
+
     item_id = payload.id or f"item-{restaurant_id}-{int(datetime.utcnow().timestamp() * 1000)}"
     img = payload.imageUrl or payload.image or "https://images.unsplash.com/photo-1544025162-d76694265947?w=600"
-    
+
+    dest = (payload.targetDestination or "KITCHEN").upper()
+    if not payload.targetDestination:
+        lower_name = payload.name.lower()
+        if any(w in lower_name for w in ["mojito", "cocktail", "beer", "wine", "drink", "beverage", "whiskey", "vodka", "rum", "mocktail", "shake", "juice"]):
+            dest = "BAR"
+
     new_item = MenuItem(
         id=item_id,
         restaurant_id=restaurant_id,
-        category_id=payload.categoryId,
+        category_id=target_category_id,
         name=payload.name,
         description=payload.description or "",
         price=payload.price,
@@ -154,11 +192,28 @@ async def create_menu_item(restaurant_id: str, payload: CreateMenuItemSchema, db
         is_available=payload.isAvailable if payload.isAvailable is not None else True,
         is_vegetarian=payload.isVegetarian if payload.isVegetarian is not None else True,
         dietary_type="VEG" if payload.isVegetarian else "NON_VEG",
-        target_destination=payload.targetDestination or "KITCHEN",
+        target_destination=dest,
     )
     db.add(new_item)
     await db.commit()
     await db.refresh(new_item)
+
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="menu_item_created",
+            payload={
+                "menuItemId": new_item.id,
+                "restaurantId": restaurant_id,
+                "name": new_item.name,
+                "price": new_item.price,
+                "targetDestination": new_item.target_destination,
+            },
+            target_audience=["WAITER", "KITCHEN", "BAR", "CUSTOMER", "OWNER"],
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_NOTICE] menu_item_created:", ws_err)
+
     return new_item
 
 @router.put("/{restaurant_id}/menu/{item_id}")
@@ -191,6 +246,24 @@ async def update_menu_item(restaurant_id: str, item_id: str, payload: UpdateMenu
 
     await db.commit()
     await db.refresh(item)
+
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="menu_item_updated",
+            payload={
+                "menuItemId": item.id,
+                "restaurantId": restaurant_id,
+                "name": item.name,
+                "price": item.price,
+                "isAvailable": item.is_available,
+                "targetDestination": item.target_destination,
+            },
+            target_audience=["WAITER", "KITCHEN", "BAR", "CUSTOMER", "OWNER"],
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_NOTICE] menu_item_updated:", ws_err)
+
     return item
 
 @router.delete("/{restaurant_id}/menu/{item_id}")
@@ -205,4 +278,15 @@ async def delete_menu_item(restaurant_id: str, item_id: str, db: AsyncSession = 
 
     await db.delete(item)
     await db.commit()
+
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="menu_item_deleted",
+            payload={"menuItemId": item_id, "restaurantId": restaurant_id},
+            target_audience=["WAITER", "KITCHEN", "BAR", "CUSTOMER", "OWNER"],
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_NOTICE] menu_item_deleted:", ws_err)
+
     return {"success": True, "message": "Menu item deleted"}

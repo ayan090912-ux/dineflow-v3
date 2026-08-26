@@ -612,10 +612,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     loadData();
   };
 
-  const handleToggleItemAvailability = async (itemId: string) => {
-    await api.toggleMenuItemAvailability(itemId);
-    addToast('success', 'Menu Availability Updated');
-    loadData();
+  const handleToggleItemAvailability = async (item: MenuItem) => {
+    const restId = currentRestaurant?.id || 'rest-1787446097984';
+    await api.toggleMenuItemAvailability(item.id, restId, item.isAvailable);
+    addToast('success', 'Menu Availability Updated', `${item.name} is now ${!item.isAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}`);
+    await loadData();
   };
 
   const handleAddItem = async () => {
@@ -629,7 +630,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         return;
       }
 
-      const restId = currentRestaurant?.id || 'rest-1';
+      const restId = currentRestaurant?.id || 'rest-1787446097984';
       const isBar = isBarEnabled && activeCatalogMode === 'BAR';
       const isVeg = isBar ? false : newItem.isVegetarian !== false;
 
@@ -682,8 +683,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Validation Failed', 'Item name and price are required');
       return;
     }
+    const restId = currentRestaurant?.id || 'rest-1787446097984';
     const isVeg = editingItem.isVegetarian !== undefined ? editingItem.isVegetarian : (editingItem.dietaryType === 'VEG');
     await api.updateMenuItem(editingItem.id, {
+      restaurantId: restId,
       name: editingItem.name,
       description: editingItem.description,
       price: typeof editingItem.price === 'string' ? parseFloat(editingItem.price) : editingItem.price,
@@ -703,16 +706,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     addToast('success', 'Menu Item Updated', `${editingItem.name} updated successfully`);
     setIsEditItemModalOpen(false);
     setEditingItem(null);
-    loadData();
+    await loadData();
   };
 
   const handleDeleteItem = async () => {
     if (!deletingItem) return;
-    await api.deleteMenuItem(deletingItem.id);
+    const restId = currentRestaurant?.id || 'rest-1787446097984';
+    await api.deleteMenuItem(deletingItem.id, restId);
     addToast('info', 'Menu Item Deleted', `${deletingItem.name} removed from menu`);
     setDeletingItem(null);
-    loadData();
+    await loadData();
   };
+
 
   // Staff CRUD Handlers
   const handleAddStaff = async () => {
@@ -2267,9 +2272,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                       <Button
                         variant={item.isAvailable ? 'secondary' : 'brand'}
                         size="sm"
-                        onClick={() => handleToggleItemAvailability(item.id)}
+                        onClick={() => handleToggleItemAvailability(item)}
                         className="text-xs"
                       >
+
                         {item.isAvailable ? 'Mark 86ed' : 'Enable Item'}
                       </Button>
 

@@ -2370,7 +2370,7 @@ export class DinelyApiClient {
       if (res.ok) {
         const data = await res.json();
         const rawItems = data.items || (Array.isArray(data) ? data : []);
-        if (Array.isArray(rawItems) && rawItems.length > 0) {
+        if (Array.isArray(rawItems)) {
           return rawItems.map((m: any) => ({
             id: m.id,
             restaurantId: m.restaurant_id || targetId,
@@ -2393,46 +2393,7 @@ export class DinelyApiClient {
       console.warn('API fetch for menu items failed:', e);
     }
 
-    let foodItems = [...(this.menuItems || []), ...GLOBAL_MULTI_TENANT_MENU_ITEMS]
-      .filter((m) => m.restaurantId === targetId)
-      .map((m) => {
-        const station = getFulfillmentStation(m);
-        return {
-          ...m,
-          targetDestination: m.targetDestination || station,
-          isAlcoholic: m.isAlcoholic || station === 'BAR',
-        };
-      });
-
-    const barItems = (this.barMenuItems || [])
-      .filter((bm) => bm.restaurantId === targetId)
-      .map((bm) => ({
-        id: bm.id,
-        restaurantId: bm.restaurantId,
-        name: bm.name,
-        description: bm.description,
-        price: bm.price,
-        categoryId: bm.categoryId,
-        barCategory: bm.categoryId as any,
-        brand: bm.brand,
-        image: bm.image || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600',
-        isAvailable: bm.isAvailable !== false,
-        isVegetarian: true,
-        dietaryType: 'VEG' as const,
-        targetDestination: 'BAR' as const,
-        isAlcoholic: bm.isAlcoholic !== false,
-        alcoholPercentage: bm.alcoholPercentage,
-        bottleSize: bm.bottleSize,
-        prepTimeMinutes: bm.prepTimeMinutes || 5,
-      }));
-
-    const foodItemIds = new Set(foodItems.map((f) => f.id));
-    const uniqueBarItems = barItems.filter((b) => !foodItemIds.has(b.id));
-
-    const combined = [...foodItems, ...uniqueBarItems];
-    const uniqueMap = new Map<string, MenuItem>();
-    combined.forEach((item) => uniqueMap.set(item.id, item));
-    return Array.from(uniqueMap.values());
+    return [];
   }
 
   async getCategories(restaurantId?: string): Promise<MenuCategory[]> {
@@ -2444,7 +2405,7 @@ export class DinelyApiClient {
       const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/categories`);
       if (res.ok) {
         const cats = await res.json();
-        if (Array.isArray(cats) && cats.length > 0) {
+        if (Array.isArray(cats)) {
           return cats.map((c: any) => ({
             id: c.id,
             restaurantId: c.restaurant_id || targetId,
@@ -2458,52 +2419,34 @@ export class DinelyApiClient {
       console.warn('API fetch for categories failed:', e);
     }
 
-    const allCats = [...(this.categories || []), ...GLOBAL_MULTI_TENANT_CATEGORIES].filter((c) => c.restaurantId === targetId);
-    const uniqueMap = new Map<string, MenuCategory>();
-    allCats.forEach((c) => uniqueMap.set(c.id, c));
-    return Array.from(uniqueMap.values());
+    return [];
   }
 
   async createCategory(catData: Partial<MenuCategory>): Promise<MenuCategory> {
-    const restId = this.resolveTenantRestaurantId(catData.restaurantId) || 'rest-1';
-    try {
-      const apiBase = getApiBaseUrl();
-      const payload = {
-        id: catData.id,
-        name: catData.name || 'New Category',
-        sortOrder: catData.sortOrder || 1,
-      };
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/categories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const c = await res.json();
-        const newCat: MenuCategory = {
-          id: c.id,
-          restaurantId: c.restaurant_id || restId,
-          name: c.name,
-          sortOrder: c.sort_order || 1,
-          isEnabled: c.is_enabled !== false,
-        };
-        this.categories.push(newCat);
-        this.saveDatabase();
-        return newCat;
-      }
-    } catch (e) {
-      console.warn('API POST for createCategory failed:', e);
-    }
-    const newCat: MenuCategory = {
-      id: catData.id || `cat-${restId}-${Date.now()}`,
-      restaurantId: restId,
+    const restId = this.resolveTenantRestaurantId(catData.restaurantId) || 'rest-1787446097984';
+    const apiBase = getApiBaseUrl();
+    const payload = {
+      id: catData.id,
       name: catData.name || 'New Category',
       sortOrder: catData.sortOrder || 1,
-      isEnabled: true,
     };
-    this.categories.push(newCat);
-    this.saveDatabase();
-    return newCat;
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to create category: ${errText}`);
+    }
+    const c = await res.json();
+    return {
+      id: c.id,
+      restaurantId: c.restaurant_id || restId,
+      name: c.name,
+      sortOrder: c.sort_order || 1,
+      isEnabled: c.is_enabled !== false,
+    };
   }
 
   async addMenuItem(itemData: Partial<MenuItem>) {
@@ -2511,159 +2454,114 @@ export class DinelyApiClient {
   }
 
   async createMenuItem(itemData: Partial<MenuItem>): Promise<MenuItem> {
-    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
-
-    try {
-      const apiBase = getApiBaseUrl();
-      const payload = {
-        id: itemData.id,
-        categoryId: itemData.categoryId || 'cat-mains',
-        name: itemData.name || 'New Menu Item',
-        description: itemData.description || '',
-        price: typeof itemData.price === 'number' ? itemData.price : parseFloat(itemData.price as any) || 0,
-        imageUrl: itemData.imageUrl || itemData.image,
-        isAvailable: itemData.isAvailable !== false,
-        isVegetarian: itemData.isVegetarian !== false,
-        targetDestination: itemData.targetDestination || 'KITCHEN',
-      };
-
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        const m = await res.json();
-        if (m && m.id) {
-          const newItem: MenuItem = {
-            id: m.id,
-            restaurantId: m.restaurant_id || restId,
-            categoryId: m.category_id || payload.categoryId,
-            name: m.name,
-            description: m.description || '',
-            price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
-            imageUrl: m.image_url || payload.imageUrl,
-            image: m.image_url || payload.imageUrl,
-            isAvailable: m.is_available !== false,
-            isVegetarian: m.is_vegetarian !== false,
-            dietaryType: m.dietary_type || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
-            targetDestination: m.target_destination || 'KITCHEN',
-          };
-          this.menuItems.unshift(newItem);
-          this.saveDatabase();
-          realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
-          return newItem;
-        }
-      }
-    } catch (e) {
-      console.warn('API POST for createMenuItem failed:', e);
-    }
-
-    let catId = itemData.categoryId;
-    const existingCats = await this.getCategories(restId);
-    if (catId) {
-      const matchedCat = existingCats.find((c) => c.id === catId || c.name === catId);
-      if (matchedCat) catId = matchedCat.id;
-    }
-    if (!catId && existingCats.length > 0) {
-      catId = existingCats[0].id;
-    }
-
-    const newItem: MenuItem = {
-      id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      restaurantId: restId,
+    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1787446097984';
+    const apiBase = getApiBaseUrl();
+    const payload = {
+      id: itemData.id,
+      categoryId: itemData.categoryId,
       name: itemData.name || 'New Menu Item',
       description: itemData.description || '',
       price: typeof itemData.price === 'number' ? itemData.price : parseFloat(itemData.price as any) || 0,
-      categoryId: catId || 'cat-mains',
-      barCategory: itemData.barCategory,
-      brand: itemData.brand,
+      imageUrl: itemData.imageUrl || itemData.image,
       isAvailable: itemData.isAvailable !== false,
       isVegetarian: itemData.isVegetarian !== false,
-      dietaryType: itemData.isVegetarian ? 'VEG' : 'NON_VEG',
-      image: itemData.image || itemData.imageUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
-      imageUrl: itemData.imageUrl || itemData.image || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
       targetDestination: itemData.targetDestination || 'KITCHEN',
-      isAlcoholic: !!itemData.isAlcoholic,
-      prepTimeMinutes: itemData.prepTimeMinutes || 15,
     };
 
-    this.menuItems.unshift(newItem);
-    this.saveDatabase();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to save menu item to database: ${errText}`);
+    }
+
+    const m = await res.json();
+    const newItem: MenuItem = {
+      id: m.id,
+      restaurantId: m.restaurant_id || restId,
+      categoryId: m.category_id || payload.categoryId,
+      name: m.name,
+      description: m.description || '',
+      price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
+      imageUrl: m.image_url || payload.imageUrl,
+      image: m.image_url || payload.imageUrl,
+      isAvailable: m.is_available !== false,
+      isVegetarian: m.is_vegetarian !== false,
+      dietaryType: m.dietary_type || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
+      targetDestination: m.target_destination || 'KITCHEN',
+    };
     realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
     return newItem;
   }
 
   async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
-    const item = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
-    const restId = item?.restaurantId || this.resolveTenantRestaurantId();
+    const restId = this.resolveTenantRestaurantId(updates.restaurantId) || 'rest-1787446097984';
+    const apiBase = getApiBaseUrl();
+    const payload = {
+      name: updates.name,
+      description: updates.description,
+      price: updates.price,
+      categoryId: updates.categoryId,
+      imageUrl: updates.imageUrl || updates.image,
+      isAvailable: updates.isAvailable,
+      isVegetarian: updates.isVegetarian,
+      targetDestination: updates.targetDestination,
+    };
 
-    if (restId) {
-      try {
-        const apiBase = getApiBaseUrl();
-        const payload = {
-          name: updates.name,
-          description: updates.description,
-          price: updates.price,
-          categoryId: updates.categoryId,
-          imageUrl: updates.imageUrl || updates.image,
-          isAvailable: updates.isAvailable,
-          isVegetarian: updates.isVegetarian,
-          targetDestination: updates.targetDestination,
-        };
-        await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } catch (e) {
-        console.warn('API PUT for updateMenuItem failed:', e);
-      }
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to update menu item in database: ${errText}`);
     }
 
-    if (item) {
-      Object.assign(item, updates);
-      if (updates.isVegetarian !== undefined) {
-        item.dietaryType = updates.isVegetarian ? 'VEG' : 'NON_VEG';
-      }
-      this.saveDatabase();
-      realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: item.id, restaurantId: item.restaurantId, data: item });
-    }
-    return item;
+    const m = await res.json();
+    const updatedItem: MenuItem = {
+      id: m.id,
+      restaurantId: m.restaurant_id || restId,
+      categoryId: m.category_id || updates.categoryId,
+      name: m.name,
+      description: m.description || '',
+      price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
+      imageUrl: m.image_url || updates.imageUrl,
+      image: m.image_url || updates.imageUrl,
+      isAvailable: m.is_available !== false,
+      isVegetarian: m.is_vegetarian !== false,
+      dietaryType: m.dietary_type || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
+      targetDestination: m.target_destination || 'KITCHEN',
+    };
+    realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: itemId, restaurantId: restId, data: updatedItem });
+    return updatedItem;
   }
 
-  async deleteMenuItem(itemId: string) {
-    const target = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
-    const restId = target?.restaurantId || this.resolveTenantRestaurantId();
+  async deleteMenuItem(itemId: string, restaurantId?: string) {
+    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1787446097984';
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`, {
+      method: 'DELETE',
+    });
 
-    if (restId) {
-      try {
-        const apiBase = getApiBaseUrl();
-        await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`, {
-          method: 'DELETE',
-        });
-      } catch (e) {
-        console.warn('API DELETE for deleteMenuItem failed:', e);
-      }
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to delete menu item: ${errText}`);
     }
 
-    this.menuItems = this.menuItems.filter((m) => m.id !== itemId);
-    this.saveDatabase();
-    if (restId) {
-      realtimeBus.emit('MenuItemDeleted' as any, { menuItemId: itemId, restaurantId: restId });
-    }
+    realtimeBus.emit('MenuItemDeleted' as any, { menuItemId: itemId, restaurantId: restId });
     return true;
   }
 
-  async toggleMenuItemAvailability(itemId: string) {
-    const item = this.menuItems.find((m) => m.id === itemId) || GLOBAL_MULTI_TENANT_MENU_ITEMS.find((m) => m.id === itemId);
-    if (item) {
-      const newAvail = !item.isAvailable;
-      return this.updateMenuItem(itemId, { isAvailable: newAvail });
-    }
-    return item;
+  async toggleMenuItemAvailability(itemId: string, restaurantId?: string, currentStatus?: boolean) {
+    return this.updateMenuItem(itemId, { restaurantId, isAvailable: !currentStatus });
   }
+
 
   async getTables(restaurantId?: string): Promise<Table[]> {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
@@ -4562,19 +4460,6 @@ export class DinelyApiClient {
     return await res.json();
   }
 
-  async closeTableSession(restaurantId: string, tableId: string): Promise<any> {
-    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1787446097984';
-    const apiBase = getApiBaseUrl();
-    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Failed to close table session: ${errText}`);
-    }
-    return await res.json();
-  }
 
 
   async createOrder(orderData: Partial<Order>): Promise<Order> {

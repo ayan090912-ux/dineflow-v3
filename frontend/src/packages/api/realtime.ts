@@ -37,9 +37,15 @@ export type RealTimeEventType =
   | 'BusinessDayClosed'
   | 'BusinessDayOpened'
   | 'RESTAURANT_APPROVED'
-  | 'RESTAURANT_REJECTED'
-  | 'RestaurantSwitched'
-  | 'StaffStatusUpdated';
+  | 'StaffStatusUpdated'
+  | 'menu_item_created'
+  | 'menu_item_updated'
+  | 'menu_item_deleted'
+  | 'menu_item_availability_changed'
+  | 'MenuItemCreated'
+  | 'MenuItemUpdated'
+  | 'MenuItemDeleted';
+
 
 export interface RealTimeEventPayload {
   eventId?: string;

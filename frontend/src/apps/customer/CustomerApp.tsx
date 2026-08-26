@@ -162,8 +162,22 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         return;
       }
 
+      if (
+        event.type === 'menu_item_created' ||
+        event.type === 'menu_item_updated' ||
+        event.type === 'menu_item_deleted' ||
+        event.type === 'menu_item_availability_changed' ||
+        event.type === 'MenuItemCreated' ||
+        event.type === 'MenuItemUpdated' ||
+        event.type === 'MenuItemDeleted'
+      ) {
+        api.getMenuItems(restId).then((items) => setMenuItems(items));
+        api.getCategories(restId).then((cats) => setFoodCategories(cats));
+      }
+
       setIsRecentStatusPulse(true);
       setTimeout(() => setIsRecentStatusPulse(false), 3500);
+
 
       if (event.type === 'ETAUpdated') {
         addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
