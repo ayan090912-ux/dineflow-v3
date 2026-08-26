@@ -34,12 +34,15 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_amount FLOAT DEFAULT 0.0;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount FLOAT DEFAULT 0.0;",
         "ALTER TABLE orders ALTER COLUMN table_session_id DROP NOT NULL;",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS target_destination VARCHAR(20) DEFAULT 'KITCHEN';",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS notes TEXT;",
     ]
     for stmt in alter_statements:
         try:
             await conn.execute(text(stmt))
         except Exception as err:
             print(f"[SCHEMA_MIGRATION_NOTICE] {stmt} -> {err}")
+
 
 
 @asynccontextmanager
