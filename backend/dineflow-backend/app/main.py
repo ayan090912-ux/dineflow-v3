@@ -21,15 +21,38 @@ import app.modules.taxes.models
 from app.scripts.cafe_co_migration import run_migration
 
 
+from sqlalchemy import text
+
+async def ensure_db_schema_columns(conn):
+    alter_statements = [
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(50);",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_prep_time_minutes INTEGER DEFAULT 15;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS eta_target_timestamp TIMESTAMPTZ;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_json JSONB;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_breakdown_json JSONB;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal FLOAT DEFAULT 0.0;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE orders ALTER COLUMN table_session_id DROP NOT NULL;",
+    ]
+    for stmt in alter_statements:
+        try:
+            await conn.execute(text(stmt))
+        except Exception as err:
+            print(f"[SCHEMA_MIGRATION_NOTICE] {stmt} -> {err}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
+            await ensure_db_schema_columns(conn)
             await conn.run_sync(Base.metadata.create_all)
         await run_migration()
     except Exception as e:
         print("[STARTUP NOTICE] Database table initialization:", e)
     yield
+
 
 app = FastAPI(
     title=settings.APP_NAME,
