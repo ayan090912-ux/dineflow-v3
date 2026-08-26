@@ -142,11 +142,14 @@ async def get_or_create_table_session(restaurant_id: str, table_id: str, table_n
     return new_sess
 
 @router.post("/{restaurant_id}/tables/{table_id}/close-session")
+@router.post("/{restaurant_id}/tables/{table_id}/close")
+@router.post("/tables/{table_id}/close-session")
 async def close_table_session(
-    restaurant_id: str,
     table_id: str,
+    restaurant_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
+
     query_tbl = select(Table).where(
         (Table.restaurant_id == restaurant_id) &
         ((Table.id == table_id) | (Table.table_number == table_id))
