@@ -127,4 +127,85 @@ async def get_or_create_table_session(restaurant_id: str, table_id: str, table_n
     tbl.active_session_id = new_sess.id
     await db.commit()
     await db.refresh(new_sess)
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="table_status_updated",
+            payload={"table_id": resolved_tbl_id, "table_number": resolved_tbl_num, "status": "OCCUPIED", "session_id": new_sess.id},
+            target_audience=["WAITER", "CUSTOMER", "OWNER"]
+        )
+    except Exception:
+        pass
+
     return new_sess
+
+@router.post("/{restaurant_id}/tables/{table_id}/close-session")
+async def close_table_session(
+    restaurant_id: str,
+    table_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    query_tbl = select(Table).where(
+        (Table.restaurant_id == restaurant_id) &
+        ((Table.id == table_id) | (Table.table_number == table_id))
+    )
+    res_tbl = await db.execute(query_tbl)
+    tbls = res_tbl.scalars().all()
+    tbl = tbls[0] if tbls else None
+
+    if not tbl:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
+
+    query_sess = select(TableSession).where(
+        (TableSession.restaurant_id == restaurant_id) &
+        (TableSession.table_id == tbl.id) &
+        (TableSession.status == "ACTIVE")
+    )
+    res_sess = await db.execute(query_sess)
+    active_sesses = res_sess.scalars().all()
+
+    closed_session_ids = []
+    for sess in active_sesses:
+        sess.status = "CLOSED"
+        sess.session_ended_at = datetime.utcnow()
+        closed_session_ids.append(sess.id)
+
+    tbl.status = "AVAILABLE"
+    tbl.is_occupied = False
+    tbl.active_session_id = None
+
+    await db.commit()
+
+    event_payload = {
+        "table_id": tbl.id,
+        "table_number": tbl.table_number,
+        "status": "VACANT",
+        "closed_session_ids": closed_session_ids
+    }
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="table_session_closed",
+            payload=event_payload,
+            target_audience=["WAITER", "CUSTOMER", "OWNER"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="table_status_updated",
+            payload=event_payload,
+            target_audience=["WAITER", "CUSTOMER", "OWNER"]
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_NOTICE] close_table_session:", ws_err)
+
+    return {
+        "status": "success",
+        "message": f"Table {tbl.table_number} session closed successfully",
+        "table_id": tbl.id,
+        "closed_session_ids": closed_session_ids
+    }
+

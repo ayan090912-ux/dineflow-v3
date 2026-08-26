@@ -199,10 +199,12 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     }
   }, [viewMode]);
 
-  // Subscribe to Realtime Bus Events & 3-Second Background Polling (Scoped by restaurant_id)
+  // Subscribe to Realtime Bus Events & Background Polling (Scoped by restaurant_id)
   useEffect(() => {
+    const currentRestId = api.getCurrentRestaurantId() || 'rest-1787446097984';
+    realtimeBus.connect(currentRestId, 'KITCHEN');
+
     const fetchFreshOrders = () => {
-      const currentRestId = api.getCurrentRestaurantId();
       const restId = currentRestId || undefined;
       api.getOrders(restId).then((freshOrders) => {
         setOrders((prevOrders) => {
@@ -222,14 +224,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       }
     };
 
-    // Initial fetch
     fetchFreshOrders();
-
-    // 3-Second Poll Interval for cross-device synchronization
-    const pollInterval = setInterval(fetchFreshOrders, 3000);
+    const pollInterval = setInterval(fetchFreshOrders, 5000);
 
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
-      const currentRestId = api.getCurrentRestaurantId();
       if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
         return;
       }
@@ -237,7 +235,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         return;
       }
       fetchFreshOrders();
-      if (!isMuted && (event.type === 'OrderCreated' || event.type === 'WaiterCalled')) {
+      if (!isMuted && (event.type === 'order_created' || event.type === 'OrderCreated')) {
         playKitchenChime('NEW_ORDER');
       }
       if (event.type === 'TableMerged') {
@@ -250,6 +248,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       unsubscribe();
     };
   }, [onRefreshOrders, isMuted]);
+
 
   // Handlers
   const handleOpenAcceptModal = async (order: Order) => {

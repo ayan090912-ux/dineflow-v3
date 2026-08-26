@@ -36,6 +36,7 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE orders ALTER COLUMN table_session_id DROP NOT NULL;",
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS target_destination VARCHAR(20) DEFAULT 'KITCHEN';",
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS notes TEXT;",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS table_id VARCHAR(255);",
     ]
     for stmt in alter_statements:
         try:
@@ -112,6 +113,7 @@ from app.modules.tables.router import router as table_router
 from app.modules.orders.router import router as order_router
 from app.modules.customer_requests.router import router as customer_requests_router
 from app.modules.taxes.router import router as tax_router
+from app.modules.websocket.router import router as websocket_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -122,6 +124,7 @@ app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
 app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
 app.include_router(customer_requests_router, prefix="/api/v1/customer-requests", tags=["Customer Requests"])
+app.include_router(websocket_router, prefix="/api/v1", tags=["Realtime WebSocket"])
 
 
 if __name__ == "__main__":

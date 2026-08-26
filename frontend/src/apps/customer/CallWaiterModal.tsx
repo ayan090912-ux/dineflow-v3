@@ -38,7 +38,6 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
   ) => {
     setSubmittingType(requestType);
     try {
-      // 1. Create Customer Request in system
       await api.createCustomerRequest({
         tableNumber,
         restaurantId,
@@ -48,24 +47,19 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
         customerNotes: note.trim() || undefined,
       });
 
-      // 2. Trigger appropriate legacy API methods for backward compatibility
-      if (requestType === 'BILL') {
-        await api.requestBill(tableNumber, restaurantId);
-      } else {
-        await api.callWaiter(tableNumber, customTitle, restaurantId);
-      }
-
       if (onRequestSuccess) {
         onRequestSuccess(customTitle, note.trim());
       }
       setNote('');
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to submit waiter request:', err);
+      alert(`Unable to submit request: ${err.message || 'Server error'}`);
     } finally {
       setSubmittingType(null);
     }
   };
+
 
   const options = [
     {

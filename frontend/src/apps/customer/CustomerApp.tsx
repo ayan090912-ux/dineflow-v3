@@ -134,6 +134,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     if (!restId) return;
 
+    realtimeBus.connect(restId, 'CUSTOMER', sId);
+
     const fetchLiveCustomerOrders = () => {
       api.getCustomerOrders(restId, tId || selectedTableNum, sId).then((orders) => {
         if (Array.isArray(orders)) {
@@ -142,9 +144,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       });
     };
 
-
     fetchLiveCustomerOrders();
-    const pollInterval = setInterval(fetchLiveCustomerOrders, 3000);
+    const pollInterval = setInterval(fetchLiveCustomerOrders, 5000);
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       if (event.restaurantId && event.restaurantId !== restId) {
@@ -153,10 +154,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       fetchLiveCustomerOrders();
 
-      if (event.type === 'TableSessionClosed' || event.type === 'TableCleared') {
+      if (event.type === 'TableSessionClosed' || event.type === 'TableCleared' || event.type === 'table_session_closed') {
         setIsSessionEnded(true);
         setCurrentTableSession(null);
         setCustomerOrders([]);
+        addToast('info', 'Session Ended 🧹', 'Your table session has been closed by staff');
         return;
       }
 
@@ -167,10 +169,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
       } else if (event.type === 'OrderAccepted') {
         addToast('success', 'Order Accepted! 🔥', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
-      } else if (event.type === 'OrderReady') {
+      } else if (event.type === 'OrderReady' || event.type === 'order_ready') {
         addToast('success', 'Order Ready! ✨', 'Your food/drinks are prepared and ready.');
-      } else if (event.type === 'OrderDelivered') {
-        addToast('success', 'Served 🍽️', 'Enjoy your order!');
+      } else if (event.type === 'OrderDelivered' || event.type === 'order_status_updated') {
+        if (event.status === 'DELIVERED') {
+          addToast('success', 'Served 🍽️', 'Enjoy your order!');
+        }
       }
     });
 
@@ -178,7 +182,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       clearInterval(pollInterval);
       unsubscribe();
     };
-  }, [currentRestaurant?.id, currentTable?.id, selectedTableNum, currentTableSession?.id]);
+  }, [currentRestaurant?.id, currentTable?.id, currentTableSession?.id, selectedTableNum]);
 
   const loadTableInfo = async (explicitTableNum?: string, explicitRestId?: string, explicitTableId?: string) => {
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;

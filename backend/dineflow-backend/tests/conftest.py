@@ -30,8 +30,9 @@ conn_mod.AsyncSessionLocal = TestingSessionLocal
 
 from app.modules.restaurants.models import Restaurant
 from app.modules.menu.models import MenuCategory, MenuItem
-from app.modules.tables.models import Table
+from app.modules.tables.models import Table, TableSession
 from app.modules.orders.models import Order, OrderItem, Bill
+from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot, TaxAuditLog
 
 TEST_TABLES = [
@@ -41,15 +42,18 @@ TEST_TABLES = [
     MenuCategory.__table__,
     MenuItem.__table__,
     Table.__table__,
+    TableSession.__table__,
     Order.__table__,
     OrderItem.__table__,
     Bill.__table__,
+    CustomerRequestModel.__table__,
     Tax.__table__,
     TaxCategory.__table__,
     TaxMenuItem.__table__,
     InvoiceTaxSnapshot.__table__,
     TaxAuditLog.__table__,
 ]
+
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():

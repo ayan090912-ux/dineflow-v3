@@ -236,14 +236,26 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
         await db.commit()
         print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={payload.restaurantId} total={total}")
         await db.refresh(new_order)
-        return format_order_response(new_order)
+        resp_data = format_order_response(new_order)
+
+        try:
+            from app.modules.websocket.manager import ws_manager
+            await ws_manager.broadcast_event(
+                restaurant_id=payload.restaurantId,
+                event_type="order_created",
+                payload=resp_data,
+                target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]
+            )
+        except Exception as ws_err:
+            print("[WS_BROADCAST_NOTICE] order_created:", ws_err)
+
+        return resp_data
     except HTTPException:
         raise
     except Exception as create_err:
         import traceback
         print("[CREATE_ORDER_CRITICAL_EXCEPT]:", traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Order creation error: {str(create_err)}")
-
 
 @router.get("/customer")
 async def get_customer_orders(
@@ -308,5 +320,26 @@ async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, d
     await db.commit()
     print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status}")
     await db.refresh(order)
-    return format_order_response(order)
+    resp_data = format_order_response(order)
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        if payload.status == "READY" or payload.kitchenStatus == "READY" or payload.barStatus == "READY":
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="order_ready",
+                payload=resp_data,
+                target_audience=["WAITER", "CUSTOMER", "OWNER"]
+            )
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_status_updated",
+            payload=resp_data,
+            target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_NOTICE] order_status_updated:", ws_err)
+
+    return resp_data
+
 

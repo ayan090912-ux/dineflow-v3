@@ -4496,6 +4496,87 @@ export class DinelyApiClient {
     return null;
   }
 
+  async createCustomerRequest(data: {
+    restaurantId?: string;
+    tableId?: string;
+    tableNumber: string;
+    requestType?: string;
+    customTitle?: string;
+    message?: string;
+    customerNotes?: string;
+    priority?: string;
+    tableSessionId?: string;
+  }): Promise<CustomerRequest> {
+    const restId = this.resolveTenantRestaurantId(data.restaurantId) || 'rest-1787446097984';
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/customer-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurantId: restId,
+        tableId: data.tableId,
+        tableNumber: data.tableNumber,
+        requestType: data.requestType || 'WATER',
+        customTitle: data.customTitle,
+        message: data.message || data.customerNotes,
+        customerNotes: data.customerNotes,
+        priority: data.priority || 'MEDIUM',
+        tableSessionId: data.tableSessionId,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to create customer request: ${errText}`);
+    }
+    return await res.json();
+  }
+
+  async getCustomerRequests(restaurantId?: string, statusFilter?: string): Promise<CustomerRequest[]> {
+    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1787446097984';
+    const apiBase = getApiBaseUrl();
+    let url = `${apiBase}/customer-requests?restaurant_id=${encodeURIComponent(restId)}`;
+    if (statusFilter) {
+      url += `&status_filter=${encodeURIComponent(statusFilter)}`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) {
+      return [];
+    }
+    return await res.json();
+  }
+
+  async updateCustomerRequest(requestId: string, statusVal: string, waiterName?: string): Promise<CustomerRequest> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/customer-requests/${encodeURIComponent(requestId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: statusVal,
+        waiterName: waiterName || 'Waiter',
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to update customer request: ${errText}`);
+    }
+    return await res.json();
+  }
+
+  async closeTableSession(restaurantId: string, tableId: string): Promise<any> {
+    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1787446097984';
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to close table session: ${errText}`);
+    }
+    return await res.json();
+  }
+
+
   async createOrder(orderData: Partial<Order>): Promise<Order> {
     const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
 
@@ -4763,75 +4844,16 @@ export class DinelyApiClient {
     return newOrg;
   }
 
-  // Waiter & Customer Request APIs
-  async getCustomerRequests(restaurantId?: string) {
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetId) return [];
-    try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/customer-requests?restaurant_id=${encodeURIComponent(targetId)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          return data;
-        }
-      }
-    } catch (err) {
-      console.warn("Failed to fetch customer requests from API:", err);
-    }
-    this.loadDatabase();
-    return this.customerRequests.filter((r) => r.restaurantId === targetId);
-  }
-
-  async getWaiterNotifications(restaurantId?: string) {
-    await delay(100);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetId) return [];
-    return this.notifications.filter((n) => !n.restaurantId || n.restaurantId === targetId);
-  }
-
-  async getWaiterShiftSummary() {
-    await delay(100);
-    return {
-      activeTablesAssigned: 4,
-      totalOrdersServed: 18,
-      tipsCollected: 145.0,
-      totalSalesVolume: 1250.0,
-    };
-  }
-
   async acceptCustomerRequest(reqId: string, waiterName?: string) {
-    return this.updateCustomerRequestStatus(reqId, 'ACCEPTED', waiterName);
+    return this.updateCustomerRequest(reqId, 'IN_PROGRESS', waiterName);
   }
 
   async rejectCustomerRequest(reqId: string, waiterName?: string) {
-    return this.updateCustomerRequestStatus(reqId, 'REJECTED', waiterName);
+    return this.updateCustomerRequest(reqId, 'REJECTED', waiterName);
   }
 
   async updateCustomerRequestStatus(reqId: string, status: any, waiterName?: string) {
-    try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/customer-requests/${encodeURIComponent(reqId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status,
-          waiterName: waiterName || 'Waiter',
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data;
-      }
-    } catch (err) {
-      console.warn("Failed to update customer request status via API:", err);
-    }
-    const req = this.customerRequests.find((r) => r.id === reqId);
-    if (req) {
-      req.status = status;
-      this.saveDatabase();
-    }
-    return req;
+    return this.updateCustomerRequest(reqId, status, waiterName);
   }
 
   async transferCustomerRequest(reqId: string, newWaiterId: string) {
@@ -4844,9 +4866,6 @@ export class DinelyApiClient {
     return true;
   }
 
-  async createCustomerRequest(req: any) {
-    return this.callWaiter(req.tableNumber || 'Table 01', req.customTitle || req.requestType || 'Water', req.restaurantId);
-  }
 
   async markAllNotificationsRead() {
     await delay(100);

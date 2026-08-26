@@ -10,7 +10,9 @@ class CustomerRequestModel(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     restaurant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    table_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     table_number: Mapped[str] = mapped_column(String(50), nullable=False)
+
     request_type: Mapped[str] = mapped_column(String(50), default="WATER", nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)

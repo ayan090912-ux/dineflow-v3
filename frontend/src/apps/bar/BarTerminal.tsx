@@ -41,11 +41,13 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
   const [customEtaInput, setCustomEtaInput] = useState('10');
 
   useEffect(() => {
+    const currentRestId = api.getCurrentRestaurantId() || 'rest-1787446097984';
+    realtimeBus.connect(currentRestId, 'BAR');
+
     loadBarOrders(true);
-    const pollInterval = setInterval(() => loadBarOrders(false), 3000);
+    const pollInterval = setInterval(() => loadBarOrders(false), 5000);
 
     const unsubscribe = realtimeBus.subscribe((event: any) => {
-      const currentRestId = api.getCurrentRestaurantId();
       if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
         return;
       }
@@ -56,6 +58,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       }
 
       if (
+        event.type === 'order_created' ||
         event.type === 'OrderCreated' ||
         event.type === 'OrderAccepted' ||
         event.type === 'OrderReady' ||
@@ -65,7 +68,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
         loadBarOrders(false);
 
         // Only alert on newly created drink orders
-        if (event.type === 'OrderCreated' || (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')) {
+        if (event.type === 'order_created' || event.type === 'OrderCreated' || (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')) {
           setLastNotification(`New Drink Order #${event.orderId || event.parentOrderId || ''} for Table ${event.tableNumber || 'Bar'} 🍸`);
           if (soundEnabled) {
             playNotificationSound();
@@ -79,6 +82,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       unsubscribe();
     };
   }, [soundEnabled]);
+
 
   const playNotificationSound = () => {
     try {

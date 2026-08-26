@@ -173,10 +173,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     }
   };
 
+  useEffect(() => {
+    if (currentRestaurantId) {
+      realtimeBus.connect(currentRestaurantId, 'WAITER');
+    }
+  }, [currentRestaurantId]);
+
   // Setup Real-time WebSockets / Event Bus Listener (Scoped by restaurant_id) & Polling
   useEffect(() => {
     loadData();
-    const pollInterval = setInterval(loadData, 3000);
+    const pollInterval = setInterval(loadData, 5000);
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       // Filter events strictly by restaurantId for multi-tenant isolation
@@ -186,56 +192,62 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
       loadData();
 
-      if (!isAudioMuted) {
+      const isChimeEvent =
+        event.type === 'service_request_created' ||
+        event.type === 'order_ready' ||
+        event.type === 'CustomerRequestCreated' ||
+        event.type === 'OrderReady';
+
+      if (isChimeEvent && !isAudioMuted) {
         playNotificationChime();
       }
 
-      if (event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
+      if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
         showToast(
           'Customer Service Call 🛎️',
           `${event.tableNumber || 'Table'} requested assistance`,
           'warning'
         );
-      } else if (event.type === 'OrderReady') {
+      } else if (event.type === 'order_ready' || event.type === 'OrderReady') {
         showToast(
           'Order Plated & Ready 🔥',
-          `Order #${event.orderId} for ${event.tableNumber} is ready for pickup`,
+          `Order for ${event.tableNumber || 'Table'} is ready for pickup`,
           'success'
         );
+      } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
+        showToast('Table Session Closed 🧹', `Table ${event.tableNumber || ''} session ended`, 'info');
       } else if (event.type === 'BillRequested') {
-        showToast(
-          'Bill Check Request 🧾',
-          `${event.tableNumber || 'Table'} requested final bill`,
-          'info'
-        );
-      } else if (event.type === 'TableStatusChanged' || event.type === 'TableStatusUpdated') {
-        showToast('Table Session Updated 🪑', `Status updated for ${event.tableNumber || 'Table'}`, 'info');
+        showToast('Bill Check Request 🧾', `${event.tableNumber || 'Table'} requested final bill`, 'info');
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearInterval(pollInterval);
+      unsubscribe();
+    };
   }, [isAudioMuted, currentRestaurantId]);
 
   // Request Actions (Workflow: PENDING -> ACCEPT -> IN_PROGRESS -> COMPLETE)
   const handleAcceptRequest = async (requestId: string) => {
     try {
-      await api.acceptCustomerRequest(requestId, waiterName);
+      await api.updateCustomerRequest(requestId, 'IN_PROGRESS', waiterName);
       showToast('Request Accepted ✅', 'Customer request accepted.', 'success');
       loadData();
-    } catch (err) {
-      showToast('Error', 'Failed to accept request', 'warning');
+    } catch (err: any) {
+      showToast('Error', err.message || 'Failed to accept request', 'warning');
     }
   };
 
   const handleCompleteRequest = async (requestId: string) => {
     try {
-      await api.updateCustomerRequestStatus(requestId, 'COMPLETED', waiterName);
+      await api.updateCustomerRequest(requestId, 'COMPLETED', waiterName);
       showToast('Request Completed ✅', 'Request fulfilled and cleared.', 'success');
       loadData();
-    } catch (err) {
-      showToast('Error', 'Failed to complete request', 'warning');
+    } catch (err: any) {
+      showToast('Error', err.message || 'Failed to complete request', 'warning');
     }
   };
+
 
   // Order Delivery Handler (Valid transition: READY -> DELIVERED)
   const handleDeliverOrder = async (orderId: string) => {
@@ -1281,11 +1293,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                     onClick={async () => {
                       setIsClosingTableLoading(true);
                       try {
-                        await api.closeTableSession(selectedTableForClose.id, waiterName);
+                        await api.closeTableSession(currentRestaurantId, selectedTableForClose.id);
                         showToast('Table Session Closed 🧹', `${selectedTableForClose.tableNumber} is now available for new guests`, 'success');
                         setSelectedTableForClose(null);
                         await loadData();
                       } catch (err: any) {
+
                         showToast('Error', err.message || 'Failed to close table session', 'warning');
                       } finally {
                         setIsClosingTableLoading(false);
