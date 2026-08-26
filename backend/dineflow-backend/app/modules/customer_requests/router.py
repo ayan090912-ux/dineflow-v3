@@ -53,6 +53,19 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     title = payload.customTitle or req_type.replace("_", " ").title()
     msg = payload.message or payload.customerNotes or f"Table {payload.tableNumber} requested: {title}"
 
+    session_id = payload.tableSessionId
+    if not session_id and (payload.tableId or payload.tableNumber):
+        from app.modules.tables.models import TableSession
+        query_sess = select(TableSession).where(
+            (TableSession.restaurant_id == payload.restaurantId) &
+            ((TableSession.table_id == payload.tableId) | (TableSession.table_number == payload.tableNumber)) &
+            (TableSession.status == "ACTIVE")
+        )
+        res_sess = await db.execute(query_sess)
+        active_sess = res_sess.scalars().first()
+        if active_sess:
+            session_id = active_sess.id
+
     new_req = CustomerRequestModel(
         id=req_id,
         restaurant_id=payload.restaurantId,
@@ -61,8 +74,9 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
         request_type=req_type,
         message=msg,
         status="PENDING",
-        table_session_id=payload.tableSessionId,
+        table_session_id=session_id,
     )
+
     db.add(new_req)
     await db.commit()
     await db.refresh(new_req)
@@ -83,14 +97,28 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     return req_dict
 
 @router.get("")
-async def get_customer_requests(restaurant_id: str, status_filter: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+async def get_customer_requests(
+    restaurant_id: str,
+    status_filter: Optional[str] = None,
+    table_id: Optional[str] = None,
+    table_session_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
     query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == restaurant_id)
     if status_filter:
         query = query.where(CustomerRequestModel.status == status_filter)
+    if table_session_id:
+        query = query.where(CustomerRequestModel.table_session_id == table_session_id)
+    elif table_id:
+        query = query.where(
+            (CustomerRequestModel.table_id == table_id) |
+            (CustomerRequestModel.table_number == table_id)
+        )
     query = query.order_by(CustomerRequestModel.created_at.desc())
     result = await db.execute(query)
     reqs = result.scalars().all()
     return [format_request_dict(r) for r in reqs]
+
 
 @router.patch("/{request_id}")
 async def update_customer_request(request_id: str, payload: UpdateCustomerRequestSchema, db: AsyncSession = Depends(get_db)):

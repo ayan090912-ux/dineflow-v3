@@ -7,7 +7,8 @@ from sqlalchemy import select, func
 
 from app.core.database.connection import get_db
 from app.modules.orders.models import Order, OrderItem, Bill
-from app.modules.tables.models import Table
+from app.modules.tables.models import Table, TableSession
+
 from app.modules.restaurants.models import Restaurant
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
@@ -62,26 +63,43 @@ def format_order_response(order: Order) -> dict:
     if not ord_num and getattr(order, "id", None):
         ord_num = f"#ORD-{str(order.id)[-4:]}"
 
+    sess_id = getattr(order, "table_session_id", None)
+    rest_id = getattr(order, "restaurant_id", "")
+    tbl_id = getattr(order, "table_id", None)
+    tbl_num = getattr(order, "table_number", "Table 01")
+    cust_name = getattr(order, "customer_name", "Guest")
+    tot_amt = getattr(order, "total_amount", 0.0) or 0.0
+
     return {
         "id": getattr(order, "id", ""),
-        "restaurant_id": getattr(order, "restaurant_id", ""),
-        "table_id": getattr(order, "table_id", None),
-        "table_number": getattr(order, "table_number", "Table 01"),
-        "table_session_id": getattr(order, "table_session_id", None),
+        "restaurant_id": rest_id,
+        "restaurantId": rest_id,
+        "table_id": tbl_id,
+        "tableId": tbl_id,
+        "table_number": tbl_num,
+        "tableNumber": tbl_num,
+        "table_session_id": sess_id,
+        "tableSessionId": sess_id,
         "status": getattr(order, "status", "PENDING"),
         "kitchen_status": getattr(order, "kitchen_status", "PENDING"),
         "bar_status": getattr(order, "bar_status", "PENDING"),
-        "customer_name": getattr(order, "customer_name", "Guest"),
+        "customer_name": cust_name,
+        "customerName": cust_name,
         "notes": getattr(order, "notes", ""),
         "subtotal": getattr(order, "subtotal", 0.0) or 0.0,
         "tax_amount": getattr(order, "tax_amount", 0.0) or 0.0,
-        "total_amount": getattr(order, "total_amount", 0.0) or 0.0,
+        "total_amount": tot_amt,
+        "totalAmount": tot_amt,
         "order_number": ord_num or "#ORD-1",
+        "orderNumber": ord_num or "#ORD-1",
         "estimated_prep_time_minutes": getattr(order, "estimated_prep_time_minutes", 15) or 15,
+        "estimatedPrepTimeMinutes": getattr(order, "estimated_prep_time_minutes", 15) or 15,
         "eta_target_timestamp": eta_val,
-        "items_json": getattr(order, "items_json", []) or [],
+        "etaTargetTimestamp": eta_val,
+        "items": getattr(order, "items_json", []) or [],
         "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
         "created_at": created_at_val,
+        "createdAt": created_at_val,
     }
 
 
@@ -271,12 +289,25 @@ async def get_customer_orders(
     if table_session_id:
         query = query.where(Order.table_session_id == table_session_id)
     elif table_id:
-        query = query.where((Order.table_id == table_id) | (Order.table_number == table_id))
+        from app.modules.tables.models import TableSession
+        query_sess = select(TableSession).where(
+            (TableSession.restaurant_id == restaurant_id) &
+            ((TableSession.table_id == table_id) | (TableSession.table_number == table_id)) &
+            (TableSession.status == "ACTIVE")
+        )
+        res_sess = await db.execute(query_sess)
+        active_sess = res_sess.scalars().first()
+
+        if active_sess:
+            query = query.where(Order.table_session_id == active_sess.id)
+        else:
+            return []
 
     query = query.order_by(Order.created_at.desc())
     result = await db.execute(query)
     orders = result.scalars().all()
     return [format_order_response(o) for o in orders]
+
 
 
 @router.get("/restaurant/{restaurant_id}")

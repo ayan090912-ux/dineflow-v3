@@ -226,6 +226,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     const session = await api.getOrCreateTableSession(restId, resolvedTableId, displayTableNum);
     if (session) {
+      const lastSessionKey = `dinely_session_${restId}_${resolvedTableId}`;
+      const prevSessionId = typeof window !== 'undefined' ? sessionStorage.getItem(lastSessionKey) : null;
+      if (prevSessionId && prevSessionId !== session.id) {
+        setCart([]);
+        setCustomerOrders([]);
+        setIsSessionEnded(false);
+      }
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(lastSessionKey, session.id);
+      }
+
       setCurrentTableSession(session);
 
       if (typeof window !== 'undefined' && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.search.includes('debug'))) {
@@ -240,6 +251,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       await loadInitialOrder(session.id, restId, displayTableNum, resolvedTableId);
     }
   };
+
 
   const loadRestaurantAndMenu = async (): Promise<Restaurant | null> => {
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;

@@ -445,14 +445,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   };
 
   useEffect(() => {
+    const restId = currentRestaurant?.id || 'rest-1787446097984';
+    realtimeBus.connect(restId, 'OWNER');
+
     loadData();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       loadData();
-      if (event.type === 'OrderCreated') {
-        addToast('info', 'New Customer Order Received! 🛎️', `Table ${event.tableNumber} placed Order #${event.orderId}`);
-      } else if (event.type === 'WaiterCalled') {
-        addToast('warning', 'Waiter Assistance Call 🔔', `Table ${event.tableNumber} requested waiter support.`);
+      if (event.type === 'order_created' || event.type === 'OrderCreated') {
+        addToast('info', 'New Customer Order Received! 🛎️', `Table ${event.tableNumber || 'Guest'} placed an order`);
+      } else if (event.type === 'service_request_created' || event.type === 'WaiterCalled') {
+        addToast('warning', 'Waiter Assistance Call 🔔', `Table ${event.tableNumber || 'Guest'} requested support.`);
+      } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
+        addToast('info', 'Table Session Closed 🧹', `Table ${event.tableNumber || ''} session ended and set to VACANT.`);
       } else if (event.type === 'BillRequested') {
         addToast('success', 'Bill Request Received 🧾', `Table ${event.tableNumber} requested final check.`);
       } else if (event.type === 'ETAUpdated') {
@@ -472,13 +477,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
     const interval = setInterval(() => {
       loadData();
-    }, 3000);
+    }, 5000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
-  }, []);
+  }, [currentRestaurant?.id]);
+
 
   const loadData = async () => {
     const user = api.getCurrentUser();
@@ -1451,10 +1457,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                     />
                     <StatsCard
                       title="Occupied Tables"
-                      value={`${tables.filter((t) => t.status !== 'AVAILABLE').length} / ${tables.length}`}
-                      change={{ value: `${tables.length > 0 ? Math.round((tables.filter((t) => t.status !== 'AVAILABLE').length / tables.length) * 100) : 0}% Occupancy`, isPositive: true }}
+                      value={`${tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length} / ${tables.length}`}
+                      change={{ value: `${tables.length > 0 ? Math.round((tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length / tables.length) * 100) : 0}% Occupancy`, isPositive: true }}
                       icon={<Grid className="w-5 h-5 text-purple-400" />}
                     />
+
                     <StatsCard
                       title="Completed Orders Today"
                       value={completed.length}
@@ -1828,9 +1835,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               <Card className="bg-slate-900 border-slate-800 p-3 space-y-1 col-span-2 sm:col-span-1">
                 <span className="text-[10px] font-mono text-rose-400 uppercase">Occupied</span>
                 <p className="text-xl font-black text-rose-400">
-                  {tables.filter((t) => t.status === 'OCCUPIED' || t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length}
+                  {tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length}
                 </p>
               </Card>
+
             </div>
 
             {/* Interactive Floorplan Table Grid */}
