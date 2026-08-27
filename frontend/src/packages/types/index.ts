@@ -574,7 +574,11 @@ export function getFulfillmentStation(item: {
   barCategory?: string;
   name?: string;
 }): 'KITCHEN' | 'BAR' {
-  if (item.targetDestination === 'BAR' || item.isAlcoholic === true || item.barCategory !== undefined) {
+  const dest = (item.targetDestination || '').toUpperCase();
+  if (dest === 'KITCHEN') {
+    return 'KITCHEN';
+  }
+  if (dest === 'BAR' || item.isAlcoholic === true || item.barCategory !== undefined) {
     return 'BAR';
   }
   const cat = (item.category || '').toLowerCase();

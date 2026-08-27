@@ -184,6 +184,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     loadData();
     const pollInterval = setInterval(loadData, 5000);
 
+    const handledEventIds = new Set<string>();
+
     const unsubscribe = realtimeBus.subscribe((event) => {
       // Filter events strictly by restaurantId for multi-tenant isolation
       if (event.restaurantId && event.restaurantId !== currentRestaurantId) {
@@ -191,6 +193,14 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       }
 
       loadData();
+
+      const evtId = event.eventId;
+      if (evtId && handledEventIds.has(evtId)) {
+        return;
+      }
+      if (evtId) {
+        handledEventIds.add(evtId);
+      }
 
       const isChimeEvent =
         event.type === 'service_request_created' ||

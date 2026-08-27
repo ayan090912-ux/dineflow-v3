@@ -33,9 +33,15 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
     return () => unsubscribe();
   }, [currentOrder.id, onUpdateOrder]);
 
-  // Live Second-by-Second Countdown Timer
+  // Live Second-by-Second Countdown Timer derived strictly from server state
   useEffect(() => {
     const calculateSecondsLeft = () => {
+      if (currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp) {
+        setRemainingSeconds(0);
+        setEtaMessage('Order transmitted — Awaiting Kitchen Confirmation...');
+        return;
+      }
+
       let target: number;
       if (currentOrder.etaTargetTimestamp) {
         target = new Date(currentOrder.etaTargetTimestamp).getTime();
@@ -49,14 +55,13 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       setRemainingSeconds(diffSec);
 
       // Dynamic Status Message based on ETA remaining and status
-
       if (currentOrder.status === 'READY') {
         setEtaMessage('Your order is ready! Your waiter is bringing your food.');
       } else if (currentOrder.status === 'DELIVERED') {
         setEtaMessage('Order served. Bon appétit!');
       } else if (diffSec <= 180 && diffSec > 0) {
         setEtaMessage('Almost ready! Plating final garnishes.');
-      } else if (diffSec === 0 && currentOrder.status === 'IN_KITCHEN') {
+      } else if (diffSec === 0 && (currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING')) {
         setEtaMessage('Chef is adding final finishing touches...');
       } else {
         setEtaMessage("We're preparing your food with care.");
@@ -66,7 +71,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
     calculateSecondsLeft();
     const interval = setInterval(calculateSecondsLeft, 1000);
     return () => clearInterval(interval);
-  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status]);
+  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus]);
 
   // Format seconds to mm:ss
   const formatCountdown = (totalSec: number) => {
@@ -79,10 +84,12 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
 
   // Stepper state determination
   const isReceived = true; // Always true if order exists
-  const isCooking = currentOrder.status === 'IN_KITCHEN' || currentOrder.status === 'READY' || currentOrder.status === 'DELIVERED';
-  const isPreparing = currentOrder.status === 'IN_KITCHEN' && remainingSeconds <= 300;
+  const isCooking = currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING' || currentOrder.status === 'READY' || currentOrder.status === 'DELIVERED';
+  const isPreparing = (currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING') && remainingSeconds <= 300;
   const isReady = currentOrder.status === 'READY' || currentOrder.status === 'DELIVERED';
   const isDelivered = currentOrder.status === 'DELIVERED';
+
+  const isPendingServerAcceptance = currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp;
 
   return (
     <Card className="p-5 m-4 bg-gradient-to-br from-slate-950 via-slate-900 to-rose-950/60 border border-rose-500/40 shadow-2xl rounded-3xl space-y-5 relative overflow-hidden">
@@ -124,17 +131,28 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       {currentOrder.status !== 'DELIVERED' && (
         <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-center space-y-1 relative">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-rose-400" /> Estimated Time Remaining
+            <Clock className="w-3.5 h-3.5 text-rose-400" /> {isPendingServerAcceptance ? 'Order Status' : 'Estimated Time Remaining'}
           </span>
 
-          <div className="font-mono text-4xl font-black text-white tracking-widest my-1 flex items-baseline justify-center gap-2">
-            <span className="text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.3)]">
-              {formatCountdown(remainingSeconds)}
-            </span>
-            <span className="text-xs text-slate-400 font-sans font-normal">
-              (~{minutesRemaining} {minutesRemaining === 1 ? 'min' : 'mins'})
-            </span>
-          </div>
+          {isPendingServerAcceptance ? (
+            <div className="py-2 text-center space-y-1">
+              <span className="text-base font-bold text-amber-400 animate-pulse block">
+                ⏳ Order Received — Awaiting Kitchen Confirmation
+              </span>
+              <span className="text-xs text-slate-400 font-normal block">
+                Prep timer will start as soon as Chef accepts your ticket.
+              </span>
+            </div>
+          ) : (
+            <div className="font-mono text-4xl font-black text-white tracking-widest my-1 flex items-baseline justify-center gap-2">
+              <span className="text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                {formatCountdown(remainingSeconds)}
+              </span>
+              <span className="text-xs text-slate-400 font-sans font-normal">
+                (~{minutesRemaining} {minutesRemaining === 1 ? 'min' : 'mins'})
+              </span>
+            </div>
+          )}
 
           <p className="text-xs text-slate-300 font-medium italic animate-pulse">
             "{etaMessage}"

@@ -97,6 +97,7 @@ def format_order_response(order: Order) -> dict:
         "eta_target_timestamp": eta_val,
         "etaTargetTimestamp": eta_val,
         "items": getattr(order, "items_json", []) or [],
+        "items_json": getattr(order, "items_json", []) or [],
         "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
         "created_at": created_at_val,
         "createdAt": created_at_val,
@@ -180,7 +181,6 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
         order_num = f"#ORD-{daily_seq}"
 
         order_id = f"ord-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
-        eta_target = datetime.utcnow() + timedelta(minutes=15)
 
         print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={payload.restaurantId} table_id={tbl_id} session_id={session_id}")
 
@@ -199,8 +199,8 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
             tax_amount=tax_amount,
             total_amount=total,
             order_number=order_num,
-            estimated_prep_time_minutes=15,
-            eta_target_timestamp=eta_target,
+            estimated_prep_time_minutes=None,
+            eta_target_timestamp=None,
             items_json=items_list_dict,
             tax_breakdown_json=tax_breakdown,
         )
@@ -311,12 +311,33 @@ async def get_customer_orders(
 
 
 @router.get("/restaurant/{restaurant_id}")
-async def get_restaurant_orders(restaurant_id: str, db: AsyncSession = Depends(get_db)):
+async def get_restaurant_orders(
+    restaurant_id: str,
+    active_only: bool = Query(False),
+    db: AsyncSession = Depends(get_db)
+):
     try:
-        query = select(Order).where(Order.restaurant_id == restaurant_id).order_by(Order.created_at.desc())
+        query = select(Order).where(Order.restaurant_id == restaurant_id)
+        if active_only:
+            query_sess = select(TableSession.id).where(
+                (TableSession.restaurant_id == restaurant_id) &
+                (TableSession.status == "ACTIVE")
+            )
+            res_sess = await db.execute(query_sess)
+            active_session_ids = [r[0] for r in res_sess.all()]
+
+            if active_session_ids:
+                query = query.where(
+                    (Order.table_session_id.in_(active_session_ids)) |
+                    (Order.status.in_(["PENDING", "PREPARING", "READY"]))
+                )
+            else:
+                query = query.where(Order.status.in_(["PENDING", "PREPARING", "READY"]))
+
+        query = query.order_by(Order.created_at.desc())
         result = await db.execute(query)
         orders = result.scalars().all()
-        print(f"[KITCHEN_ORDER_FETCH] restaurant_id={restaurant_id} count={len(orders)}")
+        print(f"[KITCHEN_ORDER_FETCH] restaurant_id={restaurant_id} active_only={active_only} count={len(orders)}")
         return [format_order_response(o) for o in orders]
     except Exception as e:
         print("[KITCHEN_ORDER_FETCH_EXCEPT]:", e)
@@ -337,6 +358,12 @@ async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, d
         order.kitchen_status = payload.kitchenStatus
     if payload.barStatus:
         order.bar_status = payload.barStatus
+
+    if (payload.kitchenStatus == "PREPARING" or payload.status == "PREPARING" or payload.status == "IN_KITCHEN") and not order.eta_target_timestamp:
+        prep_mins = payload.estimatedPrepTimeMinutes or order.estimated_prep_time_minutes or 15
+        order.estimated_prep_time_minutes = prep_mins
+        order.eta_target_timestamp = datetime.utcnow() + timedelta(minutes=prep_mins)
+
     if payload.estimatedPrepTimeMinutes is not None:
         order.estimated_prep_time_minutes = payload.estimatedPrepTimeMinutes
         if not order.eta_target_timestamp:

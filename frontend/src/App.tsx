@@ -102,36 +102,36 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-          {/* Sleek Subdomain & Environment Switcher Bar (Hidden on Customer Ordering Interface for authentic SaaS experience) */}
+          {/* Enterprise Role & Environment Navigation Header */}
           {showDomainBar && !currentPath.startsWith('/customer') && !currentPath.startsWith('/order') ? (
-            <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-sm">
-              <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigateTo('/')}>
+            <header className="bg-slate-900 border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigateTo('/')}>
                 <DinelyLogo size="sm" />
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse hidden sm:inline-block" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 hidden sm:inline-block" />
               </div>
 
-              {/* Core Domain Switcher Pills */}
-              <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 overflow-x-auto scrollbar-none no-scrollbar">
+              {/* Core Navigation Switcher Controls */}
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/90 overflow-x-auto scrollbar-none no-scrollbar">
                 <button
                   onClick={() => navigateTo('/')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath === '/' || currentPath === '/landing'
-                      ? 'bg-slate-800 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-slate-800 text-slate-100 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
                   <Globe className="w-3.5 h-3.5" />
                   <span>Main Website</span>
                 </button>
 
-                <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
+                <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
 
                 <button
                   onClick={() => navigateTo(currentUser ? '/kitchen/dashboard' : '/kitchen/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/kitchen')
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
                   <ChefHat className="w-3.5 h-3.5 text-amber-400" />
@@ -141,10 +141,10 @@ export default function App() {
                 {(currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) && (
                   <button
                     onClick={() => navigateTo(currentUser ? '/waiter' : '/waiter/login')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                       currentPath.startsWith('/waiter')
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                     }`}
                   >
                     <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
@@ -155,10 +155,10 @@ export default function App() {
                 {(currentRestaurant?.hasBar !== false && (currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR')) && (
                   <button
                     onClick={() => navigateTo(currentUser ? '/bar/dashboard' : '/bar/login')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                       currentPath.startsWith('/bar')
-                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                     }`}
                   >
                     <Wine className="w-3.5 h-3.5 text-sky-400" />
@@ -168,69 +168,69 @@ export default function App() {
 
                 <button
                   onClick={() => navigateTo(currentUser ? '/inventory/terminal' : '/inventory/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/inventory')
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
                   <Package className="w-3.5 h-3.5 text-rose-400" />
                   <span>Inventory OS</span>
                 </button>
 
-                <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
+                <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
 
                 <button
                   onClick={() => navigateTo(currentUser ? '/workspace' : '/restaurant/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/restaurant') || currentPath === '/workspace'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
-                  <Utensils className="w-3.5 h-3.5 text-rose-400" />
+                  <Utensils className="w-3.5 h-3.5 text-indigo-400" />
                   <span>Owner OS</span>
                 </button>
 
                 <button
                   onClick={() => navigateTo(currentUser ? '/admin/dashboard' : '/admin/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/admin')
-                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
-                  <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                  <Building2 className="w-3.5 h-3.5 text-purple-400" />
                   <span>Platform Admin</span>
                 </button>
 
-                <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden md:block" />
+                <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
 
                 <button
                   onClick={() => navigateTo('/customer')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath === '/customer' || currentPath === '/order'
-                      ? 'bg-rose-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-slate-800 text-slate-100 border border-slate-700'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
-                  <Smartphone className="w-3.5 h-3.5" />
+                  <Smartphone className="w-3.5 h-3.5 text-slate-300" />
                   <span>Customer App</span>
                 </button>
               </div>
 
-              {/* Active User Badge & Explicit Logout / Login Control */}
-              <div className="flex items-center gap-2">
+              {/* Active User Badge & Session Control */}
+              <div className="flex items-center gap-2 shrink-0">
                 {currentUser ? (
-                  <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <div className="flex items-center gap-2.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
                     <div className="hidden sm:block text-[11px] leading-tight">
-                      <p className="font-bold text-white max-w-[120px] truncate">{currentUser.name || currentUser.email}</p>
-                      <p className="text-[9px] text-slate-400 font-mono uppercase">{currentUser.role || 'LOGGED IN'}</p>
+                      <p className="font-semibold text-slate-100 max-w-[120px] truncate">{currentUser.name || currentUser.email}</p>
+                      <p className="text-[9px] text-slate-400 font-mono uppercase tracking-wide">{currentUser.role || 'ACTIVE SESSION'}</p>
                     </div>
                     <button
                       onClick={() => handleLogout('/restaurant/login')}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
                       title="Explicitly sign out of active session"
                     >
                       <LogOut className="w-3.5 h-3.5" />
@@ -240,7 +240,7 @@ export default function App() {
                 ) : (
                   <button
                     onClick={() => navigateTo('/restaurant/login')}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-colors cursor-pointer"
                   >
                     <span>Log In</span>
                   </button>
@@ -248,7 +248,7 @@ export default function App() {
 
                 <button
                   onClick={() => setShowDomainBar(false)}
-                  className="text-[11px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded hover:bg-slate-900 transition-colors hidden md:block"
+                  className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800 transition-colors hidden md:block"
                   title="Hide domain switcher bar"
                 >
                   Hide Bar ✕

@@ -47,6 +47,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     loadBarOrders(true);
     const pollInterval = setInterval(() => loadBarOrders(false), 5000);
 
+    const handledEventIds = new Set<string>();
+
     const unsubscribe = realtimeBus.subscribe((event: any) => {
       if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
         return;
@@ -66,6 +68,14 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
         (event.type === 'FulfillmentTicketUpdated' && event.station === 'BAR')
       ) {
         loadBarOrders(false);
+
+        const evtId = event.eventId;
+        if (evtId && handledEventIds.has(evtId)) {
+          return;
+        }
+        if (evtId) {
+          handledEventIds.add(evtId);
+        }
 
         // Only alert on newly created drink orders
         if (event.type === 'order_created' || event.type === 'OrderCreated' || (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')) {

@@ -143,14 +143,31 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 async def create_menu_item(restaurant_id: str, payload: CreateMenuItemSchema, db: AsyncSession = Depends(get_db)):
     target_category_id = payload.categoryId
 
-    # Category Auto-Resolution
+    # Category Auto-Resolution (search by ID or Name)
     cat_obj = None
     if target_category_id:
         query_cat = select(MenuCategory).where(
-            (MenuCategory.id == target_category_id) & (MenuCategory.restaurant_id == restaurant_id)
+            (MenuCategory.restaurant_id == restaurant_id) &
+            ((MenuCategory.id == target_category_id) | (MenuCategory.name == target_category_id))
         )
         res_cat = await db.execute(query_cat)
         cat_obj = res_cat.scalar_one_or_none()
+
+    if not cat_obj and target_category_id:
+        # Auto-create missing category if categoryId/Name was provided by client
+        new_cat_id = f"cat-{restaurant_id}-{payload.categoryId.lower().replace(' ', '_')}"
+        cat_obj = MenuCategory(
+            id=new_cat_id,
+            restaurant_id=restaurant_id,
+            name=payload.categoryId,
+            sort_order=5,
+            is_enabled=True,
+        )
+        db.add(cat_obj)
+        await db.flush()
+        target_category_id = cat_obj.id
+    elif cat_obj:
+        target_category_id = cat_obj.id
 
     if not cat_obj:
         query_any_cat = select(MenuCategory).where(MenuCategory.restaurant_id == restaurant_id).order_by(MenuCategory.sort_order)

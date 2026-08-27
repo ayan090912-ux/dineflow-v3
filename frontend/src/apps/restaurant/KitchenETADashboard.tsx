@@ -227,6 +227,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     fetchFreshOrders();
     const pollInterval = setInterval(fetchFreshOrders, 5000);
 
+    const handledEventIds = new Set<string>();
+
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
       if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
         return;
@@ -235,6 +237,15 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         return;
       }
       fetchFreshOrders();
+
+      const evtId = event.eventId;
+      if (evtId && handledEventIds.has(evtId)) {
+        return;
+      }
+      if (evtId) {
+        handledEventIds.add(evtId);
+      }
+
       if (!isMuted && (event.type === 'order_created' || event.type === 'OrderCreated')) {
         playKitchenChime('NEW_ORDER');
       }

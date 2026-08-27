@@ -270,6 +270,20 @@ class RealTimeEventBus {
     return this.emit(type, payload);
   }
 
+  public isEventProcessed(eventId?: string): boolean {
+    if (!eventId) return false;
+    return this.processedEventIds.has(eventId);
+  }
+
+  public markEventProcessed(eventId?: string): void {
+    if (!eventId) return;
+    this.processedEventIds.add(eventId);
+    if (this.processedEventIds.size > 500) {
+      const first = Array.from(this.processedEventIds)[0];
+      this.processedEventIds.delete(first);
+    }
+  }
+
   private notifyListeners(event: RealTimeEventPayload, isLocal: boolean) {
     this.listeners.forEach((listener) => {
       try {

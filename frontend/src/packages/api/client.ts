@@ -115,6 +115,86 @@ export function getApiBaseUrl(): string {
   return 'http://localhost:8000/api/v1';
 }
 
+export function normalizeOrder(raw: any): Order {
+  if (!raw) {
+    return {
+      id: '',
+      restaurantId: '',
+      tableId: '',
+      tableNumber: 'Table 01',
+      tableSessionId: '',
+      status: 'PENDING',
+      kitchenStatus: 'PENDING',
+      barStatus: 'PENDING',
+      customerName: 'Guest',
+      notes: '',
+      items: [],
+      totalAmount: 0,
+      subtotal: 0,
+      taxAmount: 0,
+      paymentStatus: 'UNPAID',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const rawItems = raw.items || raw.items_json || raw.order_items || raw.orderItems || [];
+  const normalizedItems: OrderItem[] = Array.isArray(rawItems)
+    ? rawItems.map((i: any, idx: number) => {
+        const dest = (i.targetDestination || i.target_destination || i.station || '').toUpperCase();
+        let targetDestination: 'KITCHEN' | 'BAR' = 'KITCHEN';
+        if (dest === 'BAR') {
+          targetDestination = 'BAR';
+        } else if (!dest) {
+          const lowerName = (i.name || '').toLowerCase();
+          if (
+            ['mojito', 'cocktail', 'beer', 'wine', 'drink', 'beverage', 'whiskey', 'vodka', 'rum', 'mocktail', 'shake', 'juice'].some((w) =>
+              lowerName.includes(w)
+            )
+          ) {
+            targetDestination = 'BAR';
+          }
+        }
+
+        return {
+          id: i.id || `oi-${raw.id || 'ord'}-${idx}`,
+          menuItemId: i.menuItemId || i.menu_item_id || i.id || `item-${idx}`,
+          name: i.name || 'Unnamed Item',
+          price: typeof i.price === 'number' ? i.price : parseFloat(i.price || i.unit_price || i.unitPrice) || 0,
+          quantity: typeof i.quantity === 'number' ? i.quantity : parseInt(i.quantity) || 1,
+          notes: i.notes || '',
+          targetDestination: targetDestination,
+          isAlcoholic: Boolean(i.isAlcoholic || i.is_alcoholic || targetDestination === 'BAR'),
+        };
+      })
+    : [];
+
+  return {
+    id: raw.id || raw.order_id || raw.orderId || '',
+    displayOrderNumber: raw.order_number || raw.orderNumber || (raw.id ? `#ORD-${String(raw.id).slice(-4)}` : '#ORD-1'),
+    restaurantId: raw.restaurant_id || raw.restaurantId || '',
+    tableId: raw.table_id || raw.tableId || '',
+    tableNumber: raw.table_number || raw.tableNumber || 'Table 01',
+    tableSessionId: raw.table_session_id || raw.tableSessionId || '',
+    status: (raw.status || 'PENDING').toUpperCase() as OrderStatus,
+    kitchenStatus: (raw.kitchen_status || raw.kitchenStatus || raw.status || 'PENDING').toUpperCase(),
+    barStatus: (raw.bar_status || raw.barStatus || raw.status || 'PENDING').toUpperCase(),
+    customerName: raw.customer_name || raw.customerName || 'Guest',
+    notes: raw.notes || '',
+    items: normalizedItems,
+    subtotal: typeof raw.subtotal === 'number' ? raw.subtotal : parseFloat(raw.subtotal) || 0,
+    taxAmount: typeof raw.tax_amount === 'number' ? raw.tax_amount : parseFloat(raw.tax_amount || raw.taxAmount) || 0,
+    totalAmount: typeof raw.total_amount === 'number' ? raw.total_amount : parseFloat(raw.total_amount || raw.totalAmount) || 0,
+    taxBreakdown: raw.tax_breakdown || raw.tax_breakdown_json || raw.taxBreakdown || [],
+    estimatedPrepTimeMinutes: raw.estimated_prep_time_minutes || raw.estimatedPrepTimeMinutes || undefined,
+    etaTargetTimestamp: raw.eta_target_timestamp || raw.etaTargetTimestamp || undefined,
+    isTimerPaused: Boolean(raw.is_timer_paused || raw.isTimerPaused),
+    paymentStatus: raw.payment_status || raw.paymentStatus || 'UNPAID',
+    createdAt: raw.created_at || raw.createdAt || new Date().toISOString(),
+    updatedAt: raw.updated_at || raw.updatedAt || new Date().toISOString(),
+  };
+}
+
 
 // Global Multi-Tenant SaaS Central Store (Multi-tenant persistent registry across all browser contexts & devices)
 export const GLOBAL_MULTI_TENANT_RESTAURANTS: Restaurant[] = [
@@ -2113,34 +2193,7 @@ export class DinelyApiClient {
       if (res.ok) {
         const rawOrds = await res.json();
         if (Array.isArray(rawOrds)) {
-          const remoteOrds: Order[] = rawOrds.map((data: any) => ({
-            id: data.id,
-            displayOrderNumber: data.order_number || `#ORD-${data.id.slice(-4)}`,
-            restaurantId: data.restaurant_id || targetId,
-            tableId: data.table_id,
-            tableNumber: data.table_number,
-            tableSessionId: data.table_session_id,
-            status: data.status || 'PENDING',
-            kitchenStatus: data.kitchen_status || 'PENDING',
-            barStatus: data.bar_status || 'PENDING',
-            estimatedPrepTimeMinutes: data.estimated_prep_time_minutes || 15,
-            etaTargetTimestamp: data.eta_target_timestamp || undefined,
-            customerName: data.customer_name || 'Guest',
-            notes: data.notes || '',
-            items: (data.items_json || []).map((i: any) => ({
-              id: i.id || `oi-${data.id}`,
-              menuItemId: i.menuItemId || i.menu_item_id || i.id,
-              name: i.name,
-              quantity: i.quantity,
-              price: typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0,
-              notes: i.notes || '',
-              targetDestination: i.targetDestination || 'KITCHEN',
-            })),
-            totalAmount: data.total_amount || 0,
-            paymentStatus: data.payment_status || 'UNPAID',
-            createdAt: data.created_at || new Date().toISOString(),
-          }));
-
+          const remoteOrds: Order[] = rawOrds.map((data: any) => normalizeOrder(data));
           this.orders = this.orders.filter((o) => o.restaurantId !== targetId).concat(remoteOrds);
           this.saveDatabase();
           return remoteOrds;
@@ -2151,7 +2204,7 @@ export class DinelyApiClient {
     }
 
     this.loadDatabase();
-    return this.orders.filter((o) => o.restaurantId === targetId);
+    return this.orders.filter((o) => o.restaurantId === targetId).map(normalizeOrder);
   }
 
   async getCustomerOrders(restaurantId?: string, tableId?: string, tableSessionId?: string): Promise<Order[]> {
@@ -2171,33 +2224,7 @@ export class DinelyApiClient {
       if (res.ok) {
         const rawOrds = await res.json();
         if (Array.isArray(rawOrds)) {
-          const remoteOrds: Order[] = rawOrds.map((data: any) => ({
-            id: data.id,
-            displayOrderNumber: data.order_number || `#ORD-${data.id.slice(-4)}`,
-            restaurantId: data.restaurant_id || targetRestId,
-            tableId: data.table_id || tableId,
-            tableNumber: data.table_number,
-            tableSessionId: data.table_session_id || tableSessionId,
-            status: data.status || 'PENDING',
-            kitchenStatus: data.kitchen_status || 'PENDING',
-            barStatus: data.bar_status || 'PENDING',
-            estimatedPrepTimeMinutes: data.estimated_prep_time_minutes || 15,
-            etaTargetTimestamp: data.eta_target_timestamp || undefined,
-            customerName: data.customer_name || 'Guest',
-            notes: data.notes || '',
-            items: (data.items_json || []).map((i: any) => ({
-              id: i.id || `oi-${data.id}`,
-              menuItemId: i.menuItemId || i.menu_item_id || i.id,
-              name: i.name,
-              quantity: i.quantity,
-              price: typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0,
-              notes: i.notes || '',
-              targetDestination: i.targetDestination || 'KITCHEN',
-            })),
-            totalAmount: data.total_amount || 0,
-            paymentStatus: data.payment_status || 'UNPAID',
-            createdAt: data.created_at || new Date().toISOString(),
-          }));
+          const remoteOrds: Order[] = rawOrds.map((data: any) => normalizeOrder(data));
           return remoteOrds;
         }
       }
@@ -2206,11 +2233,13 @@ export class DinelyApiClient {
     }
 
     this.loadDatabase();
-    return this.orders.filter(
-      (o) =>
-        o.restaurantId === targetRestId &&
-        (tableSessionId ? o.tableSessionId === tableSessionId : tableId ? o.tableId === tableId || o.tableNumber === tableId : true)
-    );
+    return this.orders
+      .filter(
+        (o) =>
+          o.restaurantId === targetRestId &&
+          (tableSessionId ? o.tableSessionId === tableSessionId : tableId ? o.tableId === tableId || o.tableNumber === tableId : true)
+      )
+      .map(normalizeOrder);
   }
 
 
@@ -2859,11 +2888,32 @@ export class DinelyApiClient {
   }
 
   // --- Table Session Management ---
-  async getActiveTableSessions(restaurantId?: string) {
+  async getActiveTableSessions(restaurantId?: string): Promise<TableSession[]> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return [];
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/active-sessions`);
+      if (res.ok) {
+        const sessions = await res.json();
+        if (Array.isArray(sessions)) {
+          return sessions.map((s: any) => ({
+            id: s.id,
+            restaurantId: s.restaurant_id || targetId,
+            tableId: s.table_id,
+            tableNumber: s.table_number,
+            status: s.status || 'ACTIVE',
+            sessionStartedAt: s.session_started_at || new Date().toISOString(),
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for active table sessions failed:', e);
+    }
+
     this.loadDatabase();
-    await delay(50);
-    const restId = this.resolveTenantRestaurantId(restaurantId);
-    return this.tableSessions.filter((s) => s.restaurantId === restId && s.status === 'ACTIVE');
+    return this.tableSessions.filter((s) => s.restaurantId === targetId && s.status === 'ACTIVE');
   }
 
   async getOrCreateTableSession(restaurantId?: string, tableId?: string, tableNumber?: string): Promise<TableSession | null> {
@@ -2971,63 +3021,67 @@ export class DinelyApiClient {
     return activeSession;
   }
 
-  async closeTableSession(tableId: string, waiterName?: string) {
-    await delay(100);
-    const tbl = this.tables.find((t) => t.id === tableId || t.tableNumber.toLowerCase() === tableId.toLowerCase());
-    if (!tbl) return null;
+  async closeTableSession(arg1: string, arg2?: string, arg3?: string) {
+    let restId = this.resolveTenantRestaurantId();
+    let tableId = arg1;
+    let waiterName = arg2;
 
-    const restId = tbl.restaurantId;
+    if (arg1 && (arg1.startsWith('rest-') || arg1 === this.currentRestaurantId) && arg2) {
+      restId = arg1;
+      tableId = arg2;
+      waiterName = arg3;
+    }
+
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[API_CLOSE_TABLE_SESSION_SUCCESS]', data);
+      }
+    } catch (err) {
+      console.warn('[API_CLOSE_TABLE_SESSION_ERROR]', err);
+    }
+
+    this.loadDatabase();
+    const tbl = this.tables.find((t) => t.id === tableId || t.tableNumber.toLowerCase() === tableId.toLowerCase());
+    if (tbl) {
+      tbl.status = 'AVAILABLE';
+      tbl.isOccupied = false;
+      tbl.activeSessionId = undefined;
+      tbl.sessionStartedAt = undefined;
+    }
 
     const activeSession = this.tableSessions.find(
-      (s) => s.restaurantId === restId && s.tableId === tbl.id && s.status === 'ACTIVE'
+      (s) => s.restaurantId === restId && s.tableId === tableId && s.status === 'ACTIVE'
     );
-
     if (activeSession) {
       activeSession.status = 'CLOSED';
       activeSession.sessionClosedAt = new Date().toISOString();
       activeSession.closedByWaiterName = waiterName || 'Staff';
     }
 
-    // Complete all active orders for this closed table session
-    this.orders.forEach((o) => {
-      const matchesSession = activeSession && o.tableSessionId === activeSession.id;
-      const matchesTable = o.tableNumber && tbl.tableNumber && o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase();
-      if ((matchesSession || matchesTable) && o.status !== 'CANCELLED') {
-        o.status = 'COMPLETED';
-        o.paymentStatus = 'PAID';
-      }
-    });
-
-    tbl.status = 'AVAILABLE';
-    tbl.isOccupied = false;
-    tbl.activeSessionId = undefined;
-    tbl.sessionStartedAt = undefined;
-    tbl.reservationDetails = undefined;
-
     this.saveDatabase();
 
-    realtimeBus.emit('TableSessionClosed' as any, {
+    realtimeBus.emit('table_session_closed' as any, {
       sessionId: activeSession?.id,
       restaurantId: restId,
-      tableId: tbl.id,
-      tableNumber: tbl.tableNumber,
+      tableId: tableId,
+      tableNumber: tbl?.tableNumber,
     });
 
-    realtimeBus.emit('TableStatusUpdated' as any, {
-      tableId: tbl.id,
+    realtimeBus.emit('table_status_updated' as any, {
+      tableId: tableId,
       restaurantId: restId,
-      tableNumber: tbl.tableNumber,
+      tableNumber: tbl?.tableNumber,
       status: 'AVAILABLE',
       data: tbl,
     });
 
-    realtimeBus.emit('TableCleared' as any, {
-      tableId: tbl.id,
-      restaurantId: restId,
-      tableNumber: tbl.tableNumber,
-    });
-
-    return tbl;
+    return tbl || true;
   }
 
   // --- Core Billing System APIs ---
@@ -4507,7 +4561,7 @@ export class DinelyApiClient {
             barStatus: data.bar_status || 'PENDING',
             customerName: data.customer_name || 'Guest',
             notes: data.notes || '',
-            items: (data.items_json || payload.items).map((i: any) => ({
+            items: (data.items || data.items_json || payload.items || []).map((i: any) => ({
               id: i.id || `oi-${data.id}`,
               menuItemId: i.menuItemId || i.menu_item_id || i.id,
               name: i.name,
