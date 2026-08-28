@@ -1366,9 +1366,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         isOpen={isCallWaiterModalOpen}
         onClose={() => setIsCallWaiterModalOpen(false)}
         tableNumber={selectedTableNum}
-        tableId={currentTable?.id}
+        tableId={
+          currentTable?.id ||
+          (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tableId')) ||
+          (currentRestaurant?.id ? `tbl-${currentRestaurant.id}-${selectedTableNum.toLowerCase().replace(/\s+/g, '_')}` : undefined)
+        }
         tableSessionId={currentTableSession?.id}
-        restaurantId={currentRestaurant?.id}
+        restaurantId={
+          currentRestaurant?.id ||
+          (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('restaurant') || undefined : undefined) ||
+          'rest-1787446097984'
+        }
         onRequestSuccess={(title, note) => {
           addToast(
             'success',

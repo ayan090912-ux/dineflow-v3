@@ -130,7 +130,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
   // Authenticated user & restaurant resolution
   const currentUser = api.getCurrentUser();
-  const currentRestaurantId = api.getCurrentRestaurantId() || currentUser?.restaurantId || 'rest-1';
+  const urlRestParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('restaurant') || new URLSearchParams(window.location.search).get('restaurantId') : null;
+  const currentRestaurantId = urlRestParam || api.getCurrentRestaurantId() || currentUser?.restaurantId || 'rest-1787446097984';
   const waiterName = currentUser?.name || 'Ayaan';
 
   // Live Clock Tick
