@@ -27,18 +27,29 @@ class UpdateCustomerRequestSchema(BaseModel):
     waiterName: Optional[str] = None
 
 def format_request_dict(req: CustomerRequestModel) -> dict:
+    iso_time = req.created_at.isoformat() if getattr(req, "created_at", None) else datetime.utcnow().isoformat()
     return {
         "id": req.id,
         "restaurantId": req.restaurant_id,
+        "restaurant_id": req.restaurant_id,
         "tableId": req.table_id,
+        "table_id": req.table_id,
         "tableNumber": req.table_number,
+        "table_number": req.table_number,
         "requestType": req.request_type,
+        "request_type": req.request_type,
+        "customTitle": req.message if req.message else req.request_type.replace("_", " ").title(),
         "message": req.message,
+        "customerNotes": req.message,
         "status": req.status,
+        "priority": "HIGH" if req.request_type in ["BILL", "CALL_WAITER"] else "MEDIUM",
         "waiterName": req.waiter_name,
+        "assignedWaiterName": req.waiter_name,
         "tableSessionId": req.table_session_id,
-        "timestamp": req.created_at.isoformat() if getattr(req, "created_at", None) else datetime.utcnow().isoformat(),
-        "created_at": req.created_at.isoformat() if getattr(req, "created_at", None) else datetime.utcnow().isoformat(),
+        "table_session_id": req.table_session_id,
+        "requestedAt": iso_time,
+        "timestamp": iso_time,
+        "created_at": iso_time,
     }
 
 @router.post("", status_code=status.HTTP_201_CREATED)

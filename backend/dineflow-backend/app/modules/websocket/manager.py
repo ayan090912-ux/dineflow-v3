@@ -48,7 +48,7 @@ class ConnectionManager:
         stale_websockets = []
 
         async with self._lock:
-            target_conns = [c for c in self.active_connections if c["restaurant_id"] == restaurant_id]
+            target_conns = [c for c in self.active_connections if str(c.get("restaurant_id", "")).lower() == str(restaurant_id).lower()]
             if target_audience:
                 allowed_roles = [r.upper() for r in target_audience]
                 # OWNER always receives operational broadcasts

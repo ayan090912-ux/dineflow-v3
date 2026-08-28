@@ -1366,6 +1366,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         isOpen={isCallWaiterModalOpen}
         onClose={() => setIsCallWaiterModalOpen(false)}
         tableNumber={selectedTableNum}
+        tableId={currentTable?.id}
+        tableSessionId={currentTableSession?.id}
+        restaurantId={currentRestaurant?.id}
         onRequestSuccess={(title, note) => {
           addToast(
             'success',

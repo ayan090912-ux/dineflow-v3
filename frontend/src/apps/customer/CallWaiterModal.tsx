@@ -15,6 +15,8 @@ export interface CallWaiterModalProps {
   isOpen: boolean;
   onClose: () => void;
   tableNumber: string;
+  tableId?: string;
+  tableSessionId?: string;
   restaurantId?: string;
   onRequestSuccess?: (title: string, note?: string) => void;
 }
@@ -23,6 +25,8 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
   isOpen,
   onClose,
   tableNumber,
+  tableId,
+  tableSessionId,
   restaurantId,
   onRequestSuccess,
 }) => {
@@ -40,6 +44,8 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
     try {
       await api.createCustomerRequest({
         tableNumber,
+        tableId,
+        tableSessionId,
         restaurantId,
         requestType,
         customTitle,

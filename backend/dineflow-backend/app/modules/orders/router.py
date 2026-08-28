@@ -414,4 +414,13 @@ async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, d
 
     return resp_data
 
+@router.get("/{order_id}")
+async def get_order_by_id(order_id: str, db: AsyncSession = Depends(get_db)):
+    query = select(Order).where(Order.id == order_id)
+    result = await db.execute(query)
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    return format_order_response(order)
+
 

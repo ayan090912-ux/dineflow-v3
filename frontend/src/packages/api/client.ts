@@ -29,6 +29,10 @@ import {
   PaymentMethod,
   BusinessType,
   Tax,
+  OrderStatus,
+  RestaurantLifecycleStatus,
+  CustomerRequestType,
+  CustomerRequestStatus,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -133,6 +137,7 @@ export function normalizeOrder(raw: any): Order {
       totalAmount: 0,
       subtotal: 0,
       taxAmount: 0,
+      tipAmount: 0,
       paymentStatus: 'UNPAID',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -186,6 +191,7 @@ export function normalizeOrder(raw: any): Order {
     subtotal: typeof raw.subtotal === 'number' ? raw.subtotal : parseFloat(raw.subtotal) || 0,
     taxAmount: typeof raw.tax_amount === 'number' ? raw.tax_amount : parseFloat(raw.tax_amount || raw.taxAmount) || 0,
     totalAmount: typeof raw.total_amount === 'number' ? raw.total_amount : parseFloat(raw.total_amount || raw.totalAmount) || 0,
+    tipAmount: typeof raw.tip_amount === 'number' ? raw.tip_amount : parseFloat(raw.tip_amount || raw.tipAmount) || 0,
     taxBreakdown: raw.tax_breakdown || raw.tax_breakdown_json || raw.taxBreakdown || [],
     estimatedPrepTimeMinutes: raw.estimated_prep_time_minutes || raw.estimatedPrepTimeMinutes || undefined,
     etaTargetTimestamp: raw.eta_target_timestamp || raw.etaTargetTimestamp || undefined,
@@ -236,8 +242,8 @@ export const GLOBAL_MULTI_TENANT_RESTAURANTS: Restaurant[] = [
       accentColor: '#fbbf24',
       backgroundColor: '#0f172a',
       textColor: '#ffffff',
-      fontFamily: 'Inter',
-      borderRadius: 'xl',
+      fontFamily: 'sans',
+      borderRadius: 'lg',
       currency: 'INR (₹)',
     },
   },
@@ -1646,12 +1652,24 @@ export class DinelyApiClient {
             domain: r.domain || '',
             isApproved: r.is_approved !== false,
             status: r.status || 'OPEN',
+            lifecycleStatus: (r.lifecycle_status || 'APPROVED') as RestaurantLifecycleStatus,
+            rating: r.rating || 4.8,
+            activeOrdersCount: 0,
+            tablesCount: r.tables_count || 12,
             currency: r.currency || 'INR (₹)',
             taxPercentage: r.tax_percentage || 5.0,
             theme: r.theme_json || {
-              primaryColor: '#f43f5e',
-              accentColor: '#fbbf24',
+              restaurantId: r.id,
               restaurantName: r.name,
+              logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+              bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+              primaryColor: '#f43f5e',
+              secondaryColor: '#475569',
+              accentColor: '#fbbf24',
+              backgroundColor: '#0f172a',
+              textColor: '#ffffff',
+              fontFamily: 'sans',
+              borderRadius: 'lg',
               currency: r.currency || 'INR (₹)',
             },
           }));
@@ -2075,12 +2093,24 @@ export class DinelyApiClient {
             domain: data.domain || '',
             isApproved: data.is_approved !== false,
             status: data.status || 'OPEN',
+            lifecycleStatus: (data.lifecycle_status || 'APPROVED') as RestaurantLifecycleStatus,
+            rating: data.rating || 4.8,
+            activeOrdersCount: 0,
+            tablesCount: data.tables_count || 12,
             currency: data.currency || 'INR (₹)',
             taxPercentage: data.tax_percentage || 5.0,
             theme: data.theme_json || {
-              primaryColor: '#f43f5e',
-              accentColor: '#fbbf24',
+              restaurantId: data.id,
               restaurantName: data.name,
+              logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+              bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+              primaryColor: '#f43f5e',
+              secondaryColor: '#475569',
+              accentColor: '#fbbf24',
+              backgroundColor: '#0f172a',
+              textColor: '#ffffff',
+              fontFamily: 'sans',
+              borderRadius: 'lg',
               currency: data.currency || 'INR (₹)',
             },
           };
@@ -2104,8 +2134,11 @@ export class DinelyApiClient {
 
       rest = {
         id: targetId,
+        orgId: 'org-dinely',
         slug: targetId.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
         name: displayName,
+        cuisine: 'Multi-Cuisine',
+        status: 'OPEN',
         ownerEmail: 'owner@dinely.food',
         email: 'contact@dinely.food',
         phone: '+1 (555) 234-5678',
@@ -2116,6 +2149,9 @@ export class DinelyApiClient {
         country: 'United States',
         currency: 'INR (₹)',
         taxPercentage: 5.0,
+        rating: 4.8,
+        activeOrdersCount: 0,
+        tablesCount: 12,
         isApproved: true,
         isAutoApproved: true,
         lifecycleStatus: 'APPROVED',
@@ -2126,10 +2162,14 @@ export class DinelyApiClient {
         hasBar: true,
         createdAt: new Date().toISOString(),
         theme: {
+          restaurantId: targetId,
           primaryColor: '#f43f5e',
+          secondaryColor: '#475569',
           accentColor: '#fbbf24',
-          mode: 'dark',
-          fontFamily: 'Inter',
+          backgroundColor: '#0f172a',
+          textColor: '#ffffff',
+          fontFamily: 'sans',
+          borderRadius: 'lg',
           restaurantName: displayName,
           bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
           logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
@@ -2150,7 +2190,7 @@ export class DinelyApiClient {
       const user = this.getCurrentUser(scope);
       if (user && user.role === 'RESTAURANT_OWNER') {
         const isOwner = rest.ownerEmail?.toLowerCase() === user.email?.toLowerCase() || rest.email?.toLowerCase() === user.email?.toLowerCase();
-        if (!isOwner && user.role !== 'SUPER_ADMIN' && user.role !== 'PLATFORM_ADMIN') {
+        if (!isOwner && (user.role as string) !== 'SUPER_ADMIN' && (user.role as string) !== 'PLATFORM_ADMIN') {
           return null;
         }
       }
@@ -2440,7 +2480,8 @@ export class DinelyApiClient {
             id: c.id,
             restaurantId: c.restaurant_id || targetId,
             name: c.name,
-            sortOrder: c.sort_order || 1,
+            order: c.sort_order || c.order || 1,
+            sortOrder: c.sort_order || c.order || 1,
             isEnabled: c.is_enabled !== false,
           }));
         }
@@ -2474,7 +2515,8 @@ export class DinelyApiClient {
       id: c.id,
       restaurantId: c.restaurant_id || restId,
       name: c.name,
-      sortOrder: c.sort_order || 1,
+      order: c.sort_order || c.order || 1,
+      sortOrder: c.sort_order || c.order || 1,
       isEnabled: c.is_enabled !== false,
     };
   }
@@ -3139,6 +3181,16 @@ export class DinelyApiClient {
         s.status = 'CLOSED';
         s.sessionClosedAt = new Date().toISOString();
         s.closedByWaiterName = waiterName || 'Staff';
+      }
+    });
+
+    this.orders.forEach((o) => {
+      const isRestMatch = !o.restaurantId || o.restaurantId === restId;
+      const isTableMatch = o.tableId === tableId || (tableSessionId && o.tableSessionId === tableSessionId) || targetTbls.some((t) => matchTableNumber(o.tableNumber, t.tableNumber));
+      if (isRestMatch && isTableMatch && o.status !== 'CANCELLED') {
+        o.status = 'COMPLETED';
+        o.kitchenStatus = 'COMPLETED';
+        o.barStatus = 'COMPLETED';
       }
     });
 
@@ -4527,7 +4579,7 @@ export class DinelyApiClient {
     priority?: string;
     tableSessionId?: string;
   }): Promise<CustomerRequest> {
-    const restId = this.resolveTenantRestaurantId(data.restaurantId) || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(data.restaurantId) || data.restaurantId || this.getCurrentRestaurantId() || 'rest-1787446097984';
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/customer-requests`, {
       method: 'POST',
@@ -4548,21 +4600,61 @@ export class DinelyApiClient {
       const errText = await res.text();
       throw new Error(`Failed to create customer request: ${errText}`);
     }
-    return await res.json();
+    const raw = await res.json();
+    return {
+      id: raw.id,
+      restaurantId: raw.restaurantId || raw.restaurant_id || restId,
+      tableId: raw.tableId || raw.table_id,
+      tableNumber: raw.tableNumber || raw.table_number || data.tableNumber,
+      requestType: (raw.requestType || raw.request_type || data.requestType || 'WATER').toUpperCase() as CustomerRequestType,
+      customTitle: raw.customTitle || raw.custom_title || raw.message,
+      message: raw.message || raw.customerNotes || data.customerNotes,
+      customerNotes: raw.customerNotes || raw.customer_notes || data.customerNotes,
+      priority: (raw.priority || data.priority || 'MEDIUM') as any,
+      status: (raw.status || 'PENDING').toUpperCase() as CustomerRequestStatus,
+      requestedAt: raw.requestedAt || raw.requested_at || raw.created_at || raw.timestamp || new Date().toISOString(),
+      acceptedAt: raw.acceptedAt || raw.accepted_at,
+      completedAt: raw.completedAt || raw.completed_at,
+      assignedWaiterName: raw.waiterName || raw.waiter_name || raw.assignedWaiterName,
+      tableSessionId: raw.tableSessionId || raw.table_session_id || data.tableSessionId,
+    };
   }
 
   async getCustomerRequests(restaurantId?: string, statusFilter?: string): Promise<CustomerRequest[]> {
-    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(restaurantId) || restaurantId || this.getCurrentRestaurantId() || 'rest-1787446097984';
     const apiBase = getApiBaseUrl();
     let url = `${apiBase}/customer-requests?restaurant_id=${encodeURIComponent(restId)}`;
     if (statusFilter) {
       url += `&status_filter=${encodeURIComponent(statusFilter)}`;
     }
-    const res = await fetch(url);
-    if (!res.ok) {
-      return [];
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const items = await res.json();
+        if (Array.isArray(items)) {
+          return items.map((raw: any) => ({
+            id: raw.id,
+            restaurantId: raw.restaurantId || raw.restaurant_id || restId,
+            tableId: raw.tableId || raw.table_id,
+            tableNumber: raw.tableNumber || raw.table_number || 'Table 01',
+            requestType: (raw.requestType || raw.request_type || 'WATER').toUpperCase() as CustomerRequestType,
+            customTitle: raw.customTitle || raw.custom_title || raw.message,
+            message: raw.message || raw.customerNotes || raw.customer_notes,
+            customerNotes: raw.customerNotes || raw.customer_notes || raw.message,
+            priority: (raw.priority || 'MEDIUM') as any,
+            status: (raw.status || 'PENDING').toUpperCase() as CustomerRequestStatus,
+            requestedAt: raw.requestedAt || raw.requested_at || raw.created_at || raw.timestamp || new Date().toISOString(),
+            acceptedAt: raw.acceptedAt || raw.accepted_at,
+            completedAt: raw.completedAt || raw.completed_at,
+            assignedWaiterName: raw.waiterName || raw.waiter_name || raw.assignedWaiterName,
+            tableSessionId: raw.tableSessionId || raw.table_session_id,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch customer requests:', e);
     }
-    return await res.json();
+    return [];
   }
 
   async updateCustomerRequest(requestId: string, statusVal: string, waiterName?: string): Promise<CustomerRequest> {
@@ -4579,7 +4671,24 @@ export class DinelyApiClient {
       const errText = await res.text();
       throw new Error(`Failed to update customer request: ${errText}`);
     }
-    return await res.json();
+    const raw = await res.json();
+    return {
+      id: raw.id,
+      restaurantId: raw.restaurantId || raw.restaurant_id || '',
+      tableId: raw.tableId || raw.table_id,
+      tableNumber: raw.tableNumber || raw.table_number || 'Table 01',
+      requestType: (raw.requestType || raw.request_type || 'WATER').toUpperCase() as CustomerRequestType,
+      customTitle: raw.customTitle || raw.custom_title || raw.message,
+      message: raw.message || raw.customerNotes,
+      customerNotes: raw.customerNotes || raw.customer_notes,
+      priority: (raw.priority || 'MEDIUM') as any,
+      status: (raw.status || statusVal).toUpperCase() as CustomerRequestStatus,
+      requestedAt: raw.requestedAt || raw.requested_at || raw.created_at || raw.timestamp || new Date().toISOString(),
+      acceptedAt: raw.acceptedAt || raw.accepted_at,
+      completedAt: raw.completedAt || raw.completed_at,
+      assignedWaiterName: raw.waiterName || raw.waiter_name || waiterName,
+      tableSessionId: raw.tableSessionId || raw.table_session_id,
+    };
   }
 
 
@@ -4641,6 +4750,7 @@ export class DinelyApiClient {
             totalAmount: data.total_amount || orderData.totalAmount || 0,
             taxAmount: data.tax_amount || 0,
             subtotal: data.subtotal || 0,
+            tipAmount: data.tip_amount || orderData.tipAmount || 0,
             taxBreakdown: data.tax_breakdown || [],
             estimatedPrepTimeMinutes: data.estimated_prep_time_minutes || 15,
             etaTargetTimestamp: data.eta_target_timestamp || undefined,

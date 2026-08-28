@@ -224,22 +224,28 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
         playNotificationChime();
       }
 
+      const tblNum = (event as any).tableNumber || (event as any).table_number || (event as any).payload?.tableNumber || (event as any).payload?.table_number || 'Table';
+      const reqTitle = (event as any).customTitle || (event as any).requestType || (event as any).payload?.customTitle || (event as any).payload?.requestType || 'Assistance';
+
       if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
         showToast(
           'Customer Service Call 🛎️',
-          `${event.tableNumber || 'Table'} requested assistance`,
+          `${tblNum} requested ${String(reqTitle).toLowerCase()}`,
           'warning'
         );
+      } else if (event.type === 'service_request_updated') {
+        // Silently reload data to keep state in sync across staff screens
+        loadData();
       } else if (event.type === 'order_ready' || event.type === 'OrderReady') {
         showToast(
           'Order Plated & Ready 🔥',
-          `Order for ${event.tableNumber || 'Table'} is ready for pickup`,
+          `Order for ${tblNum} is ready for pickup`,
           'success'
         );
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
-        showToast('Table Session Closed 🧹', `Table ${event.tableNumber || ''} session ended`, 'info');
+        showToast('Table Session Closed 🧹', `Table ${tblNum} session ended`, 'info');
       } else if (event.type === 'BillRequested') {
-        showToast('Bill Check Request 🧾', `${event.tableNumber || 'Table'} requested final bill`, 'info');
+        showToast('Bill Check Request 🧾', `${tblNum} requested final bill`, 'info');
       }
     });
 
@@ -670,43 +676,74 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {activeTablesList.slice(0, 6).map((table) => {
-                      const tableOrders = orders.filter(
-                        (o) => matchTableNumber(o.tableNumber, table.tableNumber) && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+                      const activeSession = activeSessions.find(
+                        (s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
                       );
+                      const tableOrders = activeSession
+                        ? orders.filter(
+                            (o) => o.tableSessionId === activeSession.id && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+                          )
+                        : [];
                       const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
+                      const sessionTotal = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
                       const latestOrder = tableOrders[0];
 
                       return (
                         <div
                           key={table.id}
-                          className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all space-y-3 shadow-lg"
+                          className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all space-y-3 shadow-lg flex flex-col justify-between"
                         >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="text-lg font-black text-white font-mono tracking-tight">{table.tableNumber}</h3>
-                              <div className="mt-1">{getTableStatusBadge(table.status)}</div>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h3 className="text-lg font-black text-white font-mono tracking-tight">{table.tableNumber}</h3>
+                                <div className="mt-1">{getTableStatusBadge(table.status)}</div>
+                              </div>
+                              <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-lg">
+                                ⏱️ {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
+                              </span>
                             </div>
-                            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-lg">
-                              ⏱️ {getOccupiedDuration(table.sessionStartedAt, latestOrder?.createdAt)}
-                            </span>
+
+                            <div className="space-y-1.5 text-xs text-slate-300 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                              <p className="font-semibold text-white">
+                                {tableOrders.length > 1
+                                  ? `${tableOrders.length} Active Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
+                                  : latestOrder
+                                  ? `Order #${latestOrder.id}`
+                                  : 'No active order'}
+                              </p>
+                              <p className="text-slate-400 flex items-center justify-between">
+                                <span>Item count:</span>
+                                <span className="font-bold text-slate-200">{itemCount} items</span>
+                              </p>
+                              <p className="text-slate-400 flex items-center justify-between">
+                                <span>Total Bill:</span>
+                                <span className="font-bold text-emerald-400">₹{sessionTotal.toFixed(2)}</span>
+                              </p>
+                              <p className="text-slate-400 flex items-center justify-between">
+                                <span>Assigned waiter:</span>
+                                <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
+                              </p>
+                            </div>
                           </div>
 
-                          <div className="space-y-1 text-xs text-slate-300 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-                            <p className="font-semibold text-white">
-                              {tableOrders.length > 1
-                                ? `${tableOrders.length} Active Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
-                                : latestOrder
-                                ? `Order #${latestOrder.id}`
-                                : 'No active order'}
-                            </p>
-                            <p className="text-slate-400 flex items-center justify-between">
-                              <span>Item count:</span>
-                              <span className="font-bold text-slate-200">{itemCount} items</span>
-                            </p>
-                            <p className="text-slate-400 flex items-center justify-between">
-                              <span>Assigned waiter:</span>
-                              <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
-                            </p>
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full text-[11px] font-bold py-2 bg-slate-900 border-slate-800 hover:bg-slate-800 text-sky-300"
+                              onClick={() => setSelectedTableForView(table)}
+                            >
+                              <span>VIEW DETAILS</span>
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              className="w-full text-[11px] font-bold py-2 bg-rose-600 hover:bg-rose-500 text-white shadow-lg"
+                              onClick={() => setSelectedTableForClose(table)}
+                            >
+                              <span>CLOSE TABLE 🧹</span>
+                            </Button>
                           </div>
                         </div>
                       );

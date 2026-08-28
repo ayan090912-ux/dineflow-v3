@@ -111,6 +111,7 @@ export interface Restaurant {
   state?: string;
   country?: string;
   postalCode?: string;
+  zipCode?: string;
   latitude?: number;
   longitude?: number;
   placeId?: string;
@@ -130,6 +131,7 @@ export interface Restaurant {
   vipTablesCount?: number;
   privateRoomsCount?: number;
   isApproved: boolean;
+  isAutoApproved?: boolean;
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
@@ -140,7 +142,7 @@ export interface Restaurant {
   requestedChanges?: string;
   rating: number;
   activeOrdersCount: number;
-  tablesCount: number;
+  tablesCount?: number;
   theme: ThemeConfig;
   features?: RestaurantFeatures;
   domain?: string;
@@ -149,6 +151,7 @@ export interface Restaurant {
   ownerPhone?: string;
   submittedAt?: string;
   approvedAt?: string;
+  createdAt?: string;
 }
 
 export interface PlatformNotification {
@@ -185,13 +188,16 @@ export interface MenuItem {
   name: string;
   description: string;
   price: number;
-  image: string;
+  image?: string;
+  imageUrl?: string;
   isAvailable: boolean;
+  isVeg?: boolean;
   isVegetarian?: boolean;
   dietaryType?: 'VEG' | 'NON_VEG';
   isSpicy?: boolean;
   calories?: number;
   prepTimeMinutes?: number;
+  preparationTimeMinutes?: number;
   targetDestination?: 'KITCHEN' | 'BAR';
   isAlcoholic?: boolean;
   alcoholPercentage?: number;
@@ -215,7 +221,8 @@ export interface MenuCategory {
   restaurantId: string;
   name: string;
   icon?: string;
-  order: number;
+  order?: number;
+  sortOrder?: number;
   isEnabled?: boolean;
 }
 
@@ -443,7 +450,9 @@ export type CustomerRequestStatus =
 export interface CustomerRequest {
   id: string;
   restaurantId: string;
+  tableId?: string;
   tableNumber: string;
+  tableSessionId?: string;
   requestType: CustomerRequestType;
   customTitle?: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
@@ -453,6 +462,7 @@ export interface CustomerRequest {
   completedAt?: string;
   assignedWaiterId?: string;
   assignedWaiterName?: string;
+  message?: string;
   customerNotes?: string;
   rejectionReason?: string;
 }
@@ -515,6 +525,7 @@ export interface Order {
   totalAmount: number;
   subtotal?: number;
   taxAmount: number;
+  taxBreakdown?: TaxSnapshot[];
   tipAmount: number;
   status: OrderStatus;
   targetDestination?: 'KITCHEN' | 'BAR' | 'MIXED';

@@ -297,6 +297,28 @@ async def close_table_session(
     except Exception as req_err:
         print("[SERVICE_REQUEST_CLEANUP_NOTICE]:", req_err)
 
+    # Clean up / finalize orders associated with the closed session(s)
+    try:
+        from app.modules.orders.models import Order
+        query_ords = select(Order).where(
+            (Order.restaurant_id.in_(search_rest_ids)) &
+            (
+                (Order.table_session_id.in_(closed_session_ids)) |
+                (
+                    ((Order.table_id == tbl.id) | (Order.table_number == tbl.table_number)) &
+                    (Order.status.in_(["PENDING", "CONFIRMED", "PREPARING", "READY"]))
+                )
+            )
+        )
+        res_ords = await db.execute(query_ords)
+        active_ords = res_ords.scalars().all()
+        for ord in active_ords:
+            ord.status = "COMPLETED"
+            ord.kitchen_status = "COMPLETED"
+            ord.bar_status = "COMPLETED"
+    except Exception as ord_err:
+        print("[ORDER_CLEANUP_NOTICE]:", ord_err)
+
     await db.commit()
 
     evt_id = f"evt-{int(datetime.utcnow().timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
