@@ -188,19 +188,31 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       // Filter events strictly by restaurantId for multi-tenant isolation
-      if (event.restaurantId && event.restaurantId !== currentRestaurantId) {
-        return;
+      const evtRestId = (event as any).restaurantId || (event as any).restaurant_id;
+      if (evtRestId) {
+        const resolvedCurrentRestId = api.getCurrentRestaurantId();
+        const normEvt = String(evtRestId).toLowerCase();
+        const normCurr = String(currentRestaurantId).toLowerCase();
+        const normResolved = String(resolvedCurrentRestId).toLowerCase();
+        const isMatchingTenant =
+          normEvt === normCurr ||
+          normEvt === normResolved ||
+          normEvt.includes(normCurr) ||
+          normCurr.includes(normEvt);
+        if (!isMatchingTenant) {
+          return;
+        }
       }
 
-      loadData();
-
-      const evtId = event.eventId;
+      const evtId = (event as any).eventId || (event as any).event_id;
       if (evtId && handledEventIds.has(evtId)) {
         return;
       }
       if (evtId) {
         handledEventIds.add(evtId);
       }
+
+      loadData();
 
       const isChimeEvent =
         event.type === 'service_request_created' ||
@@ -272,19 +284,19 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
   // Computed data collections
   const activeTablesList = useMemo(() => {
-    const activeOrderTableNums = orders
-      .filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')
-      .map((o) => o.tableNumber);
+    const activeSessionTableIds = new Set(
+      activeSessions
+        .filter((s) => s.status === 'ACTIVE')
+        .flatMap((s) => [s.tableId, s.tableNumber?.toLowerCase()].filter(Boolean))
+    );
 
     return tables.filter((t) => {
-      const isSessionActive = activeSessions.some(
-        (s) => s.status === 'ACTIVE' && (s.tableId === t.id || matchTableNumber(s.tableNumber, t.tableNumber))
-      );
-      const isStatusOccupied = t.status === 'OCCUPIED' || t.status === 'MERGED' || Boolean(t.isOccupied);
-      const hasActiveOrder = activeOrderTableNums.some((num) => matchTableNumber(num, t.tableNumber));
+      const isSessionActive =
+        activeSessionTableIds.has(t.id) ||
+        (t.tableNumber && activeSessionTableIds.has(t.tableNumber.toLowerCase())) ||
+        activeSessions.some((s) => s.status === 'ACTIVE' && matchTableNumber(s.tableNumber, t.tableNumber));
 
-      const isActive = isSessionActive || isStatusOccupied || hasActiveOrder;
-      if (!isActive) return false;
+      if (!isSessionActive) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -295,7 +307,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       }
       return true;
     });
-  }, [tables, activeSessions, orders, searchQuery]);
+  }, [tables, activeSessions, searchQuery]);
 
   const pendingCallsList = useMemo(() => {
     return requests.filter((r) => {
@@ -835,14 +847,14 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
           {/* TAB 2: ACTIVE TABLES */}
           {activeTab === 'active-tables' && (
-            <div className="space-y-4">
+            <div className="space-y-4 font-sans">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-white tracking-tight">Active Floor Tables</h2>
-                  <p className="text-xs text-slate-400">Real-time table status and active customer orders</p>
+                  <h2 className="text-xl font-black text-white tracking-tight">Active Tables Floor View</h2>
+                  <p className="text-xs text-slate-400">Tables currently occupied with live customer sessions</p>
                 </div>
-                <Badge variant="outline" className="border-sky-500/40 text-sky-300 font-mono">
-                  {activeTablesList.length} Active
+                <Badge variant="outline" className="border-sky-500/40 text-sky-300 font-mono text-xs px-3 py-1">
+                  {activeTablesList.length} Active Tables
                 </Badge>
               </div>
 
@@ -851,105 +863,114 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                   <Utensils className="w-12 h-12 text-slate-600 mx-auto" />
                   <h3 className="text-base font-bold text-white">No active tables right now.</h3>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    All tables are currently clear. When customers scan table QR codes or open table sessions, active tables will be listed here in real-time.
+                    All tables are clear and available. When guests scan table QR codes or open sessions, occupied tables will automatically appear here in real-time.
                   </p>
                 </Card>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {activeTablesList.map((table) => {
-                    const activeSession = activeSessions.find((s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber)));
-                    const tableOrders = orders.filter(
-                      (o) => matchTableNumber(o.tableNumber, table.tableNumber) && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+                    const activeSession = activeSessions.find(
+                      (s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
                     );
+                    const tableOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id) : [];
                     const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
+                    const sessionTotal = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
                     const latestOrder = tableOrders[0];
 
                     return (
                       <Card
                         key={table.id}
-                        className="bg-slate-900/90 border-slate-800/90 p-5 space-y-4 rounded-3xl shadow-xl hover:border-slate-700 transition-all"
+                        className="bg-slate-900/90 border-rose-500/30 p-5 space-y-4 rounded-3xl shadow-xl hover:border-rose-500/60 transition-all flex flex-col justify-between"
                       >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <span className="text-2xl font-black text-white font-mono tracking-tight">
-                              {table.tableNumber}
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-2xl font-black text-white font-mono tracking-tight">
+                                  {table.tableNumber}
+                                </span>
+                                <Badge variant="danger" className="text-[10px] font-mono font-bold">
+                                  OCCUPIED
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                {activeSession ? `Session #${activeSession.id}` : 'Active Session'}
+                              </p>
+                            </div>
+                            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-xl">
+                              ⏱️ {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
                             </span>
-                            <div className="mt-1">{getTableStatusBadge(table.status)}</div>
                           </div>
-                          <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-3 py-1 rounded-xl">
-                            ⏱️ {getOccupiedDuration(table.sessionStartedAt, latestOrder?.createdAt)}
-                          </span>
+
+                          <div className="space-y-2 bg-slate-950/90 p-4 rounded-2xl border border-slate-800 text-xs font-mono">
+                            <div className="flex justify-between items-center pb-1.5 border-b border-slate-800/80">
+                              <span className="text-slate-400">Total Active Orders:</span>
+                              <span className="font-bold text-white">{tableOrders.length} Orders</span>
+                            </div>
+
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-slate-400">Total Items:</span>
+                              <span className="font-bold text-slate-200">{itemCount} items</span>
+                            </div>
+
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-slate-400">Current Session Bill:</span>
+                              <span className="font-black text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</span>
+                            </div>
+
+                            {latestOrder && (
+                              <div className="flex flex-col gap-1.5 py-2 border-t border-b border-slate-800/80 text-[11px]">
+                                {latestOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN') && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-400">Kitchen:</span>
+                                    <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                                      latestOrder.kitchenStatus === 'READY' || (!latestOrder.kitchenStatus && latestOrder.status === 'READY')
+                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    }`}>
+                                      {latestOrder.kitchenStatus === 'READY' ? '✓ READY' : latestOrder.kitchenStatus || 'PREPARING'}
+                                    </span>
+                                  </div>
+                                )}
+                                {latestOrder.items.some((i) => getFulfillmentStation(i) === 'BAR') && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-400">Bar:</span>
+                                    <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                                      latestOrder.barStatus === 'READY' || (!latestOrder.barStatus && latestOrder.status === 'READY')
+                                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    }`}>
+                                      {latestOrder.barStatus === 'READY' ? '✓ READY' : latestOrder.barStatus || 'PREPARING'}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex justify-between items-center pt-1 border-t border-slate-800/80 text-[11px]">
+                              <span className="text-slate-400">Assigned Waiter:</span>
+                              <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="space-y-2 bg-slate-950/80 p-4 rounded-2xl border border-slate-800 text-xs">
-                          <div className="flex justify-between items-center pb-1.5 border-b border-slate-800/80">
-                            <span className="text-slate-400 font-medium">Active Orders</span>
-                            <span className="font-bold text-white font-mono">
-                              {tableOrders.length > 1
-                                ? `${tableOrders.length} Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
-                                : latestOrder
-                                ? `Order #${latestOrder.id}`
-                                : 'No active order'}
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between items-center py-1">
-                            <span className="text-slate-400 font-medium">Item Count</span>
-                            <span className="font-bold text-slate-200 font-mono">{itemCount} items</span>
-                          </div>
-
-                          {latestOrder && (
-                            <div className="flex flex-col gap-1.5 py-2 border-t border-b border-slate-800/80">
-                              {latestOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN') && (
-                                <div className="flex justify-between items-center text-[11px]">
-                                  <span className="text-slate-400">Kitchen Status:</span>
-                                  <span className={`font-bold font-mono px-2 py-0.5 rounded-full text-[10px] ${
-                                    latestOrder.kitchenStatus === 'READY' || (!latestOrder.kitchenStatus && latestOrder.status === 'READY')
-                                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                  }`}>
-                                    {latestOrder.kitchenStatus === 'READY' ? '✓ READY' : latestOrder.kitchenStatus || 'PREPARING'}
-                                  </span>
-                                </div>
-                              )}
-                              {latestOrder.items.some((i) => getFulfillmentStation(i) === 'BAR') && (
-                                <div className="flex justify-between items-center text-[11px]">
-                                  <span className="text-slate-400">Bar Status:</span>
-                                  <span className={`font-bold font-mono px-2 py-0.5 rounded-full text-[10px] ${
-                                    latestOrder.barStatus === 'READY' || (!latestOrder.barStatus && latestOrder.status === 'READY')
-                                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                  }`}>
-                                    {latestOrder.barStatus === 'READY' ? '✓ READY' : latestOrder.barStatus || 'PREPARING'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
-                            <span className="text-slate-400 font-medium">Assigned Waiter</span>
-                            <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full text-xs font-bold py-2 bg-slate-900 border-slate-800 hover:bg-slate-800 text-sky-300"
-                              onClick={() => setSelectedTableForView(table)}
-                            >
-                              <span>VIEW TABLE</span>
-                            </Button>
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              className="w-full text-xs font-bold py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-200"
-                              onClick={() => setSelectedTableForClose(table)}
-                            >
-                              <span>CLOSE TABLE</span>
-                            </Button>
-                          </div>
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-xs font-bold py-2.5 bg-slate-900 border-slate-800 hover:bg-slate-800 text-sky-300"
+                            onClick={() => setSelectedTableForView(table)}
+                          >
+                            <span>VIEW DETAILS</span>
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            className="w-full text-xs font-bold py-2.5 bg-rose-600 hover:bg-rose-500 text-white shadow-lg"
+                            onClick={() => setSelectedTableForClose(table)}
+                          >
+                            <span>CLOSE TABLE 🧹</span>
+                          </Button>
                         </div>
                       </Card>
                     );
@@ -1139,9 +1160,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             const activeSession = activeSessions.find(
               (s) => s.tableId === selectedTableForView.id && s.status === 'ACTIVE'
             );
-            const sessionOrders = orders.filter(
-              (o) => activeSession ? o.tableSessionId === activeSession.id : o.tableNumber.toLowerCase() === selectedTableForView.tableNumber.toLowerCase()
-            );
+            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id) : [];
             const sessionTotal = sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
             const tableRequests = requests.filter(
               (r) => r.tableNumber.toLowerCase() === selectedTableForView.tableNumber.toLowerCase() && r.status !== 'COMPLETED'
@@ -1250,9 +1269,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             const activeSession = activeSessions.find(
               (s) => s.tableId === selectedTableForClose.id && s.status === 'ACTIVE'
             );
-            const sessionOrders = orders.filter(
-              (o) => activeSession ? o.tableSessionId === activeSession.id : o.tableNumber.toLowerCase() === selectedTableForClose.tableNumber.toLowerCase()
-            );
+            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id) : [];
             const sessionTotal = sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
             const allPaid = sessionOrders.every((o) => o.paymentStatus === 'PAID' || o.status === 'COMPLETED');
 
@@ -1303,12 +1320,38 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                     onClick={async () => {
                       setIsClosingTableLoading(true);
                       try {
-                        await api.closeTableSession(currentRestaurantId, selectedTableForClose.id);
-                        showToast('Table Session Closed 🧹', `${selectedTableForClose.tableNumber} is now available for new guests`, 'success');
+                        const targetTbl = selectedTableForClose;
+                        const activeSess = activeSessions.find(
+                          (s) => s.status === 'ACTIVE' && (s.tableId === targetTbl.id || matchTableNumber(s.tableNumber, targetTbl.tableNumber))
+                        );
+                        await api.closeTableSession({
+                          restaurantId: currentRestaurantId,
+                          tableId: targetTbl.id,
+                          waiterName: waiterName,
+                          tableSessionId: activeSess?.id,
+                        });
+                        showToast('Table Session Closed 🧹', `${targetTbl.tableNumber} is now available for new guests`, 'success');
                         setSelectedTableForClose(null);
+
+                        // Optimistically clear closed session from React state
+                        setActiveSessions((prev) =>
+                          prev.filter(
+                            (s) =>
+                              s.id !== activeSess?.id &&
+                              s.tableId !== targetTbl.id &&
+                              !matchTableNumber(s.tableNumber, targetTbl.tableNumber)
+                          )
+                        );
+                        setTables((prev) =>
+                          prev.map((t) =>
+                            t.id === targetTbl.id || matchTableNumber(t.tableNumber, targetTbl.tableNumber)
+                              ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined }
+                              : t
+                          )
+                        );
+
                         await loadData();
                       } catch (err: any) {
-
                         showToast('Error', err.message || 'Failed to close table session', 'warning');
                       } finally {
                         setIsClosingTableLoading(false);

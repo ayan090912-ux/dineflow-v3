@@ -427,10 +427,10 @@ export default function App() {
                 user={currentUser}
                 onSelectRestaurant={async (rest) => {
                   await api.switchActiveRestaurant(rest.id);
-                  const updated = await api.getRestaurantDetails(rest.id);
+                  const updated = (await api.getRestaurantDetails(rest.id)) || rest;
                   setCurrentRestaurant(updated);
-                  const isApproved = updated?.isApproved || updated?.lifecycleStatus === 'APPROVED' || updated?.lifecycleStatus === 'LIVE' || updated?.lifecycleStatus === 'ACTIVE';
-                  if (isApproved) {
+                  const isAppr = rest.isApproved !== false || updated?.isApproved !== false || updated?.lifecycleStatus === 'APPROVED' || updated?.lifecycleStatus === 'LIVE' || updated?.lifecycleStatus === 'ACTIVE';
+                  if (isAppr) {
                     navigateTo('/restaurant/dashboard');
                   } else {
                     navigateTo('/restaurant/pending-approval');

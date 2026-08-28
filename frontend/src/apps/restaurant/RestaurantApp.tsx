@@ -1855,9 +1855,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 const activeSess = activeSessions.find(
                   (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
                 );
-                const tableOrders = activeSess
-                  ? orders.filter((o) => o.tableSessionId === activeSess.id)
-                  : orders.filter((o) => o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase() && o.status !== 'COMPLETED' && o.status !== 'CANCELLED');
+                const isTableOccupied = Boolean(activeSess);
+                const tableOrders = activeSess ? orders.filter((o) => o.tableSessionId === activeSess.id) : [];
                 const sessionTotal = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
                 return (
@@ -1868,7 +1867,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                         ? 'border-amber-500/60 shadow-lg shadow-amber-950/20'
                         : isMerged
                         ? 'border-sky-500/60 shadow-lg shadow-sky-950/20'
-                        : (tbl.status === 'OCCUPIED' || activeSess)
+                        : isTableOccupied
                         ? 'border-rose-500/40 shadow-lg shadow-rose-950/20'
                         : 'border-slate-800'
                     }`}
@@ -1892,7 +1891,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
                         <Badge
                           variant={
-                            activeSess || tbl.status === 'OCCUPIED'
+                            isTableOccupied
                               ? 'danger'
                               : isReserved
                               ? 'warning'
@@ -1901,13 +1900,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                               : 'success'
                           }
                         >
-                          {activeSess || tbl.status === 'OCCUPIED' ? 'OCCUPIED' : tbl.status}
+                          {isTableOccupied ? 'OCCUPIED' : tbl.status === 'OCCUPIED' ? 'AVAILABLE' : tbl.status}
                         </Badge>
                       </div>
 
                       {/* Active Table Session Banner */}
                       {activeSess && (
-                        <div className="mt-3 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs space-y-1.5 font-mono">
+                        <div className="mt-3 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs space-y-2 font-mono">
                           <div className="flex justify-between items-center">
                             <span className="font-bold text-amber-300 flex items-center gap-1.5">
                               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -1920,6 +1919,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                           <div className="flex justify-between text-slate-300 text-[11px]">
                             <span>Orders: <strong className="text-white">{tableOrders.length}</strong></span>
                             <span>Total Bill: <strong className="text-emerald-400">₹{sessionTotal.toFixed(2)}</strong></span>
+                          </div>
+                          <div className="pt-1 flex justify-end">
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await api.closeTableSession({
+                                    restaurantId: currentRestaurant?.id,
+                                    tableId: tbl.id,
+                                    waiterName: currentUser?.name || 'Owner',
+                                    tableSessionId: activeSess.id,
+                                  });
+                                  addToast('success', 'Table Session Closed 🧹', `${tbl.tableNumber} is now AVAILABLE.`);
+                                  await loadData();
+                                } catch (err: any) {
+                                  addToast('error', 'Close Error', err.message || 'Failed to close table session.');
+                                }
+                              }}
+                              className="text-[10px] py-1 px-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                            >
+                              CLOSE TABLE
+                            </Button>
                           </div>
                         </div>
                       )}
@@ -2876,7 +2898,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
             {billingSubTab === 'taxes' ? (
               <TaxManagement
-                restaurantId={restaurantId}
+                restaurantId={currentRestaurant?.id || 'rest-1'}
                 currencySymbol={theme.currency || '₹'}
                 categories={foodCategories}
                 menuItems={menuItems}

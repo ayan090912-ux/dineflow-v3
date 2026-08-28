@@ -28,6 +28,7 @@ import {
   Wine,
   ShieldCheck,
   BellRing,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   Button,
@@ -262,7 +263,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         });
       }
 
-      await loadInitialOrder(session.id, restId, displayTableNum, resolvedTableId);
+      await loadInitialOrder(session.id, restId, displayTableNum);
     }
   };
 
@@ -516,7 +517,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       );
     } catch (err: any) {
       console.error('Order checkout failed:', err);
-      addToast('danger', 'Unable to Place Order', err?.message || 'Server network error. Please check connection and try again.');
+      addToast('error', 'Unable to Place Order', err?.message || 'Server network error. Please check connection and try again.');
     }
   };
 

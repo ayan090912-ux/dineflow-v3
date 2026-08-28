@@ -120,18 +120,32 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
         try:
             query_sess = select(TableSession).where(TableSession.id == session_id)
             res_sess = await db.execute(query_sess)
-            active_sess = res_sess.scalar_one_or_none()
-            if not active_sess:
-                new_sess = TableSession(
-                    id=session_id,
-                    restaurant_id=payload.restaurantId,
-                    table_id=tbl_id,
-                    table_number=tbl_num,
-                    status="ACTIVE",
-                    session_started_at=datetime.utcnow()
-                )
-                db.add(new_sess)
-                await db.flush()
+            existing_sess = res_sess.scalar_one_or_none()
+
+            if not existing_sess or existing_sess.status == "CLOSED":
+                query_active = select(TableSession).where(
+                    (TableSession.restaurant_id == payload.restaurantId) &
+                    ((TableSession.table_id == tbl_id) | (TableSession.table_number == tbl_num)) &
+                    (TableSession.status == "ACTIVE")
+                ).order_by(TableSession.session_started_at.desc())
+                res_active = await db.execute(query_active)
+                active_sess = res_active.scalars().first()
+
+                if active_sess:
+                    session_id = active_sess.id
+                else:
+                    new_sess_id = session_id if not existing_sess else f"sess-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
+                    new_sess = TableSession(
+                        id=new_sess_id,
+                        restaurant_id=payload.restaurantId,
+                        table_id=tbl_id,
+                        table_number=tbl_num,
+                        status="ACTIVE",
+                        session_started_at=datetime.utcnow()
+                    )
+                    db.add(new_sess)
+                    await db.flush()
+                    session_id = new_sess.id
         except Exception as sess_err:
             print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
 

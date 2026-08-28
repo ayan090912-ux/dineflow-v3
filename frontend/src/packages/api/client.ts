@@ -28,6 +28,7 @@ import {
   BillStatus,
   PaymentMethod,
   BusinessType,
+  Tax,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -1919,22 +1920,22 @@ export class DinelyApiClient {
     const user = this.getCurrentUser(scope);
 
     const scopeRestId = this.currentRestaurantIdsByScope[scope] || user?.restaurantId;
-    if (scopeRestId && this.restaurants.some((r) => r.id === scopeRestId && !r.isDeleted)) {
+    if (scopeRestId) {
       return scopeRestId;
     }
 
-    if (this._currentRestaurantId && this.restaurants.some((r) => r.id === this._currentRestaurantId && !r.isDeleted)) {
+    if (this._currentRestaurantId) {
       return this._currentRestaurantId;
     }
 
     if (typeof window !== 'undefined' && window.localStorage) {
       const activeRestId = localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id');
-      if (activeRestId && this.restaurants.some((r) => r.id === activeRestId && !r.isDeleted)) {
+      if (activeRestId) {
         return activeRestId;
       }
     }
 
-    return this.restaurants.find((r) => !r.isDeleted)?.id || 'rest-1787446097984';
+    return this.restaurants.find((r) => !r.isDeleted)?.id || 'rest-demo';
   }
 
   private ensureRestaurantDefaults(rest: Restaurant): Restaurant {
@@ -3021,67 +3022,134 @@ export class DinelyApiClient {
     return activeSession;
   }
 
-  async closeTableSession(arg1: string, arg2?: string, arg3?: string) {
-    let restId = this.resolveTenantRestaurantId();
-    let tableId = arg1;
-    let waiterName = arg2;
+  async closeTableSession(
+    arg1: string | { restaurantId?: string; tableId?: string; waiterName?: string; tableSessionId?: string },
+    arg2?: string,
+    arg3?: string,
+    arg4?: string
+  ) {
+    let restId: string | undefined;
+    let tableId: string | undefined;
+    let waiterName: string | undefined;
+    let tableSessionId: string | undefined;
 
-    if (arg1 && (arg1.startsWith('rest-') || arg1 === this.currentRestaurantId) && arg2) {
-      restId = arg1;
-      tableId = arg2;
-      waiterName = arg3;
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      restId = arg1.restaurantId;
+      tableId = arg1.tableId;
+      waiterName = arg1.waiterName;
+      tableSessionId = arg1.tableSessionId;
+    } else if (typeof arg1 === 'string') {
+      const str1 = arg1;
+      if (arg4 !== undefined) {
+        restId = str1;
+        tableId = arg2;
+        waiterName = arg3;
+        tableSessionId = arg4;
+      } else if (arg3 !== undefined) {
+        const resolvedRest = this.resolveTenantRestaurantId(str1);
+        const isArg1Rest = Boolean(
+          resolvedRest ||
+          str1 === this.currentRestaurantId ||
+          str1 === this._currentRestaurantId ||
+          str1.startsWith('rest-') ||
+          this.restaurants.some((r) => r.id === str1 || r.slug === str1 || r.id.toLowerCase() === str1.toLowerCase() || r.slug?.toLowerCase() === str1.toLowerCase())
+        );
+
+        if (isArg1Rest) {
+          restId = str1;
+          tableId = arg2;
+          waiterName = arg3;
+        } else {
+          tableId = str1;
+          waiterName = arg2;
+          tableSessionId = arg3;
+        }
+      } else if (arg2 !== undefined) {
+        const isArg1Rest = Boolean(
+          (str1.startsWith('rest-') || str1 === this.currentRestaurantId || str1 === this._currentRestaurantId) &&
+          !str1.startsWith('tbl-')
+        );
+        if (isArg1Rest) {
+          restId = str1;
+          tableId = arg2;
+        } else {
+          tableId = str1;
+          waiterName = arg2;
+        }
+      } else {
+        tableId = str1;
+      }
     }
+
+    restId = this.resolveTenantRestaurantId(restId) || restId || this.getCurrentRestaurantId() || 'rest-1787446097984';
+
+    if (!tableId) {
+      throw new Error('table_id is required to close table session.');
+    }
+
+    console.log('[API_CLOSE_TABLE_SESSION_SENDING]', {
+      restaurant_id: restId,
+      table_id: tableId,
+      waiter_name: waiterName,
+      table_session_id: tableSessionId,
+    });
 
     const apiBase = getApiBaseUrl();
-    try {
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        console.log('[API_CLOSE_TABLE_SESSION_SUCCESS]', data);
-      }
-    } catch (err) {
-      console.warn('[API_CLOSE_TABLE_SESSION_ERROR]', err);
+    const url = new URL(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session`);
+    if (tableSessionId) {
+      url.searchParams.set('table_session_id', tableSessionId);
     }
 
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table_session_id: tableSessionId,
+        waiter_name: waiterName || 'Staff',
+      }),
+    });
+
+    if (!res.ok) {
+      let errMsg = `Failed to close table session (${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson && errJson.detail) {
+          errMsg = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch (_) {}
+      throw new Error(errMsg);
+    }
+
+    const data = await res.json();
+    console.log('[API_CLOSE_TABLE_SESSION_SUCCESS]', data);
+
     this.loadDatabase();
-    const tbl = this.tables.find((t) => t.id === tableId || t.tableNumber.toLowerCase() === tableId.toLowerCase());
-    if (tbl) {
+    const targetTbls = this.tables.filter((t) => t.id === tableId || (t.tableNumber && matchTableNumber(t.tableNumber, tableId!)));
+    targetTbls.forEach((tbl) => {
       tbl.status = 'AVAILABLE';
       tbl.isOccupied = false;
       tbl.activeSessionId = undefined;
       tbl.sessionStartedAt = undefined;
-    }
+    });
 
-    const activeSession = this.tableSessions.find(
-      (s) => s.restaurantId === restId && s.tableId === tableId && s.status === 'ACTIVE'
-    );
-    if (activeSession) {
-      activeSession.status = 'CLOSED';
-      activeSession.sessionClosedAt = new Date().toISOString();
-      activeSession.closedByWaiterName = waiterName || 'Staff';
-    }
+    this.tableSessions.forEach((s) => {
+      const isRestMatch = !s.restaurantId || s.restaurantId === restId || s.restaurantId === (typeof arg1 === 'string' ? arg1 : undefined);
+      const isTableMatch = s.tableId === tableId || (tableSessionId && s.id === tableSessionId) || targetTbls.some((t) => matchTableNumber(s.tableNumber, t.tableNumber));
+      if (isRestMatch && isTableMatch && s.status === 'ACTIVE') {
+        s.status = 'CLOSED';
+        s.sessionClosedAt = new Date().toISOString();
+        s.closedByWaiterName = waiterName || 'Staff';
+      }
+    });
 
     this.saveDatabase();
 
-    realtimeBus.emit('table_session_closed' as any, {
-      sessionId: activeSession?.id,
-      restaurantId: restId,
-      tableId: tableId,
-      tableNumber: tbl?.tableNumber,
-    });
+    return targetTbls[0] || true;
+  }
 
-    realtimeBus.emit('table_status_updated' as any, {
-      tableId: tableId,
-      restaurantId: restId,
-      tableNumber: tbl?.tableNumber,
-      status: 'AVAILABLE',
-      data: tbl,
-    });
-
-    return tbl || true;
+  async getWaiterNotifications(restaurantId?: string): Promise<WaiterNotification[]> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    return (this.notifications || []).filter((n) => !targetId || !n.restaurantId || n.restaurantId === targetId) as any;
   }
 
   // --- Core Billing System APIs ---
@@ -4307,7 +4375,7 @@ export class DinelyApiClient {
             type: t.type || 'PERCENTAGE',
             rate: typeof t.rate === 'number' ? t.rate : parseFloat(t.rate) || 0,
             fixedAmount: typeof t.fixed_amount === 'number' ? t.fixed_amount : parseFloat(t.fixed_amount) || 0,
-            isInclusive: t.is_inclusive !== False && t.is_inclusive !== false,
+            isInclusive: t.is_inclusive !== false,
             appliesTo: t.applies_to || 'ORDER',
             applicableOrderTypes: t.applicable_order_types || ['DINE_IN', 'TAKEAWAY', 'DELIVERY'],
             categoryIds: t.category_ids || [],

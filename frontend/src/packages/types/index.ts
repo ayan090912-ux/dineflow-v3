@@ -509,8 +509,11 @@ export interface Order {
   orderType?: 'DINE_IN' | 'PICKUP';
   customerName?: string;
   customerPhone?: string;
+  notes?: string;
+  displayOrderNumber?: string;
   items: OrderItem[];
   totalAmount: number;
+  subtotal?: number;
   taxAmount: number;
   tipAmount: number;
   status: OrderStatus;

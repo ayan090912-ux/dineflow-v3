@@ -1,6 +1,7 @@
+import uuid
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +10,23 @@ from app.core.database.connection import get_db
 from app.modules.tables.models import Table, TableSession
 
 router = APIRouter()
+
+async def _get_valid_restaurant_ids(restaurant_id: Optional[str], db: AsyncSession) -> list[str]:
+    if not restaurant_id:
+        return []
+    valid = [restaurant_id]
+    try:
+        from app.modules.restaurants.models import Restaurant
+        res_rest = await db.execute(select(Restaurant).where((Restaurant.id == restaurant_id) | (Restaurant.slug == restaurant_id)))
+        rest_obj = res_rest.scalar_one_or_none()
+        if rest_obj:
+            if rest_obj.id not in valid:
+                valid.append(rest_obj.id)
+            if rest_obj.slug and rest_obj.slug not in valid:
+                valid.append(rest_obj.slug)
+    except Exception:
+        pass
+    return valid
 
 class CreateTableSchema(BaseModel):
     id: Optional[str] = None
@@ -194,34 +212,52 @@ async def get_or_create_table_session(restaurant_id: str, table_id: str, table_n
 
     return new_sess
 
+class CloseTableSessionSchema(BaseModel):
+    table_session_id: Optional[str] = None
+    waiter_name: Optional[str] = None
+
 @router.post("/{restaurant_id}/tables/{table_id}/close-session")
 @router.post("/{restaurant_id}/tables/{table_id}/close")
 @router.post("/tables/{table_id}/close-session")
 async def close_table_session(
     table_id: str,
     restaurant_id: Optional[str] = None,
+    table_session_id: Optional[str] = Query(None),
+    payload: Optional[CloseTableSessionSchema] = None,
     db: AsyncSession = Depends(get_db)
 ):
+    target_session_id = table_session_id or (payload.table_session_id if payload else None)
+    valid_rest_ids = await _get_valid_restaurant_ids(restaurant_id, db)
+
     query_tbl = select(Table).where(
         ((Table.id == table_id) | (Table.table_number == table_id))
     )
-    if restaurant_id:
-        query_tbl = query_tbl.where(Table.restaurant_id == restaurant_id)
+    if valid_rest_ids:
+        query_tbl = query_tbl.where(Table.restaurant_id.in_(valid_rest_ids))
 
     res_tbl = await db.execute(query_tbl)
     tbls = res_tbl.scalars().all()
     tbl = tbls[0] if tbls else None
 
+    # Fallback search without restaurant_id filter if not found
+    if not tbl and valid_rest_ids:
+        res_tbl_fallback = await db.execute(select(Table).where((Table.id == table_id) | (Table.table_number == table_id)))
+        tbls_fallback = res_tbl_fallback.scalars().all()
+        tbl = tbls_fallback[0] if tbls_fallback else None
+
     if not tbl:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
 
     rest_id = tbl.restaurant_id
+    search_rest_ids = list(set([rest_id] + valid_rest_ids))
 
+    # Close ALL active sessions for this table in this restaurant
     query_sess = select(TableSession).where(
-        (TableSession.restaurant_id == rest_id) &
+        (TableSession.restaurant_id.in_(search_rest_ids)) &
         ((TableSession.table_id == tbl.id) | (TableSession.table_number == tbl.table_number)) &
         (TableSession.status == "ACTIVE")
     )
+
     res_sess = await db.execute(query_sess)
     active_sesses = res_sess.scalars().all()
 
@@ -231,6 +267,17 @@ async def close_table_session(
         sess.session_closed_at = datetime.utcnow()
         closed_session_ids.append(sess.id)
 
+    # Also close explicit target_session_id if passed and exists
+    if target_session_id:
+        res_explicit = await db.execute(select(TableSession).where(TableSession.id == target_session_id))
+        explicit_sess = res_explicit.scalar_one_or_none()
+        if explicit_sess:
+            explicit_sess.status = "CLOSED"
+            if not explicit_sess.session_closed_at:
+                explicit_sess.session_closed_at = datetime.utcnow()
+            if explicit_sess.id not in closed_session_ids:
+                closed_session_ids.append(explicit_sess.id)
+
     tbl.status = "AVAILABLE"
     tbl.is_occupied = False
     tbl.active_session_id = None
@@ -239,7 +286,7 @@ async def close_table_session(
     try:
         from app.modules.customer_requests.models import CustomerRequestModel
         query_reqs = select(CustomerRequestModel).where(
-            (CustomerRequestModel.restaurant_id == rest_id) &
+            (CustomerRequestModel.restaurant_id.in_(search_rest_ids)) &
             ((CustomerRequestModel.table_id == tbl.id) | (CustomerRequestModel.table_number == tbl.table_number)) &
             (CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS"]))
         )
@@ -252,9 +299,20 @@ async def close_table_session(
 
     await db.commit()
 
+    evt_id = f"evt-{int(datetime.utcnow().timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
+    primary_closed_session_id = closed_session_ids[0] if closed_session_ids else target_session_id
+
     event_payload = {
+        "event_id": evt_id,
+        "eventId": evt_id,
+        "restaurant_id": rest_id,
+        "restaurantId": rest_id,
         "table_id": tbl.id,
+        "tableId": tbl.id,
         "table_number": tbl.table_number,
+        "tableNumber": tbl.table_number,
+        "table_session_id": primary_closed_session_id,
+        "tableSessionId": primary_closed_session_id,
         "status": "VACANT",
         "closed_session_ids": closed_session_ids,
         "timestamp": datetime.utcnow().isoformat() + "Z"
@@ -281,6 +339,7 @@ async def close_table_session(
         "status": "success",
         "message": f"Table {tbl.table_number} session closed successfully",
         "table_id": tbl.id,
+        "table_session_id": primary_closed_session_id,
         "closed_session_ids": closed_session_ids
     }
 
