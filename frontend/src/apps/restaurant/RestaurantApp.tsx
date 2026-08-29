@@ -2866,60 +2866,82 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         {/* Tab: Billing & Digital Receipt OS */}
         {activeTab === 'billing' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Receipt className="w-5 h-5 text-emerald-400" /> Restaurant Billing & Financial Terminal
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Realtime table settlement, server-calculated GST invoices, payment recording, and owner UPI configuration.
-                </p>
+            {/* Header Title Banner */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-950/40">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                      <span>Restaurant Billing & Invoicing OS</span>
+                      <Badge variant="success" className="text-[10px] font-mono uppercase tracking-wider py-0.5">
+                        Live POS
+                      </Badge>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Real-time table settlement, server-calculated GST invoices, verified UPI checkout & tax configuration.
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto">
+              {/* Segmented Subtab Pills */}
+              <div className="flex flex-wrap items-center gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-md">
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('terminal')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     billingSubTab === 'terminal'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/50'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  Live Tables & POS
+                  <Utensils className="w-3.5 h-3.5" />
+                  <span>Live Tables & POS</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('invoices')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     billingSubTab === 'invoices'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/50'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  Invoices & History ({bills.length})
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>Invoices & History</span>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${billingSubTab === 'invoices' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    {bills.length}
+                  </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('taxes')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     billingSubTab === 'taxes'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg shadow-rose-950/50'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  GST & Tax Rules
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>GST & Tax Rules</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('settings')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     billingSubTab === 'settings'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg shadow-amber-950/50'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  UPI & Bill Setup
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>UPI & Bill Setup</span>
                 </button>
               </div>
             </div>
