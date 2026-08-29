@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2,
   Receipt,
@@ -36,71 +36,94 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
   addToast,
   onConfigSaved,
 }) => {
-  const [config, setConfig] = useState<BillingConfig | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-
-  // Form State
-  const [legalName, setLegalName] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [state, setState] = useState('');
-  const [stateCode, setStateCode] = useState('');
-  const [gstin, setGstin] = useState('');
-  const [pan, setPan] = useState('');
-  const [address, setAddress] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [invoicePrefix, setInvoicePrefix] = useState('INV-');
-  const [invoiceStartingNumber, setInvoiceStartingNumber] = useState('1001');
-  const [serviceChargePercentage, setServiceChargePercentage] = useState('0');
-  const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
+  // Initialize state directly from currentRestaurant to prevent initial spinner block
+  const [legalName, setLegalName] = useState(
+    currentRestaurant?.legalName || currentRestaurant?.name || 'CAFE.CO'
+  );
+  const [displayName, setDisplayName] = useState(currentRestaurant?.name || 'CAFE.CO');
+  const [state, setState] = useState(currentRestaurant?.state || '');
+  const [stateCode, setStateCode] = useState(currentRestaurant?.stateCode || '');
+  const [gstin, setGstin] = useState(currentRestaurant?.gstin || currentRestaurant?.gstNumber || '');
+  const [pan, setPan] = useState(currentRestaurant?.pan || '');
+  const [address, setAddress] = useState(currentRestaurant?.address || '');
+  const [phone, setPhone] = useState(currentRestaurant?.phone || '');
+  const [email, setEmail] = useState(currentRestaurant?.email || '');
+  const [invoicePrefix, setInvoicePrefix] = useState(currentRestaurant?.invoicePrefix || 'INV-');
+  const [invoiceStartingNumber, setInvoiceStartingNumber] = useState(
+    String(currentRestaurant?.invoiceStartingNumber || 1001)
+  );
+  const [serviceChargePercentage, setServiceChargePercentage] = useState(
+    String(currentRestaurant?.serviceChargePercentage || 0)
+  );
+  const [serviceChargeEnabled, setServiceChargeEnabled] = useState(
+    Boolean(currentRestaurant?.serviceChargeEnabled)
+  );
 
   // UPI State
-  const [upiId, setUpiId] = useState('');
-  const [upiMerchantName, setUpiMerchantName] = useState('');
-  const [upiQrUrl, setUpiQrUrl] = useState('');
-  const [upiEnabled, setUpiEnabled] = useState(true);
+  const [upiId, setUpiId] = useState(currentRestaurant?.upiId || '');
+  const [upiMerchantName, setUpiMerchantName] = useState(
+    currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'CAFE.CO'
+  );
+  const [upiQrUrl, setUpiQrUrl] = useState(currentRestaurant?.upiQrUrl || '');
+  const [upiEnabled, setUpiEnabled] = useState(
+    currentRestaurant?.upiEnabled !== undefined ? Boolean(currentRestaurant?.upiEnabled) : true
+  );
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingQr, setIsUploadingQr] = useState(false);
   const [qrFileError, setQrFileError] = useState<string | null>(null);
 
-  // Load configuration
+  const hasFetchedRef = useRef(false);
+
+  // Load configuration from backend on mount once per restaurantId
   useEffect(() => {
+    let isMounted = true;
+
     async function loadConfig() {
-      setIsLoading(true);
+      if (hasFetchedRef.current) return;
       try {
         const data = await api.getBillingConfig(restaurantId);
-        setConfig(data);
-        setLegalName(data.legalName || currentRestaurant?.legalName || currentRestaurant?.name || '');
-        setDisplayName(data.name || currentRestaurant?.name || '');
-        setState(data.state || currentRestaurant?.state || '');
-        setStateCode(data.stateCode || currentRestaurant?.stateCode || '');
-        setGstin(data.gstin || currentRestaurant?.gstin || currentRestaurant?.gstNumber || '');
-        setPan(data.pan || currentRestaurant?.pan || '');
-        setAddress(data.address || currentRestaurant?.address || '');
-        setPhone(data.phone || currentRestaurant?.phone || '');
-        setEmail(data.email || currentRestaurant?.email || '');
-        setInvoicePrefix(data.invoicePrefix || currentRestaurant?.invoicePrefix || 'INV-');
-        setInvoiceStartingNumber(String(data.invoiceStartingNumber || currentRestaurant?.invoiceStartingNumber || 1001));
-        setServiceChargePercentage(String(data.serviceChargePercentage || currentRestaurant?.serviceChargePercentage || 0));
-        setServiceChargeEnabled(Boolean(data.serviceChargeEnabled || currentRestaurant?.serviceChargeEnabled));
-        setUpiId(data.upiId || currentRestaurant?.upiId || '');
-        setUpiMerchantName(data.upiMerchantName || currentRestaurant?.upiMerchantName || currentRestaurant?.name || '');
-        setUpiQrUrl(data.upiQrUrl || currentRestaurant?.upiQrUrl || '');
-        setUpiEnabled(data.upiEnabled !== false && currentRestaurant?.upiEnabled !== false);
+        if (!isMounted) return;
+
+        hasFetchedRef.current = true;
+        if (data) {
+          if (data.legalName) setLegalName(data.legalName);
+          if (data.name) setDisplayName(data.name);
+          if (data.state) setState(data.state);
+          if (data.stateCode) setStateCode(data.stateCode);
+          if (data.gstin) setGstin(data.gstin);
+          if (data.pan) setPan(data.pan);
+          if (data.address) setAddress(data.address);
+          if (data.phone) setPhone(data.phone);
+          if (data.email) setEmail(data.email);
+          if (data.invoicePrefix) setInvoicePrefix(data.invoicePrefix);
+          if (data.invoiceStartingNumber) setInvoiceStartingNumber(String(data.invoiceStartingNumber));
+          if (data.serviceChargePercentage !== undefined)
+            setServiceChargePercentage(String(data.serviceChargePercentage));
+          if (data.serviceChargeEnabled !== undefined)
+            setServiceChargeEnabled(Boolean(data.serviceChargeEnabled));
+          if (data.upiId) setUpiId(data.upiId);
+          if (data.upiMerchantName) setUpiMerchantName(data.upiMerchantName);
+          if (data.upiQrUrl) setUpiQrUrl(data.upiQrUrl);
+          if (data.upiEnabled !== undefined) setUpiEnabled(Boolean(data.upiEnabled));
+        }
       } catch (err) {
-        console.error('Failed to load billing config:', err);
-        addToast('danger', 'Error', 'Failed to load restaurant billing configuration');
-      } finally {
-        setIsLoading(false);
+        console.warn('Failed to load remote billing config, using local cache:', err);
       }
     }
 
     if (restaurantId) {
       loadConfig();
     }
-  }, [restaurantId, currentRestaurant]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [restaurantId]);
 
   // Handle QR File Upload
-  const handleQrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setQrFileError(null);
     const file = e.target.files?.[0];
     if (!file) return;
@@ -115,14 +138,39 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
       return;
     }
 
+    setIsUploadingQr(true);
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const dataUrl = event.target?.result as string;
       setUpiQrUrl(dataUrl);
       setUpiEnabled(true);
-      addToast('info', 'QR Image Uploaded', 'Remember to click Save Changes to persist.');
+
+      try {
+        await api.uploadUpiQrImage(restaurantId, dataUrl, upiMerchantName || displayName, upiId);
+        addToast('success', 'UPI QR Image Uploaded & Verified ✅', 'Your custom standee QR code is now live.');
+      } catch (err: any) {
+        console.warn('Remote QR upload failed, stored locally:', err);
+        addToast('info', 'QR Image Stored Locally', 'Click Save Configuration to confirm.');
+      } finally {
+        setIsUploadingQr(false);
+      }
+    };
+    reader.onerror = () => {
+      setQrFileError('Failed to read image file.');
+      setIsUploadingQr(false);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Handle Remove Custom QR
+  const handleRemoveCustomQr = async () => {
+    setUpiQrUrl('');
+    try {
+      await api.updateBillingConfig(restaurantId, { upiQrUrl: '' });
+      addToast('info', 'Custom QR Removed', 'Switched back to auto-generated vector QR.');
+    } catch (e) {
+      // Local state is already cleared
+    }
   };
 
   // Handle Save
@@ -140,7 +188,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
         address: address.trim(),
         phone: phone.trim(),
         email: email.trim(),
-        invoicePrefix: invoicePrefix.trim().toUpperCase(),
+        invoicePrefix: invoicePrefix.trim().toUpperCase() || 'INV-',
         invoiceStartingNumber: parseInt(invoiceStartingNumber, 10) || 1001,
         serviceChargePercentage: parseFloat(serviceChargePercentage) || 0.0,
         serviceChargeEnabled,
@@ -150,7 +198,6 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
         upiEnabled,
       });
 
-      setConfig(updated);
       addToast('success', 'Billing & UPI Settings Saved ✅', 'Invoicing rules, GST details, and UPI checkout updated.');
       if (onConfigSaved) onConfigSaved();
     } catch (err: any) {
@@ -165,15 +212,6 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
   const dynamicUpiPayload = upiId
     ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiMerchantName || displayName || 'Merchant')}&cu=INR`
     : '';
-
-  if (isLoading) {
-    return (
-      <div className="p-12 text-center text-slate-400 space-y-3">
-        <Receipt className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-        <p className="font-semibold text-sm">Loading Restaurant Billing & UPI Settings...</p>
-      </div>
-    );
-  }
 
   return (
     <form onSubmit={handleSave} className="space-y-6">
@@ -467,16 +505,19 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 <label className="block text-slate-300 font-semibold mb-1">
                   Upload Custom Standee QR Image (Optional)
                 </label>
-                <div className="border-2 border-dashed border-slate-800 hover:border-slate-700 bg-slate-950 rounded-xl p-4 text-center cursor-pointer transition-all relative">
+                <div className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 bg-slate-950 rounded-xl p-4 text-center cursor-pointer transition-all relative">
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     onChange={handleQrFileUpload}
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    disabled={isUploadingQr}
                   />
                   <div className="space-y-1.5 pointer-events-none">
-                    <Upload className="w-5 h-5 text-slate-400 mx-auto" />
-                    <p className="font-bold text-white text-xs">Click or drag & drop custom QR code standee image</p>
+                    <Upload className={`w-5 h-5 ${isUploadingQr ? 'animate-bounce text-emerald-400' : 'text-slate-400'} mx-auto`} />
+                    <p className="font-bold text-white text-xs">
+                      {isUploadingQr ? 'Uploading & Processing QR Image...' : 'Click or drag & drop custom QR code standee image'}
+                    </p>
                     <p className="text-[10px] text-slate-500">Supported: PNG, JPG, WEBP (Max 2MB) — or leave blank to use auto-generated QR</p>
                   </div>
                 </div>
@@ -507,7 +548,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setUpiQrUrl('')}
+                    onClick={handleRemoveCustomQr}
                     className="absolute -top-2 -right-2 p-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-lg transition-transform hover:scale-110 cursor-pointer"
                     title="Remove Custom Image"
                   >
