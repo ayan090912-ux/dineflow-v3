@@ -3415,6 +3415,22 @@ export class DinelyApiClient {
     };
     this.notifications.unshift(notif);
 
+    // Create real CustomerRequest in backend & database so Waiter Terminal displays it!
+    try {
+      await this.createCustomerRequest({
+        restaurantId: restId,
+        tableNumber: bill.tableNumber,
+        requestType: 'BILL',
+        customTitle: 'Bill Requested 🧾',
+        message: `Customer at ${bill.tableNumber} requested final bill (₹${bill.grandTotal.toFixed(2)})`,
+        customerNotes: `Total Amount: ₹${bill.grandTotal.toFixed(2)}`,
+        priority: 'HIGH',
+        tableSessionId: bill.tableSessionId,
+      });
+    } catch (err) {
+      console.warn('Failed to post customer request for bill:', err);
+    }
+
     this.saveDatabase();
 
     realtimeBus.emit('BillRequested' as any, {
@@ -3424,6 +3440,22 @@ export class DinelyApiClient {
       tableSessionId: bill.tableSessionId,
       grandTotal: bill.grandTotal,
       data: bill,
+    });
+
+    realtimeBus.emit('service_request_created' as any, {
+      restaurantId: restId,
+      tableNumber: bill.tableNumber,
+      requestType: 'BILL',
+      customTitle: 'Bill Requested 🧾',
+      tableSessionId: bill.tableSessionId,
+    });
+
+    realtimeBus.emit('CustomerRequestCreated' as any, {
+      restaurantId: restId,
+      tableNumber: bill.tableNumber,
+      requestType: 'BILL',
+      customTitle: 'Bill Requested 🧾',
+      tableSessionId: bill.tableSessionId,
     });
 
     if (tbl) {

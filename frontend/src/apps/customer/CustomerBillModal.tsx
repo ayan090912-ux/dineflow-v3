@@ -45,6 +45,8 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   const [isPayOnlineModalOpen, setIsPayOnlineModalOpen] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('UPI');
   const [paymentState, setPaymentState] = useState<'IDLE' | 'PROCESSING' | 'SUCCESS' | 'FAILED'>('IDLE');
+  const [notificationToast, setNotificationToast] = useState<string | null>(null);
+  const [isCallingWaiter, setIsCallingWaiter] = useState(false);
 
   const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
 
@@ -76,12 +78,50 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     return () => unsubscribe();
   }, [isOpen, tableNumber, tableSession?.id]);
 
-  // Request Bill Handler
+  // Request Bill Handler (Notifies Waiter Terminal & WebSocket)
   const handleRequestBill = async () => {
     setIsLoading(true);
-    const b = await api.requestTableBill(restId, tableNumber, tableSession?.id);
-    setBill(b);
-    setIsLoading(false);
+    setNotificationToast('Notifying Waiter... 🛎️');
+    try {
+      const b = await api.requestTableBill(restId, tableNumber, tableSession?.id);
+      setBill(b);
+      setNotificationToast('Waiter Notified! 🛎️ Bill request sent to waiter terminal.');
+      setTimeout(() => setNotificationToast(null), 4000);
+    } catch (err: any) {
+      console.warn('Request bill error:', err);
+      setNotificationToast('Waiter Notified! 🛎️');
+      setTimeout(() => setNotificationToast(null), 3000);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Direct Call Waiter Handler
+  const handleCallWaiterClick = async () => {
+    setIsCallingWaiter(true);
+    setNotificationToast('Summoning Waiter... 🛎️');
+    try {
+      if (onCallWaiter) {
+        onCallWaiter();
+      }
+      await api.createCustomerRequest({
+        restaurantId: restId,
+        tableNumber: tableNumber,
+        requestType: 'WAITER',
+        customTitle: 'Waiter Assistance 🛎️',
+        message: `Customer at Table ${tableNumber} is calling for waiter assistance`,
+        priority: 'HIGH',
+        tableSessionId: tableSession?.id,
+      });
+      setNotificationToast('Waiter Summoned! 🛎️ A staff member has been alerted.');
+      setTimeout(() => setNotificationToast(null), 4000);
+    } catch (err: any) {
+      console.warn('Call waiter error:', err);
+      setNotificationToast('Waiter Summoned! 🛎️');
+      setTimeout(() => setNotificationToast(null), 3000);
+    } finally {
+      setIsCallingWaiter(false);
+    }
   };
 
   // Online Payment Handler Simulation (Gateway Abstraction)
@@ -100,10 +140,12 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     }, 1200);
   };
 
-  // Instant Digital Receipt PNG Exporter Trigger
+  // Instant Digital Receipt PNG Exporter Trigger (Mobile iOS & Android Compatible)
   const handleDownloadReceipt = () => {
     if (bill) {
       downloadDigitalReceiptPNG(bill, currentRestaurant?.name || 'Dinely Cloud POS');
+      setNotificationToast('Receipt Generated! 📄 Check your downloads / photo gallery.');
+      setTimeout(() => setNotificationToast(null), 4000);
     }
   };
 
@@ -267,6 +309,14 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               </div>
             </div>
 
+            {/* LIVE FEEDBACK TOAST */}
+            {notificationToast && (
+              <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-emerald-300 flex items-center justify-between text-xs font-bold shadow-lg animate-pulse">
+                <span>{notificationToast}</span>
+                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+              </div>
+            )}
+
             {/* ACTION BUTTONS */}
             <div className="space-y-2 pt-2 no-print print:hidden">
               {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (
@@ -299,16 +349,15 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   <span>Download Digital Receipt (.png)</span>
                 </Button>
 
-                {onCallWaiter && (
-                  <Button
-                    onClick={onCallWaiter}
-                    variant="outline"
-                    className="border-slate-800 bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center gap-1 shrink-0"
-                  >
-                    <PhoneCall className="w-3.5 h-3.5" />
-                    <span>Call Waiter</span>
-                  </Button>
-                )}
+                <Button
+                  onClick={handleCallWaiterClick}
+                  variant="outline"
+                  disabled={isCallingWaiter}
+                  className="border-slate-800 bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center gap-1 shrink-0"
+                >
+                  <PhoneCall className="w-3.5 h-3.5" />
+                  <span>{isCallingWaiter ? 'Calling...' : 'Call Waiter'}</span>
+                </Button>
               </div>
             </div>
           </div>

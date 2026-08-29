@@ -78,6 +78,8 @@ export interface RealTimeEventPayload {
   businessDayId?: string;
   employeeId?: string;
   menuItemId?: string;
+  requestType?: string;
+  customTitle?: string;
   name?: string;
   role?: string;
   lastLoginAt?: string;

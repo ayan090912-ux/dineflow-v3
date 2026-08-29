@@ -218,13 +218,64 @@ export function downloadDigitalReceiptPNG(bill: Bill, restaurantName: string = '
   ctx.fillText('Thank you for dining with us! 🙏', width / 2, y);
   ctx.fillText('Powered by Dinely Multi-Tenant Restaurant Cloud OS', width / 2, y + 20);
 
-  // Convert Canvas to Blob and Trigger Download
+  // Convert Canvas to Blob and Trigger Download / Native Mobile Share
   const fileName = `Digital_Receipt_${bill.id || 'DLY-BILL'}_${Date.now()}.png`;
-  const imageURI = canvas.toDataURL('image/png');
-  const a = document.createElement('a');
-  a.href = imageURI;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+
+  try {
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        // Fallback dataURL
+        const imageURI = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = imageURI;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      // 1. Native Mobile Share Sheet (iOS Safari / Android Chrome)
+      if (typeof navigator !== 'undefined' && navigator.canShare) {
+        try {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: `Digital Receipt — ${restaurantName}`,
+              text: `E-Receipt for Table ${bill.tableNumber} • Total: ${formatCurrency(bill.grandTotal || 0)}`,
+              files: [file],
+            });
+            return;
+          }
+        } catch (err: any) {
+          if (err.name === 'AbortError') return;
+          console.warn('Native share fallback to download link:', err);
+        }
+      }
+
+      // 2. Standard Blob Object URL Download
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }, 2000);
+    }, 'image/png');
+  } catch (e) {
+    console.error('Failed to download digital receipt:', e);
+    // Ultimate fallback
+    const imageURI = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = imageURI;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 }
