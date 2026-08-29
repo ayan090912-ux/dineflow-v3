@@ -65,11 +65,15 @@ export function getProductionOrigin(): string {
   return window.location.origin.replace(/^http:\/\//, 'https://');
 }
 
-export type PortalScope = 'ADMIN' | 'OWNER' | 'STAFF' | 'CUSTOMER';
+export type PortalScope = 'ADMIN' | 'OWNER' | 'KITCHEN' | 'WAITER' | 'BAR' | 'INVENTORY' | 'STAFF' | 'CUSTOMER';
 
 const SESSION_KEYS: Record<PortalScope, string> = {
   ADMIN: 'dinely_session_admin',
   OWNER: 'dinely_session_owner',
+  KITCHEN: 'dinely_session_kitchen',
+  WAITER: 'dinely_session_waiter',
+  BAR: 'dinely_session_bar',
+  INVENTORY: 'dinely_session_inventory',
   STAFF: 'dinely_session_staff',
   CUSTOMER: 'dinely_session_customer',
 };
@@ -77,6 +81,10 @@ const SESSION_KEYS: Record<PortalScope, string> = {
 const TOKEN_KEYS: Record<PortalScope, string> = {
   ADMIN: 'dinely_tokens_admin',
   OWNER: 'dinely_tokens_owner',
+  KITCHEN: 'dinely_tokens_kitchen',
+  WAITER: 'dinely_tokens_waiter',
+  BAR: 'dinely_tokens_bar',
+  INVENTORY: 'dinely_tokens_inventory',
   STAFF: 'dinely_tokens_staff',
   CUSTOMER: 'dinely_tokens_customer',
 };
@@ -86,8 +94,17 @@ export function getPortalScopeFromPath(pathname?: string): PortalScope {
   if (p.startsWith('/admin')) {
     return 'ADMIN';
   }
-  if (p.startsWith('/kitchen') || p.startsWith('/waiter') || p.startsWith('/bar') || p.startsWith('/inventory')) {
-    return 'STAFF';
+  if (p.startsWith('/kitchen')) {
+    return 'KITCHEN';
+  }
+  if (p.startsWith('/waiter')) {
+    return 'WAITER';
+  }
+  if (p.startsWith('/bar')) {
+    return 'BAR';
+  }
+  if (p.startsWith('/inventory')) {
+    return 'INVENTORY';
   }
   if (p.startsWith('/customer') || p.startsWith('/order') || p.startsWith('/qr')) {
     return 'CUSTOMER';
@@ -441,12 +458,20 @@ export class DinelyApiClient {
   private currentUsersByScope: Record<PortalScope, User | null> = {
     ADMIN: null,
     OWNER: null,
+    KITCHEN: null,
+    WAITER: null,
+    BAR: null,
+    INVENTORY: null,
     STAFF: null,
     CUSTOMER: null,
   };
   private currentTokensByScope: Record<PortalScope, AuthTokens | null> = {
     ADMIN: null,
     OWNER: null,
+    KITCHEN: null,
+    WAITER: null,
+    BAR: null,
+    INVENTORY: null,
     STAFF: null,
     CUSTOMER: null,
   };
@@ -454,6 +479,10 @@ export class DinelyApiClient {
   private currentRestaurantIdsByScope: Record<PortalScope, string | null> = {
     ADMIN: null,
     OWNER: null,
+    KITCHEN: null,
+    WAITER: null,
+    BAR: null,
+    INVENTORY: null,
     STAFF: null,
     CUSTOMER: null,
   };
@@ -688,10 +717,18 @@ export class DinelyApiClient {
         scope = 'ADMIN';
       } else if (user.role === 'RESTAURANT_OWNER') {
         scope = 'OWNER';
-      } else if (user.role === 'CHEF' || user.role === 'WAITER' || user.role === 'BARTENDER' || user.role === 'BAR_STAFF' || user.role === 'INVENTORY_MANAGER' || user.role === 'MANAGER') {
-        scope = 'STAFF';
+      } else if (user.role === 'CHEF') {
+        scope = 'KITCHEN';
+      } else if (user.role === 'WAITER') {
+        scope = 'WAITER';
+      } else if (user.role === 'BARTENDER' || user.role === 'BAR_STAFF') {
+        scope = 'BAR';
+      } else if (user.role === 'INVENTORY_MANAGER') {
+        scope = 'INVENTORY';
       } else if (user.role === 'CUSTOMER') {
         scope = 'CUSTOMER';
+      } else {
+        scope = 'STAFF';
       }
     }
 
@@ -1109,7 +1146,7 @@ export class DinelyApiClient {
     };
 
     kitchenUser.tokens = tokens;
-    this.saveSession(kitchenUser, tokens, emp.restaurantId);
+    this.saveSession(kitchenUser, tokens, emp.restaurantId, 'KITCHEN');
     this.saveDatabase();
 
     realtimeBus.emit('StaffStatusUpdated' as any, {
@@ -1176,7 +1213,7 @@ export class DinelyApiClient {
     };
 
     waiterUser.tokens = tokens;
-    this.saveSession(waiterUser, tokens, emp.restaurantId);
+    this.saveSession(waiterUser, tokens, emp.restaurantId, 'WAITER');
     this.saveDatabase();
 
     realtimeBus.emit('StaffStatusUpdated' as any, {
@@ -1247,7 +1284,7 @@ export class DinelyApiClient {
     };
 
     barUser.tokens = tokens;
-    this.saveSession(barUser, tokens, emp.restaurantId);
+    this.saveSession(barUser, tokens, emp.restaurantId, 'BAR');
     this.saveDatabase();
 
     realtimeBus.emit('StaffStatusUpdated' as any, {
@@ -1314,7 +1351,7 @@ export class DinelyApiClient {
     };
 
     invUser.tokens = tokens;
-    this.saveSession(invUser, tokens, emp.restaurantId);
+    this.saveSession(invUser, tokens, emp.restaurantId, 'INVENTORY');
     this.saveDatabase();
 
     realtimeBus.emit('StaffStatusUpdated' as any, {
@@ -1335,7 +1372,38 @@ export class DinelyApiClient {
     if (!this.currentUsersByScope[targetScope]) {
       this.restoreSession(targetScope);
     }
-    return this.currentUsersByScope[targetScope];
+    const directUser = this.currentUsersByScope[targetScope];
+    if (directUser) {
+      return directUser;
+    }
+
+    // Hierarchical inheritance:
+    // 1. If an active RESTAURANT_OWNER, MANAGER, or SUPER_ADMIN session exists, they have authority across all terminals
+    const ownerUser = this.currentUsersByScope['OWNER'] || this.restoreSession('OWNER');
+    if (
+      ownerUser &&
+      (ownerUser.role === 'RESTAURANT_OWNER' ||
+        ownerUser.role === 'SUPER_ADMIN' ||
+        (ownerUser.role as string) === 'MANAGER')
+    ) {
+      return ownerUser;
+    }
+
+    // 2. If an active PLATFORM_ADMIN session exists, it has full cloud authority
+    const adminUser = this.currentUsersByScope['ADMIN'] || this.restoreSession('ADMIN');
+    if (adminUser && (adminUser.role === 'PLATFORM_ADMIN' || adminUser.role === 'SUPER_ADMIN')) {
+      return adminUser;
+    }
+
+    // 3. Check specific staff scopes
+    for (const s of ['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'] as PortalScope[]) {
+      if (s !== targetScope) {
+        const u = this.currentUsersByScope[s] || this.restoreSession(s);
+        if (u) return u;
+      }
+    }
+
+    return null;
   }
 
   getCurrentRestaurantId(scope?: PortalScope): string {

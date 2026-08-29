@@ -95,7 +95,18 @@ export default function App() {
   const checkRoleAccess = (allowedRoles: string[]) => {
     if (!currentUser) return false;
     if (allowedRoles.includes('PLATFORM_ADMIN')) {
-      return (currentUser.role === 'PLATFORM_ADMIN' || currentUser.role === 'SUPER_ADMIN') && currentUser.email?.toLowerCase() === 'ayan090912@gmail.com';
+      return (
+        (currentUser.role === 'PLATFORM_ADMIN' || currentUser.role === 'SUPER_ADMIN') &&
+        currentUser.email?.toLowerCase() === 'ayan090912@gmail.com'
+      );
+    }
+    // Super admin & Restaurant owner & Manager have full operational access to all restaurant terminals
+    if (
+      currentUser.role === 'SUPER_ADMIN' ||
+      currentUser.role === 'RESTAURANT_OWNER' ||
+      (currentUser.role as string) === 'MANAGER'
+    ) {
+      return true;
     }
     return allowedRoles.includes(currentUser.role);
   };
