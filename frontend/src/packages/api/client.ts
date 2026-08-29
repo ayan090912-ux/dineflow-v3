@@ -38,8 +38,8 @@ import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
 import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
 
-// Simulated API delay helper
-const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
+// High-performance non-blocking API helper
+const delay = (_ms = 0) => Promise.resolve();
 
 export function getProductionOrigin(): string {
   if (typeof window === 'undefined') return 'https://dinely.food';

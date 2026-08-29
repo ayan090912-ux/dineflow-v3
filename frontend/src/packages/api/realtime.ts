@@ -207,7 +207,7 @@ class RealTimeEventBus {
       };
 
       this.ws.onclose = () => {
-        console.log('[WS_DISCONNECTED] Retrying in 4s...');
+        console.log('[WS_DISCONNECTED] Reconnecting in 1.5s...');
         this.isConnected = false;
         if (this.pingInterval) clearInterval(this.pingInterval);
 
@@ -216,7 +216,7 @@ class RealTimeEventBus {
           if (this.currentRestaurantId) {
             this.connect(this.currentRestaurantId, this.currentRole, this.currentTableSessionId || undefined);
           }
-        }, 4000);
+        }, 1500);
       };
 
       this.ws.onerror = (err) => {

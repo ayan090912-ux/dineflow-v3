@@ -256,36 +256,52 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     };
   }, [isAudioMuted, currentRestaurantId]);
 
-  // Request Actions (Workflow: PENDING -> ACCEPT -> IN_PROGRESS -> COMPLETE)
+  // Request Actions with Instant Optimistic UI Response
   const handleAcceptRequest = async (requestId: string) => {
+    // Instant optimistic state update
+    setRequests((prev) =>
+      prev.map((r) =>
+        r.id === requestId ? { ...r, status: 'IN_PROGRESS', assignedStaffName: waiterName } : r
+      )
+    );
+    showToast('Request Accepted ✅', 'Customer request accepted.', 'success');
     try {
       await api.updateCustomerRequest(requestId, 'IN_PROGRESS', waiterName);
-      showToast('Request Accepted ✅', 'Customer request accepted.', 'success');
       loadData();
     } catch (err: any) {
       showToast('Error', err.message || 'Failed to accept request', 'warning');
+      loadData();
     }
   };
 
   const handleCompleteRequest = async (requestId: string) => {
+    // Instant optimistic state update
+    setRequests((prev) =>
+      prev.map((r) => (r.id === requestId ? { ...r, status: 'COMPLETED' } : r))
+    );
+    showToast('Request Completed ✅', 'Request fulfilled and cleared.', 'success');
     try {
       await api.updateCustomerRequest(requestId, 'COMPLETED', waiterName);
-      showToast('Request Completed ✅', 'Request fulfilled and cleared.', 'success');
       loadData();
     } catch (err: any) {
       showToast('Error', err.message || 'Failed to complete request', 'warning');
+      loadData();
     }
   };
 
-
   // Order Delivery Handler (Valid transition: READY -> DELIVERED)
   const handleDeliverOrder = async (orderId: string) => {
+    // Instant optimistic state update
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED' } : o))
+    );
+    showToast('Order Delivered 🎉', `Order #${orderId} delivered to customer`, 'success');
     try {
       await api.deliverOrder(orderId);
-      showToast('Order Delivered 🎉', `Order #${orderId} delivered to customer`, 'success');
       loadData();
     } catch (err: any) {
       showToast('Delivery Error ⚠️', err.message || 'Failed to deliver order', 'warning');
+      loadData();
     }
   };
 
