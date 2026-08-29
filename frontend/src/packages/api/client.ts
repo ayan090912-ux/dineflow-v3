@@ -3583,11 +3583,259 @@ export class DinelyApiClient {
     return { bill, session };
   }
 
-  async getBills(restaurantId?: string): Promise<Bill[]> {
-    this.loadDatabase();
-    await delay(50);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
+  async getBillingConfig(restaurantId?: string): Promise<BillingConfig> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/config`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to fetch remote billing config:', e);
+    }
+    const rest = this.restaurants.find((r) => r.id === targetId);
+    return {
+      restaurantId: targetId,
+      name: rest?.name || 'Restaurant',
+      legalName: rest?.legalName || rest?.name || 'Dinely Fine Dining',
+      state: rest?.state || '',
+      stateCode: rest?.stateCode || '',
+      gstin: rest?.gstin || rest?.gstNumber || '',
+      pan: rest?.pan || '',
+      address: rest?.address || '',
+      phone: rest?.phone || '',
+      email: rest?.email || '',
+      currency: rest?.currency || 'INR (₹)',
+      invoicePrefix: rest?.invoicePrefix || 'INV-',
+      invoiceStartingNumber: rest?.invoiceStartingNumber || 1001,
+      serviceChargePercentage: rest?.serviceChargePercentage || 0.0,
+      serviceChargeEnabled: rest?.serviceChargeEnabled || false,
+      upiId: rest?.upiId || '',
+      upiMerchantName: rest?.upiMerchantName || rest?.name || '',
+      upiQrUrl: rest?.upiQrUrl || '',
+      upiEnabled: rest?.upiEnabled !== false,
+    };
+  }
+
+  async updateBillingConfig(restaurantId: string, config: Partial<BillingConfig>): Promise<BillingConfig> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          legal_name: config.legalName,
+          state: config.state,
+          state_code: config.stateCode,
+          gstin: config.gstin,
+          pan: config.pan,
+          invoice_prefix: config.invoicePrefix,
+          invoice_starting_number: config.invoiceStartingNumber,
+          service_charge_percentage: config.serviceChargePercentage,
+          service_charge_enabled: config.serviceChargeEnabled,
+          upi_id: config.upiId,
+          upi_merchant_name: config.upiMerchantName,
+          upi_qr_url: config.upiQrUrl,
+          upi_enabled: config.upiEnabled,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.config) return data.config;
+      }
+    } catch (e) {
+      console.warn('Failed to update remote billing config:', e);
+    }
+
+    // Local DB update fallback
+    const rest = this.restaurants.find((r) => r.id === targetId);
+    if (rest) {
+      if (config.legalName !== undefined) rest.legalName = config.legalName;
+      if (config.state !== undefined) rest.state = config.state;
+      if (config.stateCode !== undefined) rest.stateCode = config.stateCode;
+      if (config.gstin !== undefined) rest.gstin = config.gstin;
+      if (config.pan !== undefined) rest.pan = config.pan;
+      if (config.invoicePrefix !== undefined) rest.invoicePrefix = config.invoicePrefix;
+      if (config.invoiceStartingNumber !== undefined) rest.invoiceStartingNumber = config.invoiceStartingNumber;
+      if (config.serviceChargePercentage !== undefined) rest.serviceChargePercentage = config.serviceChargePercentage;
+      if (config.serviceChargeEnabled !== undefined) rest.serviceChargeEnabled = config.serviceChargeEnabled;
+      if (config.upiId !== undefined) rest.upiId = config.upiId;
+      if (config.upiMerchantName !== undefined) rest.upiMerchantName = config.upiMerchantName;
+      if (config.upiQrUrl !== undefined) rest.upiQrUrl = config.upiQrUrl;
+      if (config.upiEnabled !== undefined) rest.upiEnabled = config.upiEnabled;
+      this.saveDatabase();
+    }
+    return this.getBillingConfig(targetId);
+  }
+
+  async uploadUpiQrImage(restaurantId: string, qrDataUrl: string, merchantName?: string, upiId?: string) {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/qr-upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          qrDataUrl,
+          merchantName,
+          upiId,
+        }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to upload remote UPI QR:', e);
+    }
+    const rest = this.restaurants.find((r) => r.id === targetId);
+    if (rest) {
+      rest.upiQrUrl = qrDataUrl;
+      if (merchantName) rest.upiMerchantName = merchantName;
+      if (upiId) rest.upiId = upiId;
+      rest.upiEnabled = true;
+      this.saveDatabase();
+    }
+    return { status: 'success', upiQrUrl: qrDataUrl };
+  }
+
+  async calculateTableBill(restaurantId: string, payload: {
+    tableNumber: string;
+    tableId?: string;
+    tableSessionId?: string;
+    discountPercentage?: number;
+    discountAmount?: number;
+    serviceChargePercentage?: number;
+    orderType?: string;
+  }) {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to calculate bill via backend:', e);
+    }
+    return await this.getRunningTableBill(targetId, payload.tableNumber, payload.tableSessionId);
+  }
+
+  async generateTableInvoice(restaurantId: string, payload: {
+    tableNumber: string;
+    tableId?: string;
+    tableSessionId?: string;
+    discountPercentage?: number;
+    discountAmount?: number;
+    serviceChargePercentage?: number;
+    paymentMethod?: string;
+    orderType?: string;
+  }): Promise<Bill> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/generate-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const bill = await res.json();
+        const existingIdx = this.bills.findIndex((b) => b.id === bill.id);
+        if (existingIdx >= 0) {
+          this.bills[existingIdx] = bill;
+        } else {
+          this.bills.unshift(bill);
+        }
+        this.saveDatabase();
+        return bill;
+      }
+    } catch (e) {
+      console.warn('Failed to generate invoice via backend:', e);
+    }
+    const b = await this.requestTableBill(targetId, payload.tableNumber, payload.tableSessionId);
+    return b!;
+  }
+
+  async markBillPayment(restaurantId: string, billId: string, paymentMethod: PaymentMethod = 'CASH', verifiedBy: string = 'Staff', paymentReference?: string): Promise<Bill> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/mark-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentMethod,
+          verifiedBy,
+          paymentReference,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.bill) {
+          const idx = this.bills.findIndex((b) => b.id === billId);
+          if (idx >= 0) this.bills[idx] = data.bill;
+          this.saveDatabase();
+          return data.bill;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to record payment via backend:', e);
+    }
+    const b = await this.recordBillPayment(billId, paymentMethod);
+    return b!;
+  }
+
+  async closeTableSettlement(restaurantId: string, billId: string, closedBy: string = 'Staff') {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/close-table?closed_by=${encodeURIComponent(closedBy)}`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to close table via backend:', e);
+    }
+    const b = this.bills.find((bill) => bill.id === billId);
+    if (b && b.tableSessionId) {
+      return await this.closeTableSessionAndGenerateBill(b.tableSessionId, closedBy, b.paymentMethod);
+    }
+    return { status: 'success' };
+  }
+
+  async getBills(restaurantId?: string, statusFilter?: string, paymentStatus?: string, tableNumber?: string): Promise<Bill[]> {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
     if (!targetId) return [];
+
+    const apiBase = getApiBaseUrl();
+    let url = `${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/bills`;
+    const params = new URLSearchParams();
+    if (statusFilter && statusFilter !== 'ALL') params.append('status_filter', statusFilter);
+    if (paymentStatus && paymentStatus !== 'ALL') params.append('payment_status', paymentStatus);
+    if (tableNumber) params.append('table_number', tableNumber);
+    if (params.toString()) url += `?${params.toString()}`;
+
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const items = await res.json();
+        if (Array.isArray(items) && items.length > 0) {
+          return items;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch remote bills:', e);
+    }
+
+    this.loadDatabase();
     return this.bills.filter((b) => b.restaurantId === targetId);
   }
 

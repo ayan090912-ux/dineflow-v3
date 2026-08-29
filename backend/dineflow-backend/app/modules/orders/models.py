@@ -51,11 +51,22 @@ class Bill(Base, TimestampMixin):
     table_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     table_number: Mapped[str] = mapped_column(String(50), nullable=False)
     table_session_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     subtotal: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    discount_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    discount_percentage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    service_charge_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    service_charge_percentage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     tax_percentage: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    round_off_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     grand_total: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    payment_status: Mapped[str] = mapped_column(String(20), default="UNPAID", nullable=False)  # UNPAID | PAID
+    status: Mapped[str] = mapped_column(String(30), default="OPEN", nullable=False)  # OPEN | BILL_REQUESTED | PAYMENT_PENDING | PAID | CLOSED | CANCELLED
+    payment_status: Mapped[str] = mapped_column(String(40), default="UNPAID", nullable=False)  # UNPAID | PAYMENT_PENDING | PAYMENT_VERIFICATION_REQUIRED | PAID | FAILED
     payment_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    payment_verified_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    payment_reference: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     tax_breakdown_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    items_snapshot_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    orders_snapshot_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 

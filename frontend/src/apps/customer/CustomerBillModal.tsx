@@ -317,24 +317,27 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               </div>
             )}
 
-            {/* ACTION BUTTONS */}
-            <div className="space-y-2 pt-2 no-print print:hidden">
+            {/* ACTION BUTTONS (STRICTLY OPTION 1 & OPTION 2) */}
+            <div className="space-y-3 pt-2 no-print print:hidden">
               {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* OPTION 1: CALL WAITER FOR BILL */}
                   <Button
                     onClick={handleRequestBill}
-                    className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-amber-950/40"
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold py-3.5 text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-amber-950/40 cursor-pointer"
                   >
-                    <Receipt className="w-4 h-4" />
-                    <span>{bill.status === 'BILL_REQUESTED' ? 'Re-notify Waiter 🔔' : 'Request Bill 🧾'}</span>
+                    <PhoneCall className="w-4 h-4" />
+                    <span>{bill.status === 'BILL_REQUESTED' ? 'Re-notify Waiter 🔔' : 'Call Waiter for Bill 🛎️'}</span>
                   </Button>
 
+                  {/* OPTION 2: PAY VIA UPI QR */}
                   <Button
                     onClick={() => setIsPayOnlineModalOpen(true)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/40"
+                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>Pay Online 💳</span>
+                    <span>Pay via UPI QR 📲</span>
                   </Button>
                 </div>
               )}
@@ -343,20 +346,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                 <Button
                   onClick={handleDownloadReceipt}
                   variant="brand"
-                  className="w-full text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/30 cursor-pointer"
+                  className="w-full text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-rose-950/30 cursor-pointer"
                 >
                   <Download className="w-4 h-4 text-white" />
                   <span>Download Digital Receipt (.png)</span>
-                </Button>
-
-                <Button
-                  onClick={handleCallWaiterClick}
-                  variant="outline"
-                  disabled={isCallingWaiter}
-                  className="border-slate-800 bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center gap-1 shrink-0"
-                >
-                  <PhoneCall className="w-3.5 h-3.5" />
-                  <span>{isCallingWaiter ? 'Calling...' : 'Call Waiter'}</span>
                 </Button>
               </div>
             </div>
@@ -364,60 +357,87 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
         )}
       </div>
 
-      {/* ONLINE PAYMENT MODAL ABSTRACTION */}
+      {/* UPI QR PAYMENT MODAL (OPTION 2) */}
       <Modal
         isOpen={isPayOnlineModalOpen}
         onClose={() => setIsPayOnlineModalOpen(false)}
-        title="Instant Online Table Payment 💳"
+        title="Pay via UPI QR ⚡"
       >
         <div className="space-y-4 text-xs">
           <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-1">
-            <span className="text-[11px] text-slate-400 uppercase font-mono">Total Payable Amount</span>
-            <p className="text-2xl font-black text-emerald-400 font-mono">
+            <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Amount Due to Pay</span>
+            <p className="text-3xl font-black text-emerald-400 font-mono">
               {formatCurrency(bill?.grandTotal || 0)}
             </p>
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[11px] text-slate-300 font-semibold">
               {currentRestaurant?.name || 'Restaurant'} • Table {tableNumber} (Session #{tableSession?.id})
             </p>
           </div>
 
-          <div>
-            <label className="block text-slate-400 font-bold mb-2">Select Payment Method</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['UPI', 'CARD', 'QR_CODE'] as PaymentMethod[]).map((method) => (
-                <button
-                  key={method}
-                  onClick={() => setSelectedPaymentMethod(method)}
-                  className={`p-3 rounded-xl border text-center font-bold font-mono transition-all ${
-                    selectedPaymentMethod === method
-                      ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                  }`}
-                >
-                  {method === 'UPI' ? 'BHIM / UPI 📲' : method === 'CARD' ? 'Debit/Credit Card 💳' : 'QR Scan ⚡'}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* MERCHANT UPI QR DISPLAY */}
+          {currentRestaurant?.upiQrUrl || currentRestaurant?.upiId ? (
+            <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 text-center space-y-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">
+                Scan & Pay with Any UPI App
+              </span>
 
-          {paymentState === 'PROCESSING' ? (
-            <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 rounded-2xl text-center space-y-2">
-              <Clock className="w-6 h-6 text-emerald-400 animate-spin mx-auto" />
-              <p className="font-bold text-emerald-300">Processing Online Payment...</p>
-            </div>
-          ) : paymentState === 'SUCCESS' ? (
-            <div className="p-4 bg-emerald-950/60 border border-emerald-500/50 rounded-2xl text-center space-y-1 text-emerald-300">
-              <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
-              <p className="font-bold">Payment Verified & Paid 🎉</p>
+              {currentRestaurant?.upiQrUrl ? (
+                <div className="w-52 h-52 bg-white p-3 rounded-2xl shadow-2xl mx-auto flex items-center justify-center">
+                  <img
+                    src={currentRestaurant.upiQrUrl}
+                    alt="Merchant UPI QR Code"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-52 h-52 bg-slate-900 border border-slate-800 rounded-2xl mx-auto flex flex-col items-center justify-center p-4 text-slate-400 space-y-2 font-mono">
+                  <span className="text-xs text-slate-300">Scan using UPI App to VPA:</span>
+                  <span className="font-black text-emerald-400 text-sm break-all">{currentRestaurant?.upiId}</span>
+                </div>
+              )}
+
+              {currentRestaurant?.upiId && (
+                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] flex items-center justify-between">
+                  <span className="text-slate-400">UPI ID:</span>
+                  <span className="font-bold text-white select-all">{currentRestaurant.upiId}</span>
+                </div>
+              )}
+
+              <p className="text-[10px] text-slate-400">
+                Compatible with Google Pay, PhonePe, Paytm, BHIM & all Indian UPI banking apps.
+              </p>
+
+              {/* PAYMENT VERIFICATION NOTICE */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-300 text-left space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs">
+                  <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Payment Verification Required</span>
+                </div>
+                <p className="text-[10px] text-amber-400/80">
+                  After completing payment on your UPI app, our floor waiter will confirm payment verification on the billing terminal.
+                </p>
+              </div>
             </div>
           ) : (
-            <Button
-              onClick={handleProcessOnlinePayment}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs"
-            >
-              Pay {formatCurrency(bill?.grandTotal || 0)} Now
-            </Button>
+            <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-3">
+              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+              <h4 className="font-bold text-white text-sm">UPI Payment Not Configured</h4>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                UPI payment is not configured by this restaurant. Please tap <strong>Call Waiter for Bill</strong> to pay via cash, card, or physical POS at your table.
+              </p>
+            </div>
           )}
+
+          <Button
+            onClick={() => {
+              setIsPayOnlineModalOpen(false);
+              handleRequestBill();
+            }}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>I Have Paid • Alert Waiter 🛎️</span>
+          </Button>
         </div>
       </Modal>
     </Modal>

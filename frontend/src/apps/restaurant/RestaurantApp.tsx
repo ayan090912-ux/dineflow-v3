@@ -86,6 +86,7 @@ import { BarTerminal } from '../bar/BarTerminal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
 import { TaxManagement } from './TaxManagement';
+import { OwnerBillingSettings } from './OwnerBillingSettings';
 
 interface RestaurantAppProps {
   onEditSetup?: () => void;
@@ -103,10 +104,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [selectedBillDetails, setSelectedBillDetails] = useState<Bill | null>(null);
+  const [paymentBillModal, setPaymentBillModal] = useState<Bill | null>(null);
+  const [paymentMethodInput, setPaymentMethodInput] = useState<PaymentMethod>('CASH');
+  const [paymentRefInput, setPaymentRefInput] = useState<string>('');
+  const [paymentVerifiedByInput, setPaymentVerifiedByInput] = useState<string>('Manager / Cashier');
+  const [settlingBillId, setSettlingBillId] = useState<string | null>(null);
   const [billingSearchQuery, setBillingSearchQuery] = useState('');
   const [billingStatusFilter, setBillingStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'CANCELLED'>('ALL');
   const [billingPaymentFilter, setBillingPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'UPI'>('ALL');
-  const [billingSubTab, setBillingSubTab] = useState<'invoices' | 'taxes'>('invoices');
+  const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'taxes' | 'settings'>('terminal');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
 
@@ -2863,40 +2869,73 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Receipt className="w-5 h-5 text-emerald-400" /> Restaurant Billing & Taxes
+                  <Receipt className="w-5 h-5 text-emerald-400" /> Restaurant Billing & Financial Terminal
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Manage running table bills, receipts, digital invoicing, and tax configurations.
+                  Realtime table settlement, server-calculated GST invoices, payment recording, and owner UPI configuration.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setBillingSubTab('terminal')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    billingSubTab === 'terminal'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Live Tables & POS
+                </button>
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('invoices')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     billingSubTab === 'invoices'
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Invoices & Receipts
+                  Invoices & History ({bills.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('taxes')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     billingSubTab === 'taxes'
                       ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Taxes
+                  GST & Tax Rules
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingSubTab('settings')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    billingSubTab === 'settings'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  UPI & Bill Setup
                 </button>
               </div>
             </div>
 
-            {billingSubTab === 'taxes' ? (
+            {/* SUBTAB 4: OWNER BILLING & UPI SETTINGS */}
+            {billingSubTab === 'settings' && (
+              <OwnerBillingSettings
+                restaurantId={currentRestaurant?.id || 'rest-1'}
+                currentRestaurant={currentRestaurant}
+                addToast={addToast}
+                onConfigSaved={loadData}
+              />
+            )}
+
+            {/* SUBTAB 3: TAXES MANAGEMENT */}
+            {billingSubTab === 'taxes' && (
               <TaxManagement
                 restaurantId={currentRestaurant?.id || 'rest-1'}
                 currencySymbol={theme.currency || '₹'}
@@ -2904,194 +2943,383 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 menuItems={menuItems}
                 addToast={addToast}
               />
-            ) : (
+            )}
+
+            {/* SUBTAB 1 & 2: COMMERCIAL BILLING TERMINAL & INVOICES */}
+            {(billingSubTab === 'terminal' || billingSubTab === 'invoices') && (
               <>
+                {/* Billing KPI Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                    <span className="text-[11px] text-emerald-400 font-semibold uppercase">Today's Sales</span>
+                    <p className="text-2xl font-black text-emerald-400">
+                      {formatCurrency(
+                        bills
+                          .filter((b) => b.createdAt.startsWith(new Date().toISOString().split('T')[0]) && (b.paymentStatus === 'PAID' || b.status === 'CLOSED'))
+                          .reduce((sum, b) => sum + b.grandTotal, 0),
+                        theme.currency || 'INR (₹)'
+                      )}
+                    </p>
+                    <span className="text-[10px] text-slate-500">Verified paid revenue today</span>
+                  </Card>
 
+                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                    <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Receipts</span>
+                    <p className="text-2xl font-black text-white">{bills.length}</p>
+                    <span className="text-[10px] text-slate-500">Generated invoices & sessions</span>
+                  </Card>
 
-            {/* Billing KPI Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-                <span className="text-[11px] text-emerald-400 font-semibold uppercase">Today's Sales</span>
-                <p className="text-2xl font-black text-emerald-400">
-                  {formatCurrency(
-                    bills
-                      .filter((b) => b.createdAt.startsWith(new Date().toISOString().split('T')[0]) && (b.paymentStatus === 'PAID' || b.status === 'CLOSED'))
-                      .reduce((sum, b) => sum + b.grandTotal, 0),
-                    theme.currency || 'INR (₹)'
-                  )}
-                </p>
-                <span className="text-[10px] text-slate-500">Verified paid revenue today</span>
-              </Card>
+                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                    <span className="text-[11px] text-emerald-400 font-semibold uppercase">Paid Invoices</span>
+                    <p className="text-2xl font-black text-emerald-300">
+                      {bills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').length}
+                    </p>
+                    <span className="text-[10px] text-slate-500">Completed table bills</span>
+                  </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-                <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Receipts</span>
-                <p className="text-2xl font-black text-white">{bills.length}</p>
-                <span className="text-[10px] text-slate-500">Generated invoices & sessions</span>
-              </Card>
+                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                    <span className="text-[11px] text-amber-400 font-semibold uppercase">Pending / Open Bills</span>
+                    <p className="text-2xl font-black text-amber-300">
+                      {bills.filter((b) => (b.paymentStatus === 'UNPAID' || b.paymentStatus === 'PAYMENT_PENDING' || b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED') && b.status !== 'CANCELLED' && b.status !== 'CLOSED').length}
+                    </p>
+                    <span className="text-[10px] text-slate-500">Active table sessions</span>
+                  </Card>
+                </div>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-                <span className="text-[11px] text-emerald-400 font-semibold uppercase">Paid Invoices</span>
-                <p className="text-2xl font-black text-emerald-300">
-                  {bills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').length}
-                </p>
-                <span className="text-[10px] text-slate-500">Completed table bills</span>
-              </Card>
-
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-                <span className="text-[11px] text-amber-400 font-semibold uppercase">Pending / Open Bills</span>
-                <p className="text-2xl font-black text-amber-300">
-                  {bills.filter((b) => (b.paymentStatus === 'UNPAID' || b.paymentStatus === 'PAYMENT_PENDING') && b.status !== 'CANCELLED').length}
-                </p>
-                <span className="text-[10px] text-slate-500">Active table sessions</span>
-              </Card>
-            </div>
-
-            {/* Filters Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
-              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
-                <select
-                  value={billingStatusFilter}
-                  onChange={(e: any) => setBillingStatusFilter(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="PAID">Paid Only</option>
-                  <option value="PENDING">Pending / Unpaid</option>
-                </select>
-
-                <select
-                  value={billingPaymentFilter}
-                  onChange={(e: any) => setBillingPaymentFilter(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="ALL">All Payment Methods</option>
-                  <option value="UPI">UPI / Digital</option>
-                  <option value="CASH">Cash</option>
-                  <option value="CARD">Credit/Debit Card</option>
-                </select>
-              </div>
-
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
-                <input
-                  type="text"
-                  value={billingSearchQuery}
-                  onChange={(e) => setBillingSearchQuery(e.target.value)}
-                  placeholder="Search invoice #, table #, session..."
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            {/* Bills DataTable */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-              <DataTable<Bill>
-                data={bills.filter((b) => {
-                  if (billingStatusFilter === 'PAID' && !(b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
-                  if (billingStatusFilter === 'PENDING' && (b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
-                  if (billingPaymentFilter !== 'ALL' && b.paymentMethod !== billingPaymentFilter) return false;
-                  if (billingSearchQuery) {
-                    const q = billingSearchQuery.toLowerCase();
-                    return (
-                      b.id.toLowerCase().includes(q) ||
-                      b.tableNumber.toLowerCase().includes(q) ||
-                      b.tableSessionId.toLowerCase().includes(q)
-                    );
-                  }
-                  return true;
-                })}
-                keyExtractor={(b) => b.id}
-                columns={[
-                  {
-                    key: 'id',
-                    header: 'Invoice #',
-                    render: (b) => (
-                      <div>
-                        <p className="font-mono font-bold text-emerald-400 text-xs">{b.id}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">
-                          {new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'tableNumber',
-                    header: 'Table & Session',
-                    render: (b) => (
-                      <div>
-                        <p className="font-bold text-white text-xs">{b.tableNumber}</p>
-                        <p className="text-[10px] text-emerald-400 font-mono">Session #{b.tableSessionId}</p>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'items',
-                    header: 'Items Breakdown',
-                    render: (b) => (
-                      <span className="text-xs font-mono text-slate-300">
-                        {b.items.reduce((sum, i) => sum + i.quantity, 0)} Items ({b.orders.length} Orders)
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'grandTotal',
-                    header: 'Grand Total',
-                    render: (b) => (
-                      <div>
-                        <p className="font-mono font-bold text-white text-sm">
-                          {formatCurrency(b.grandTotal, theme.currency || 'INR (₹)')}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-mono">Tax: {formatCurrency(b.taxAmount, theme.currency || 'INR (₹)')}</p>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'paymentMethod',
-                    header: 'Payment Method',
-                    render: (b) => (
-                      <Badge variant="outline" className="font-mono">
-                        {b.paymentMethod || 'CASH'}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    key: 'status',
-                    header: 'Status',
-                    render: (b) => (
-                      <Badge
-                        variant={
-                          b.paymentStatus === 'PAID' || b.status === 'CLOSED'
-                            ? 'success'
-                            : b.status === 'BILL_REQUESTED'
-                            ? 'warning'
-                            : 'info'
-                        }
-                      >
-                        {b.paymentStatus === 'PAID' || b.status === 'CLOSED'
-                          ? 'PAID'
-                          : b.status === 'BILL_REQUESTED'
-                          ? 'BILL REQUESTED'
-                          : 'OPEN'}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    key: 'actions',
-                    header: 'Actions',
-                    render: (b) => (
+                {/* SUBTAB 1: LIVE OPEN TABLE BILLS */}
+                {billingSubTab === 'terminal' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <span>Active Tables & Running Orders</span>
+                        <Badge variant="brand">{tables.filter(t => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED').length} Active</Badge>
+                      </h4>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setSelectedBillDetails(b)}
-                        className="border-slate-800 text-xs font-bold text-slate-300 hover:text-white"
+                        onClick={loadData}
+                        className="text-xs border-slate-800 text-slate-300 hover:text-white"
                       >
-                        View Receipt 🧾
+                        Refresh Live Tables
                       </Button>
-                    ),
-                  },
-                ]}
-              />
-            </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {tables
+                        .filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.isOccupied)
+                        .map((tbl) => {
+                          const tableOrders = orders.filter(
+                            (o) => o.tableNumber === tbl.tableNumber && o.status !== 'CANCELLED'
+                          );
+                          const activeBill = bills.find(
+                            (b) => b.tableNumber === tbl.tableNumber && b.status !== 'CLOSED' && b.status !== 'CANCELLED'
+                          );
+                          const orderCount = tableOrders.length;
+                          const totalItems = tableOrders.reduce(
+                            (sum, o) => sum + (o.items || []).reduce((iSum, itm) => iSum + itm.quantity, 0),
+                            0
+                          );
+                          const runningTotal = activeBill
+                            ? activeBill.grandTotal
+                            : tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+
+                          return (
+                            <Card
+                              key={tbl.id}
+                              className={`p-5 rounded-2xl border transition-all space-y-4 ${
+                                tbl.status === 'BILL_REQUESTED' || activeBill?.status === 'BILL_REQUESTED'
+                                  ? 'bg-amber-950/20 border-amber-500/50 shadow-lg shadow-amber-950/30'
+                                  : activeBill?.paymentStatus === 'PAID'
+                                  ? 'bg-emerald-950/20 border-emerald-500/50'
+                                  : 'bg-slate-900 border-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <h4 className="text-base font-bold text-white flex items-center gap-2">
+                                    <span>{tbl.tableNumber}</span>
+                                    <Badge
+                                      variant={
+                                        tbl.status === 'BILL_REQUESTED'
+                                          ? 'warning'
+                                          : activeBill?.paymentStatus === 'PAID'
+                                          ? 'success'
+                                          : 'default'
+                                      }
+                                    >
+                                      {tbl.status === 'BILL_REQUESTED' ? 'BILL REQUESTED 🧾' : activeBill?.paymentStatus === 'PAID' ? 'PAID ✅' : 'ACTIVE'}
+                                    </Badge>
+                                  </h4>
+                                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                    {tbl.section} • Capacity {tbl.capacity}
+                                  </p>
+                                </div>
+
+                                <div className="text-right font-mono">
+                                  <span className="text-[10px] text-slate-400 uppercase">Running Total</span>
+                                  <p className="text-xl font-black text-emerald-400">
+                                    {formatCurrency(runningTotal, theme.currency || 'INR (₹)')}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80 text-xs font-mono flex items-center justify-between text-slate-300">
+                                <span>{orderCount} Orders ({totalItems} Items)</span>
+                                {activeBill?.invoiceNumber && (
+                                  <span className="text-emerald-400 font-bold">{activeBill.invoiceNumber}</span>
+                                )}
+                              </div>
+
+                              {/* ACTIONS */}
+                              <div className="grid grid-cols-2 gap-2 pt-1">
+                                {activeBill ? (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setSelectedBillDetails(activeBill)}
+                                      className="border-slate-800 text-xs font-bold text-slate-200 hover:text-white"
+                                    >
+                                      View Bill 📄
+                                    </Button>
+
+                                    {activeBill.paymentStatus !== 'PAID' ? (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          setPaymentBillModal(activeBill);
+                                          setPaymentMethodInput('CASH');
+                                        }}
+                                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
+                                      >
+                                        Mark Paid 💳
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        disabled={settlingBillId === activeBill.id}
+                                        onClick={async () => {
+                                          setSettlingBillId(activeBill.id);
+                                          await api.closeTableSettlement(currentRestaurant?.id || 'rest-1', activeBill.id, 'Cashier');
+                                          addToast('success', 'Table Closed & Reset! 🧹', `${tbl.tableNumber} is now available.`);
+                                          setSettlingBillId(null);
+                                          await loadData();
+                                        }}
+                                        className="bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold"
+                                      >
+                                        Close Table 🏁
+                                      </Button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    onClick={async () => {
+                                      try {
+                                        const b = await api.generateTableInvoice(currentRestaurant?.id || 'rest-1', {
+                                          tableNumber: tbl.tableNumber,
+                                          tableId: tbl.id,
+                                        });
+                                        addToast('success', 'Invoice Generated! 🧾', `${b.invoiceNumber || b.id} created for ${tbl.tableNumber}`);
+                                        await loadData();
+                                      } catch (err: any) {
+                                        addToast('danger', 'Invoice Error', err.message || 'Failed to generate invoice');
+                                      }
+                                    }}
+                                    className="col-span-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs"
+                                  >
+                                    Generate GST Invoice 🧾
+                                  </Button>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                    </div>
+
+                    {tables.filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.isOccupied).length === 0 && (
+                      <div className="p-12 text-center bg-slate-900/40 border border-dashed border-slate-800 rounded-2xl space-y-2">
+                        <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                        <h4 className="font-bold text-white text-sm">All Tables Vacant & Settled</h4>
+                        <p className="text-xs text-slate-400">No active dining sessions requiring bill generation or payment settlement.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SUBTAB 2: INVOICES & RECEIPTS HISTORY */}
+                {billingSubTab === 'invoices' && (
+                  <div className="space-y-4">
+                    {/* Filters Bar */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+                      <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+                        <select
+                          value={billingStatusFilter}
+                          onChange={(e: any) => setBillingStatusFilter(e.target.value)}
+                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="ALL">All Statuses</option>
+                          <option value="PAID">Paid Only</option>
+                          <option value="PENDING">Pending / Unpaid</option>
+                        </select>
+
+                        <select
+                          value={billingPaymentFilter}
+                          onChange={(e: any) => setBillingPaymentFilter(e.target.value)}
+                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="ALL">All Payment Methods</option>
+                          <option value="UPI">UPI / Digital</option>
+                          <option value="CASH">Cash</option>
+                          <option value="CARD">Credit/Debit Card</option>
+                        </select>
+                      </div>
+
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+                        <input
+                          type="text"
+                          value={billingSearchQuery}
+                          onChange={(e) => setBillingSearchQuery(e.target.value)}
+                          placeholder="Search invoice #, table #, session..."
+                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bills DataTable */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                      <DataTable<Bill>
+                        data={bills.filter((b) => {
+                          if (billingStatusFilter === 'PAID' && !(b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
+                          if (billingStatusFilter === 'PENDING' && (b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
+                          if (billingPaymentFilter !== 'ALL' && b.paymentMethod !== billingPaymentFilter) return false;
+                          if (billingSearchQuery) {
+                            const q = billingSearchQuery.toLowerCase();
+                            return (
+                              (b.invoiceNumber && b.invoiceNumber.toLowerCase().includes(q)) ||
+                              b.id.toLowerCase().includes(q) ||
+                              b.tableNumber.toLowerCase().includes(q) ||
+                              b.tableSessionId.toLowerCase().includes(q)
+                            );
+                          }
+                          return true;
+                        })}
+                        keyExtractor={(b) => b.id}
+                        columns={[
+                          {
+                            key: 'id',
+                            header: 'Invoice #',
+                            render: (b) => (
+                              <div>
+                                <p className="font-mono font-bold text-emerald-400 text-xs">{b.invoiceNumber || b.id}</p>
+                                <p className="text-[10px] text-slate-400 font-mono">
+                                  {new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            ),
+                          },
+                          {
+                            key: 'tableNumber',
+                            header: 'Table & Session',
+                            render: (b) => (
+                              <div>
+                                <p className="font-bold text-white text-xs">{b.tableNumber}</p>
+                                <p className="text-[10px] text-emerald-400 font-mono">Session #{b.tableSessionId}</p>
+                              </div>
+                            ),
+                          },
+                          {
+                            key: 'items',
+                            header: 'Items Breakdown',
+                            render: (b) => (
+                              <span className="text-xs font-mono text-slate-300">
+                                {b.items.reduce((sum, i) => sum + i.quantity, 0)} Items ({b.orders.length} Orders)
+                              </span>
+                            ),
+                          },
+                          {
+                            key: 'grandTotal',
+                            header: 'Grand Total',
+                            render: (b) => (
+                              <div>
+                                <p className="font-mono font-bold text-white text-sm">
+                                  {formatCurrency(b.grandTotal, theme.currency || 'INR (₹)')}
+                                </p>
+                                <p className="text-[10px] text-slate-500 font-mono">
+                                  Tax: {formatCurrency(b.taxAmount, theme.currency || 'INR (₹)')}
+                                  {b.serviceChargeAmount ? ` • SC: ${formatCurrency(b.serviceChargeAmount, theme.currency || 'INR (₹)')}` : ''}
+                                </p>
+                              </div>
+                            ),
+                          },
+                          {
+                            key: 'paymentMethod',
+                            header: 'Payment Method',
+                            render: (b) => (
+                              <Badge variant="outline" className="font-mono">
+                                {b.paymentMethod || 'CASH'}
+                              </Badge>
+                            ),
+                          },
+                          {
+                            key: 'status',
+                            header: 'Status',
+                            render: (b) => (
+                              <Badge
+                                variant={
+                                  b.paymentStatus === 'PAID' || b.status === 'CLOSED'
+                                    ? 'success'
+                                    : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED'
+                                    ? 'warning'
+                                    : b.status === 'BILL_REQUESTED'
+                                    ? 'warning'
+                                    : 'info'
+                                }
+                              >
+                                {b.paymentStatus === 'PAID' || b.status === 'CLOSED'
+                                  ? 'PAID'
+                                  : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED'
+                                  ? 'VERIFY PAYMENT ⚠️'
+                                  : b.status === 'BILL_REQUESTED'
+                                  ? 'BILL REQUESTED'
+                                  : 'OPEN'}
+                              </Badge>
+                            ),
+                          },
+                          {
+                            key: 'actions',
+                            header: 'Actions',
+                            render: (b) => (
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedBillDetails(b)}
+                                  className="border-slate-800 text-xs font-bold text-slate-300 hover:text-white"
+                                >
+                                  View 🧾
+                                </Button>
+                                {b.paymentStatus !== 'PAID' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setPaymentBillModal(b);
+                                      setPaymentMethodInput('CASH');
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2 py-1"
+                                  >
+                                    Pay 💳
+                                  </Button>
+                                )}
+                              </div>
+                            ),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -4800,30 +5028,35 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         )}
       </Modal>
 
-      {/* Bill Details Modal for Owner */}
+      {/* Bill Details Modal for Owner / Cashier */}
       <Modal
         isOpen={!!selectedBillDetails}
         onClose={() => setSelectedBillDetails(null)}
-        title={`Invoice Details — ${selectedBillDetails?.id} 🧾`}
+        title={`Official Tax Invoice — ${selectedBillDetails?.invoiceNumber || selectedBillDetails?.id} 🧾`}
       >
         {selectedBillDetails && (
           <div className="space-y-4 text-xs printable-receipt">
             <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
               <div className="flex justify-between items-center border-b border-slate-800 pb-2 font-mono">
-                <span className="text-slate-400">Invoice #: <strong className="text-emerald-400">{selectedBillDetails.id}</strong></span>
+                <span className="text-slate-400">Invoice #: <strong className="text-emerald-400">{selectedBillDetails.invoiceNumber || selectedBillDetails.id}</strong></span>
                 <span className="text-slate-400">{new Date(selectedBillDetails.createdAt).toLocaleString()}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
                 <div>Table: <strong className="text-white">{selectedBillDetails.tableNumber}</strong></div>
-                <div>Session: <strong className="text-emerald-400">#{selectedBillDetails.tableSessionId}</strong></div>
-                <div>Payment Method: <strong className="text-amber-400">{selectedBillDetails.paymentMethod || 'CASH'}</strong></div>
-                <div>Status: <strong className="text-emerald-300">{selectedBillDetails.paymentStatus}</strong></div>
+                <div>Session: <strong className="text-emerald-400">#{String(selectedBillDetails.tableSessionId).slice(-6)}</strong></div>
+                <div>Payment Method: <strong className="text-amber-400">{(selectedBillDetails.paymentMethod || 'CASH').toUpperCase()}</strong></div>
+                <div>
+                  Status:{' '}
+                  <strong className={selectedBillDetails.paymentStatus === 'PAID' ? 'text-emerald-400' : 'text-amber-400'}>
+                    {selectedBillDetails.paymentStatus === 'PAID' ? 'PAID & VERIFIED ✅' : selectedBillDetails.paymentStatus}
+                  </strong>
+                </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              <h5 className="font-bold text-slate-300 uppercase text-[11px]">Itemized Breakdown</h5>
-              <div className="divide-y divide-slate-800 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+              <h5 className="font-bold text-slate-300 uppercase text-[11px]">Itemized Tax Invoice Breakdown</h5>
+              <div className="divide-y divide-slate-800 bg-slate-950 p-3 rounded-2xl border border-slate-800 max-h-52 overflow-y-auto">
                 {selectedBillDetails.items.map((i, idx) => (
                   <div key={idx} className="py-1.5 flex justify-between items-center">
                     <div>
@@ -4836,32 +5069,175 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               </div>
             </div>
 
-            <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-1 font-mono text-xs">
+            <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-1.5 font-mono text-xs">
               <div className="flex justify-between text-slate-400">
-                <span>Subtotal</span>
+                <span>Subtotal:</span>
                 <span>{formatCurrency(selectedBillDetails.subtotal, theme.currency || 'INR (₹)')}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>GST / Tax (5%)</span>
-                <span>{formatCurrency(selectedBillDetails.taxAmount, theme.currency || 'INR (₹)')}</span>
+
+              {(selectedBillDetails.discountAmount || 0) > 0 && (
+                <div className="flex justify-between text-emerald-400">
+                  <span>Discount ({selectedBillDetails.discountPercentage || 0}%):</span>
+                  <span>-{formatCurrency(selectedBillDetails.discountAmount, theme.currency || 'INR (₹)')}</span>
+                </div>
+              )}
+
+              {(selectedBillDetails.serviceChargeAmount || 0) > 0 && (
+                <div className="flex justify-between text-amber-400">
+                  <span>Service Charge ({selectedBillDetails.serviceChargePercentage || 0}%):</span>
+                  <span>{formatCurrency(selectedBillDetails.serviceChargeAmount, theme.currency || 'INR (₹)')}</span>
+                </div>
+              )}
+
+              {selectedBillDetails.taxBreakdown && selectedBillDetails.taxBreakdown.length > 0 ? (
+                selectedBillDetails.taxBreakdown.map((t, idx) => (
+                  <div key={idx} className="flex justify-between text-slate-400">
+                    <span>{t.name || t.taxName || 'GST'} ({t.rate || t.taxRate || 0}%{t.isInclusive ? ' Incl.' : ''}):</span>
+                    <span>{formatCurrency(t.amount || t.taxAmount || 0, theme.currency || 'INR (₹)')}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-between text-slate-400">
+                  <span>GST / Taxes:</span>
+                  <span>{formatCurrency(selectedBillDetails.taxAmount, theme.currency || 'INR (₹)')}</span>
+                </div>
+              )}
+
+              {selectedBillDetails.roundOffAmount && selectedBillDetails.roundOffAmount !== 0 ? (
+                <div className="flex justify-between text-slate-400">
+                  <span>Round Off:</span>
+                  <span>{formatCurrency(selectedBillDetails.roundOffAmount, theme.currency || 'INR (₹)')}</span>
+                </div>
+              ) : null}
+
+              <div className="flex justify-between text-emerald-400 font-black pt-2 border-t border-slate-800 text-sm">
+                <span>GRAND TOTAL:</span>
+                <span className="text-base">{formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}</span>
               </div>
-              <div className="flex justify-between text-emerald-400 font-bold pt-2 border-t border-slate-800 text-sm">
-                <span>GRAND TOTAL</span>
-                <span>{formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}</span>
+            </div>
+
+            <div className="pt-2 flex flex-wrap justify-end gap-2">
+              {selectedBillDetails.paymentStatus !== 'PAID' && (
+                <Button
+                  onClick={() => {
+                    setPaymentBillModal(selectedBillDetails);
+                    setPaymentMethodInput('CASH');
+                    setSelectedBillDetails(null);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                >
+                  Mark Payment 💳
+                </Button>
+              )}
+
+              <Button
+                onClick={() => downloadDigitalReceiptPNG(selectedBillDetails, currentRestaurant?.legalName || currentRestaurant?.name || theme.restaurantName || 'Restaurant')}
+                variant="brand"
+                className="flex items-center gap-1.5 cursor-pointer shadow-md text-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Tax Invoice (.png)</span>
+              </Button>
+
+              <Button onClick={() => setSelectedBillDetails(null)} variant="outline" className="border-slate-800 text-slate-300 text-xs">
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Payment Recording Modal */}
+      <Modal
+        isOpen={!!paymentBillModal}
+        onClose={() => setPaymentBillModal(null)}
+        title="Record Bill Payment 💳"
+      >
+        {paymentBillModal && (
+          <div className="space-y-4 text-xs">
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Settlement Amount</span>
+              <p className="text-3xl font-black text-emerald-400 font-mono">
+                {formatCurrency(paymentBillModal.grandTotal, theme.currency || 'INR (₹)')}
+              </p>
+              <p className="text-slate-400 font-mono text-[11px]">
+                Table {paymentBillModal.tableNumber} • {paymentBillModal.invoiceNumber || paymentBillModal.id}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1.5">Select Payment Method</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(['CASH', 'UPI', 'CARD', 'OTHER'] as PaymentMethod[]).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setPaymentMethodInput(method)}
+                      className={`p-2.5 rounded-xl border text-center font-bold font-mono transition-all text-xs cursor-pointer ${
+                        paymentMethodInput === method
+                          ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Verified By (Staff / Cashier Name)</label>
+                <input
+                  type="text"
+                  value={paymentVerifiedByInput}
+                  onChange={(e) => setPaymentVerifiedByInput(e.target.value)}
+                  placeholder="Manager / Cashier Name"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Transaction / Reference ID (Optional)</label>
+                <input
+                  type="text"
+                  value={paymentRefInput}
+                  onChange={(e) => setPaymentRefInput(e.target.value)}
+                  placeholder="e.g. UPI Ref #439281982 or POS Slip #128"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                />
               </div>
             </div>
 
             <div className="pt-2 flex justify-end gap-2">
               <Button
-                onClick={() => downloadDigitalReceiptPNG(selectedBillDetails, currentRestaurant?.name || theme.restaurantName || 'Restaurant')}
-                variant="brand"
-                className="flex items-center gap-1.5 cursor-pointer shadow-md"
+                variant="outline"
+                onClick={() => setPaymentBillModal(null)}
+                className="border-slate-800 text-slate-400"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download Digital Receipt (.png)</span>
+                Cancel
               </Button>
-              <Button onClick={() => setSelectedBillDetails(null)} variant="outline" className="border-slate-800 text-slate-300">
-                Close Invoice
+              <Button
+                onClick={async () => {
+                  try {
+                    const updated = await api.markBillPayment(
+                      currentRestaurant?.id || 'rest-1',
+                      paymentBillModal.id,
+                      paymentMethodInput,
+                      paymentVerifiedByInput || 'Staff',
+                      paymentRefInput || undefined
+                    );
+                    addToast('success', 'Payment Confirmed & Recorded 🎉', `₹${updated.grandTotal.toFixed(2)} marked PAID via ${updated.paymentMethod}`);
+                    setPaymentBillModal(null);
+                    setPaymentRefInput('');
+                    await loadData();
+                  } catch (err: any) {
+                    addToast('danger', 'Payment Error', err.message || 'Failed to record payment');
+                  }
+                }}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5"
+              >
+                Confirm & Record Payment ✅
               </Button>
             </div>
           </div>

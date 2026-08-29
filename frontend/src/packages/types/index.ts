@@ -161,7 +161,19 @@ export interface Restaurant {
   email?: string;
   website?: string;
   gstNumber?: string;
+  gstin?: string;
+  pan?: string;
+  legalName?: string;
+  stateCode?: string;
   taxPercentage?: number;
+  invoicePrefix?: string;
+  invoiceStartingNumber?: number;
+  serviceChargePercentage?: number;
+  serviceChargeEnabled?: boolean;
+  upiId?: string;
+  upiMerchantName?: string;
+  upiQrUrl?: string;
+  upiEnabled?: boolean;
   openingHours?: string;
   closingHours?: string;
   currency?: string;
@@ -371,12 +383,36 @@ export interface TaxAuditLog {
   createdAt: string;
 }
 
+export interface BillingConfig {
+  restaurantId: string;
+  name?: string;
+  legalName: string;
+  state: string;
+  stateCode: string;
+  gstin: string;
+  pan: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  currency?: string;
+  invoicePrefix: string;
+  invoiceStartingNumber: number;
+  serviceChargePercentage: number;
+  serviceChargeEnabled: boolean;
+  upiId: string;
+  upiMerchantName: string;
+  upiQrUrl: string;
+  upiEnabled: boolean;
+  billingSettings?: Record<string, any>;
+}
+
 export interface Bill {
   id: string;
   restaurantId: string;
   tableId: string;
   tableNumber: string;
   tableSessionId: string;
+  invoiceNumber?: string;
   businessDayId?: string;
   orders: Order[];
   items: BillItem[];
@@ -385,10 +421,16 @@ export interface Bill {
   taxRate?: number;
   taxBreakdown?: TaxSnapshot[];
   discountAmount: number;
+  discountPercentage?: number;
+  serviceChargeAmount?: number;
+  serviceChargePercentage?: number;
+  roundOffAmount?: number;
   grandTotal: number;
   status: BillStatus;
   paymentMethod?: PaymentMethod;
-  paymentStatus: 'UNPAID' | 'PAYMENT_PENDING' | 'PAID' | 'FAILED';
+  paymentStatus: 'UNPAID' | 'PAYMENT_PENDING' | 'PAYMENT_VERIFICATION_REQUIRED' | 'PAID' | 'FAILED';
+  paymentVerifiedBy?: string;
+  paymentReference?: string;
   requestedAt?: string;
   paidAt?: string;
   closedAt?: string;

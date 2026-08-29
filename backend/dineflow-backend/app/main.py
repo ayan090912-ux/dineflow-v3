@@ -37,6 +37,33 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS target_destination VARCHAR(20) DEFAULT 'KITCHEN';",
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS notes TEXT;",
         "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS table_id VARCHAR(255);",
+        # Restaurant Billing & Compliance Columns
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS legal_name VARCHAR(255);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS state VARCHAR(100);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS state_code VARCHAR(10);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS gstin VARCHAR(50);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS pan VARCHAR(50);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS invoice_prefix VARCHAR(20) DEFAULT 'INV-';",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS invoice_starting_number FLOAT DEFAULT 1001;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS service_charge_enabled BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_merchant_name VARCHAR(255);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_qr_url TEXT;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_enabled BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS billing_settings_json JSONB;",
+        # Bills Columns
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_percentage FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS round_off_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'OPEN';",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_verified_by VARCHAR(100);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS items_snapshot_json JSONB;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS orders_snapshot_json JSONB;",
     ]
     for stmt in alter_statements:
         try:
@@ -113,6 +140,7 @@ from app.modules.tables.router import router as table_router
 from app.modules.orders.router import router as order_router
 from app.modules.customer_requests.router import router as customer_requests_router
 from app.modules.taxes.router import router as tax_router
+from app.modules.billing.router import router as billing_router
 from app.modules.websocket.router import router as websocket_router
 
 # API Routes
@@ -120,6 +148,7 @@ app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(platform_router, prefix="/api/v1/admin", tags=["Platform Admin"])
 app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Restaurants"])
 app.include_router(tax_router, prefix="/api/v1/restaurants", tags=["Taxes"])
+app.include_router(billing_router, prefix="/api/v1/restaurants", tags=["Billing & Invoices"])
 app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
 app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
