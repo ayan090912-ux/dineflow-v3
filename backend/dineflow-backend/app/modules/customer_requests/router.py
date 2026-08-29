@@ -111,6 +111,7 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
 async def get_customer_requests(
     restaurant_id: str,
     status_filter: Optional[str] = None,
+    active_only: bool = False,
     table_id: Optional[str] = None,
     table_session_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
@@ -118,6 +119,8 @@ async def get_customer_requests(
     query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == restaurant_id)
     if status_filter:
         query = query.where(CustomerRequestModel.status == status_filter)
+    elif active_only:
+        query = query.where(CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS", "ACCEPTED"]))
     if table_session_id:
         query = query.where(CustomerRequestModel.table_session_id == table_session_id)
     elif table_id:
@@ -128,6 +131,34 @@ async def get_customer_requests(
     query = query.order_by(CustomerRequestModel.created_at.desc())
     result = await db.execute(query)
     reqs = result.scalars().all()
+
+    if active_only and not table_session_id:
+        from app.modules.tables.models import TableSession
+        res_active = await db.execute(
+            select(TableSession).where(
+                (TableSession.restaurant_id == restaurant_id) &
+                (TableSession.status == "ACTIVE")
+            )
+        )
+        active_sessions = res_active.scalars().all()
+        active_session_ids = {s.id for s in active_sessions}
+        active_table_ids = {s.table_id for s in active_sessions if s.table_id}
+        active_table_numbers = {s.table_number for s in active_sessions if s.table_number}
+
+        filtered = []
+        for req in reqs:
+            if req.table_session_id and req.table_session_id in active_session_ids:
+                filtered.append(req)
+                continue
+            req_table_id = req.table_id
+            req_table_num = req.table_number
+            if req_table_id and req_table_id in active_table_ids:
+                filtered.append(req)
+                continue
+            if req_table_num and req_table_num in active_table_numbers:
+                filtered.append(req)
+        reqs = filtered
+
     return [format_request_dict(r) for r in reqs]
 
 

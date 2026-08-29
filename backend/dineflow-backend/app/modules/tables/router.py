@@ -282,14 +282,26 @@ async def close_table_session(
     tbl.is_occupied = False
     tbl.active_session_id = None
 
-    # Clean up pending service requests associated with this table
+    # Clean up pending service requests associated with closed session(s) or this table
     try:
         from app.modules.customer_requests.models import CustomerRequestModel
-        query_reqs = select(CustomerRequestModel).where(
+        req_filters = [
             (CustomerRequestModel.restaurant_id.in_(search_rest_ids)) &
-            ((CustomerRequestModel.table_id == tbl.id) | (CustomerRequestModel.table_number == tbl.table_number)) &
-            (CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS"]))
-        )
+            (CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS", "ACCEPTED"]))
+        ]
+        if closed_session_ids:
+            query_reqs = select(CustomerRequestModel).where(
+                req_filters[0] &
+                (
+                    (CustomerRequestModel.table_session_id.in_(closed_session_ids)) |
+                    ((CustomerRequestModel.table_id == tbl.id) | (CustomerRequestModel.table_number == tbl.table_number))
+                )
+            )
+        else:
+            query_reqs = select(CustomerRequestModel).where(
+                req_filters[0] &
+                ((CustomerRequestModel.table_id == tbl.id) | (CustomerRequestModel.table_number == tbl.table_number))
+            )
         res_reqs = await db.execute(query_reqs)
         active_reqs = res_reqs.scalars().all()
         for req in active_reqs:
