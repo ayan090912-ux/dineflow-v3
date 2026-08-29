@@ -7,6 +7,7 @@ import { WaiterTerminalOS } from './apps/waiter/WaiterTerminalOS';
 import { KitchenETADashboard } from './apps/restaurant/KitchenETADashboard';
 import { BarTerminal } from './apps/bar/BarTerminal';
 import { InventoryTerminalOS } from './apps/inventory/InventoryTerminalOS';
+import { RestaurantOperationsCenter } from './apps/operations/RestaurantOperationsCenter';
 import { AuthPage } from './apps/auth/AuthPage';
 import { RoleLoginPage, PortalType } from './apps/auth/RoleLoginPage';
 import { UnauthorizedPage } from './apps/auth/UnauthorizedPage';
@@ -18,6 +19,7 @@ import { ErrorBoundary, DinelyLogo } from './packages/ui';
 import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
 import {
+  Activity,
   Building2,
   Utensils,
   Smartphone,
@@ -122,6 +124,18 @@ export default function App() {
                 >
                   <Globe className="w-3.5 h-3.5" />
                   <span>Main Website</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo(currentUser ? '/operations' : '/restaurant/login')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    currentPath.startsWith('/operations')
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Operations Center</span>
                 </button>
 
                 <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
@@ -383,6 +397,40 @@ export default function App() {
                   onLoginSuccess={(_, user) => {
                     setCurrentUser(user);
                     navigateTo('/admin/dashboard');
+                  }}
+                />
+              )
+            )}
+
+            {/* Unified Restaurant Operations Center (Primary Commercial Operations Screen) */}
+            {(currentPath === '/operations' || currentPath === '/operations/dashboard' || currentPath === '/operations/center') && (
+              checkRoleAccess(['RESTAURANT_OWNER', 'MANAGER', 'CHEF', 'WAITER', 'BARTENDER', 'BAR_STAFF', 'INVENTORY_MANAGER', 'SUPER_ADMIN']) ? (
+                (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
+                  <PendingApprovalPage
+                    onNavigate={navigateTo}
+                    onLogout={() => handleLogout('/restaurant/login')}
+                  />
+                ) : (
+                  <RestaurantOperationsCenter
+                    onLogout={() => handleLogout('/restaurant/login')}
+                    onNavigate={navigateTo}
+                  />
+                )
+              ) : currentUser ? (
+                <UnauthorizedPage
+                  requiredRole="RESTAURANT STAFF / OWNER"
+                  userRole={currentUser?.role}
+                  userEmail={currentUser?.email}
+                  targetPath="/operations"
+                  onNavigate={navigateTo}
+                />
+              ) : (
+                <RoleLoginPage
+                  portal="restaurant"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/operations');
                   }}
                 />
               )
