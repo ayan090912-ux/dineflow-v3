@@ -12,7 +12,7 @@ from app.modules.tables.models import Table, TableSession
 from app.modules.orders.models import Order, Bill
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
-from app.modules.websocket.manager import websocket_manager
+from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
 
@@ -215,10 +215,10 @@ async def update_restaurant_billing_config(
 
     # Broadcast updated configuration event to live terminals
     try:
-        await websocket_manager.broadcast_to_restaurant(
-            restaurant_id,
-            {
-                "type": "BillingConfigUpdated",
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="BillingConfigUpdated",
+            payload={
                 "restaurantId": rest.id,
                 "timestamp": datetime.utcnow().isoformat(),
             }
@@ -484,24 +484,22 @@ async def generate_table_invoice(
     # 4. Broadcast Realtime Event
     formatted = format_bill_response(new_bill)
     try:
-        await websocket_manager.broadcast_to_restaurant(
-            restaurant_id,
-            {
-                "type": "BillRequested",
-                "restaurantId": restaurant_id,
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="BillRequested",
+            payload={
                 "billId": new_bill.id,
                 "invoiceNumber": new_bill.invoice_number,
                 "tableNumber": new_bill.table_number,
                 "tableSessionId": new_bill.table_session_id,
                 "grandTotal": new_bill.grand_total,
-                "payload": formatted,
+                "data": formatted,
             }
         )
-        await websocket_manager.broadcast_to_restaurant(
-            restaurant_id,
-            {
-                "type": "TableStatusUpdated",
-                "restaurantId": restaurant_id,
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="TableStatusUpdated",
+            payload={
                 "tableNumber": new_bill.table_number,
                 "status": "BILL_REQUESTED",
             }
@@ -571,11 +569,10 @@ async def record_bill_payment(
 
     # Broadcast Realtime Event
     try:
-        await websocket_manager.broadcast_to_restaurant(
-            restaurant_id,
-            {
-                "type": "BillPaid",
-                "restaurantId": restaurant_id,
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="BillPaid",
+            payload={
                 "billId": bill.id,
                 "invoiceNumber": bill.invoice_number,
                 "tableNumber": bill.table_number,
@@ -583,7 +580,7 @@ async def record_bill_payment(
                 "paymentMethod": bill.payment_method,
                 "paymentStatus": "PAID",
                 "grandTotal": bill.grand_total,
-                "payload": formatted,
+                "data": formatted,
             }
         )
     except Exception:
@@ -639,22 +636,20 @@ async def close_table_settlement(
 
     # Broadcast Realtime Closure Event
     try:
-        await websocket_manager.broadcast_to_restaurant(
-            restaurant_id,
-            {
-                "type": "TableSessionClosed",
-                "restaurantId": restaurant_id,
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="TableSessionClosed",
+            payload={
                 "tableNumber": bill.table_number,
                 "tableSessionId": bill.table_session_id,
                 "closedBy": closed_by,
-                "payload": formatted,
+                "data": formatted,
             }
         )
-        await websocket_manager.broadcast_to_restaurant(
-            restaurant_id,
-            {
-                "type": "TableStatusUpdated",
-                "restaurantId": restaurant_id,
+        await ws_manager.broadcast_event(
+            restaurant_id=restaurant_id,
+            event_type="TableStatusUpdated",
+            payload={
                 "tableNumber": bill.table_number,
                 "status": "AVAILABLE",
             }
