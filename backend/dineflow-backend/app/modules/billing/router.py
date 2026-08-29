@@ -66,6 +66,40 @@ class QrUploadSchema(BaseModel):
 
 # ----------------- HELPERS -----------------
 
+async def find_restaurant_by_identifier(restaurant_id: str, db: AsyncSession) -> Optional[Restaurant]:
+    if not restaurant_id:
+        return None
+    # 1. Direct ID match
+    stmt = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_deleted == False)
+    res = await db.execute(stmt)
+    rest = res.scalar_one_or_none()
+    if rest:
+        return rest
+    
+    # 2. Case-insensitive ID match
+    stmt = select(Restaurant).where(func.lower(Restaurant.id) == restaurant_id.lower(), Restaurant.is_deleted == False)
+    res = await db.execute(stmt)
+    rest = res.scalar_one_or_none()
+    if rest:
+        return rest
+
+    # 3. Slug match
+    stmt = select(Restaurant).where(Restaurant.slug == restaurant_id.lower(), Restaurant.is_deleted == False)
+    res = await db.execute(stmt)
+    rest = res.scalar_one_or_none()
+    if rest:
+        return rest
+
+    # 4. Fallback for default identifiers
+    if restaurant_id in ["rest-1", "default", "current"]:
+        stmt = select(Restaurant).where(Restaurant.is_deleted == False).order_by(Restaurant.created_at.asc())
+        res = await db.execute(stmt)
+        rest = res.scalars().first()
+        if rest:
+            return rest
+
+    return None
+
 def format_bill_response(bill: Bill) -> dict:
     created_at_val = None
     if getattr(bill, "created_at", None):
@@ -140,9 +174,7 @@ async def get_restaurant_billing_config(
     restaurant_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_deleted == False)
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
     if not rest:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
@@ -175,9 +207,7 @@ async def update_restaurant_billing_config(
     config: BillingConfigUpdateSchema,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_deleted == False)
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
     if not rest:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
@@ -216,7 +246,7 @@ async def update_restaurant_billing_config(
     # Broadcast updated configuration event to live terminals
     try:
         await ws_manager.broadcast_event(
-            restaurant_id=restaurant_id,
+            restaurant_id=rest.id,
             event_type="BillingConfigUpdated",
             payload={
                 "restaurantId": rest.id,
@@ -253,9 +283,7 @@ async def upload_restaurant_upi_qr(
     payload: QrUploadSchema,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_deleted == False)
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
     if not rest:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
@@ -290,13 +318,11 @@ async def calculate_table_bill(
     db: AsyncSession = Depends(get_db)
 ):
     # 1. Fetch Restaurant & Active Tax Configuration
-    stmt = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_deleted == False)
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
     if not rest:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
-    taxes_stmt = select(Tax).where(Tax.restaurant_id == restaurant_id, Tax.status == "ACTIVE")
+    taxes_stmt = select(Tax).where(Tax.restaurant_id == rest.id, Tax.status == "ACTIVE")
     t_res = await db.execute(taxes_stmt)
     active_taxes = list(t_res.scalars().all())
 
@@ -318,7 +344,7 @@ async def calculate_table_bill(
     sess_id = input_data.tableSessionId
 
     orders_query = select(Order).where(
-        Order.restaurant_id == restaurant_id,
+        Order.restaurant_id == rest.id,
         Order.status != "CANCELLED"
     )
     if sess_id:
@@ -378,7 +404,7 @@ async def calculate_table_bill(
     grand_total = round(raw_total + round_off, 2)
 
     return {
-        "restaurantId": restaurant_id,
+        "restaurantId": rest.id,
         "tableNumber": tbl_num,
         "tableSessionId": sess_id,
         "itemCount": len(bill_items),
@@ -407,9 +433,7 @@ async def generate_table_invoice(
     db: AsyncSession = Depends(get_db)
 ):
     # 1. Fetch Restaurant & Next Invoice Number
-    stmt = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_deleted == False)
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
     if not rest:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
@@ -418,7 +442,7 @@ async def generate_table_invoice(
     current_num = int(rest.invoice_starting_number or 1001)
 
     # Check for existing bills with invoice numbers to ensure uniqueness
-    max_inv_stmt = select(func.count(Bill.id)).where(Bill.restaurant_id == restaurant_id)
+    max_inv_stmt = select(func.count(Bill.id)).where(Bill.restaurant_id == rest.id)
     inv_count_res = await db.execute(max_inv_stmt)
     total_bills = inv_count_res.scalar() or 0
     invoice_number = f"{prefix}{current_num + total_bills}"
@@ -433,13 +457,13 @@ async def generate_table_invoice(
         serviceChargePercentage=payload.serviceChargePercentage,
         orderType=payload.orderType
     )
-    calc_res = await calculate_table_bill(restaurant_id, calc_input, db)
+    calc_res = await calculate_table_bill(rest.id, calc_input, db)
 
     # 3. Create or Update Bill record
     bill_id = f"bill-{uuid.uuid4().hex[:12]}"
     new_bill = Bill(
         id=bill_id,
-        restaurant_id=restaurant_id,
+        restaurant_id=rest.id,
         table_id=payload.tableId or f"table-{payload.tableNumber}",
         table_number=payload.tableNumber,
         table_session_id=payload.tableSessionId or f"sess-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
@@ -463,7 +487,7 @@ async def generate_table_invoice(
     db.add(new_bill)
 
     # Update Table status to BILL_REQUESTED
-    tbl_stmt = select(Table).where(Table.restaurant_id == restaurant_id, Table.table_number == payload.tableNumber)
+    tbl_stmt = select(Table).where(Table.restaurant_id == rest.id, Table.table_number == payload.tableNumber)
     tbl_res = await db.execute(tbl_stmt)
     tbl = tbl_res.scalar_one_or_none()
     if tbl:
@@ -485,7 +509,7 @@ async def generate_table_invoice(
     formatted = format_bill_response(new_bill)
     try:
         await ws_manager.broadcast_event(
-            restaurant_id=restaurant_id,
+            restaurant_id=rest.id,
             event_type="BillRequested",
             payload={
                 "billId": new_bill.id,
@@ -497,7 +521,7 @@ async def generate_table_invoice(
             }
         )
         await ws_manager.broadcast_event(
-            restaurant_id=restaurant_id,
+            restaurant_id=rest.id,
             event_type="TableStatusUpdated",
             payload={
                 "tableNumber": new_bill.table_number,
@@ -520,7 +544,10 @@ async def list_restaurant_bills(
     table_number: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Bill).where(Bill.restaurant_id == restaurant_id).order_by(Bill.created_at.desc())
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    target_rest_id = rest.id if rest else restaurant_id
+
+    query = select(Bill).where(Bill.restaurant_id == target_rest_id).order_by(Bill.created_at.desc())
     if status_filter:
         query = query.where(Bill.status == status_filter.upper())
     if payment_status:
@@ -540,7 +567,10 @@ async def record_bill_payment(
     payload: MarkPaymentSchema,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == restaurant_id)
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    target_rest_id = rest.id if rest else restaurant_id
+
+    stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == target_rest_id)
     res = await db.execute(stmt)
     bill = res.scalar_one_or_none()
     if not bill:
@@ -570,7 +600,7 @@ async def record_bill_payment(
     # Broadcast Realtime Event
     try:
         await ws_manager.broadcast_event(
-            restaurant_id=restaurant_id,
+            restaurant_id=target_rest_id,
             event_type="BillPaid",
             payload={
                 "billId": bill.id,
@@ -600,7 +630,10 @@ async def close_table_settlement(
     closed_by: Optional[str] = Query("Staff"),
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == restaurant_id)
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    target_rest_id = rest.id if rest else restaurant_id
+
+    stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == target_rest_id)
     res = await db.execute(stmt)
     bill = res.scalar_one_or_none()
     if not bill:
@@ -622,7 +655,7 @@ async def close_table_settlement(
             sess.closed_by_waiter_name = closed_by
 
     # Free up table
-    tbl_stmt = select(Table).where(Table.restaurant_id == restaurant_id, Table.table_number == bill.table_number)
+    tbl_stmt = select(Table).where(Table.restaurant_id == target_rest_id, Table.table_number == bill.table_number)
     tbl_res = await db.execute(tbl_stmt)
     tbl = tbl_res.scalar_one_or_none()
     if tbl:
@@ -637,7 +670,7 @@ async def close_table_settlement(
     # Broadcast Realtime Closure Event
     try:
         await ws_manager.broadcast_event(
-            restaurant_id=restaurant_id,
+            restaurant_id=target_rest_id,
             event_type="TableSessionClosed",
             payload={
                 "tableNumber": bill.table_number,
@@ -647,7 +680,7 @@ async def close_table_settlement(
             }
         )
         await ws_manager.broadcast_event(
-            restaurant_id=restaurant_id,
+            restaurant_id=target_rest_id,
             event_type="TableStatusUpdated",
             payload={
                 "tableNumber": bill.table_number,
