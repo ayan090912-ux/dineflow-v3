@@ -3621,6 +3621,29 @@ export class DinelyApiClient {
   async updateBillingConfig(restaurantId: string, config: Partial<BillingConfig>): Promise<BillingConfig> {
     const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
     const apiBase = getApiBaseUrl();
+    
+    // Always update local in-memory & persisted state
+    const rest = this.restaurants.find((r) => r.id === targetId);
+    if (rest) {
+      if (config.legalName !== undefined) rest.legalName = config.legalName;
+      if (config.state !== undefined) rest.state = config.state;
+      if (config.stateCode !== undefined) rest.stateCode = config.stateCode;
+      if (config.gstin !== undefined) {
+        rest.gstin = config.gstin;
+        rest.gstNumber = config.gstin;
+      }
+      if (config.pan !== undefined) rest.pan = config.pan;
+      if (config.invoicePrefix !== undefined) rest.invoicePrefix = config.invoicePrefix;
+      if (config.invoiceStartingNumber !== undefined) rest.invoiceStartingNumber = config.invoiceStartingNumber;
+      if (config.serviceChargePercentage !== undefined) rest.serviceChargePercentage = config.serviceChargePercentage;
+      if (config.serviceChargeEnabled !== undefined) rest.serviceChargeEnabled = config.serviceChargeEnabled;
+      if (config.upiId !== undefined) rest.upiId = config.upiId;
+      if (config.upiMerchantName !== undefined) rest.upiMerchantName = config.upiMerchantName;
+      if (config.upiQrUrl !== undefined) rest.upiQrUrl = config.upiQrUrl;
+      if (config.upiEnabled !== undefined) rest.upiEnabled = config.upiEnabled;
+      this.saveDatabase();
+    }
+
     try {
       const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/config`, {
         method: 'PUT',
@@ -3649,24 +3672,6 @@ export class DinelyApiClient {
       console.warn('Failed to update remote billing config:', e);
     }
 
-    // Local DB update fallback
-    const rest = this.restaurants.find((r) => r.id === targetId);
-    if (rest) {
-      if (config.legalName !== undefined) rest.legalName = config.legalName;
-      if (config.state !== undefined) rest.state = config.state;
-      if (config.stateCode !== undefined) rest.stateCode = config.stateCode;
-      if (config.gstin !== undefined) rest.gstin = config.gstin;
-      if (config.pan !== undefined) rest.pan = config.pan;
-      if (config.invoicePrefix !== undefined) rest.invoicePrefix = config.invoicePrefix;
-      if (config.invoiceStartingNumber !== undefined) rest.invoiceStartingNumber = config.invoiceStartingNumber;
-      if (config.serviceChargePercentage !== undefined) rest.serviceChargePercentage = config.serviceChargePercentage;
-      if (config.serviceChargeEnabled !== undefined) rest.serviceChargeEnabled = config.serviceChargeEnabled;
-      if (config.upiId !== undefined) rest.upiId = config.upiId;
-      if (config.upiMerchantName !== undefined) rest.upiMerchantName = config.upiMerchantName;
-      if (config.upiQrUrl !== undefined) rest.upiQrUrl = config.upiQrUrl;
-      if (config.upiEnabled !== undefined) rest.upiEnabled = config.upiEnabled;
-      this.saveDatabase();
-    }
     return this.getBillingConfig(targetId);
   }
 

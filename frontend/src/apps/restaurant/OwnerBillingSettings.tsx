@@ -16,8 +16,10 @@ import {
   MapPin,
   Sparkles,
   HelpCircle,
+  Smartphone,
+  Check,
 } from 'lucide-react';
-import { Button, Card, Badge, Input } from '../../packages/ui';
+import { Button, Card, Badge, Input, QRCodeDisplay } from '../../packages/ui';
 import { BillingConfig, Restaurant } from '../../packages/types';
 import { api } from '../../packages/api/client';
 
@@ -143,13 +145,13 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
         serviceChargePercentage: parseFloat(serviceChargePercentage) || 0.0,
         serviceChargeEnabled,
         upiId: upiId.trim(),
-        upiMerchantName: upiMerchantName.trim() || displayName,
+        upiMerchantName: upiMerchantName.trim() || displayName || legalName,
         upiQrUrl: upiQrUrl.trim(),
         upiEnabled,
       });
 
       setConfig(updated);
-      addToast('success', 'Billing Settings Saved ✅', 'Restaurant invoicing and UPI configuration updated.');
+      addToast('success', 'Billing & UPI Settings Saved ✅', 'Invoicing rules, GST details, and UPI checkout updated.');
       if (onConfigSaved) onConfigSaved();
     } catch (err: any) {
       console.error('Failed to save billing config:', err);
@@ -159,11 +161,16 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
     }
   };
 
+  // Generate dynamic standard UPI URL
+  const dynamicUpiPayload = upiId
+    ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiMerchantName || displayName || 'Merchant')}&cu=INR`
+    : '';
+
   if (isLoading) {
     return (
       <div className="p-12 text-center text-slate-400 space-y-3">
         <Receipt className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-        <p className="font-semibold text-sm">Loading Restaurant Billing & Tax Settings...</p>
+        <p className="font-semibold text-sm">Loading Restaurant Billing & UPI Settings...</p>
       </div>
     );
   }
@@ -171,9 +178,9 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
   return (
     <form onSubmit={handleSave} className="space-y-6">
       {/* HEADER BANNER */}
-      <div className="p-4 bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-5 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 rounded-2xl border border-slate-800 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <h3 className="text-base font-extrabold text-white flex items-center gap-2">
             <Building2 className="w-5 h-5 text-emerald-400" />
             <span>Owner Billing & Invoicing Configuration</span>
           </h3>
@@ -185,7 +192,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
         <Button
           type="submit"
           disabled={isSaving}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-950/40 text-xs shrink-0 cursor-pointer"
+          className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-950/40 text-xs shrink-0 cursor-pointer"
         >
           <Save className="w-4 h-4" />
           <span>{isSaving ? 'Saving...' : 'Save Configuration'}</span>
@@ -194,7 +201,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* SECTION 1: LEGAL BUSINESS & GST IDENTITY */}
-        <Card className="bg-slate-900 border-slate-800 p-5 rounded-2xl space-y-4">
+        <Card className="bg-slate-900/90 border-slate-800 p-6 rounded-2xl space-y-4 shadow-xl">
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -202,10 +209,12 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 1. Legal Entity & GST Information
               </h4>
             </div>
-            <Badge variant="outline">Server Authoritative</Badge>
+            <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 font-mono">
+              Server Authoritative
+            </Badge>
           </div>
 
-          <div className="space-y-3 text-xs">
+          <div className="space-y-3.5 text-xs">
             <div>
               <label className="block text-slate-300 font-semibold mb-1">
                 Restaurant Legal Name <span className="text-rose-400">*</span>
@@ -214,11 +223,11 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 type="text"
                 value={legalName}
                 onChange={(e) => setLegalName(e.target.value)}
-                placeholder="e.g. Dinely Hospitality LLP / Fine Dining Pvt Ltd"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
+                placeholder="e.g. CAFE.CO Hospitality LLP / Fine Dining Pvt Ltd"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-semibold"
                 required
               />
-              <p className="text-[10px] text-slate-500 mt-0.5">Printed as the registered trade entity on invoices and receipts.</p>
+              <p className="text-[10px] text-slate-500 mt-1">Printed as the registered trade entity on invoices and receipts.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -232,7 +241,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   onChange={(e) => setGstin(e.target.value)}
                   placeholder="e.g. 27ABCDE1234F1Z5"
                   maxLength={15}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-mono uppercase"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-mono uppercase"
                 />
               </div>
 
@@ -246,7 +255,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   onChange={(e) => setPan(e.target.value)}
                   placeholder="e.g. ABCDE1234F"
                   maxLength={10}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-mono uppercase"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-mono uppercase"
                 />
               </div>
             </div>
@@ -261,7 +270,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   value={state}
                   onChange={(e) => setState(e.target.value)}
                   placeholder="e.g. Maharashtra"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
@@ -275,7 +284,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   onChange={(e) => setStateCode(e.target.value)}
                   placeholder="e.g. 27"
                   maxLength={5}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
                 />
               </div>
             </div>
@@ -289,7 +298,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="Complete address printed on tax invoices..."
                 rows={2}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
@@ -297,7 +306,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
 
 
         {/* SECTION 2: INVOICE SEQUENCE & SERVICE CHARGE */}
-        <Card className="bg-slate-900 border-slate-800 p-5 rounded-2xl space-y-4">
+        <Card className="bg-slate-900/90 border-slate-800 p-6 rounded-2xl space-y-4 shadow-xl">
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Receipt className="w-4 h-4 text-emerald-400" />
@@ -305,7 +314,9 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 2. Invoice Numbering & Surcharges
               </h4>
             </div>
-            <Badge variant="outline">Deterministic Series</Badge>
+            <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 font-mono">
+              Deterministic Series
+            </Badge>
           </div>
 
           <div className="space-y-4 text-xs">
@@ -319,9 +330,9 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   value={invoicePrefix}
                   onChange={(e) => setInvoicePrefix(e.target.value)}
                   placeholder="e.g. INV- or DLY/"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-emerald-400 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-mono font-bold"
                 />
-                <p className="text-[10px] text-slate-500 mt-0.5">Prefix prepended to each bill #</p>
+                <p className="text-[10px] text-slate-500 mt-1">Prefix prepended to each bill #</p>
               </div>
 
               <div>
@@ -334,9 +345,9 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   onChange={(e) => setInvoiceStartingNumber(e.target.value)}
                   placeholder="1001"
                   min={1}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
                 />
-                <p className="text-[10px] text-slate-500 mt-0.5">Next generated invoice will start here</p>
+                <p className="text-[10px] text-slate-500 mt-1">Next generated invoice will start here</p>
               </div>
             </div>
 
@@ -398,7 +409,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
 
 
         {/* SECTION 3: UPI DIGITAL PAYMENTS & MERCHANT QR */}
-        <Card className="bg-slate-900 border-slate-800 p-5 rounded-2xl space-y-4 lg:col-span-2">
+        <Card className="bg-slate-900/90 border-slate-800 p-6 rounded-2xl space-y-4 lg:col-span-2 shadow-xl">
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <QrCode className="w-4 h-4 text-emerald-400" />
@@ -407,7 +418,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
               </h4>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-medium">Enable UPI Option on Customer Bill:</span>
+              <span className="text-xs text-slate-300 font-medium">Enable UPI on Customer Bill:</span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -415,13 +426,13 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   onChange={(e) => setUpiEnabled(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                <div className="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
               </label>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
-            <div className="md:col-span-2 space-y-3">
+            <div className="md:col-span-2 space-y-4">
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
                   Merchant UPI ID / VPA <span className="text-emerald-400">*</span>
@@ -430,11 +441,11 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   type="text"
                   value={upiId}
                   onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="e.g. restaurant@okaxis, merchant@icici, dineflow@upi"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                  placeholder="e.g. cafe@okaxis, restaurant@icici, dineflow@upi"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-emerald-400 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-mono font-bold text-sm"
                 />
-                <p className="text-[10px] text-slate-500 mt-0.5">
-                  Customers can scan your QR or copy this VPA directly to pay via GPay, PhonePe, Paytm, or BHIM.
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Customers scan this QR to pay directly via Google Pay, PhonePe, Paytm, or BHIM.
                 </p>
               </div>
 
@@ -446,15 +457,15 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   type="text"
                   value={upiMerchantName}
                   onChange={(e) => setUpiMerchantName(e.target.value)}
-                  placeholder="e.g. Dinely Fine Dining Cafe"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
+                  placeholder="e.g. CAFE.CO Fine Dining"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-medium"
                 />
               </div>
 
-              {/* Upload QR File Box */}
+              {/* Upload Custom QR Image */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
-                  Upload Merchant UPI QR Code Image
+                  Upload Custom Standee QR Image (Optional)
                 </label>
                 <div className="border-2 border-dashed border-slate-800 hover:border-slate-700 bg-slate-950 rounded-xl p-4 text-center cursor-pointer transition-all relative">
                   <input
@@ -465,12 +476,12 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   />
                   <div className="space-y-1.5 pointer-events-none">
                     <Upload className="w-5 h-5 text-slate-400 mx-auto" />
-                    <p className="font-bold text-white text-xs">Click or drag & drop to upload UPI QR image</p>
-                    <p className="text-[10px] text-slate-500">Supported formats: PNG, JPG, WEBP (Max 2MB)</p>
+                    <p className="font-bold text-white text-xs">Click or drag & drop custom QR code standee image</p>
+                    <p className="text-[10px] text-slate-500">Supported: PNG, JPG, WEBP (Max 2MB) — or leave blank to use auto-generated QR</p>
                   </div>
                 </div>
                 {qrFileError && (
-                  <p className="text-[11px] text-rose-400 font-medium mt-1 flex items-center gap-1">
+                  <p className="text-[11px] text-rose-400 font-medium mt-1.5 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" />
                     <span>{qrFileError}</span>
                   </p>
@@ -479,14 +490,15 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
             </div>
 
             {/* LIVE UPI QR PREVIEW */}
-            <div className="bg-slate-950 rounded-2xl border border-slate-800 p-4 flex flex-col items-center justify-center text-center space-y-3">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">
-                Customer QR Preview
+            <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 flex flex-col items-center justify-center text-center space-y-3 shadow-inner">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono flex items-center gap-1.5">
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Live Customer Checkout Preview</span>
               </span>
 
               {upiQrUrl ? (
                 <div className="relative group">
-                  <div className="w-40 h-40 bg-white p-2.5 rounded-2xl shadow-xl flex items-center justify-center overflow-hidden">
+                  <div className="w-44 h-44 bg-white p-2.5 rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden">
                     <img
                       src={upiQrUrl}
                       alt="Merchant UPI QR"
@@ -496,23 +508,34 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   <button
                     type="button"
                     onClick={() => setUpiQrUrl('')}
-                    className="absolute top-1 right-1 p-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Remove QR Image"
+                    className="absolute -top-2 -right-2 p-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow-lg transition-transform hover:scale-110 cursor-pointer"
+                    title="Remove Custom Image"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              ) : upiId ? (
+                <div className="w-44 h-44 bg-white p-2.5 rounded-2xl shadow-2xl flex items-center justify-center">
+                  <QRCodeDisplay
+                    value={dynamicUpiPayload}
+                    size={160}
+                    level="M"
+                    includeMargin={false}
+                  />
+                </div>
               ) : (
-                <div className="w-40 h-40 bg-slate-900 border-2 border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center text-slate-600 p-4 space-y-1">
+                <div className="w-44 h-44 bg-slate-900 border-2 border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center text-slate-600 p-4 space-y-1.5">
                   <QrCode className="w-8 h-8 text-slate-700" />
-                  <span className="text-[10px] text-slate-500">No QR uploaded</span>
+                  <span className="text-[10px] text-slate-500 font-semibold">Enter UPI ID to generate live QR</span>
                 </div>
               )}
 
-              <div className="space-y-0.5 font-mono text-[10px]">
-                <p className="font-bold text-white">{upiMerchantName || displayName || 'Merchant'}</p>
-                <p className="text-emerald-400 font-semibold">{upiId || 'No UPI ID Set'}</p>
-                <p className="text-slate-500">{upiEnabled ? '● UPI Enabled' : '○ UPI Disabled'}</p>
+              <div className="space-y-1 font-mono text-[11px] w-full">
+                <p className="font-bold text-white truncate">{upiMerchantName || displayName || legalName || 'Merchant'}</p>
+                <p className="text-emerald-400 font-bold break-all">{upiId || 'No UPI ID Set'}</p>
+                <Badge variant={upiEnabled ? 'success' : 'outline'} className="text-[10px] py-0.5 mt-1">
+                  {upiEnabled ? '● UPI Checkout Active' : '○ UPI Checkout Disabled'}
+                </Badge>
               </div>
             </div>
           </div>
@@ -524,10 +547,10 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
         <Button
           type="submit"
           disabled={isSaving}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-950/40 text-xs cursor-pointer"
+          className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-8 py-3 rounded-xl flex items-center gap-2 shadow-xl shadow-emerald-950/40 text-xs cursor-pointer"
         >
           <Save className="w-4 h-4" />
-          <span>{isSaving ? 'Saving Changes...' : 'Save All Billing Settings'}</span>
+          <span>{isSaving ? 'Saving Changes...' : 'Save All Billing & UPI Settings'}</span>
         </Button>
       </div>
     </form>

@@ -16,7 +16,7 @@ import {
   ChevronRight,
   ShieldCheck,
 } from 'lucide-react';
-import { Modal, Button, Badge, Card } from '../../packages/ui';
+import { Modal, Button, Badge, Card, QRCodeDisplay } from '../../packages/ui';
 import { Bill, Restaurant, TableSession, PaymentMethod } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
@@ -387,6 +387,15 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                     src={currentRestaurant.upiQrUrl}
                     alt="Merchant UPI QR Code"
                     className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : currentRestaurant?.upiId ? (
+                <div className="w-52 h-52 bg-white p-3 rounded-2xl shadow-2xl mx-auto flex items-center justify-center">
+                  <QRCodeDisplay
+                    value={`upi://pay?pa=${encodeURIComponent(currentRestaurant.upiId)}&pn=${encodeURIComponent(currentRestaurant.upiMerchantName || currentRestaurant.name || 'Restaurant')}&am=${bill?.grandTotal || 0}&cu=INR`}
+                    size={180}
+                    level="M"
+                    includeMargin={false}
                   />
                 </div>
               ) : (
