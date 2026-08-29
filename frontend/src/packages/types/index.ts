@@ -26,6 +26,48 @@ export interface User {
   tokens?: AuthTokens;
 }
 
+export type WorkspaceType = 'admin' | 'restaurant' | 'operations' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'customer';
+
+export function canAccessWorkspace(user: User | null | undefined, workspace: WorkspaceType | string): boolean {
+  if (!user || !user.role) return false;
+  const role = user.role;
+
+  // 1. Platform Admin / Super Admin has access to all platform and operational workspaces
+  if (role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') {
+    return true;
+  }
+
+  // 2. Restaurant Owner & Manager have access to all restaurant operational & management workspaces
+  if (role === 'RESTAURANT_OWNER' || role === 'MANAGER') {
+    return workspace !== 'admin';
+  }
+
+  // 3. Restaurant Staff roles (Chef, Waiter, Bartender, Inventory Manager, Cashier, Host)
+  // have unified access across all staff operational terminals and the Operations Center
+  const isStaffRole = [
+    'CHEF',
+    'WAITER',
+    'BARTENDER',
+    'BAR_STAFF',
+    'INVENTORY_MANAGER',
+    'HOST',
+    'CASHIER',
+  ].includes(role);
+
+  if (isStaffRole) {
+    if (workspace === 'admin' || workspace === 'restaurant') {
+      return false;
+    }
+    return ['operations', 'kitchen', 'waiter', 'bar', 'inventory', 'customer'].includes(workspace);
+  }
+
+  if (role === 'CUSTOMER') {
+    return workspace === 'customer';
+  }
+
+  return false;
+}
+
 export interface RestaurantFeatures {
   food_service: boolean;
   cafe: boolean;

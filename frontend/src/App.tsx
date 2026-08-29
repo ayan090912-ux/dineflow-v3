@@ -18,6 +18,7 @@ import { ThemeProvider } from './packages/theme/ThemeEngine';
 import { ErrorBoundary, DinelyLogo } from './packages/ui';
 import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
+import { canAccessWorkspace, WorkspaceType } from './packages/types';
 import {
   Activity,
   Building2,
@@ -91,24 +92,9 @@ export default function App() {
     }
   }, [currentPath, currentUser]);
 
-  // Helper to check role authorization
-  const checkRoleAccess = (allowedRoles: string[]) => {
-    if (!currentUser) return false;
-    if (allowedRoles.includes('PLATFORM_ADMIN')) {
-      return (
-        (currentUser.role === 'PLATFORM_ADMIN' || currentUser.role === 'SUPER_ADMIN') &&
-        currentUser.email?.toLowerCase() === 'ayan090912@gmail.com'
-      );
-    }
-    // Super admin & Restaurant owner & Manager have full operational access to all restaurant terminals
-    if (
-      currentUser.role === 'SUPER_ADMIN' ||
-      currentUser.role === 'RESTAURANT_OWNER' ||
-      (currentUser.role as string) === 'MANAGER'
-    ) {
-      return true;
-    }
-    return allowedRoles.includes(currentUser.role);
+  // Canonical workspace authorization decision engine
+  const checkWorkspaceAccess = (workspace: WorkspaceType | string) => {
+    return canAccessWorkspace(currentUser, workspace);
   };
 
   return (
@@ -138,7 +124,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => navigateTo(currentUser ? '/operations' : '/restaurant/login')}
+                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'operations') ? '/operations' : '/restaurant/login')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                     currentPath.startsWith('/operations')
                       ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
@@ -152,7 +138,7 @@ export default function App() {
                 <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
 
                 <button
-                  onClick={() => navigateTo(currentUser ? '/kitchen/dashboard' : '/kitchen/login')}
+                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'kitchen') ? '/kitchen/dashboard' : '/kitchen/login')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/kitchen')
                       ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
@@ -165,7 +151,7 @@ export default function App() {
 
                 {(currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) && (
                   <button
-                    onClick={() => navigateTo(currentUser ? '/waiter' : '/waiter/login')}
+                    onClick={() => navigateTo(canAccessWorkspace(currentUser, 'waiter') ? '/waiter' : '/waiter/login')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                       currentPath.startsWith('/waiter')
                         ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
@@ -179,7 +165,7 @@ export default function App() {
 
                 {(currentRestaurant?.hasBar !== false && (currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR')) && (
                   <button
-                    onClick={() => navigateTo(currentUser ? '/bar/dashboard' : '/bar/login')}
+                    onClick={() => navigateTo(canAccessWorkspace(currentUser, 'bar') ? '/bar/dashboard' : '/bar/login')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                       currentPath.startsWith('/bar')
                         ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
@@ -192,7 +178,7 @@ export default function App() {
                 )}
 
                 <button
-                  onClick={() => navigateTo(currentUser ? '/inventory/terminal' : '/inventory/login')}
+                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'inventory') ? '/inventory/terminal' : '/inventory/login')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/inventory')
                       ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
@@ -206,7 +192,7 @@ export default function App() {
                 <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
 
                 <button
-                  onClick={() => navigateTo(currentUser ? '/workspace' : '/restaurant/login')}
+                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'restaurant') ? '/workspace' : '/restaurant/login')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/restaurant') || currentPath === '/workspace'
                       ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
@@ -218,7 +204,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => navigateTo(currentUser ? '/admin/dashboard' : '/admin/login')}
+                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'admin') ? '/admin/dashboard' : '/admin/login')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     currentPath.startsWith('/admin')
                       ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
@@ -364,7 +350,7 @@ export default function App() {
             )}
 
             {(currentPath === '/inventory/terminal' || currentPath === '/inventory/dashboard' || currentPath === '/inventory') && (
-              checkRoleAccess(['INVENTORY_MANAGER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+              checkWorkspaceAccess('inventory') ? (
                 <InventoryTerminalOS
                   onLogout={() => handleLogout('/inventory/login')}
                   activeRestaurantId={currentRestaurant?.id}
@@ -391,7 +377,7 @@ export default function App() {
 
             {/* Dashboards with Role-Based Access Control (RBAC) */}
             {currentPath === '/admin/dashboard' && (
-              checkRoleAccess(['PLATFORM_ADMIN', 'SUPER_ADMIN']) ? (
+              checkWorkspaceAccess('admin') ? (
                 <PlatformApp onLogout={() => handleLogout('/admin/login')} />
               ) : currentUser ? (
                 <UnauthorizedPage
@@ -415,7 +401,7 @@ export default function App() {
 
             {/* Unified Restaurant Operations Center (Primary Commercial Operations Screen) */}
             {(currentPath === '/operations' || currentPath === '/operations/dashboard' || currentPath === '/operations/center') && (
-              checkRoleAccess(['RESTAURANT_OWNER', 'MANAGER', 'CHEF', 'WAITER', 'BARTENDER', 'BAR_STAFF', 'INVENTORY_MANAGER', 'SUPER_ADMIN']) ? (
+              checkWorkspaceAccess('operations') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
                     onNavigate={navigateTo}
@@ -449,7 +435,7 @@ export default function App() {
 
             {/* Operational Dashboards with Strict Approval Guard */}
             {(currentPath === '/restaurant/dashboard' || currentPath === '/owner') && (
-              checkRoleAccess(['RESTAURANT_OWNER', 'MANAGER', 'SUPER_ADMIN']) ? (
+              checkWorkspaceAccess('restaurant') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
                     onNavigate={navigateTo}
@@ -508,7 +494,7 @@ export default function App() {
             )}
 
             {currentPath === '/kitchen/dashboard' && (
-              checkRoleAccess(['CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+              checkWorkspaceAccess('kitchen') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
                     onNavigate={navigateTo}
@@ -545,7 +531,7 @@ export default function App() {
             )}
 
             {currentPath === '/bar/dashboard' && (
-              checkRoleAccess(['BARTENDER', 'BAR_STAFF', 'CHEF', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+              checkWorkspaceAccess('bar') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
                     onNavigate={navigateTo}
@@ -577,7 +563,7 @@ export default function App() {
 
             {(currentPath === '/waiter' || currentPath === '/waiter/dashboard') && (
               (currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) ? (
-                checkRoleAccess(['WAITER', 'HOST', 'CASHIER', 'BARTENDER', 'MANAGER', 'RESTAURANT_OWNER', 'SUPER_ADMIN']) ? (
+                checkWorkspaceAccess('waiter') ? (
                   (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                     <PendingApprovalPage
                       onNavigate={navigateTo}

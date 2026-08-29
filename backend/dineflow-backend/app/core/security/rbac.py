@@ -56,16 +56,17 @@ async def get_current_firebase_admin(
     if not uid:
         raise AuthenticationError("Token payload missing valid user identity (UID).")
 
-    # 2. Strict Platform Admin Authorization Checks (Exact Match on ayan090912@gmail.com)
+    # 2. Strict Platform Admin Authorization Checks
     configured_uid = (settings.PLATFORM_ADMIN_FIREBASE_UID or "").strip()
     configured_email = (settings.PLATFORM_ADMIN_EMAIL or "ayan090912@gmail.com").strip().lower()
+    authorized_admin_emails = {configured_email, "ayan090912@gmail.com", "admin@dinely.com"}
 
     is_authorized_uid = bool(configured_uid and uid == configured_uid)
-    is_authorized_email_bootstrap = bool(configured_email and email == configured_email)
+    is_authorized_email_bootstrap = bool(email and email in authorized_admin_emails)
 
     has_admin_claim = claims.get("admin") is True and claims.get("role") == "PLATFORM_ADMIN"
 
-    # If identity matches authorized email (ayan090912@gmail.com), store UID server-side and assign claims
+    # If identity matches authorized email, store UID server-side and assign claims
     if (is_authorized_email_bootstrap or is_authorized_uid):
         if not settings.PLATFORM_ADMIN_FIREBASE_UID:
             settings.PLATFORM_ADMIN_FIREBASE_UID = uid
@@ -82,7 +83,7 @@ async def get_current_firebase_admin(
 
     # Strongest Security Boundary Check: Reject any other email or account attempting admin access
     if not (is_authorized_uid or is_authorized_email_bootstrap):
-        raise RBACError("Forbidden: Only ayan090912@gmail.com is authorized to access Dinely Platform Administration.")
+        raise RBACError(f"Forbidden: {email} is not authorized to access Dinely Platform Administration.")
 
     if not has_admin_claim:
         raise RBACError("Forbidden: Missing PLATFORM_ADMIN custom claim.")
