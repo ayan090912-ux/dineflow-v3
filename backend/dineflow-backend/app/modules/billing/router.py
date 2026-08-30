@@ -69,30 +69,40 @@ class QrUploadSchema(BaseModel):
 async def find_restaurant_by_identifier(restaurant_id: str, db: AsyncSession) -> Optional[Restaurant]:
     if not restaurant_id:
         return None
+    
+    clean_id = restaurant_id.strip()
+
     # 1. Direct ID match
-    stmt = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_deleted == False)
+    stmt = select(Restaurant).where(Restaurant.id == clean_id, Restaurant.deleted_at.is_(None))
     res = await db.execute(stmt)
     rest = res.scalar_one_or_none()
     if rest:
         return rest
     
     # 2. Case-insensitive ID match
-    stmt = select(Restaurant).where(func.lower(Restaurant.id) == restaurant_id.lower(), Restaurant.is_deleted == False)
+    stmt = select(Restaurant).where(func.lower(Restaurant.id) == clean_id.lower(), Restaurant.deleted_at.is_(None))
     res = await db.execute(stmt)
     rest = res.scalar_one_or_none()
     if rest:
         return rest
 
     # 3. Slug match
-    stmt = select(Restaurant).where(Restaurant.slug == restaurant_id.lower(), Restaurant.is_deleted == False)
+    stmt = select(Restaurant).where(Restaurant.slug == clean_id.lower(), Restaurant.deleted_at.is_(None))
     res = await db.execute(stmt)
     rest = res.scalar_one_or_none()
     if rest:
         return rest
 
-    # 4. Fallback for default identifiers
-    if restaurant_id in ["rest-1", "default", "current"]:
-        stmt = select(Restaurant).where(Restaurant.is_deleted == False).order_by(Restaurant.created_at.asc())
+    # 4. Name match (case-insensitive)
+    stmt = select(Restaurant).where(func.lower(Restaurant.name) == clean_id.lower(), Restaurant.deleted_at.is_(None))
+    res = await db.execute(stmt)
+    rest = res.scalar_one_or_none()
+    if rest:
+        return rest
+
+    # 5. Fallback for default identifiers
+    if clean_id.lower() in ["rest-1", "default", "current", "cafe-co", "cafeco"]:
+        stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None)).order_by(Restaurant.created_at.asc())
         res = await db.execute(stmt)
         rest = res.scalars().first()
         if rest:

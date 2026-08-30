@@ -2159,6 +2159,20 @@ export class DinelyApiClient {
             tablesCount: data.tables_count || 12,
             currency: data.currency || 'INR (₹)',
             taxPercentage: data.tax_percentage || 5.0,
+            legalName: data.legal_name || data.legalName || data.name || 'CAFE.CO',
+            state: data.state || '',
+            stateCode: data.state_code || data.stateCode || '',
+            gstin: data.gstin || data.gstNumber || '',
+            gstNumber: data.gstin || data.gstNumber || '',
+            pan: data.pan || '',
+            invoicePrefix: data.invoice_prefix || data.invoicePrefix || 'INV-',
+            invoiceStartingNumber: data.invoice_starting_number !== undefined ? Number(data.invoice_starting_number) : (data.invoiceStartingNumber || 1001),
+            serviceChargePercentage: data.service_charge_percentage !== undefined ? Number(data.service_charge_percentage) : (data.serviceChargePercentage || 0.0),
+            serviceChargeEnabled: data.service_charge_enabled !== undefined ? Boolean(data.service_charge_enabled) : Boolean(data.serviceChargeEnabled),
+            upiId: data.upi_id || data.upiId || '',
+            upiMerchantName: data.upi_merchant_name || data.upiMerchantName || data.name || '',
+            upiQrUrl: data.upi_qr_url || data.upiQrUrl || '',
+            upiEnabled: data.upi_enabled !== undefined ? Boolean(data.upi_enabled) : (data.upiEnabled !== undefined ? Boolean(data.upiEnabled) : true),
             theme: data.theme_json || {
               restaurantId: data.id,
               restaurantName: data.name,
@@ -3586,19 +3600,57 @@ export class DinelyApiClient {
   async getBillingConfig(restaurantId?: string): Promise<BillingConfig> {
     const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
     const apiBase = getApiBaseUrl();
+    let remoteConfig: any = null;
     try {
       const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/config`);
       if (res.ok) {
-        return await res.json();
+        remoteConfig = await res.json();
       }
     } catch (e) {
       console.warn('Failed to fetch remote billing config:', e);
     }
-    const rest = this.restaurants.find((r) => r.id === targetId);
+
+    const rest = this.restaurants.find((r) => r.id === targetId || r.slug === targetId);
+    if (remoteConfig) {
+      if (rest) {
+        if (remoteConfig.upiId !== undefined) rest.upiId = remoteConfig.upiId;
+        if (remoteConfig.upiMerchantName !== undefined) rest.upiMerchantName = remoteConfig.upiMerchantName;
+        if (remoteConfig.upiQrUrl !== undefined) rest.upiQrUrl = remoteConfig.upiQrUrl;
+        if (remoteConfig.upiEnabled !== undefined) rest.upiEnabled = Boolean(remoteConfig.upiEnabled);
+        if (remoteConfig.legalName !== undefined) rest.legalName = remoteConfig.legalName;
+        if (remoteConfig.gstin !== undefined) {
+          rest.gstin = remoteConfig.gstin;
+          rest.gstNumber = remoteConfig.gstin;
+        }
+        this.saveDatabase();
+      }
+      return {
+        restaurantId: remoteConfig.restaurantId || targetId,
+        name: remoteConfig.name || rest?.name || 'Restaurant',
+        legalName: remoteConfig.legalName || rest?.legalName || rest?.name || 'CAFE.CO',
+        state: remoteConfig.state || rest?.state || '',
+        stateCode: remoteConfig.stateCode || rest?.stateCode || '',
+        gstin: remoteConfig.gstin || rest?.gstin || '',
+        pan: remoteConfig.pan || rest?.pan || '',
+        address: remoteConfig.address || rest?.address || '',
+        phone: remoteConfig.phone || rest?.phone || '',
+        email: remoteConfig.email || rest?.email || '',
+        currency: remoteConfig.currency || rest?.currency || 'INR (₹)',
+        invoicePrefix: remoteConfig.invoicePrefix || rest?.invoicePrefix || 'INV-',
+        invoiceStartingNumber: remoteConfig.invoiceStartingNumber !== undefined ? Number(remoteConfig.invoiceStartingNumber) : (rest?.invoiceStartingNumber || 1001),
+        serviceChargePercentage: remoteConfig.serviceChargePercentage !== undefined ? Number(remoteConfig.serviceChargePercentage) : (rest?.serviceChargePercentage || 0.0),
+        serviceChargeEnabled: remoteConfig.serviceChargeEnabled !== undefined ? Boolean(remoteConfig.serviceChargeEnabled) : (rest?.serviceChargeEnabled || false),
+        upiId: remoteConfig.upiId !== undefined ? remoteConfig.upiId : (rest?.upiId || ''),
+        upiMerchantName: remoteConfig.upiMerchantName || rest?.upiMerchantName || rest?.name || '',
+        upiQrUrl: remoteConfig.upiQrUrl !== undefined ? remoteConfig.upiQrUrl : (rest?.upiQrUrl || ''),
+        upiEnabled: remoteConfig.upiEnabled !== undefined ? Boolean(remoteConfig.upiEnabled) : (rest?.upiEnabled !== false),
+      };
+    }
+
     return {
       restaurantId: targetId,
       name: rest?.name || 'Restaurant',
-      legalName: rest?.legalName || rest?.name || 'Dinely Fine Dining',
+      legalName: rest?.legalName || rest?.name || 'CAFE.CO',
       state: rest?.state || '',
       stateCode: rest?.stateCode || '',
       gstin: rest?.gstin || rest?.gstNumber || '',

@@ -17,11 +17,12 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Modal, Button, Badge, Card, QRCodeDisplay } from '../../packages/ui';
-import { Bill, Restaurant, TableSession, PaymentMethod } from '../../packages/types';
+import { Bill, Restaurant, TableSession, PaymentMethod, BillingConfig } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
 import { formatCurrency } from '../../packages/utils/currency';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
+import { formatStandardTableNumber } from '../../packages/utils/tableUtils';
 
 interface CustomerBillModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   onCallWaiter,
 }) => {
   const [bill, setBill] = useState<Bill | null>(null);
+  const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isPayOnlineModalOpen, setIsPayOnlineModalOpen] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('UPI');
@@ -49,6 +51,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   const [isCallingWaiter, setIsCallingWaiter] = useState(false);
 
   const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
+  const standardTable = formatStandardTableNumber(tableNumber);
 
   // Load Running Bill
   const loadBill = async () => {
@@ -59,8 +62,23 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     setIsLoading(false);
   };
 
+  // Load Server Authoritative Billing & UPI Config
+  const loadBillingConfig = async () => {
+    try {
+      const cfg = await api.getBillingConfig(restId);
+      if (cfg) {
+        setBillingConfig(cfg);
+      }
+    } catch (e) {
+      console.warn('Failed to load server billing config:', e);
+    }
+  };
+
   useEffect(() => {
-    loadBill();
+    if (isOpen) {
+      loadBill();
+      loadBillingConfig();
+    }
 
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
       if (
@@ -73,10 +91,21 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
       ) {
         loadBill();
       }
+      if (event.type === 'BillingConfigUpdated' || (event as any).type === 'billing_config_updated') {
+        loadBillingConfig();
+      }
     });
 
     return () => unsubscribe();
-  }, [isOpen, tableNumber, tableSession?.id]);
+  }, [isOpen, tableNumber, tableSession?.id, restId]);
+
+  // UPI Config Values Resolved from Server Config with Fallbacks
+  const activeUpiId = billingConfig?.upiId || currentRestaurant?.upiId || '';
+  const activeMerchantName = billingConfig?.upiMerchantName || currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'CAFE.CO';
+  const activeQrUrl = billingConfig?.upiQrUrl || currentRestaurant?.upiQrUrl || '';
+  const activeUpiEnabled = billingConfig?.upiEnabled !== undefined 
+    ? Boolean(billingConfig.upiEnabled) 
+    : (currentRestaurant?.upiEnabled !== undefined ? Boolean(currentRestaurant.upiEnabled) : true);
 
   // Request Bill Handler (Notifies Waiter Terminal & WebSocket)
   const handleRequestBill = async () => {
@@ -96,6 +125,35 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     }
   };
 
+  // Customer Claimed Paid Online -> Alert Waiter
+  const handleCustomerClaimedPaid = async () => {
+    setIsLoading(true);
+    setNotificationToast('Alerting Waiter... 🛎️');
+    try {
+      const amountStr = bill ? `₹${bill.grandTotal.toFixed(2)}` : '';
+      await api.createCustomerRequest({
+        restaurantId: restId,
+        tableNumber: standardTable,
+        requestType: 'BILL',
+        customTitle: 'UPI Payment Verification ⚡',
+        message: `Customer at ${standardTable} has paid ${amountStr} via UPI (${activeUpiId || 'UPI QR'}). Please verify & confirm.`,
+        customerNotes: `UPI ID: ${activeUpiId || 'Merchant QR'} | Amount: ${amountStr}`,
+        priority: 'HIGH',
+        tableSessionId: tableSession?.id,
+      });
+      await api.requestTableBill(restId, tableNumber, tableSession?.id);
+      setNotificationToast('Waiter Alerted! 🛎️ Payment verification sent to billing terminal.');
+      setTimeout(() => setNotificationToast(null), 4000);
+    } catch (err: any) {
+      console.warn('Paid alert error:', err);
+      setNotificationToast('Waiter Alerted! 🛎️');
+      setTimeout(() => setNotificationToast(null), 3000);
+    } finally {
+      setIsLoading(false);
+      setIsPayOnlineModalOpen(false);
+    }
+  };
+
   // Direct Call Waiter Handler
   const handleCallWaiterClick = async () => {
     setIsCallingWaiter(true);
@@ -106,10 +164,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
       }
       await api.createCustomerRequest({
         restaurantId: restId,
-        tableNumber: tableNumber,
-        requestType: 'WAITER',
+        tableNumber: standardTable,
+        requestType: 'CALL_WAITER',
         customTitle: 'Waiter Assistance 🛎️',
-        message: `Customer at Table ${tableNumber} is calling for waiter assistance`,
+        message: `Customer at ${standardTable} is calling for waiter assistance`,
         priority: 'HIGH',
         tableSessionId: tableSession?.id,
       });
@@ -155,7 +213,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Session Bill & Receipt — ${tableNumber} 🧾`}
+      title={`Session Bill & Receipt — ${standardTable} 🧾`}
     >
       <div className="space-y-5 text-xs text-slate-200 printable-receipt">
         {isLoading && !bill ? (
@@ -182,10 +240,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   </div>
                   <div>
                     <h3 className="font-black text-white text-sm">
-                      {currentRestaurant?.name || 'Dinely Fine Dining'}
+                      {activeMerchantName || currentRestaurant?.name || 'CAFE.CO'}
                     </h3>
                     <p className="text-[10px] text-slate-400 font-mono">
-                      {currentRestaurant?.address || 'Floor Table Experience'}
+                      {billingConfig?.address || currentRestaurant?.address || 'Floor Table Experience'}
                     </p>
                   </div>
                 </div>
@@ -202,7 +260,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
                 <div>
                   <span className="text-slate-500 block">TABLE</span>
-                  <span className="font-bold text-white">{bill.tableNumber}</span>
+                  <span className="font-bold text-white">{formatStandardTableNumber(bill.tableNumber)}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">SESSION ID</span>
@@ -218,7 +276,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                     <div>
                       <p className="font-bold text-xs">Bill Requested</p>
                       <p className="text-[10px] text-amber-400/80">
-                        Your waiter has been notified and is bringing your bill to {bill.tableNumber}.
+                        Your waiter has been notified and is bringing your bill to {formatStandardTableNumber(bill.tableNumber)}.
                       </p>
                     </div>
                   </div>
@@ -293,7 +351,6 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                     <span>{formatCurrency(bill.taxAmount)}</span>
                   </div>
                 )}
-
 
                 {bill.discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-400">
@@ -370,45 +427,40 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               {formatCurrency(bill?.grandTotal || 0)}
             </p>
             <p className="text-[11px] text-slate-300 font-semibold">
-              {currentRestaurant?.name || 'Restaurant'} • Table {tableNumber} (Session #{tableSession?.id})
+              {activeMerchantName || currentRestaurant?.name || 'CAFE.CO'} • {standardTable} (Session #{tableSession?.id})
             </p>
           </div>
 
           {/* MERCHANT UPI QR DISPLAY */}
-          {currentRestaurant?.upiQrUrl || currentRestaurant?.upiId ? (
+          {activeUpiEnabled && (activeQrUrl || activeUpiId) ? (
             <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 text-center space-y-3">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">
                 Scan & Pay with Any UPI App
               </span>
 
-              {currentRestaurant?.upiQrUrl ? (
+              {activeQrUrl ? (
                 <div className="w-52 h-52 bg-white p-3 rounded-2xl shadow-2xl mx-auto flex items-center justify-center">
                   <img
-                    src={currentRestaurant.upiQrUrl}
+                    src={activeQrUrl}
                     alt="Merchant UPI QR Code"
                     className="w-full h-full object-contain"
                   />
                 </div>
-              ) : currentRestaurant?.upiId ? (
+              ) : activeUpiId ? (
                 <div className="w-52 h-52 bg-white p-3 rounded-2xl shadow-2xl mx-auto flex items-center justify-center">
                   <QRCodeDisplay
-                    value={`upi://pay?pa=${encodeURIComponent(currentRestaurant.upiId)}&pn=${encodeURIComponent(currentRestaurant.upiMerchantName || currentRestaurant.name || 'Restaurant')}&am=${bill?.grandTotal || 0}&cu=INR`}
+                    value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${(bill?.grandTotal || 0).toFixed(2)}&cu=INR`}
                     size={180}
                     level="M"
                     includeMargin={false}
                   />
                 </div>
-              ) : (
-                <div className="w-52 h-52 bg-slate-900 border border-slate-800 rounded-2xl mx-auto flex flex-col items-center justify-center p-4 text-slate-400 space-y-2 font-mono">
-                  <span className="text-xs text-slate-300">Scan using UPI App to VPA:</span>
-                  <span className="font-black text-emerald-400 text-sm break-all">{currentRestaurant?.upiId}</span>
-                </div>
-              )}
+              ) : null}
 
-              {currentRestaurant?.upiId && (
+              {activeUpiId && (
                 <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] flex items-center justify-between">
                   <span className="text-slate-400">UPI ID:</span>
-                  <span className="font-bold text-white select-all">{currentRestaurant.upiId}</span>
+                  <span className="font-bold text-white select-all">{activeUpiId}</span>
                 </div>
               )}
 
@@ -423,9 +475,17 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   <span>Payment Verification Required</span>
                 </div>
                 <p className="text-[10px] text-amber-400/80">
-                  After completing payment on your UPI app, our floor waiter will confirm payment verification on the billing terminal.
+                  After completing payment on your UPI app, tap below so our floor waiter verifies and settles your table bill.
                 </p>
               </div>
+            </div>
+          ) : !activeUpiEnabled ? (
+            <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-3">
+              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+              <h4 className="font-bold text-white text-sm">UPI Payment Temporarily Disabled</h4>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                UPI payment is currently turned off by this restaurant. Please tap <strong>Call Waiter for Bill</strong> to pay via cash, card, or physical POS at your table.
+              </p>
             </div>
           ) : (
             <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-3">
@@ -438,11 +498,8 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
           )}
 
           <Button
-            onClick={() => {
-              setIsPayOnlineModalOpen(false);
-              handleRequestBill();
-            }}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg"
+            onClick={handleCustomerClaimedPaid}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>I Have Paid • Alert Waiter 🛎️</span>
