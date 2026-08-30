@@ -359,6 +359,7 @@ async def get_restaurant_orders(
 
 
 @router.put("/{order_id}/status")
+@router.patch("/{order_id}/status")
 async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, db: AsyncSession = Depends(get_db)):
     query = select(Order).where(Order.id == order_id)
     result = await db.execute(query)
