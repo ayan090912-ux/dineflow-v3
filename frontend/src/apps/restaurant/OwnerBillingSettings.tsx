@@ -510,6 +510,8 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 </label>
                 <div className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 bg-slate-950 rounded-xl p-4 text-center cursor-pointer transition-all relative">
                   <input
+                    id="owner-qr-file-input"
+                    data-testid="owner-qr-file-input"
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     onChange={handleQrFileUpload}

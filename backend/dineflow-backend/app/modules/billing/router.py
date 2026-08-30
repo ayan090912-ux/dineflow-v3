@@ -310,6 +310,20 @@ async def upload_restaurant_upi_qr(
     await db.commit()
     await db.refresh(rest)
 
+    # Broadcast updated configuration event to live terminals
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=rest.id,
+            event_type="BillingConfigUpdated",
+            payload={
+                "restaurantId": rest.id,
+                "upiQrUrl": rest.upi_qr_url,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+    except Exception:
+        pass
+
     return {
         "status": "success",
         "message": "UPI QR code uploaded and verified successfully",
