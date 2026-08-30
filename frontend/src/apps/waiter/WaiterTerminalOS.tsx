@@ -44,7 +44,7 @@ import {
   WaiterNotification,
   getFulfillmentStation,
 } from '../../packages/types';
-import { realtimeBus } from '../../packages/api/realtime';
+import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
 import { matchTableNumber } from '../../packages/utils/tableUtils';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 
@@ -96,6 +96,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isErrorState, setIsErrorState] = useState<boolean>(false);
+  const [wsStatus, setWsStatus] = useState<ConnectionStatusType>('CONNECTING');
 
   // Core Data State
   const [requests, setRequests] = useState<CustomerRequest[]>([]);
@@ -148,9 +149,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   }, []);
 
   // Fetch data strictly for authenticated employee's restaurant
-  const loadData = async () => {
+  const loadData = async (silent: boolean = false) => {
     try {
-      setIsErrorState(false);
+      if (!silent) setIsErrorState(false);
       const targetRestId = currentRestaurantId;
 
       const [reqData, ordData, tblData, notifData, sessionData] = await Promise.all([
@@ -166,29 +167,45 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       setTables(tblData);
       setNotifications(notifData);
       setActiveSessions(sessionData || []);
+      setIsErrorState(false);
     } catch (err) {
       console.error('Failed to load Waiter Terminal data:', err);
-      setIsErrorState(true);
+      if (!silent) setIsErrorState(true);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Realtime WebSocket Connection & Connection Status Sync
   useEffect(() => {
     if (currentRestaurantId) {
       realtimeBus.connect(currentRestaurantId, 'WAITER');
     }
+    const unsubStatus = realtimeBus.subscribeStatus((status) => {
+      setWsStatus(status);
+      if (status === 'CONNECTED') {
+        // Silently reconcile state on connect / reconnect
+        loadData(true);
+      }
+    });
+    return () => {
+      unsubStatus();
+    };
   }, [currentRestaurantId]);
 
-  // Setup Real-time WebSockets / Event Bus Listener (Scoped by restaurant_id) & Polling
+  // Real-Time Granular Event-Driven State Dispatch (Zero-Latency, No Full Page Reloads)
   useEffect(() => {
-    loadData();
-    const pollInterval = setInterval(loadData, 5000);
+    loadData(false);
+
+    // Safety-net reconciliation polling (relaxed 12s interval to prevent UI freezing)
+    const pollInterval = setInterval(() => {
+      loadData(true);
+    }, 12000);
 
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      // Filter events strictly by restaurantId for multi-tenant isolation
+      // 1. Strict multi-tenant isolation
       const evtRestId = (event as any).restaurantId || (event as any).restaurant_id;
       if (evtRestId) {
         const resolvedCurrentRestId = api.getCurrentRestaurantId();
@@ -205,16 +222,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
         }
       }
 
+      // 2. Event deduplication
       const evtId = (event as any).eventId || (event as any).event_id;
       if (evtId && handledEventIds.has(evtId)) {
         return;
       }
       if (evtId) {
         handledEventIds.add(evtId);
+        if (handledEventIds.size > 500) {
+          const first = Array.from(handledEventIds)[0];
+          handledEventIds.delete(first);
+        }
       }
 
-      loadData();
-
+      // 3. Play chime for call/ready events
       const isChimeEvent =
         event.type === 'service_request_created' ||
         event.type === 'order_ready' ||
@@ -228,24 +249,122 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       const tblNum = (event as any).tableNumber || (event as any).table_number || (event as any).payload?.tableNumber || (event as any).payload?.table_number || 'Table';
       const reqTitle = (event as any).customTitle || (event as any).requestType || (event as any).payload?.customTitle || (event as any).payload?.requestType || 'Assistance';
 
+      // 4. Granular instant state dispatch
       if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
+        const payloadData = (event as any).payload || event;
+        const newReq: CustomerRequest = {
+          id: payloadData.id || (event as any).id || `req-${Date.now()}`,
+          restaurantId: payloadData.restaurantId || payloadData.restaurant_id || currentRestaurantId,
+          tableId: payloadData.tableId || payloadData.table_id,
+          tableNumber: payloadData.tableNumber || payloadData.table_number || tblNum,
+          requestType: (payloadData.requestType || payloadData.request_type || 'WATER').toUpperCase() as CustomerRequestType,
+          customTitle: payloadData.customTitle || payloadData.custom_title || payloadData.message || reqTitle,
+          message: payloadData.message || payloadData.customerNotes || payloadData.customer_notes || '',
+          customerNotes: payloadData.customerNotes || payloadData.customer_notes || payloadData.message || '',
+          priority: (payloadData.priority || 'HIGH') as any,
+          status: (payloadData.status || 'PENDING').toUpperCase() as CustomerRequestStatus,
+          requestedAt: payloadData.requestedAt || payloadData.requested_at || payloadData.created_at || (event as any).timestamp || new Date().toISOString(),
+          tableSessionId: payloadData.tableSessionId || payloadData.table_session_id,
+          assignedWaiterName: payloadData.waiterName || payloadData.waiter_name || payloadData.assignedWaiterName,
+        };
+
+        // Instant optimistic addition to requests queue
+        setRequests((prev) => {
+          if (prev.some((r) => r.id === newReq.id)) return prev;
+          return [newReq, ...prev];
+        });
+
         showToast(
           'Customer Service Call 🛎️',
           `${tblNum} requested ${String(reqTitle).toLowerCase()}`,
           'warning'
         );
-      } else if (event.type === 'service_request_updated') {
-        // Silently reload data to keep state in sync across staff screens
-        loadData();
+      } else if (event.type === 'service_request_updated' || event.type === 'CustomerRequestUpdated') {
+        const payloadData = (event as any).payload || event;
+        const reqId = payloadData.id || (event as any).id;
+        const updatedStatus = (payloadData.status || (event as any).status || '').toUpperCase();
+        const assignedStaff = payloadData.waiterName || payloadData.waiter_name || payloadData.assignedWaiterName;
+
+        if (reqId && updatedStatus) {
+          setRequests((prev) =>
+            prev.map((r) =>
+              r.id === reqId
+                ? {
+                    ...r,
+                    status: updatedStatus as CustomerRequestStatus,
+                    assignedWaiterName: assignedStaff || r.assignedWaiterName,
+                  }
+                : r
+            )
+          );
+        }
+      } else if (event.type === 'order_created' || event.type === 'OrderCreated') {
+        const payloadOrder = (event as any).order || (event as any).payload?.order;
+        if (payloadOrder && payloadOrder.id) {
+          setOrders((prev) => {
+            if (prev.some((o) => o.id === payloadOrder.id)) {
+              return prev.map((o) => (o.id === payloadOrder.id ? payloadOrder : o));
+            }
+            return [payloadOrder, ...prev];
+          });
+        } else {
+          api.getOrders(currentRestaurantId).then(setOrders).catch(() => {});
+        }
       } else if (event.type === 'order_ready' || event.type === 'OrderReady') {
+        const orderId = (event as any).orderId || (event as any).order_id || (event as any).payload?.orderId;
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o))
+          );
+        }
         showToast(
           'Order Plated & Ready 🔥',
           `Order for ${tblNum} is ready for pickup`,
           'success'
         );
+      } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
+        const orderId = (event as any).orderId || (event as any).order_id || (event as any).payload?.orderId;
+        const newStatus = (event as any).status || (event as any).payload?.status;
+        if (orderId && newStatus) {
+          setOrders((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+          );
+        }
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
+        const tblId = (event as any).tableId || (event as any).table_id || (event as any).payload?.tableId;
+        const sessId = (event as any).tableSessionId || (event as any).table_session_id || (event as any).sessionId;
+
+        setTables((prev) =>
+          prev.map((t) =>
+            t.id === tblId || t.number === tblNum
+              ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined }
+              : t
+          )
+        );
+        if (sessId) {
+          setActiveSessions((prev) => prev.filter((s) => s.id !== sessId));
+          setRequests((prev) => prev.filter((r) => r.tableSessionId !== sessId));
+        }
         showToast('Table Session Closed 🧹', `Table ${tblNum} session ended`, 'info');
-      } else if (event.type === 'BillRequested') {
+      } else if (event.type === 'table_session_created' || event.type === 'TableSessionCreated' || event.type === 'table_status_updated' || event.type === 'TableStatusUpdated') {
+        const sess = (event as any).session || (event as any).payload?.session;
+        const tblId = (event as any).tableId || sess?.tableId;
+        if (sess && sess.id) {
+          setActiveSessions((prev) => [sess, ...prev.filter((s) => s.id !== sess.id)]);
+          if (tblId) {
+            setTables((prev) =>
+              prev.map((t) =>
+                t.id === tblId || t.number === sess.tableNumber
+                  ? { ...t, status: 'OCCUPIED', isOccupied: true, activeSessionId: sess.id }
+                  : t
+              )
+            );
+          }
+        } else {
+          api.getActiveTableSessions(currentRestaurantId).then(setActiveSessions).catch(() => {});
+          api.getTables(currentRestaurantId).then(setTables).catch(() => {});
+        }
+      } else if (event.type === 'BillRequested' || event.type === 'bill_updated') {
         showToast('Bill Check Request 🧾', `${tblNum} requested final bill`, 'info');
       }
     });
@@ -456,10 +575,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               <h1 className="text-base font-black text-white tracking-tight">Waiter Terminal OS</h1>
               <Badge variant="success" className="text-[10px] py-0 px-1.5 font-mono">MVP</Badge>
             </div>
-            <p className="text-xs text-slate-400 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-              <span className="text-emerald-400 font-semibold">ONLINE & REALTIME DISPATCH</span>
-            </p>
+            {wsStatus === 'CONNECTED' ? (
+              <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
+                <span className="text-emerald-400 font-semibold font-mono">LIVE • SYNCHRONIZED</span>
+              </p>
+            ) : wsStatus === 'RECONNECTING' ? (
+              <p className="text-xs text-amber-400 flex items-center gap-1.5 animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block animate-spin" />
+                <span className="font-semibold font-mono">RECONNECTING...</span>
+              </p>
+            ) : (
+              <p className="text-xs text-rose-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                <span className="font-semibold font-mono">OFFLINE (RETRYING)</span>
+              </p>
+            )}
           </div>
         </div>
 

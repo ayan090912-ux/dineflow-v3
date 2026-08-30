@@ -112,12 +112,16 @@ function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableS
   return `wss://${host}/api/v1/ws?restaurant_id=${encodeURIComponent(restaurantId)}&role=${encodeURIComponent(role)}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}`;
 }
 
+export type ConnectionStatusType = 'CONNECTED' | 'CONNECTING' | 'RECONNECTING' | 'DISCONNECTED';
+type StatusListener = (status: ConnectionStatusType) => void;
+
 class RealTimeEventBus {
   private listeners: Set<EventListener> = new Set();
+  private statusListeners: Set<StatusListener> = new Set();
   private channel: BroadcastChannel | null = null;
   private ws: WebSocket | null = null;
   private processedEventIds: Set<string> = new Set();
-  private isConnected: boolean = false;
+  private status: ConnectionStatusType = 'DISCONNECTED';
   private currentRestaurantId: string | null = null;
   private currentRole: string = 'CUSTOMER';
   private currentTableSessionId: string | null = null;
@@ -139,6 +143,46 @@ class RealTimeEventBus {
         console.warn('BroadcastChannel fallback setup:', err);
       }
     }
+
+    // Auto-reconnect & state sync on tab visibility recovery
+    if (typeof window !== 'undefined') {
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.currentRestaurantId) {
+          if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.log('[WS_VISIBILITY_RECOVERY] Tab became active, reconnecting...');
+            this.connect(this.currentRestaurantId, this.currentRole, this.currentTableSessionId || undefined);
+          }
+        }
+      });
+      window.addEventListener('online', () => {
+        if (this.currentRestaurantId) {
+          console.log('[WS_NETWORK_ONLINE] Network restored, reconnecting...');
+          this.connect(this.currentRestaurantId, this.currentRole, this.currentTableSessionId || undefined);
+        }
+      });
+    }
+  }
+
+  public getStatus(): ConnectionStatusType {
+    return this.status;
+  }
+
+  public subscribeStatus(listener: StatusListener): () => void {
+    this.statusListeners.add(listener);
+    listener(this.status);
+    return () => {
+      this.statusListeners.delete(listener);
+    };
+  }
+
+  private setStatus(newStatus: ConnectionStatusType) {
+    if (this.status === newStatus) return;
+    this.status = newStatus;
+    this.statusListeners.forEach((fn) => {
+      try {
+        fn(newStatus);
+      } catch (e) {}
+    });
   }
 
   public connect(restaurantId: string, role: string = 'CUSTOMER', tableSessionId?: string) {
@@ -149,7 +193,7 @@ class RealTimeEventBus {
       this.currentRestaurantId === restaurantId &&
       this.currentRole === role &&
       this.currentTableSessionId === tableSessionId &&
-      (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
+      this.ws.readyState === WebSocket.OPEN
     ) {
       return;
     }
@@ -160,6 +204,8 @@ class RealTimeEventBus {
     this.currentRole = role;
     this.currentTableSessionId = tableSessionId || null;
 
+    this.setStatus(this.reconnectAttempts > 0 ? 'RECONNECTING' : 'CONNECTING');
+
     const wsUrl = getWebSocketUrl(restaurantId, role, tableSessionId);
     console.log('[WS_CONNECTING] URL:', wsUrl);
 
@@ -168,7 +214,7 @@ class RealTimeEventBus {
 
       this.ws.onopen = () => {
         console.log('[WS_CONNECTED] Scoped to restaurant:', restaurantId, 'role:', role);
-        this.isConnected = true;
+        this.setStatus('CONNECTED');
         this.reconnectAttempts = 0;
 
         if (this.pingInterval) clearInterval(this.pingInterval);
@@ -226,12 +272,13 @@ class RealTimeEventBus {
       };
 
       this.ws.onclose = () => {
-        this.isConnected = false;
+        this.setStatus('DISCONNECTED');
         if (this.pingInterval) clearInterval(this.pingInterval);
 
         this.reconnectAttempts++;
-        const backoffMs = Math.min(1000 * Math.pow(1.5, Math.min(this.reconnectAttempts, 8)) + Math.random() * 500, 15000);
+        const backoffMs = Math.min(1000 * Math.pow(1.4, Math.min(this.reconnectAttempts, 6)) + Math.random() * 300, 8000);
         console.log(`[WS_DISCONNECTED] Reconnecting attempt #${this.reconnectAttempts} in ${Math.round(backoffMs)}ms...`);
+        this.setStatus('RECONNECTING');
 
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = setTimeout(() => {
@@ -246,6 +293,7 @@ class RealTimeEventBus {
       };
     } catch (e) {
       console.error('[WS_INIT_FAILED]:', e);
+      this.setStatus('DISCONNECTED');
     }
   }
 
