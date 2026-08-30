@@ -23,10 +23,24 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
   // Listen to Real-Time Bus events for instant updates
   useEffect(() => {
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
-      if (event.orderId === currentOrder.id && event.data) {
-        setCurrentOrder(event.data);
-        if (onUpdateOrder) {
-          onUpdateOrder(event.data);
+      const evtOrdId = event.orderId || (event as any).id || (event as any).payload?.id || (event as any).payload?.orderId;
+      if (evtOrdId && String(evtOrdId) === String(currentOrder.id)) {
+        const updatedObj = event.data || (event as any).payload || (typeof event === 'object' ? event : null);
+        if (updatedObj && (updatedObj.status || updatedObj.kitchenStatus || updatedObj.barStatus)) {
+          setCurrentOrder((prev) => ({
+            ...prev,
+            ...updatedObj,
+            status: updatedObj.status || prev.status,
+            kitchenStatus: updatedObj.kitchenStatus || updatedObj.kitchen_status || prev.kitchenStatus,
+            barStatus: updatedObj.barStatus || updatedObj.bar_status || prev.barStatus,
+            etaTargetTimestamp: updatedObj.etaTargetTimestamp || updatedObj.eta_target_timestamp || prev.etaTargetTimestamp,
+          }));
+          if (onUpdateOrder && updatedObj.status) {
+            onUpdateOrder({
+              ...currentOrder,
+              ...updatedObj,
+            });
+          }
         }
       }
     });

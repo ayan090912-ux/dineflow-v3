@@ -358,13 +358,13 @@ async def close_table_session(
             restaurant_id=rest_id,
             event_type="table_session_closed",
             payload=event_payload,
-            target_audience=["WAITER", "CUSTOMER", "OWNER"]
+            target_audience=["WAITER", "CUSTOMER", "OWNER", "KITCHEN", "BAR"]
         )
         await ws_manager.broadcast_event(
             restaurant_id=rest_id,
             event_type="table_status_updated",
             payload=event_payload,
-            target_audience=["WAITER", "CUSTOMER", "OWNER"]
+            target_audience=["WAITER", "CUSTOMER", "OWNER", "KITCHEN", "BAR"]
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] close_table_session:", ws_err)

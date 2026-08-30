@@ -50,11 +50,12 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event: any) => {
-      if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
+      const evtRestId = event.restaurantId || event.restaurant_id;
+      if (evtRestId && currentRestId && String(evtRestId).toLowerCase() !== String(currentRestId).toLowerCase()) {
         return;
       }
 
-      // Ignore updates for other stations to prevent unnecessary re-fetches
+      // Ignore updates for other stations if specifically targeted for kitchen only
       if (event.type === 'FulfillmentTicketUpdated' && event.station && event.station !== 'BAR') {
         return;
       }
@@ -62,14 +63,19 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       if (
         event.type === 'order_created' ||
         event.type === 'OrderCreated' ||
+        event.type === 'order_status_updated' ||
+        event.type === 'OrderStatusUpdated' ||
         event.type === 'OrderAccepted' ||
+        event.type === 'order_ready' ||
         event.type === 'OrderReady' ||
         event.type === 'BarStatusUpdated' ||
+        event.type === 'table_session_closed' ||
+        event.type === 'TableSessionClosed' ||
         (event.type === 'FulfillmentTicketUpdated' && event.station === 'BAR')
       ) {
         loadBarOrders(false);
 
-        const evtId = event.eventId;
+        const evtId = event.eventId || event.event_id;
         if (evtId && handledEventIds.has(evtId)) {
           return;
         }
@@ -79,7 +85,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
         // Only alert on newly created drink orders
         if (event.type === 'order_created' || event.type === 'OrderCreated' || (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')) {
-          setLastNotification(`New Drink Order #${event.orderId || event.parentOrderId || ''} for Table ${event.tableNumber || 'Bar'} 🍸`);
+          setLastNotification(`New Drink Order #${event.orderId || event.parentOrderId || event.id || ''} for Table ${event.tableNumber || 'Bar'} 🍸`);
           if (soundEnabled) {
             playNotificationSound();
           }

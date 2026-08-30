@@ -230,7 +230,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
-      if (event.restaurantId && currentRestId && event.restaurantId !== currentRestId) {
+      const evtRestId = event.restaurantId || (event as any).restaurant_id;
+      if (evtRestId && currentRestId && String(evtRestId).toLowerCase() !== String(currentRestId).toLowerCase()) {
         return;
       }
       if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station === 'BAR') {
@@ -238,7 +239,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       }
       fetchFreshOrders();
 
-      const evtId = event.eventId;
+      const evtId = event.eventId || (event as any).event_id;
       if (evtId && handledEventIds.has(evtId)) {
         return;
       }

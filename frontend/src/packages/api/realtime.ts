@@ -124,6 +124,8 @@ class RealTimeEventBus {
   private reconnectTimer: any = null;
   private pingInterval: any = null;
 
+  private reconnectAttempts: number = 0;
+
   constructor() {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
@@ -167,6 +169,7 @@ class RealTimeEventBus {
       this.ws.onopen = () => {
         console.log('[WS_CONNECTED] Scoped to restaurant:', restaurantId, 'role:', role);
         this.isConnected = true;
+        this.reconnectAttempts = 0;
 
         if (this.pingInterval) clearInterval(this.pingInterval);
         this.pingInterval = setInterval(() => {
@@ -181,7 +184,7 @@ class RealTimeEventBus {
 
         try {
           const raw = JSON.parse(msgEvent.data);
-          const eventId = raw.event_id || raw.eventId;
+          const eventId = raw.event_id || raw.eventId || (raw.payload && (raw.payload.eventId || raw.payload.event_id));
 
           if (eventId) {
             if (this.processedEventIds.has(eventId)) {
@@ -194,31 +197,48 @@ class RealTimeEventBus {
             }
           }
 
+          const payloadObj = raw.payload || {};
+          const restId = raw.restaurant_id || raw.restaurantId || payloadObj.restaurantId || payloadObj.restaurant_id;
+          const tblNum = raw.table_number || raw.tableNumber || payloadObj.tableNumber || payloadObj.table_number;
+          const tblSessId = raw.table_session_id || raw.tableSessionId || payloadObj.tableSessionId || payloadObj.table_session_id;
+
           const mappedPayload: RealTimeEventPayload = {
             eventId,
             type: raw.type,
-            restaurantId: raw.restaurant_id || raw.restaurantId,
+            restaurantId: restId,
+            tableNumber: tblNum,
+            tableSessionId: tblSessId,
             timestamp: raw.timestamp || new Date().toISOString(),
-            ...(raw.payload || {}),
+            ...payloadObj,
           };
 
+          // Dispatch primary event
           this.notifyListeners(mappedPayload, false);
+
+          // Dispatch canonical alias events if snake_case <-> PascalCase mapping exists
+          const aliasType = this.getEventAlias(raw.type);
+          if (aliasType && aliasType !== raw.type) {
+            this.notifyListeners({ ...mappedPayload, type: aliasType }, false);
+          }
         } catch (err) {
           console.error('[WS_MESSAGE_PARSE_ERROR]:', err);
         }
       };
 
       this.ws.onclose = () => {
-        console.log('[WS_DISCONNECTED] Reconnecting in 1.5s...');
         this.isConnected = false;
         if (this.pingInterval) clearInterval(this.pingInterval);
+
+        this.reconnectAttempts++;
+        const backoffMs = Math.min(1000 * Math.pow(1.5, Math.min(this.reconnectAttempts, 8)) + Math.random() * 500, 15000);
+        console.log(`[WS_DISCONNECTED] Reconnecting attempt #${this.reconnectAttempts} in ${Math.round(backoffMs)}ms...`);
 
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = setTimeout(() => {
           if (this.currentRestaurantId) {
             this.connect(this.currentRestaurantId, this.currentRole, this.currentTableSessionId || undefined);
           }
-        }, 1500);
+        }, backoffMs);
       };
 
       this.ws.onerror = (err) => {
@@ -227,6 +247,27 @@ class RealTimeEventBus {
     } catch (e) {
       console.error('[WS_INIT_FAILED]:', e);
     }
+  }
+
+  private getEventAlias(type: string): string | null {
+    const aliases: Record<string, string> = {
+      order_created: 'OrderCreated',
+      OrderCreated: 'order_created',
+      order_ready: 'OrderReady',
+      OrderReady: 'order_ready',
+      order_status_updated: 'OrderStatusUpdated',
+      service_request_created: 'CustomerRequestCreated',
+      CustomerRequestCreated: 'service_request_created',
+      service_request_updated: 'CustomerRequestUpdated',
+      CustomerRequestUpdated: 'service_request_updated',
+      table_session_closed: 'TableSessionClosed',
+      TableSessionClosed: 'table_session_closed',
+      table_status_updated: 'TableStatusUpdated',
+      TableStatusUpdated: 'table_status_updated',
+      BillRequested: 'bill_updated',
+      BillPaid: 'payment_updated',
+    };
+    return aliases[type] || null;
   }
 
   public disconnect() {

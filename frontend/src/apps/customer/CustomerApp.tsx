@@ -149,7 +149,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const pollInterval = setInterval(fetchLiveCustomerOrders, 5000);
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      if (event.restaurantId && event.restaurantId !== restId) {
+      const evtRestId = event.restaurantId || (event as any).restaurant_id;
+      if (evtRestId && restId && String(evtRestId).toLowerCase() !== String(restId).toLowerCase()) {
         return;
       }
 
