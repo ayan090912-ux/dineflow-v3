@@ -16,7 +16,6 @@ import {
   UtensilsCrossed,
   Wine,
   Truck,
-  Coffee,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
@@ -31,8 +30,14 @@ import {
   ArrowRight,
   Clock,
   AlertCircle,
+  ChefHat,
+  PhoneCall,
+  Package,
+  Receipt,
+  LayoutDashboard,
+  Check,
 } from 'lucide-react';
-import { Restaurant, User } from '../../packages/types';
+import { Restaurant, User, BusinessType } from '../../packages/types';
 
 interface SetupWizardProps {
   initialOwnerData?: any;
@@ -40,30 +45,34 @@ interface SetupWizardProps {
   onNavigate?: (path: string) => void;
 }
 
-const BUSINESS_TYPES = [
+// STRICTLY 3 BUSINESS TYPES
+const BUSINESS_TYPES: Array<{
+  id: BusinessType;
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tagline: string;
+  desc: string;
+}> = [
   {
     id: 'RESTAURANT',
     name: 'Restaurant',
     icon: UtensilsCrossed,
-    desc: 'Full-service dining, bistro, or casual eatery.',
-  },
-  {
-    id: 'CAFE',
-    name: 'Cafe',
-    icon: Coffee,
-    desc: 'Coffee house, espresso bar, or bakery cafe.',
+    tagline: 'Full-Service & Casual Dining',
+    desc: 'Bistros, fine dining, cafes, diners, and full-service eateries with table service.',
   },
   {
     id: 'BAR',
     name: 'Bar',
     icon: Wine,
-    desc: 'Cocktail bar, pub, brewery, or lounge.',
+    tagline: 'Bar, Lounge & Mixology',
+    desc: 'Cocktail bars, pubs, breweries, wine lounges, and nightlife beverage venues.',
   },
   {
     id: 'FOOD_CART',
     name: 'Food Cart',
     icon: Truck,
-    desc: 'Mobile food cart, kiosk, stall, or food truck venue.',
+    tagline: 'Kiosk, Stall & Food Truck',
+    desc: 'Mobile food carts, fast counter kiosks, street food stalls, and quick-pickup stands.',
   },
 ];
 
@@ -76,16 +85,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [isAuthInitializing, setIsAuthInitializing] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  // Setup Wizard Form State (persisted safely in Step 1 for new onboarding)
+  // 4-Step Onboarding State
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Step 1: Basic Information
-  const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || '');
-  const [businessType, setBusinessType] = useState<string>('RESTAURANT');
+  // Step 1: Business Type
+  const [businessType, setBusinessType] = useState<BusinessType>('RESTAURANT');
 
-  // Step 2: Location
+  // Step 2: Business Details & Location
+  const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || '');
   const [country, setCountry] = useState('India');
   const [state, setState] = useState('');
   const [city, setCity] = useState('');
@@ -96,6 +105,45 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [longitude, setLongitude] = useState<number | null>(null);
   const [placeId, setPlaceId] = useState<string | null>(null);
   const [selectedLocationObj, setSelectedLocationObj] = useState<StructuredAddress | null>(null);
+  const [hasSeating, setHasSeating] = useState<boolean>(true);
+  const [tablesCount, setTablesCount] = useState<number>(10);
+
+  // Step 3: Terminal Selection State
+  const [enableKitchen, setEnableKitchen] = useState<boolean>(true);
+  const [enableWaiter, setEnableWaiter] = useState<boolean>(true);
+  const [enableBar, setEnableBar] = useState<boolean>(false);
+  const [enableInventory, setEnableInventory] = useState<boolean>(true);
+  const [enableBilling, setEnableBilling] = useState<boolean>(true);
+
+  // Auto-set terminal defaults when business type changes
+  const applyBusinessTypeDefaults = (type: BusinessType) => {
+    setBusinessType(type);
+    if (type === 'FOOD_CART') {
+      setEnableKitchen(true);
+      setEnableInventory(true);
+      setEnableBilling(true);
+      setEnableWaiter(hasSeating);
+      setEnableBar(false); // Bar is NEVER enabled for Food Cart
+      if (!hasSeating) setTablesCount(0);
+    } else if (type === 'BAR') {
+      setEnableBar(true);
+      setEnableKitchen(true);
+      setEnableWaiter(true);
+      setEnableInventory(true);
+      setEnableBilling(true);
+      setHasSeating(true);
+      if (tablesCount === 0) setTablesCount(10);
+    } else {
+      // RESTAURANT
+      setEnableKitchen(true);
+      setEnableWaiter(true);
+      setEnableBar(false);
+      setEnableInventory(true);
+      setEnableBilling(true);
+      setHasSeating(true);
+      if (tablesCount === 0) setTablesCount(10);
+    }
+  };
 
   const handleSelectAddress = (loc: StructuredAddress) => {
     setAddress(loc.fullAddress);
@@ -109,10 +157,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     if (loc.placeId) setPlaceId(loc.placeId);
     setSelectedLocationObj(loc);
   };
-
-  // Step 3: Tables
-  const [hasSeating, setHasSeating] = useState<boolean>(true);
-  const [tablesCount, setTablesCount] = useState<number>(10);
 
   // Check user state on mount
   useEffect(() => {
@@ -128,7 +172,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       const searchParams = new URLSearchParams(window.location.search);
       const isCreateMode = searchParams.get('mode') === 'create' || searchParams.get('new') === 'true' || window.location.hash.includes('create');
       
-      // If user explicitly clicked "Create a new restaurant", do NOT auto-redirect to existing restaurant
       if (isCreateMode) {
         setCurrentStep(1);
         return;
@@ -171,7 +214,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       setCurrentUser(user);
       setIsAuthInitializing(false);
 
-      // Check existing owner state
       if (authRes.hasRestaurant && authRes.restaurant) {
         if (authRes.restaurant.isApproved || authRes.restaurant.lifecycleStatus === 'APPROVED' || authRes.restaurant.lifecycleStatus === 'ACTIVE') {
           if (onNavigate) onNavigate('/workspace');
@@ -182,7 +224,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         }
       }
 
-      // If new or no restaurants, proceed to Step 1 Basics
       setCurrentStep(1);
     } catch (err: any) {
       setIsAuthInitializing(false);
@@ -193,23 +234,28 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const handleNextStep = () => {
     setErrorMessage('');
     if (currentStep === 1) {
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
       if (!restaurantName.trim()) {
-        setErrorMessage("Please enter your venue/restaurant name.");
+        setErrorMessage('Please enter your business / restaurant name.');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
-      setCurrentStep(2);
-    } else if (currentStep === 2) {
       if (!country.trim() || !city.trim() || !address.trim()) {
         setErrorMessage('Please enter country, city, and street address.');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
-      setCurrentStep(3);
-    } else if (currentStep === 3) {
       const isNoSeating = businessType === 'FOOD_CART' && !hasSeating;
       if (!isNoSeating && (!tablesCount || tablesCount < 1)) {
         setErrorMessage('Please enter at least 1 table for your venue.');
+        return;
+      }
+      setCurrentStep(3);
+    } else if (currentStep === 3) {
+      const anySelected = enableKitchen || enableWaiter || enableBar || enableInventory || enableBilling;
+      if (!anySelected) {
+        setErrorMessage('Please select at least one operational terminal for your business.');
         return;
       }
       setCurrentStep(4);
@@ -238,16 +284,25 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       }
 
       const fullAddress = [address, city, state, country, postalCode ? `PIN: ${postalCode}` : ''].filter(Boolean).join(', ');
-
       const isNoSeating = businessType === 'FOOD_CART' && !hasSeating;
       const finalTablesCount = isNoSeating ? 0 : tablesCount;
+
+      // Construct enabled modules array
+      const enabledModules: string[] = [];
+      if (enableKitchen) enabledModules.push('kitchen');
+      if (enableWaiter && !isNoSeating) enabledModules.push('waiter');
+      if (enableBar && businessType !== 'FOOD_CART') enabledModules.push('bar');
+      if (enableInventory) enabledModules.push('inventory');
+      if (enableBilling) enabledModules.push('billing');
 
       // 1. Create new restaurant record
       const newRest = await api.createRestaurantForOwner({
         name: restaurantName,
-        businessType: businessType as any,
+        businessType: businessType,
+        hasBar: enableBar && businessType !== 'FOOD_CART',
         hasTables: !isNoSeating,
-        hasWaiter: !isNoSeating,
+        hasKitchen: enableKitchen,
+        hasWaiter: enableWaiter && !isNoSeating,
         address: fullAddress,
         phone: user.phone || '+91 98765 43210',
         email: user.email,
@@ -255,13 +310,18 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         ownerEmail: user.email,
       });
 
-      // 2. Submit application for Platform Admin Approval with table count
+      // 2. Submit application for Platform Admin Approval
       const updatedRest = await api.submitRestaurantLaunch({
         id: newRest.id,
         restaurantName,
         businessType,
+        hasBar: enableBar && businessType !== 'FOOD_CART',
         hasTables: !isNoSeating,
-        hasWaiter: !isNoSeating,
+        hasKitchen: enableKitchen,
+        hasWaiter: enableWaiter && !isNoSeating,
+        hasInventory: enableInventory,
+        hasBilling: enableBilling,
+        enabledModules,
         address: fullAddress,
         locality,
         city,
@@ -279,6 +339,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           vip: 0,
         },
         totalTablesCount: finalTablesCount,
+      });
+
+      // 3. Save workspace modules
+      await api.updateWorkspaceModules(newRest.id, enabledModules, {
+        hasKitchen: enableKitchen,
+        hasWaiter: enableWaiter && !isNoSeating,
+        hasBar: enableBar && businessType !== 'FOOD_CART',
+        hasInventory: enableInventory,
+        hasBilling: enableBilling,
+        hasTables: !isNoSeating,
       });
 
       setIsSubmitting(false);
@@ -302,10 +372,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           <div className="space-y-2">
             <Badge variant="brand" className="mb-1">Owner Onboarding</Badge>
             <h1 className="text-3xl font-black text-white tracking-tight">
-              Create your restaurant on Dinely
+              Create your business on Dinely
             </h1>
             <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-              First, let's create or connect your owner account to start setting up your venue.
+              First, let's create or connect your owner account to start configuring your custom workspace.
             </p>
           </div>
 
@@ -363,7 +433,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       <header className="max-w-3xl w-full mx-auto flex items-center justify-between py-3 px-4 bg-slate-900/80 border border-slate-800 rounded-2xl backdrop-blur-xl z-10 shadow-lg">
         <div className="flex items-center gap-3">
           <DinelyLogo size="sm" />
-          <Badge variant="brand" className="text-[10px]">Restaurant Setup</Badge>
+          <Badge variant="brand" className="text-[10px]">Workspace Setup</Badge>
         </div>
 
         <div className="flex items-center gap-3 text-xs">
@@ -380,9 +450,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           {/* Progress Tracker */}
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-              <span className={currentStep >= 1 ? 'text-rose-400' : 'text-slate-500'}>1. Basics</span>
-              <span className={currentStep >= 2 ? 'text-rose-400' : 'text-slate-500'}>2. Location</span>
-              <span className={currentStep >= 3 ? 'text-rose-400' : 'text-slate-500'}>3. Capacity</span>
+              <span className={currentStep >= 1 ? 'text-rose-400' : 'text-slate-500'}>1. Business Type</span>
+              <span className={currentStep >= 2 ? 'text-rose-400' : 'text-slate-500'}>2. Details & Tables</span>
+              <span className={currentStep >= 3 ? 'text-rose-400' : 'text-slate-500'}>3. Choose Terminals</span>
               <span className={currentStep >= 4 ? 'text-rose-400' : 'text-slate-500'}>4. Review</span>
             </div>
             <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800 flex">
@@ -400,20 +470,71 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             </div>
           )}
 
-          {/* STEP 1: BASIC INFORMATION */}
+          {/* STEP 1: BUSINESS TYPE (ONLY 3 CARDS) */}
           {currentStep === 1 && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in fade-in">
               <div className="space-y-1">
-                <Badge variant="brand" className="mb-1">Step 1 — Basic Information</Badge>
+                <Badge variant="brand" className="mb-1">Step 1 — Business Type</Badge>
                 <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  What's your restaurant called?
+                  What type of business do you run?
                 </h2>
-                <p className="text-xs text-slate-400">Enter your official venue name and select your restaurant category.</p>
+                <p className="text-xs text-slate-400">
+                  Select your venue model. Dinely will configure your recommended operational terminals.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3.5">
+                {BUSINESS_TYPES.map((bt) => {
+                  const IconComp = bt.icon;
+                  const isSelected = businessType === bt.id;
+                  return (
+                    <div
+                      key={bt.id}
+                      onClick={() => applyBusinessTypeDefaults(bt.id)}
+                      className={`p-5 rounded-2xl border cursor-pointer transition-all flex items-start gap-4 ${
+                        isSelected
+                          ? 'bg-rose-500/10 border-rose-500 text-white shadow-xl shadow-rose-950/30 ring-1 ring-rose-500/50'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className={`p-3.5 rounded-2xl border shrink-0 ${isSelected ? 'bg-rose-500 text-white border-rose-400 shadow-md' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                        <IconComp className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-base font-bold text-white tracking-tight">{bt.name}</h3>
+                          <Badge variant={isSelected ? 'brand' : 'outline'} className="text-[10px] uppercase font-mono">
+                            {bt.tagline}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">{bt.desc}</p>
+                      </div>
+                      <div className="pt-1 shrink-0">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? 'border-rose-500 bg-rose-500 text-white' : 'border-slate-700'}`}>
+                          {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: BUSINESS DETAILS & LOCATION */}
+          {currentStep === 2 && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="space-y-1">
+                <Badge variant="brand" className="mb-1">Step 2 — Venue Information & Location</Badge>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Tell us about your business
+                </h2>
+                <p className="text-xs text-slate-400">Provide official venue name, location, and customer dining capacity.</p>
               </div>
 
               <div className="space-y-5">
                 <Input
-                  label="Restaurant Name *"
+                  label="Business / Venue Name *"
                   placeholder="e.g. Lumiere Bistro or Cafe.Co"
                   value={restaurantName}
                   onChange={(e) => setRestaurantName(e.target.value)}
@@ -421,86 +542,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   required
                 />
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-300 block">Select Restaurant Type *</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {BUSINESS_TYPES.map((bt) => {
-                      const IconComp = bt.icon;
-                      const isSelected = businessType === bt.id;
-                      return (
-                        <div
-                          key={bt.id}
-                          onClick={() => setBusinessType(bt.id)}
-                          className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
-                            isSelected
-                              ? 'bg-rose-500/10 border-rose-500 text-white shadow-md shadow-rose-950/30'
-                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                          }`}
-                        >
-                          <div className={`p-2.5 rounded-xl border w-fit ${isSelected ? 'bg-rose-500 text-white border-rose-400' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
-                            <IconComp className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold">{bt.name}</div>
-                            <div className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{bt.desc}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Food Cart Seating Toggle */}
-                {businessType === 'FOOD_CART' && (
-                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
-                    <label className="text-xs font-bold text-slate-300 block">Do you have customer seating available at your Food Cart? *</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => { setHasSeating(true); if (tablesCount === 0) setTablesCount(5); }}
-                        className={`p-3.5 rounded-xl border text-xs font-bold transition-all text-left space-y-1 cursor-pointer ${
-                          hasSeating ? 'bg-rose-500/10 border-rose-500 text-white shadow-md shadow-rose-950/30' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>Yes, Seating Available</span>
-                          {hasSeating && <CheckCircle2 className="w-4 h-4 text-rose-400" />}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-normal">Customer dining tables configured for QR ordering</p>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => { setHasSeating(false); setTablesCount(0); }}
-                        className={`p-3.5 rounded-xl border text-xs font-bold transition-all text-left space-y-1 cursor-pointer ${
-                          !hasSeating ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-950/30' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>No Seating — Counter Pickup</span>
-                          {!hasSeating && <CheckCircle2 className="w-4 h-4 text-amber-400" />}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-normal">Standee QR code + Digital Token Bill on screen</p>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: LOCATION */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <Badge variant="brand" className="mb-1">Step 2 — Location</Badge>
-                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  Where is your restaurant located?
-                </h2>
-                <p className="text-xs text-slate-400">Provide official address details for venue verification.</p>
-              </div>
-
-              <div className="space-y-5">
                 <AddressAutocomplete
                   value={address}
                   onSelectAddress={handleSelectAddress}
@@ -521,128 +562,288 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   }
                 />
 
-                <div className="pt-2 space-y-3 border-t border-slate-800/80">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Auto-Populated Location Details
-                    </p>
-                    <span className="text-[10px] text-slate-500 font-mono">Auto-filled from address selection</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Country *"
-                      placeholder="e.g. India"
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      icon={<Globe className="w-4 h-4 text-slate-500" />}
-                      required
-                    />
-                    <Input
-                      label="State / Region"
-                      placeholder="e.g. West Bengal"
-                      value={state}
-                      onChange={(e) => setState(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="City *"
-                      placeholder="e.g. Kolkata"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      icon={<Building className="w-4 h-4 text-slate-500" />}
-                      required
-                    />
-                    <Input
-                      label="Postal / PIN Code"
-                      placeholder="e.g. 700016"
-                      value={postalCode}
-                      onChange={(e) => setPostalCode(e.target.value)}
-                    />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="City *"
+                    placeholder="e.g. Kolkata"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    icon={<Building className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
+                  <Input
+                    label="Country *"
+                    placeholder="e.g. India"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    icon={<Globe className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* STEP 3: TABLES */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <Badge variant="brand" className="mb-1">Step 3 — Seating & Tables</Badge>
-                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  How many tables does your restaurant have?
-                </h2>
-                <p className="text-xs text-slate-400">Specify total seating tables for automated QR code generation.</p>
-              </div>
+                {/* Seating / Table Configuration */}
+                {businessType === 'FOOD_CART' ? (
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                    <label className="text-xs font-bold text-slate-300 block">Do you have customer dining tables at your Food Cart? *</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { setHasSeating(true); setEnableWaiter(true); if (tablesCount === 0) setTablesCount(5); }}
+                        className={`p-3.5 rounded-xl border text-xs font-bold transition-all text-left space-y-1 cursor-pointer ${
+                          hasSeating ? 'bg-rose-500/10 border-rose-500 text-white shadow-md' : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>Yes, Seating Available</span>
+                          {hasSeating && <CheckCircle2 className="w-4 h-4 text-rose-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-normal">Customer tables configured with QR ordering</p>
+                      </button>
 
-              {!hasSeating ? (
-                <div className="p-6 bg-slate-950 rounded-2xl border border-amber-500/30 text-center space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
-                    <Truck className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-base font-bold text-white">No Seating (0 Tables) — Counter Token Mode</h3>
-                    <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                      Customers will scan your Food Cart standee QR code, place orders, and receive a digital Token Bill on their phone screen to show at your counter.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-sm font-bold text-white flex items-center gap-2">
-                          <Grid className="w-4 h-4 text-rose-400" /> Number of Tables *
+                      <button
+                        type="button"
+                        onClick={() => { setHasSeating(false); setEnableWaiter(false); setTablesCount(0); }}
+                        className={`p-3.5 rounded-xl border text-xs font-bold transition-all text-left space-y-1 cursor-pointer ${
+                          !hasSeating ? 'bg-amber-500/10 border-amber-500 text-white shadow-md' : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>No Seating — Counter Pickup</span>
+                          {!hasSeating && <CheckCircle2 className="w-4 h-4 text-amber-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-normal">Single Standee QR + Digital Token Bills</p>
+                      </button>
+                    </div>
+
+                    {hasSeating && (
+                      <div className="pt-2 flex items-center justify-between border-t border-slate-800">
+                        <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Grid className="w-4 h-4 text-rose-400" /> Number of Tables
                         </label>
-                        <p className="text-xs text-slate-400">Total dining tables available at your outlet.</p>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={tablesCount}
+                          onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-20 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-center font-bold text-rose-400 text-sm"
+                        />
                       </div>
-                      <input
-                        type="number"
-                        min={1}
-                        max={200}
-                        value={tablesCount}
-                        onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-24 px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-center font-black text-rose-400 text-base focus:outline-none focus:border-rose-500"
-                      />
-                    </div>
+                    )}
                   </div>
-
-                  <div className="p-4 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl flex items-start gap-3 text-xs text-slate-300">
-                    <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                ) : (
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-between">
                     <div>
-                      <span className="font-bold text-white block mb-0.5">Automated Table Instantiation</span>
-                      Upon approval by Platform Admin, Dinely will automatically create <span className="font-bold text-rose-400">{tablesCount} tables</span> in the database with table-specific QR codes.
+                      <label className="text-xs font-bold text-white flex items-center gap-2">
+                        <Grid className="w-4 h-4 text-rose-400" /> Number of Dining Tables *
+                      </label>
+                      <p className="text-[11px] text-slate-400">Total dining tables available for QR menu & waiter dispatch.</p>
                     </div>
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={tablesCount}
+                      onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-24 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-center font-black text-rose-400 text-base focus:outline-none focus:border-rose-500"
+                    />
                   </div>
-                </>
-              )}
+                )}
+              </div>
             </div>
           )}
 
-          {/* STEP 4: REVIEW */}
-          {currentStep === 4 && (
-            <div className="space-y-6">
+          {/* STEP 3: CHOOSE YOUR DINELY TERMINALS */}
+          {currentStep === 3 && (
+            <div className="space-y-6 animate-in fade-in">
               <div className="space-y-1">
-                <Badge variant="brand" className="mb-1">Step 4 — Review</Badge>
+                <Badge variant="brand" className="mb-1">Step 3 — Workspace Configuration</Badge>
                 <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  Review your restaurant application
+                  Choose the tools your business needs
                 </h2>
-                <p className="text-xs text-slate-400">Verify your venue configuration before submitting for Dinely Admin review.</p>
+                <p className="text-xs text-slate-400">
+                  Select which operational terminals will be generated for your {businessType.toLowerCase()} workspace. You can adjust this later in settings.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {/* 1. Kitchen KDS */}
+                <div
+                  onClick={() => setEnableKitchen(!enableKitchen)}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                    enableKitchen ? 'bg-amber-500/10 border-amber-500/60 text-white shadow-md' : 'bg-slate-950 border-slate-800 text-slate-400 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2.5 rounded-xl border ${enableKitchen ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                      <ChefHat className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-sm">Kitchen Display System (KDS)</span>
+                        <Badge variant="warning" className="text-[9px]">Recommended</Badge>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">Manage incoming food orders, prep queues, and chef station timing.</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={enableKitchen}
+                    onChange={() => {}}
+                    className="w-5 h-5 rounded text-amber-500 accent-amber-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 2. Waiter Terminal */}
+                <div
+                  onClick={() => setEnableWaiter(!enableWaiter)}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                    enableWaiter ? 'bg-emerald-500/10 border-emerald-500/60 text-white shadow-md' : 'bg-slate-950 border-slate-800 text-slate-400 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2.5 rounded-xl border ${enableWaiter ? 'bg-emerald-500 text-white border-emerald-400' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                      <PhoneCall className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-sm">Waiter Terminal OS</span>
+                        {businessType === 'FOOD_CART' && <Badge variant="outline" className="text-[9px]">Optional</Badge>}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">Manage table requests, water/bill calls, order delivery, and table turnover.</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={enableWaiter}
+                    onChange={() => {}}
+                    className="w-5 h-5 rounded text-emerald-500 accent-emerald-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 3. Bar Terminal (ONLY FOR RESTAURANT AND BAR; NOT OFFERED FOR FOOD CART) */}
+                {businessType !== 'FOOD_CART' && (
+                  <div
+                    onClick={() => setEnableBar(!enableBar)}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                      enableBar ? 'bg-purple-500/10 border-purple-500/60 text-white shadow-md' : 'bg-slate-950 border-slate-800 text-slate-400 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2.5 rounded-xl border ${enableBar ? 'bg-purple-500 text-white border-purple-400' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                        <Wine className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">Bar Terminal KDS</span>
+                          {businessType === 'BAR' && <Badge variant="brand" className="text-[9px]">Essential</Badge>}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">Dedicated mixology terminal for drink queues, cocktail prep, and beverage dispensing.</p>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={enableBar}
+                      onChange={() => {}}
+                      className="w-5 h-5 rounded text-purple-500 accent-purple-500 mt-1 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {/* 4. Inventory Terminal */}
+                <div
+                  onClick={() => setEnableInventory(!enableInventory)}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                    enableInventory ? 'bg-rose-500/10 border-rose-500/60 text-white shadow-md' : 'bg-slate-950 border-slate-800 text-slate-400 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2.5 rounded-xl border ${enableInventory ? 'bg-rose-500 text-white border-rose-400' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                      <Package className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-sm">Inventory & Stock OS</span>
+                        <Badge variant="brand" className="text-[9px]">Included</Badge>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">Track raw ingredients, recipe consumption, low stock alerts, and supplier orders.</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={enableInventory}
+                    onChange={() => {}}
+                    className="w-5 h-5 rounded text-rose-500 accent-rose-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 5. Billing & POS */}
+                <div
+                  onClick={() => setEnableBilling(!enableBilling)}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                    enableBilling ? 'bg-sky-500/10 border-sky-500/60 text-white shadow-md' : 'bg-slate-950 border-slate-800 text-slate-400 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2.5 rounded-xl border ${enableBilling ? 'bg-sky-500 text-white border-sky-400' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                      <Receipt className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-sm">Billing, POS & Tax Engine</span>
+                        <Badge variant="success" className="text-[9px]">Essential</Badge>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">Digital POS receipts, custom UPI QR payments, GST invoices, and settlement logs.</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={enableBilling}
+                    onChange={() => {}}
+                    className="w-5 h-5 rounded text-sky-500 accent-sky-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 6. Owner Dashboard (Auto-included) */}
+                <div className="p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/30 flex items-center justify-between text-xs text-slate-300">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                      <LayoutDashboard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">Owner Executive Dashboard</span>
+                        <span className="text-[10px] font-mono text-indigo-400 font-bold bg-indigo-500/20 px-2 py-0.5 rounded-full">ALWAYS ACTIVE</span>
+                      </div>
+                      <p className="text-slate-400 mt-0.5">Central commercial intelligence, menu pricing, theme, and staff management.</p>
+                    </div>
+                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-indigo-400 shrink-0" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: REVIEW & CREATE WORKSPACE */}
+          {currentStep === 4 && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="space-y-1">
+                <Badge variant="brand" className="mb-1">Step 4 — Review & Workspace Generation</Badge>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Review your Dinely configuration
+                </h2>
+                <p className="text-xs text-slate-400">Confirm your customized setup before launching your workspace.</p>
               </div>
 
               {/* Review Summary Card */}
-              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 space-y-4">
+              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 space-y-5">
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Restaurant Name</span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Venue Name</span>
                     <span className="font-bold text-white text-base">{restaurantName}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Type</span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Business Model</span>
                     <span className="font-bold text-rose-400 text-base">{businessType}</span>
                   </div>
                   <div>
@@ -650,14 +851,26 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                     <span className="font-bold text-slate-200">{city}, {country}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Dining Tables</span>
-                    <span className="font-bold text-rose-400">{tablesCount} Tables</span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Capacity</span>
+                    <span className="font-bold text-rose-400">{businessType === 'FOOD_CART' && !hasSeating ? 'Counter Token Pickup' : `${tablesCount} Tables`}</span>
                   </div>
-                  <div className="col-span-2 pt-2 border-t border-slate-800/80">
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Owner Account</span>
-                    <span className="font-bold text-white">{currentUser.name}</span>
-                    <span className="text-slate-400 text-[11px] block">{currentUser.email}</span>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 space-y-2">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Generated Workspace Modules:</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="brand">Owner OS (Dashboard)</Badge>
+                    {enableKitchen && <Badge variant="warning">Kitchen KDS</Badge>}
+                    {enableWaiter && (businessType !== 'FOOD_CART' || hasSeating) && <Badge variant="success">Waiter Terminal</Badge>}
+                    {enableBar && businessType !== 'FOOD_CART' && <Badge variant="brand">Bar Terminal</Badge>}
+                    {enableInventory && <Badge variant="brand">Inventory OS</Badge>}
+                    {enableBilling && <Badge variant="info">Billing & POS</Badge>}
                   </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Authenticated Owner:</span>
+                  <span className="font-mono text-white font-bold">{currentUser.name} ({currentUser.email})</span>
                 </div>
               </div>
             </div>
@@ -694,7 +907,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 className="text-xs font-bold px-8 py-3 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-xl shadow-rose-950/50"
                 icon={isSubmitting ? undefined : <Sparkles className="w-4 h-4 ml-1" />}
               >
-                Submit for approval →
+                Create Workspace & Submit →
               </Button>
             )}
           </div>

@@ -28,37 +28,42 @@ export interface User {
 
 export type WorkspaceType = 'admin' | 'restaurant' | 'operations' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'customer';
 
-export function canAccessWorkspace(user: User | null | undefined, workspace: WorkspaceType | string): boolean {
+export type TerminalModule = 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'billing' | 'dashboard';
+
+export function canAccessWorkspace(
+  user: User | null | undefined,
+  workspace: WorkspaceType | string,
+  restaurant?: Restaurant | null
+): boolean {
   if (!user || !user.role) return false;
   const role = user.role;
 
-  // 1. Platform Admin / Super Admin has access to all platform and operational workspaces
+  // 1. Platform Admin / Super Admin has exclusive access to platform admin
+  if (workspace === 'admin') {
+    return role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN';
+  }
+
   if (role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') {
     return true;
   }
 
-  // 2. Restaurant Owner & Manager have access to all restaurant operational & management workspaces
+  // 2. Restaurant Owner & Manager have access to all enabled restaurant operational & management workspaces
   if (role === 'RESTAURANT_OWNER' || role === 'MANAGER') {
-    return workspace !== 'admin';
+    return true;
   }
 
-  // 3. Restaurant Staff roles (Chef, Waiter, Bartender, Inventory Manager, Cashier, Host)
-  // have unified access across all staff operational terminals and the Operations Center
-  const isStaffRole = [
-    'CHEF',
-    'WAITER',
-    'BARTENDER',
-    'BAR_STAFF',
-    'INVENTORY_MANAGER',
-    'HOST',
-    'CASHIER',
-  ].includes(role);
-
-  if (isStaffRole) {
-    if (workspace === 'admin' || workspace === 'restaurant') {
-      return false;
-    }
-    return ['operations', 'kitchen', 'waiter', 'bar', 'inventory', 'customer'].includes(workspace);
+  // 3. Scoped Staff roles (Staff only access their designated terminal)
+  if (role === 'CHEF') {
+    return workspace === 'kitchen';
+  }
+  if (role === 'WAITER' || role === 'HOST' || role === 'CASHIER') {
+    return workspace === 'waiter';
+  }
+  if (role === 'BARTENDER' || role === 'BAR_STAFF') {
+    return workspace === 'bar';
+  }
+  if (role === 'INVENTORY_MANAGER') {
+    return workspace === 'inventory';
   }
 
   if (role === 'CUSTOMER') {
@@ -66,6 +71,31 @@ export function canAccessWorkspace(user: User | null | undefined, workspace: Wor
   }
 
   return false;
+}
+
+export function isModuleEnabled(
+  restaurant: Restaurant | null | undefined,
+  module: TerminalModule | string
+): boolean {
+  if (!restaurant) return true; // Default permissive until loaded
+  
+  const bType = (restaurant.businessType || 'RESTAURANT').toUpperCase();
+
+  // If enabledModules array is present, check membership
+  if (Array.isArray(restaurant.enabledModules) && restaurant.enabledModules.length > 0) {
+    if (module === 'dashboard' || module === 'restaurant') return true;
+    return restaurant.enabledModules.includes(module.toLowerCase());
+  }
+
+  // Fallback to explicit boolean flags
+  if (module === 'kitchen') return restaurant.hasKitchen !== false;
+  if (module === 'waiter') return restaurant.hasWaiter !== false && restaurant.hasTables !== false;
+  if (module === 'bar') return restaurant.hasBar === true || bType === 'BAR';
+  if (module === 'inventory') return restaurant.hasInventory !== false;
+  if (module === 'billing') return restaurant.hasBilling !== false;
+  if (module === 'dashboard' || module === 'restaurant' || module === 'operations') return true;
+
+  return true;
 }
 
 export interface RestaurantFeatures {
@@ -144,6 +174,9 @@ export interface Restaurant {
   hasTables?: boolean;
   hasKitchen?: boolean;
   hasWaiter?: boolean;
+  hasInventory?: boolean;
+  hasBilling?: boolean;
+  enabledModules?: string[];
   orderNumberPrefix?: string;
   restaurantType?: string;
   description?: string;

@@ -2020,20 +2020,38 @@ export class DinelyApiClient {
     if (!rest.businessType) {
       rest.businessType = rest.features?.bar ? 'BAR' : 'RESTAURANT';
     }
+    const bType = (rest.businessType || 'RESTAURANT').toUpperCase();
     if (rest.hasBar === undefined) {
-      rest.hasBar = rest.businessType === 'BAR' || Boolean(rest.features?.bar);
+      rest.hasBar = bType === 'BAR' || Boolean(rest.features?.bar);
     }
     if (rest.hasKitchen === undefined) {
       rest.hasKitchen = true;
     }
     if (rest.hasTables === undefined) {
-      rest.hasTables = true;
+      rest.hasTables = bType !== 'FOOD_CART';
     }
     if (rest.hasWaiter === undefined) {
-      rest.hasWaiter = rest.hasTables !== false;
+      rest.hasWaiter = bType !== 'FOOD_CART' || rest.hasTables !== false;
+    }
+    if (rest.hasInventory === undefined) {
+      rest.hasInventory = true;
+    }
+    if (rest.hasBilling === undefined) {
+      rest.hasBilling = true;
+    }
+    if (!rest.enabledModules || rest.enabledModules.length === 0) {
+      if (bType === 'FOOD_CART') {
+        rest.enabledModules = ['kitchen', 'inventory', 'billing'];
+        if (rest.hasWaiter) rest.enabledModules.push('waiter');
+      } else if (bType === 'BAR') {
+        rest.enabledModules = ['bar', 'kitchen', 'waiter', 'inventory', 'billing'];
+      } else {
+        rest.enabledModules = ['kitchen', 'waiter', 'inventory', 'billing'];
+        if (rest.hasBar) rest.enabledModules.push('bar');
+      }
     }
     if (!rest.orderNumberPrefix) {
-      rest.orderNumberPrefix = rest.businessType === 'FOOD_TRUCK' ? '#F' : '#ORD';
+      rest.orderNumberPrefix = bType === 'FOOD_TRUCK' || bType === 'FOOD_CART' ? '#F' : '#ORD';
     }
     if (rest.taxPercentage === undefined) {
       rest.taxPercentage = 5.0;
@@ -2041,7 +2059,65 @@ export class DinelyApiClient {
     return rest;
   }
 
+  async updateWorkspaceModules(
+    restaurantId: string,
+    enabledModules: string[],
+    moduleFlags?: {
+      hasKitchen?: boolean;
+      hasWaiter?: boolean;
+      hasBar?: boolean;
+      hasInventory?: boolean;
+      hasBilling?: boolean;
+      hasTables?: boolean;
+    }
+  ) {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    const apiBase = getApiBaseUrl();
 
+    const payload = {
+      enabledModules,
+      hasKitchen: moduleFlags?.hasKitchen !== undefined ? moduleFlags.hasKitchen : enabledModules.includes('kitchen'),
+      hasWaiter: moduleFlags?.hasWaiter !== undefined ? moduleFlags.hasWaiter : enabledModules.includes('waiter'),
+      hasBar: moduleFlags?.hasBar !== undefined ? moduleFlags.hasBar : enabledModules.includes('bar'),
+      hasInventory: moduleFlags?.hasInventory !== undefined ? moduleFlags.hasInventory : enabledModules.includes('inventory'),
+      hasBilling: moduleFlags?.hasBilling !== undefined ? moduleFlags.hasBilling : enabledModules.includes('billing'),
+      hasTables: moduleFlags?.hasTables,
+    };
+
+    // Update in-memory local state
+    const rest = this.restaurants.find((r) => r.id === targetId);
+    if (rest) {
+      rest.enabledModules = enabledModules;
+      rest.hasKitchen = payload.hasKitchen;
+      rest.hasWaiter = payload.hasWaiter;
+      rest.hasBar = payload.hasBar;
+      rest.hasInventory = payload.hasInventory;
+      rest.hasBilling = payload.hasBilling;
+      if (payload.hasTables !== undefined) rest.hasTables = payload.hasTables;
+      this.saveDatabase();
+    }
+
+    try {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/workspace-modules`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('API PATCH for workspace-modules failed:', e);
+    }
+
+    realtimeBus.emit('WorkspaceConfigUpdated' as any, {
+      restaurantId: targetId,
+      enabledModules,
+      ...payload,
+    });
+
+    return { status: 'success', restaurantId: targetId, enabledModules, ...payload };
+  }
 
   async syncRestaurantToBackend(rest: Restaurant) {
     if (!rest || !rest.id) return;
@@ -2133,17 +2209,29 @@ export class DinelyApiClient {
       if (res.ok) {
         const data = await res.json();
         if (data && data.id) {
+          const bType = (data.business_type || 'RESTAURANT').toUpperCase();
+          const mappedModules = data.enabled_modules || (
+            bType === 'FOOD_CART'
+              ? ['kitchen', 'inventory', 'billing', ...(data.has_waiter ? ['waiter'] : [])]
+              : bType === 'BAR'
+              ? ['bar', 'kitchen', 'waiter', 'inventory', 'billing']
+              : ['kitchen', 'waiter', 'inventory', 'billing', ...(data.has_bar ? ['bar'] : [])]
+          );
+
           const mappedRest: Restaurant = {
             id: data.id,
             orgId: data.org_id || 'org-dinely',
             name: data.name,
             slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-'),
             cuisine: data.cuisine || 'Multi-Cuisine',
-            businessType: data.business_type || 'RESTAURANT',
+            businessType: bType as BusinessType,
             hasBar: data.has_bar !== false,
             hasTables: data.has_tables !== false,
             hasKitchen: data.has_kitchen !== false,
             hasWaiter: data.has_waiter !== false,
+            hasInventory: data.has_inventory !== false,
+            hasBilling: data.has_billing !== false,
+            enabledModules: mappedModules,
             orderNumberPrefix: data.order_number_prefix || '#ORD',
             address: data.address || '',
             phone: data.phone || '',

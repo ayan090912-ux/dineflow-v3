@@ -52,6 +52,9 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_qr_url TEXT;",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_enabled BOOLEAN DEFAULT TRUE;",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS billing_settings_json JSONB;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS has_inventory BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS has_billing BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS enabled_modules JSONB;",
         # Bills Columns
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",

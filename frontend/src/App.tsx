@@ -11,44 +11,30 @@ import { RestaurantOperationsCenter } from './apps/operations/RestaurantOperatio
 import { AuthPage } from './apps/auth/AuthPage';
 import { RoleLoginPage, PortalType } from './apps/auth/RoleLoginPage';
 import { UnauthorizedPage } from './apps/auth/UnauthorizedPage';
+import { ModuleNotEnabledPage } from './apps/auth/ModuleNotEnabledPage';
 import { SetupWizard } from './apps/onboarding/SetupWizard';
 import { PendingApprovalPage } from './apps/onboarding/PendingApprovalPage';
 import { WorkspaceSelector } from './apps/onboarding/WorkspaceSelector';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
-import { ErrorBoundary, DinelyLogo } from './packages/ui';
+import { ErrorBoundary } from './packages/ui';
 import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
-import { canAccessWorkspace, WorkspaceType } from './packages/types';
-import {
-  Activity,
-  Building2,
-  Utensils,
-  Smartphone,
-  ChefHat,
-  PhoneCall,
-  Wine,
-  Package,
-  Globe,
-  LogOut,
-  ShieldAlert,
-} from 'lucide-react';
+import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant } from './packages/types';
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
   const [currentUser, setCurrentUser] = useState<any>(() => api.getCurrentUser(getPortalScopeFromPath(window.location.pathname)));
   const [activeOwnerData, setActiveOwnerData] = useState<any>(null);
-  const [showDomainBar, setShowDomainBar] = useState(true);
   const [kitchenOrders, setKitchenOrders] = useState<any[]>([]);
-
-  const [currentRestaurant, setCurrentRestaurant] = useState<any>(null);
-
-  const cleanPath = (currentPath || '/').split('?')[0];
+  const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
 
   useEffect(() => {
-    api.getRestaurantDetails().then((r) => setCurrentRestaurant(r));
+    api.getRestaurantDetails().then((r) => {
+      if (r) setCurrentRestaurant(r);
+    });
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      if (event.type === 'RestaurantSwitched' || event.type === 'RESTAURANT_APPROVED') {
+      if (event.type === 'RestaurantSwitched' || event.type === 'RESTAURANT_APPROVED' || event.type === 'WorkspaceConfigUpdated') {
         const restId = (event as any).restaurantId || api.getCurrentRestaurantId();
         api.getRestaurantDetails(restId).then((r) => {
           if (r) setCurrentRestaurant(r);
@@ -86,7 +72,7 @@ export default function App() {
 
   // Load orders for kitchen view
   useEffect(() => {
-    if (currentPath === '/kitchen/dashboard') {
+    if (currentPath === '/kitchen/dashboard' || currentPath.startsWith('/kitchen')) {
       const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
       api.getOrders(restId).then((o) => setKitchenOrders(o));
     }
@@ -101,180 +87,6 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-          {/* Enterprise Role & Environment Navigation Header */}
-          {showDomainBar && !currentPath.startsWith('/customer') && !currentPath.startsWith('/order') ? (
-            <header className="bg-slate-900 border-b border-slate-800/80 px-4 py-2 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigateTo('/')}>
-                <DinelyLogo size="sm" />
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 hidden sm:inline-block" />
-              </div>
-
-              {/* Core Navigation Switcher Controls */}
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/90 overflow-x-auto scrollbar-none no-scrollbar">
-                <button
-                  onClick={() => navigateTo('/')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    currentPath === '/' || currentPath === '/landing'
-                      ? 'bg-slate-800 text-slate-100 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                >
-                  <Globe className="w-3.5 h-3.5" />
-                  <span>Main Website</span>
-                </button>
-
-                <button
-                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'operations') ? '/operations' : '/restaurant/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                    currentPath.startsWith('/operations')
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                >
-                  <Activity className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Operations Center</span>
-                </button>
-
-                <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
-
-                <button
-                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'kitchen') ? '/kitchen/dashboard' : '/kitchen/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    currentPath.startsWith('/kitchen')
-                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                >
-                  <ChefHat className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Kitchen KDS</span>
-                </button>
-
-                {(currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) && (
-                  <button
-                    onClick={() => navigateTo(canAccessWorkspace(currentUser, 'waiter') ? '/waiter' : '/waiter/login')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                      currentPath.startsWith('/waiter')
-                        ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                    }`}
-                  >
-                    <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Waiter Terminal</span>
-                  </button>
-                )}
-
-                {(currentRestaurant?.hasBar !== false && (currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR')) && (
-                  <button
-                    onClick={() => navigateTo(canAccessWorkspace(currentUser, 'bar') ? '/bar/dashboard' : '/bar/login')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                      currentPath.startsWith('/bar')
-                        ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                    }`}
-                  >
-                    <Wine className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Bar Terminal</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'inventory') ? '/inventory/terminal' : '/inventory/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    currentPath.startsWith('/inventory')
-                      ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                >
-                  <Package className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Inventory OS</span>
-                </button>
-
-                <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
-
-                <button
-                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'restaurant') ? '/workspace' : '/restaurant/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    currentPath.startsWith('/restaurant') || currentPath === '/workspace'
-                      ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                >
-                  <Utensils className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Owner OS</span>
-                </button>
-
-                <button
-                  onClick={() => navigateTo(canAccessWorkspace(currentUser, 'admin') ? '/admin/dashboard' : '/admin/login')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    currentPath.startsWith('/admin')
-                      ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                >
-                  <Building2 className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Platform Admin</span>
-                </button>
-
-                <div className="h-3.5 w-[1px] bg-slate-800/80 mx-1 hidden md:block" />
-
-                <button
-                  onClick={() => navigateTo('/customer')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    currentPath === '/customer' || currentPath === '/order'
-                      ? 'bg-slate-800 text-slate-100 border border-slate-700'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-slate-300" />
-                  <span>Customer App</span>
-                </button>
-              </div>
-
-              {/* Active User Badge & Session Control */}
-              <div className="flex items-center gap-2 shrink-0">
-                {currentUser ? (
-                  <div className="flex items-center gap-2.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                    <div className="hidden sm:block text-[11px] leading-tight">
-                      <p className="font-semibold text-slate-100 max-w-[120px] truncate">{currentUser.name || currentUser.email}</p>
-                      <p className="text-[9px] text-slate-400 font-mono uppercase tracking-wide">{currentUser.role || 'ACTIVE SESSION'}</p>
-                    </div>
-                    <button
-                      onClick={() => handleLogout('/restaurant/login')}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-                      title="Explicitly sign out of active session"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span className="hidden md:inline">Log Out</span>
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => navigateTo('/restaurant/login')}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-colors cursor-pointer"
-                  >
-                    <span>Log In</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setShowDomainBar(false)}
-                  className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800 transition-colors hidden md:block"
-                  title="Hide domain switcher bar"
-                >
-                  Hide Bar ✕
-                </button>
-              </div>
-            </header>
-          ) : (
-            <button
-              onClick={() => setShowDomainBar(true)}
-              className="fixed top-2 right-2 z-50 bg-slate-900/90 text-slate-400 hover:text-white text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-800 shadow-xl"
-            >
-              Switch Domain 🌐
-            </button>
-          )}
-
           {/* Dynamic App & Router Render */}
           <div className="flex-1">
             {/* Landing Web Page */}
@@ -349,8 +161,15 @@ export default function App() {
               />
             )}
 
+            {/* Inventory Terminal OS Route */}
             {(currentPath === '/inventory/terminal' || currentPath === '/inventory/dashboard' || currentPath === '/inventory') && (
-              checkWorkspaceAccess('inventory') ? (
+              !isModuleEnabled(currentRestaurant, 'inventory') ? (
+                <ModuleNotEnabledPage
+                  moduleName="Inventory OS"
+                  restaurant={currentRestaurant}
+                  onNavigate={navigateTo}
+                />
+              ) : checkWorkspaceAccess('inventory') ? (
                 <InventoryTerminalOS
                   onLogout={() => handleLogout('/inventory/login')}
                   activeRestaurantId={currentRestaurant?.id}
@@ -375,8 +194,8 @@ export default function App() {
               )
             )}
 
-            {/* Dashboards with Role-Based Access Control (RBAC) */}
-            {currentPath === '/admin/dashboard' && (
+            {/* Platform Admin Control Plane (Strictly isolated from normal restaurant users) */}
+            {currentPath.startsWith('/admin') && currentPath !== '/admin/login' && (
               checkWorkspaceAccess('admin') ? (
                 <PlatformApp onLogout={() => handleLogout('/admin/login')} />
               ) : currentUser ? (
@@ -399,7 +218,7 @@ export default function App() {
               )
             )}
 
-            {/* Unified Restaurant Operations Center (Primary Commercial Operations Screen) */}
+            {/* Operations Center Screen */}
             {(currentPath === '/operations' || currentPath === '/operations/dashboard' || currentPath === '/operations/center') && (
               checkWorkspaceAccess('operations') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
@@ -433,8 +252,8 @@ export default function App() {
               )
             )}
 
-            {/* Operational Dashboards with Strict Approval Guard */}
-            {(currentPath === '/restaurant/dashboard' || currentPath === '/owner') && (
+            {/* Owner OS / Restaurant Dashboard */}
+            {(currentPath === '/restaurant/dashboard' || currentPath === '/owner' || currentPath === '/restaurant') && (
               checkWorkspaceAccess('restaurant') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
@@ -467,6 +286,7 @@ export default function App() {
               )
             )}
 
+            {/* Workspace / Multi-Outlet Selector */}
             {(currentPath === '/workspace' || currentPath === '/restaurant/select') && (
               <WorkspaceSelector
                 user={currentUser}
@@ -493,8 +313,15 @@ export default function App() {
               />
             )}
 
-            {currentPath === '/kitchen/dashboard' && (
-              checkWorkspaceAccess('kitchen') ? (
+            {/* Kitchen KDS Terminal Route */}
+            {(currentPath === '/kitchen/dashboard' || currentPath === '/kitchen') && (
+              !isModuleEnabled(currentRestaurant, 'kitchen') ? (
+                <ModuleNotEnabledPage
+                  moduleName="Kitchen Display System (KDS)"
+                  restaurant={currentRestaurant}
+                  onNavigate={navigateTo}
+                />
+              ) : checkWorkspaceAccess('kitchen') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
                     onNavigate={navigateTo}
@@ -512,7 +339,7 @@ export default function App() {
                 )
               ) : currentUser ? (
                 <UnauthorizedPage
-                  requiredRole="CHEF / KITCHEN STAFF"
+                  requiredRole="CHEF / KITCHEN STAFF / OWNER"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/kitchen/dashboard"
@@ -530,8 +357,15 @@ export default function App() {
               )
             )}
 
-            {currentPath === '/bar/dashboard' && (
-              checkWorkspaceAccess('bar') ? (
+            {/* Bar Terminal KDS Route */}
+            {(currentPath === '/bar/dashboard' || currentPath === '/bar') && (
+              !isModuleEnabled(currentRestaurant, 'bar') ? (
+                <ModuleNotEnabledPage
+                  moduleName="Bar Terminal KDS"
+                  restaurant={currentRestaurant}
+                  onNavigate={navigateTo}
+                />
+              ) : checkWorkspaceAccess('bar') ? (
                 (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
                   <PendingApprovalPage
                     onNavigate={navigateTo}
@@ -542,7 +376,7 @@ export default function App() {
                 )
               ) : currentUser ? (
                 <UnauthorizedPage
-                  requiredRole="BARTENDER / BAR STAFF"
+                  requiredRole="BARTENDER / BAR STAFF / OWNER"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/bar/dashboard"
@@ -560,43 +394,39 @@ export default function App() {
               )
             )}
 
-
+            {/* Waiter Terminal OS Route */}
             {(currentPath === '/waiter' || currentPath === '/waiter/dashboard') && (
-              (currentRestaurant?.hasTables !== false && currentRestaurant?.hasWaiter !== false) ? (
-                checkWorkspaceAccess('waiter') ? (
-                  (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
-                    <PendingApprovalPage
-                      onNavigate={navigateTo}
-                      onLogout={() => handleLogout('/waiter/login')}
-                    />
-                  ) : (
-                    <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
-                  )
-                ) : currentUser ? (
-                  <UnauthorizedPage
-                    requiredRole="WAITER / FLOOR STAFF"
-                    userRole={currentUser?.role}
-                    userEmail={currentUser?.email}
-                    targetPath="/waiter"
+              !isModuleEnabled(currentRestaurant, 'waiter') ? (
+                <ModuleNotEnabledPage
+                  moduleName="Waiter Terminal OS"
+                  restaurant={currentRestaurant}
+                  onNavigate={navigateTo}
+                />
+              ) : checkWorkspaceAccess('waiter') ? (
+                (currentRestaurant && !currentRestaurant.isApproved && currentRestaurant.lifecycleStatus !== 'APPROVED' && currentRestaurant.lifecycleStatus !== 'LIVE' && currentRestaurant.lifecycleStatus !== 'ACTIVE' && currentUser?.role !== 'SUPER_ADMIN') ? (
+                  <PendingApprovalPage
                     onNavigate={navigateTo}
+                    onLogout={() => handleLogout('/waiter/login')}
                   />
                 ) : (
-                  <RoleLoginPage
-                    portal="waiter"
-                    onNavigate={navigateTo}
-                    onLoginSuccess={(_, user) => {
-                      setCurrentUser(user);
-                      navigateTo('/waiter');
-                    }}
-                  />
+                  <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
                 )
-              ) : (
+              ) : currentUser ? (
                 <UnauthorizedPage
-                  requiredRole="WAITER & TABLE MODULE (Disabled for Tableless Venues)"
+                  requiredRole="WAITER / FLOOR STAFF / OWNER"
                   userRole={currentUser?.role}
                   userEmail={currentUser?.email}
                   targetPath="/waiter"
                   onNavigate={navigateTo}
+                />
+              ) : (
+                <RoleLoginPage
+                  portal="waiter"
+                  onNavigate={navigateTo}
+                  onLoginSuccess={(_, user) => {
+                    setCurrentUser(user);
+                    navigateTo('/waiter');
+                  }}
                 />
               )
             )}

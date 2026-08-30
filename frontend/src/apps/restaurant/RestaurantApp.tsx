@@ -87,6 +87,8 @@ import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
 import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
+import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
+import { isModuleEnabled } from '../../packages/types';
 
 interface RestaurantAppProps {
   onEditSetup?: () => void;
@@ -95,7 +97,7 @@ interface RestaurantAppProps {
 
 export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLogout }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'workspace_settings'>('dashboard');
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -1141,10 +1143,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
           {/* Navigation Links */}
           <nav className="space-y-1">
             {(() => {
-              const hasBarModule = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
+              const hasKitchenModule = isModuleEnabled(currentRestaurant, 'kitchen');
+              const hasWaiterModule = isModuleEnabled(currentRestaurant, 'waiter');
+              const hasBarModule = isModuleEnabled(currentRestaurant, 'bar');
+              const hasInventoryModule = isModuleEnabled(currentRestaurant, 'inventory');
+              const hasBillingModule = isModuleEnabled(currentRestaurant, 'billing');
               const hasTablesModule = currentRestaurant?.hasTables !== false;
-              const hasWaiterModule = (currentRestaurant?.hasWaiter !== false) && hasTablesModule;
-              const isFoodTruck = currentRestaurant?.businessType === 'FOOD_TRUCK';
+              const isFoodCart = currentRestaurant?.businessType === 'FOOD_CART' || currentRestaurant?.businessType === 'FOOD_TRUCK';
 
               const links = [
                 { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -1157,7 +1162,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   icon: <ShoppingBag className="w-4 h-4" />,
                   badge: orders.filter((o) => o.status !== 'COMPLETED').length,
                 },
-                { id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> },
+                ...(hasKitchenModule
+                  ? [{ id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> }]
+                  : []),
                 ...(hasBarModule
                   ? [{ id: 'bar', label: 'Bar Terminal KDS', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
                   : []),
@@ -1169,13 +1176,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                       badge: tables.filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length > 0 ? 'ALERT' : undefined,
                     }]
                   : []),
-                ...(isFoodTruck || !hasTablesModule
+                ...(isFoodCart && !hasTablesModule
                   ? [{ id: 'qr_pickup', label: 'QR Ordering / Pickup', icon: <QrCode className="w-4 h-4 text-sky-400" />, badge: 'PICKUP' }]
                   : []),
                 { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
                 { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
-                { id: 'inventory', label: 'Inventory', icon: <Package className="w-4 h-4" /> },
-                { id: 'billing', label: 'Billing & Receipts', icon: <Receipt className="w-4 h-4 text-emerald-400" /> },
+                ...(hasInventoryModule
+                  ? [{ id: 'inventory', label: 'Inventory', icon: <Package className="w-4 h-4" /> }]
+                  : []),
+                ...(hasBillingModule
+                  ? [{ id: 'billing', label: 'Billing & Receipts', icon: <Receipt className="w-4 h-4 text-emerald-400" /> }]
+                  : []),
                 {
                   id: 'business_day',
                   label: 'Business Day & Daily Closing',
@@ -1183,6 +1194,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   badge: currentBusinessDay?.status === 'OPEN' ? 'OPEN' : 'CLOSED',
                 },
                 { id: 'theme', label: 'Branding & Theme', icon: <Palette className="w-4 h-4" /> },
+                { id: 'workspace_settings', label: 'Workspace & Terminals', icon: <Layers className="w-4 h-4 text-rose-400" /> },
               ];
 
               return links.map((item) => (
@@ -3520,6 +3532,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
               </div>
             </Card>
           </div>
+        )}
+
+        {/* Tab: Workspace & Terminal Configuration */}
+        {activeTab === 'workspace_settings' && (
+          <WorkspaceSettingsTab
+            restaurant={currentRestaurant}
+            onRefreshRestaurant={loadData}
+            addToast={addToast}
+          />
         )}
 
         {/* Tab: Business Day & Daily Closing */}
