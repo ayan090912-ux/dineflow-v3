@@ -146,8 +146,11 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
       setUpiEnabled(true);
 
       try {
-        await api.uploadUpiQrImage(restaurantId, dataUrl, upiMerchantName || displayName, upiId);
-        addToast('success', 'UPI QR Image Uploaded & Verified ✅', 'Your custom standee QR code is now live.');
+        const uploadRes = await api.uploadUpiQrImage(restaurantId, dataUrl, upiMerchantName || displayName, upiId);
+        if (uploadRes && uploadRes.upiQrUrl) {
+          setUpiQrUrl(uploadRes.upiQrUrl);
+        }
+        addToast('success', 'UPI QR Image Uploaded & Verified ✅', 'Your custom standee QR code is now live and saved.');
       } catch (err: any) {
         console.warn('Remote QR upload failed, stored locally:', err);
         addToast('info', 'QR Image Stored Locally', 'Click Save Configuration to confirm.');

@@ -201,7 +201,16 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   // Instant Digital Receipt PNG Exporter Trigger (Mobile iOS & Android Compatible)
   const handleDownloadReceipt = () => {
     if (bill) {
-      downloadDigitalReceiptPNG(bill, currentRestaurant?.name || 'Dinely Cloud POS');
+      downloadDigitalReceiptPNG(
+        bill,
+        activeMerchantName || currentRestaurant?.name || 'CAFE.CO',
+        {
+          legalName: billingConfig?.legalName || currentRestaurant?.legalName,
+          gstin: billingConfig?.gstin || currentRestaurant?.gstin || currentRestaurant?.gstNumber,
+          pan: billingConfig?.pan || currentRestaurant?.pan,
+          address: billingConfig?.address || currentRestaurant?.address,
+        }
+      );
       setNotificationToast('Receipt Generated! 📄 Check your downloads / photo gallery.');
       setTimeout(() => setNotificationToast(null), 4000);
     }

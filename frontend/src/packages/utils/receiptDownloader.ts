@@ -1,12 +1,25 @@
 import { Bill } from '../types';
 import { formatCurrency } from './currency';
+import { formatStandardTableNumber } from './tableUtils';
 
-export function downloadDigitalReceiptPNG(bill: Bill, restaurantName: string = 'Dinely Cloud POS'): void {
+export interface ReceiptOptions {
+  legalName?: string;
+  gstin?: string;
+  pan?: string;
+  address?: string;
+}
+
+export function downloadDigitalReceiptPNG(
+  bill: Bill,
+  restaurantName: string = 'Dinely Cloud POS',
+  options?: ReceiptOptions
+): void {
   const canvas = document.createElement('canvas');
   const width = 640;
   const itemsCount = (bill.items || []).length;
   const taxBreakdownCount = (bill.taxBreakdown || []).length;
-  const height = 820 + itemsCount * 45 + taxBreakdownCount * 22;
+  const extraHeaderLines = (options?.gstin || options?.pan || options?.address) ? 30 : 0;
+  const height = 820 + itemsCount * 45 + taxBreakdownCount * 22 + extraHeaderLines;
 
   canvas.width = width * 2; // High-DPI 2x scale
   canvas.height = height * 2;
@@ -33,34 +46,55 @@ export function downloadDigitalReceiptPNG(bill: Bill, restaurantName: string = '
   ctx.fillRect(16, 16, width - 32, 8);
 
   // Header Title
+  const displayTitle = options?.legalName || restaurantName || 'Dinely Fine Dining';
   ctx.fillStyle = '#ffffff';
-  ctx.font = '900 24px Inter, system-ui, sans-serif';
+  ctx.font = '900 22px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText((restaurantName || 'Dinely Fine Dining').toUpperCase(), width / 2, 60);
+  ctx.fillText(displayTitle.toUpperCase(), width / 2, 55);
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('OFFICIAL GST TAX INVOICE & DIGITAL RECEIPT', width / 2, 82);
+  ctx.fillText('OFFICIAL GST TAX INVOICE & DIGITAL RECEIPT', width / 2, 75);
+
+  let headerY = 92;
+  if (options?.address) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '500 10px Inter, system-ui, sans-serif';
+    ctx.fillText(options.address, width / 2, headerY);
+    headerY += 15;
+  }
+
+  const gstPanParts: string[] = [];
+  if (options?.gstin) gstPanParts.push(`GSTIN: ${options.gstin}`);
+  if (options?.pan) gstPanParts.push(`PAN: ${options.pan}`);
+  if (gstPanParts.length > 0) {
+    ctx.fillStyle = '#10b981';
+    ctx.font = '700 10px monospace';
+    ctx.fillText(gstPanParts.join('  |  '), width / 2, headerY);
+    headerY += 15;
+  }
 
   // Divider Line
   ctx.strokeStyle = '#334155';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(40, 100);
-  ctx.lineTo(width - 40, 100);
+  ctx.moveTo(40, headerY);
+  ctx.lineTo(width - 40, headerY);
   ctx.stroke();
+
+  const metaStartY = headerY + 25;
 
   // Invoice & Table Metadata Grid
   ctx.textAlign = 'left';
   ctx.fillStyle = '#64748b';
   ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('INVOICE NO', 40, 125);
-  ctx.fillText('DATE & TIME', 230, 125);
-  ctx.fillText('TABLE & SESSION', 440, 125);
+  ctx.fillText('INVOICE NO', 40, metaStartY);
+  ctx.fillText('DATE & TIME', 230, metaStartY);
+  ctx.fillText('TABLE & SESSION', 440, metaStartY);
 
   ctx.fillStyle = '#10b981';
   ctx.font = '700 13px monospace';
-  ctx.fillText(bill.invoiceNumber || bill.id || 'INV-1001', 40, 145);
+  ctx.fillText(bill.invoiceNumber || bill.id || 'INV-1001', 40, metaStartY + 20);
 
   ctx.fillStyle = '#f8fafc';
   ctx.font = '600 12px Inter, system-ui, sans-serif';
@@ -71,33 +105,35 @@ export function downloadDigitalReceiptPNG(bill: Bill, restaurantName: string = '
     hour: '2-digit',
     minute: '2-digit',
   });
-  ctx.fillText(dateStr, 230, 145);
+  ctx.fillText(dateStr, 230, metaStartY + 20);
 
   ctx.fillStyle = '#f59e0b';
-  ctx.fillText(`${bill.tableNumber || 'Table'} (#${bill.tableSessionId ? String(bill.tableSessionId).slice(-6) : '001'})`, 440, 145);
+  const standardTableLabel = formatStandardTableNumber(bill.tableNumber);
+  ctx.fillText(`${standardTableLabel} (#${bill.tableSessionId ? String(bill.tableSessionId).slice(-6) : '001'})`, 440, metaStartY + 20);
 
   // Status & Payment Method Box
+  const boxY = metaStartY + 40;
   ctx.fillStyle = '#1e293b';
-  ctx.fillRect(40, 165, width - 80, 42);
+  ctx.fillRect(40, boxY, width - 80, 42);
   ctx.strokeStyle = '#334155';
-  ctx.strokeRect(40, 165, width - 80, 42);
+  ctx.strokeRect(40, boxY, width - 80, 42);
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('PAYMENT STATUS:', 55, 190);
+  ctx.fillText('PAYMENT STATUS:', 55, boxY + 25);
   ctx.fillStyle = bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? '#10b981' : '#f59e0b';
   ctx.font = '800 12px Inter, system-ui, sans-serif';
-  ctx.fillText(bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? '● PAID & VERIFIED' : '○ PAYMENT PENDING', 165, 190);
+  ctx.fillText(bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? '● PAID & VERIFIED' : '○ PAYMENT PENDING', 165, boxY + 25);
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('PAYMENT METHOD:', 350, 190);
+  ctx.fillText('PAYMENT METHOD:', 350, boxY + 25);
   ctx.fillStyle = '#f8fafc';
   ctx.font = '700 12px Inter, system-ui, sans-serif';
-  ctx.fillText((bill.paymentMethod || 'UPI / CASH').toUpperCase(), 465, 190);
+  ctx.fillText((bill.paymentMethod || 'UPI / CASH').toUpperCase(), 465, boxY + 25);
 
   // Itemized Header
-  let y = 240;
+  let y = boxY + 65;
   ctx.fillStyle = '#475569';
   ctx.fillRect(40, y, width - 80, 28);
   ctx.fillStyle = '#cbd5e1';
