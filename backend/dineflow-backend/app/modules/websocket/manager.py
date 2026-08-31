@@ -98,6 +98,29 @@ class ConnectionManager:
         event_type = message.get("type", "GenericEvent")
         await self.broadcast_event(restaurant_id=restaurant_id, event_type=event_type, payload=message)
 
+    async def broadcast_global(self, message: dict):
+        event_type = message.get("type", "GlobalEvent")
+        event_id = f"evt-{int(datetime.utcnow().timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
+        event_data = {
+            "event_id": event_id,
+            "eventId": event_id,
+            "type": event_type,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": message,
+            **message
+        }
+        json_str = json.dumps(event_data)
+        stale_websockets = []
+        async with self._lock:
+            for conn in self.active_connections:
+                ws = conn["websocket"]
+                try:
+                    await ws.send_text(json_str)
+                except Exception:
+                    stale_websockets.append(ws)
+            if stale_websockets:
+                self.active_connections = [c for c in self.active_connections if c["websocket"] not in stale_websockets]
+
 # Global ConnectionManager instance
 ws_manager = ConnectionManager()
 

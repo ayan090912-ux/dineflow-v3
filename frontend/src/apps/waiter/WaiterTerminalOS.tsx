@@ -132,7 +132,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   // Authenticated user & restaurant resolution
   const currentUser = api.getCurrentUser();
   const urlRestParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('restaurant') || new URLSearchParams(window.location.search).get('restaurantId') : null;
-  const currentRestaurantId = urlRestParam || api.getCurrentRestaurantId() || currentUser?.restaurantId || 'rest-1787446097984';
+  const currentRestaurantId = urlRestParam || api.getCurrentRestaurantId() || currentUser?.restaurantId || '';
   const waiterName = currentUser?.name || 'Ayaan';
 
   // Live Clock Tick
@@ -336,7 +336,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
         setTables((prev) =>
           prev.map((t) =>
-            t.id === tblId || t.number === tblNum
+            t.id === tblId || (t as any).number === tblNum || t.tableNumber === tblNum
               ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined }
               : t
           )
@@ -354,7 +354,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           if (tblId) {
             setTables((prev) =>
               prev.map((t) =>
-                t.id === tblId || t.number === sess.tableNumber
+                t.id === tblId || (t as any).number === sess.tableNumber || t.tableNumber === sess.tableNumber
                   ? { ...t, status: 'OCCUPIED', isOccupied: true, activeSessionId: sess.id }
                   : t
               )
@@ -645,7 +645,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             <span>Unable to connect to restaurant server. Realtime events may be paused.</span>
           </div>
-          <Button variant="outline" size="sm" onClick={loadData} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={() => loadData()} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1">
             <RefreshCw className="w-3 h-3" />
             <span>RETRY</span>
           </Button>
@@ -741,14 +741,14 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             <div className="flex-1 min-w-[240px]">
               <SearchInput
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(val) => setSearchQuery(typeof val === 'string' ? val : (val as any).target.value)}
                 placeholder="Search table #, order #, or customer request..."
               />
             </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={loadData}
+              onClick={() => loadData()}
               disabled={isLoading}
               className="text-xs bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5"
             >

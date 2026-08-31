@@ -1,9 +1,17 @@
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 
+from app.core.database.connection import get_db
 from app.core.security.rbac import require_platform_admin, get_current_firebase_admin
 from app.modules.admin.audit_service import AdminAuditLogger
+from app.modules.restaurants.models import Restaurant
+from app.modules.tables.models import Table
+from app.modules.menu.models import MenuCategory, MenuItem
+from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
 
@@ -56,52 +64,212 @@ async def verify_platform_admin_token(
 
 @router.get("/restaurants")
 async def get_all_restaurants(
-    admin_claims: Dict[str, Any] = Depends(require_platform_admin)
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
 ) -> List[Dict[str, Any]]:
     """
-    Protected endpoint to list all platform restaurants.
+    Protected endpoint to list all platform restaurants from PostgreSQL.
     """
-    return [
-        {
-            "id": "rest-001",
-            "name": "Bella Italia Bistro",
-            "ownerEmail": "owner@bellaitalia.com",
-            "lifecycleStatus": "LIVE",
-            "isApproved": True,
-            "createdAt": "2026-01-15T08:00:00Z"
-        },
-        {
-            "id": "rest-002",
-            "name": "Tokyo Express Grill",
-            "ownerEmail": "owner@tokyoexpress.com",
-            "lifecycleStatus": "PENDING_APPROVAL",
-            "isApproved": False,
-            "createdAt": "2026-02-10T11:30:00Z"
-        }
-    ]
+    stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None)).order_by(Restaurant.created_at.desc())
+    result = await db.execute(stmt)
+    rests = result.scalars().all()
+
+    output = []
+    for r in rests:
+        output.append({
+            "id": r.id,
+            "name": r.name,
+            "slug": r.slug,
+            "cuisine": r.cuisine,
+            "businessType": r.business_type,
+            "ownerName": r.owner_name,
+            "ownerEmail": r.owner_email,
+            "ownerUid": r.owner_uid,
+            "phone": r.phone,
+            "email": r.email,
+            "address": r.address,
+            "lifecycleStatus": r.lifecycle_status or ("LIVE" if r.is_approved else "PENDING_APPROVAL"),
+            "isApproved": r.is_approved,
+            "status": r.status,
+            "enabledModules": r.enabled_modules,
+            "hasKitchen": r.has_kitchen,
+            "hasWaiter": r.has_waiter,
+            "hasBar": r.has_bar,
+            "hasInventory": r.has_inventory,
+            "hasBilling": r.has_billing,
+            "hasTables": r.has_tables,
+            "rejectionReason": r.rejection_reason,
+            "requestedChanges": r.requested_changes,
+            "approvedAt": r.approved_at.isoformat() if r.approved_at else None,
+            "approvedBy": r.approved_by,
+            "submittedAt": r.submitted_at.isoformat() if r.submitted_at else (r.created_at.isoformat() if r.created_at else None),
+            "createdAt": r.created_at.isoformat() if r.created_at else None,
+            "theme": r.theme_json,
+        })
+    return output
 
 
 @router.post("/restaurants/approve")
 async def approve_restaurant(
     action: RestaurantStatusAction,
     request: Request,
-    admin_claims: Dict[str, Any] = Depends(require_platform_admin)
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Approves a restaurant application.
+    Approves a restaurant application and transitions tenant to LIVE status.
     """
-    uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+    admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+    admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
+
+    query = select(Restaurant).where(Restaurant.id == action.restaurant_id)
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+
+    if not rest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{action.restaurant_id}' not found."
+        )
+
+    rest.is_approved = True
+    rest.lifecycle_status = "LIVE"
+    rest.status = "OPEN"
+    rest.approved_at = datetime.now(timezone.utc)
+    rest.approved_by = admin_email
+
+    # Ensure default initial categories exist for this tenant
+    cat_query = select(MenuCategory).where(MenuCategory.restaurant_id == rest.id)
+    cat_res = await db.execute(cat_query)
+    existing_cats = cat_res.scalars().all()
+    if not existing_cats:
+        default_cats = [
+            ("Starters & Appetizers", 1),
+            ("Main Course", 2),
+            ("Gourmet Desserts", 3),
+            ("Beverages & Drinks", 4)
+        ]
+        for idx, (cat_name, sort_ord) in enumerate(default_cats):
+            db.add(MenuCategory(
+                id=f"cat-{rest.id}-{idx+1}",
+                restaurant_id=rest.id,
+                name=cat_name,
+                sort_order=sort_ord,
+                is_enabled=True
+            ))
+
+    # Ensure tables exist for this tenant
+    if rest.has_tables:
+        tbl_query = select(Table).where(Table.restaurant_id == rest.id)
+        tbl_res = await db.execute(tbl_query)
+        if not tbl_res.scalars().first():
+            for i in range(1, 9):
+                t_num = f"Table {str(i).zfill(2)}"
+                t_id = f"tbl-{rest.id}-table_{str(i).zfill(2)}"
+                db.add(Table(
+                    id=t_id,
+                    restaurant_id=rest.id,
+                    table_number=t_num,
+                    section="Main Hall" if i <= 5 else "Terrace",
+                    capacity=4,
+                    status="AVAILABLE",
+                    is_occupied=False,
+                    qr_code_url=f"https://dinely.food/customer?restaurant={rest.id}&tableId={t_id}&table={t_num}"
+                ))
+
+    await db.commit()
+    await db.refresh(rest)
+
     AdminAuditLogger.log_action(
-        admin_uid=uid,
+        admin_uid=admin_uid,
         action="RESTAURANT_APPROVED",
         target_resource="RESTAURANT",
         target_id=action.restaurant_id,
         ip_address=request.client.host if request.client else "127.0.0.1"
     )
+
+    # Realtime notification to Owner and all terminals
+    await ws_manager.broadcast_global({
+        "type": "RESTAURANT_APPROVED",
+        "restaurantId": rest.id,
+        "restaurantName": rest.name,
+        "lifecycleStatus": "LIVE",
+        "isApproved": True,
+        "ownerEmail": rest.owner_email,
+        "approvedBy": admin_email,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    await ws_manager.broadcast_to_restaurant(
+        restaurant_id=rest.id,
+        message={
+            "type": "RestaurantStatusUpdated",
+            "restaurantId": rest.id,
+            "lifecycleStatus": "LIVE",
+            "isApproved": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
     return {
         "status": "SUCCESS",
-        "message": f"Restaurant {action.restaurant_id} approved successfully.",
-        "restaurant_id": action.restaurant_id
+        "message": f"Restaurant '{rest.name}' ({action.restaurant_id}) approved successfully.",
+        "restaurant_id": action.restaurant_id,
+        "lifecycleStatus": "LIVE"
+    }
+
+
+@router.post("/restaurants/reject")
+async def reject_restaurant(
+    action: RestaurantStatusAction,
+    request: Request,
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Rejects a restaurant application with optional reason.
+    """
+    admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+
+    query = select(Restaurant).where(Restaurant.id == action.restaurant_id)
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+
+    if not rest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{action.restaurant_id}' not found."
+        )
+
+    rest.is_approved = False
+    rest.lifecycle_status = "REJECTED"
+    rest.status = "CLOSED"
+    rest.rejection_reason = action.reason or "Application did not meet platform requirements."
+
+    await db.commit()
+    await db.refresh(rest)
+
+    AdminAuditLogger.log_action(
+        admin_uid=admin_uid,
+        action="RESTAURANT_REJECTED",
+        target_resource="RESTAURANT",
+        target_id=action.restaurant_id,
+        ip_address=request.client.host if request.client else "127.0.0.1",
+        details={"reason": action.reason}
+    )
+
+    await ws_manager.broadcast_global({
+        "type": "RESTAURANT_REJECTED",
+        "restaurantId": rest.id,
+        "lifecycleStatus": "REJECTED",
+        "rejectionReason": rest.rejection_reason,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {
+        "status": "SUCCESS",
+        "message": f"Restaurant {action.restaurant_id} rejected.",
+        "restaurant_id": action.restaurant_id,
+        "lifecycleStatus": "REJECTED"
     }
 
 
@@ -109,24 +277,53 @@ async def approve_restaurant(
 async def suspend_restaurant(
     action: RestaurantStatusAction,
     request: Request,
-    admin_claims: Dict[str, Any] = Depends(require_platform_admin)
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
     """
     Suspends a restaurant account.
     """
-    uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+    admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+
+    query = select(Restaurant).where(Restaurant.id == action.restaurant_id)
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+
+    if not rest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{action.restaurant_id}' not found."
+        )
+
+    rest.is_approved = False
+    rest.lifecycle_status = "SUSPENDED"
+    rest.status = "CLOSED"
+    rest.rejection_reason = action.reason or "Suspended by Platform Administrator."
+
+    await db.commit()
+    await db.refresh(rest)
+
     AdminAuditLogger.log_action(
-        admin_uid=uid,
+        admin_uid=admin_uid,
         action="RESTAURANT_SUSPENDED",
         target_resource="RESTAURANT",
         target_id=action.restaurant_id,
         ip_address=request.client.host if request.client else "127.0.0.1",
         details={"reason": action.reason}
     )
+
+    await ws_manager.broadcast_global({
+        "type": "RESTAURANT_SUSPENDED",
+        "restaurantId": rest.id,
+        "lifecycleStatus": "SUSPENDED",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
     return {
         "status": "SUCCESS",
         "message": f"Restaurant {action.restaurant_id} suspended successfully.",
-        "restaurant_id": action.restaurant_id
+        "restaurant_id": action.restaurant_id,
+        "lifecycleStatus": "SUSPENDED"
     }
 
 
@@ -171,9 +368,13 @@ async def get_platform_billing(
 
 @router.get("/analytics")
 async def get_platform_analytics(
-    admin_claims: Dict[str, Any] = Depends(require_platform_admin)
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
-    return {"total_restaurants": 45, "active_users": 380, "system_health": "100% OPERATIONAL"}
+    stmt = select(func.count(Restaurant.id)).where(Restaurant.deleted_at.is_(None))
+    res = await db.execute(stmt)
+    total_rests = res.scalar() or 0
+    return {"total_restaurants": total_rests, "active_users": 380, "system_health": "100% OPERATIONAL"}
 
 
 @router.get("/audit-logs")

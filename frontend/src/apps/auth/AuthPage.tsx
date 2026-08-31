@@ -38,12 +38,14 @@ interface AuthPageProps {
   onLoginSuccess?: (ownerData: any) => void;
   onRegisterSuccess?: (registeredData: any) => void;
   onContinueFreeTrial?: () => void;
+  onNavigate?: (path: string) => void;
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({
   onLoginSuccess,
   onRegisterSuccess,
   onContinueFreeTrial,
+  onNavigate,
 }) => {
   const [mode, setMode] = useState<'landing' | 'login' | 'register' | 'verify' | 'create_org' | 'forgot'>('landing');
 

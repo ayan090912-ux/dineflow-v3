@@ -55,6 +55,13 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS has_inventory BOOLEAN DEFAULT TRUE;",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS has_billing BOOLEAN DEFAULT TRUE;",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS enabled_modules JSONB;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS owner_uid VARCHAR(255);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(50) DEFAULT 'PENDING_APPROVAL';",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS rejection_reason TEXT;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS requested_changes TEXT;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;",
         # Bills Columns
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Any
-from sqlalchemy import String, Boolean, Float, Text, JSON
+from sqlalchemy import String, Boolean, Float, Text, JSON, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database.connection import Base
 from app.core.database.base_model import TimestampMixin, SoftDeleteMixin
@@ -28,8 +28,15 @@ class Restaurant(Base, TimestampMixin, SoftDeleteMixin):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     owner_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     owner_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    owner_uid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    lifecycle_status: Mapped[str] = mapped_column(String(50), default="PENDING_APPROVAL", nullable=False, index=True)
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    requested_changes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="OPEN", nullable=False)
     currency: Mapped[str] = mapped_column(String(20), default="INR (₹)", nullable=False)
     tax_percentage: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)

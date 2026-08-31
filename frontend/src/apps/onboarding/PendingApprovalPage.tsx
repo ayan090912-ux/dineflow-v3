@@ -17,7 +17,7 @@ import {
   Grid,
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input } from '../../packages/ui';
-import { api } from '../../packages/api/client';
+import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant } from '../../packages/types';
 
 interface PendingApprovalPageProps {
@@ -50,8 +50,26 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     loadRestaurantData();
     const interval = setInterval(() => {
       loadRestaurantDataSilent();
-    }, 2500);
-    return () => clearInterval(interval);
+    }, 3000);
+
+    const unsub = realtimeBus.subscribe((event: any) => {
+      if (event.type === 'RESTAURANT_APPROVED' || event.type === 'RestaurantStatusUpdated') {
+        const evtRestId = event.restaurantId || event.restaurant_id;
+        if (!restaurantId || !evtRestId || evtRestId === restaurantId || (restaurant && evtRestId === restaurant.id)) {
+          loadRestaurantData();
+        }
+      } else if (event.type === 'RESTAURANT_REJECTED') {
+        const evtRestId = event.restaurantId || event.restaurant_id;
+        if (!restaurantId || !evtRestId || evtRestId === restaurantId || (restaurant && evtRestId === restaurant.id)) {
+          loadRestaurantData();
+        }
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsub();
+    };
   }, [restaurantId]);
 
   useEffect(() => {

@@ -51,7 +51,7 @@ import {
   EmptyState,
   DinelyLogo,
 } from '../../packages/ui';
-import { api } from '../../packages/api/client';
+import { api, realtimeBus } from '../../packages/api/client';
 import { Organization, Restaurant, AuditLog } from '../../packages/types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -83,12 +83,23 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
   useEffect(() => {
     loadData();
+    const unsub = realtimeBus.subscribe((event: any) => {
+      if (
+        event.type === 'RestaurantRegistrationSubmitted' ||
+        event.type === 'RESTAURANT_APPROVED' ||
+        event.type === 'RESTAURANT_REJECTED' ||
+        event.type === 'RestaurantStatusUpdated'
+      ) {
+        loadData();
+      }
+    });
+    return () => unsub();
   }, []);
 
   const loadData = async () => {
     const s = await api.getPlatformStats();
     const orgs = await api.getOrganizations();
-    const allRests = await api.getAllRestaurants();
+    const allRests = await api.getPlatformRestaurants();
     const logs = await api.getAuditLogs();
     const orders = await api.getOrders();
     setStats(s);

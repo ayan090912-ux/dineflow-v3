@@ -38,9 +38,9 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
 }) => {
   // Initialize state directly from currentRestaurant to prevent initial spinner block
   const [legalName, setLegalName] = useState(
-    currentRestaurant?.legalName || currentRestaurant?.name || 'CAFE.CO'
+    currentRestaurant?.legalName || currentRestaurant?.name || ''
   );
-  const [displayName, setDisplayName] = useState(currentRestaurant?.name || 'CAFE.CO');
+  const [displayName, setDisplayName] = useState(currentRestaurant?.name || '');
   const [state, setState] = useState(currentRestaurant?.state || '');
   const [stateCode, setStateCode] = useState(currentRestaurant?.stateCode || '');
   const [gstin, setGstin] = useState(currentRestaurant?.gstin || currentRestaurant?.gstNumber || '');
@@ -62,7 +62,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
   // UPI State
   const [upiId, setUpiId] = useState(currentRestaurant?.upiId || '');
   const [upiMerchantName, setUpiMerchantName] = useState(
-    currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'CAFE.CO'
+    currentRestaurant?.upiMerchantName || currentRestaurant?.name || ''
   );
   const [upiQrUrl, setUpiQrUrl] = useState(currentRestaurant?.upiQrUrl || '');
   const [upiEnabled, setUpiEnabled] = useState(
@@ -264,7 +264,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 type="text"
                 value={legalName}
                 onChange={(e) => setLegalName(e.target.value)}
-                placeholder="e.g. CAFE.CO Hospitality LLP / Fine Dining Pvt Ltd"
+                placeholder="e.g. Spice Route Hospitality LLP / Fine Dining Pvt Ltd"
                 className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-semibold"
                 required
               />
@@ -498,7 +498,7 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   type="text"
                   value={upiMerchantName}
                   onChange={(e) => setUpiMerchantName(e.target.value)}
-                  placeholder="e.g. CAFE.CO Fine Dining"
+                  placeholder="e.g. Spice Route Fine Dining"
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-medium"
                 />
               </div>
@@ -565,8 +565,6 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                   <QRCodeDisplay
                     value={dynamicUpiPayload}
                     size={160}
-                    level="M"
-                    includeMargin={false}
                   />
                 </div>
               ) : (

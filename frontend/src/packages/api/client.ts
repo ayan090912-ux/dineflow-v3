@@ -33,9 +33,11 @@ import {
   RestaurantLifecycleStatus,
   CustomerRequestType,
   CustomerRequestStatus,
+  BillingConfig,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
+export { realtimeBus } from './realtime';
 import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
 
 // High-performance non-blocking API helper
@@ -1366,6 +1368,19 @@ export class DinelyApiClient {
     return { user: invUser, tokens, employee: emp, restaurant: rest };
   }
 
+  getAuthHeader(scope?: PortalScope): Record<string, string> {
+    const targetScope = scope || getPortalScopeFromPath();
+    const token = this.currentTokensByScope[targetScope]?.accessToken ||
+                  this.currentTokensByScope['ADMIN']?.accessToken ||
+                  this.currentTokensByScope['OWNER']?.accessToken ||
+                  (typeof window !== 'undefined' ? (localStorage.getItem('dinely_platform_admin_id_token') || sessionStorage.getItem('dinely_admin_token')) : null);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  }
+
   getCurrentUser(scope?: PortalScope): User | null {
     const targetScope = scope || getPortalScopeFromPath();
     if (!this.currentUsersByScope[targetScope]) {
@@ -1405,11 +1420,26 @@ export class DinelyApiClient {
     return null;
   }
 
+  setCurrentUser(user: User | null, scope?: PortalScope) {
+    const targetScope = scope || getPortalScopeFromPath();
+    this.currentUsersByScope[targetScope] = user;
+    if (typeof window !== 'undefined') {
+      const storageKey = SESSION_KEYS[targetScope];
+      if (user) {
+        sessionStorage.setItem(storageKey, JSON.stringify(user));
+        localStorage.setItem(storageKey, JSON.stringify(user));
+      } else {
+        sessionStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey);
+      }
+    }
+  }
+
   getCurrentRestaurantId(scope?: PortalScope): string {
     const targetScope = scope || getPortalScopeFromPath();
     const user = this.getCurrentUser(targetScope);
     const candidateId = this.currentRestaurantIdsByScope[targetScope] || user?.restaurantId || this._currentRestaurantId || undefined;
-    return this.resolveTenantRestaurantId(candidateId) || 'rest-1787446097984';
+    return this.resolveTenantRestaurantId(candidateId) || candidateId || '';
   }
 
   async logout(scope?: PortalScope) {
@@ -1748,14 +1778,78 @@ export class DinelyApiClient {
     return this.restaurants.filter((r) => !r.isDeleted);
   }
 
+  async getPlatformRestaurants(): Promise<Restaurant[]> {
+    try {
+      const apiBase = getApiBaseUrl();
+      const headers = this.getAuthHeader('ADMIN');
+      const res = await fetch(`${apiBase}/admin/restaurants`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data.map((r: any) => ({
+            id: r.id,
+            orgId: r.org_id || 'org-dinely',
+            name: r.name,
+            slug: r.slug || r.name.toLowerCase().replace(/\s+/g, '-'),
+            cuisine: r.cuisine || 'Multi-Cuisine',
+            businessType: r.businessType || r.business_type || 'RESTAURANT',
+            hasBar: r.hasBar !== false && r.has_bar !== false,
+            hasTables: r.hasTables !== false && r.has_tables !== false,
+            hasKitchen: r.hasKitchen !== false && r.has_kitchen !== false,
+            hasWaiter: r.hasWaiter !== false && r.has_waiter !== false,
+            hasInventory: r.hasInventory !== false && r.has_inventory !== false,
+            hasBilling: r.hasBilling !== false && r.has_billing !== false,
+            enabledModules: r.enabledModules || r.enabled_modules,
+            orderNumberPrefix: r.orderNumberPrefix || r.order_number_prefix || '#ORD',
+            address: r.address || '',
+            phone: r.phone || '',
+            email: r.email || '',
+            ownerName: r.ownerName || r.owner_name || '',
+            ownerEmail: r.ownerEmail || r.owner_email || '',
+            ownerUid: r.ownerUid || r.owner_uid || '',
+            domain: r.domain || '',
+            isApproved: Boolean(r.isApproved || r.is_approved),
+            status: r.status || 'OPEN',
+            lifecycleStatus: (r.lifecycleStatus || r.lifecycle_status || (r.isApproved ? 'LIVE' : 'PENDING_APPROVAL')) as RestaurantLifecycleStatus,
+            rejectionReason: r.rejectionReason || r.rejection_reason,
+            requestedChanges: r.requestedChanges || r.requested_changes,
+            approvedAt: r.approvedAt || r.approved_at,
+            approvedBy: r.approvedBy || r.approved_by,
+            submittedAt: r.submittedAt || r.submitted_at || r.createdAt || r.created_at,
+            rating: r.rating || 5.0,
+            activeOrdersCount: 0,
+            tablesCount: r.tablesCount || r.tables_count || 8,
+            currency: r.currency || 'INR (₹)',
+            taxPercentage: r.taxPercentage || r.tax_percentage || 5.0,
+            theme: r.theme || r.theme_json,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch for getPlatformRestaurants failed:', e);
+    }
+    return this.restaurants.filter((r) => !r.isDeleted);
+  }
+
   async approveRestaurant(restaurantId: string) {
-    await delay(200);
+    try {
+      const apiBase = getApiBaseUrl();
+      const headers = this.getAuthHeader('ADMIN');
+      await fetch(`${apiBase}/admin/restaurants/approve`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ restaurant_id: restaurantId }),
+      });
+    } catch (e) {
+      console.warn('Backend approve call failed:', e);
+    }
+
     const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
     if (rest) {
       const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       rest.isApproved = true;
       rest.status = 'OPEN';
-      rest.lifecycleStatus = 'APPROVED';
+      rest.lifecycleStatus = 'LIVE';
       rest.approvedAt = now;
       rest.rejectionReason = undefined;
       rest.requestedChanges = undefined;
@@ -1830,7 +1924,18 @@ export class DinelyApiClient {
   }
 
   async rejectRestaurant(restaurantId: string, reason = 'Application declined by administrator') {
-    await delay(300);
+    try {
+      const apiBase = getApiBaseUrl();
+      const headers = this.getAuthHeader('ADMIN');
+      await fetch(`${apiBase}/admin/restaurants/reject`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ restaurant_id: restaurantId, reason }),
+      });
+    } catch (e) {
+      console.warn('Backend reject call failed:', e);
+    }
+
     const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
     if (rest) {
       rest.lifecycleStatus = 'REJECTED';
@@ -1860,6 +1965,7 @@ export class DinelyApiClient {
       });
 
       this.saveDatabase();
+      realtimeBus.emit('RESTAURANT_REJECTED' as any, { restaurantId: rest.id, reason });
     }
     return rest;
   }
@@ -2254,7 +2360,7 @@ export class DinelyApiClient {
             tablesCount: data.tables_count || 12,
             currency: data.currency || 'INR (₹)',
             taxPercentage: data.tax_percentage || 5.0,
-            legalName: data.legal_name || data.legalName || data.name || 'CAFE.CO',
+            legalName: data.legal_name || data.legalName || data.name || '',
             state: data.state || '',
             stateCode: data.state_code || data.stateCode || '',
             gstin: data.gstin || data.gstNumber || '',
@@ -2291,65 +2397,9 @@ export class DinelyApiClient {
     }
 
     let rest = this.restaurants.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
-    
     if (!rest) {
       rest = GLOBAL_MULTI_TENANT_RESTAURANTS.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
     }
-    
-    if (!rest && targetId && (targetId.startsWith('rest-') || targetId.startsWith('rest_'))) {
-      let displayName = 'CAFE.CO';
-      if (targetId.includes('bistro')) displayName = 'Lumière Bistro';
-      else if (targetId.includes('bar')) displayName = 'Vanguard Lounge & Bar';
-
-      rest = {
-        id: targetId,
-        orgId: 'org-dinely',
-        slug: targetId.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-        name: displayName,
-        cuisine: 'Multi-Cuisine',
-        status: 'OPEN',
-        ownerEmail: 'owner@dinely.food',
-        email: 'contact@dinely.food',
-        phone: '+1 (555) 234-5678',
-        address: '123 Gourmet Way, Culinary District',
-        city: 'Metropolis',
-        state: 'NY',
-        zipCode: '10001',
-        country: 'United States',
-        currency: 'INR (₹)',
-        taxPercentage: 5.0,
-        rating: 4.8,
-        activeOrdersCount: 0,
-        tablesCount: 12,
-        isApproved: true,
-        isAutoApproved: true,
-        lifecycleStatus: 'APPROVED',
-        businessType: 'RESTAURANT',
-        hasTables: true,
-        hasWaiter: true,
-        hasKitchen: true,
-        hasBar: true,
-        createdAt: new Date().toISOString(),
-        theme: {
-          restaurantId: targetId,
-          primaryColor: '#f43f5e',
-          secondaryColor: '#475569',
-          accentColor: '#fbbf24',
-          backgroundColor: '#0f172a',
-          textColor: '#ffffff',
-          fontFamily: 'sans',
-          borderRadius: 'lg',
-          restaurantName: displayName,
-          bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-          logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
-          currency: 'INR (₹)',
-        },
-      };
-      this.restaurants.push(rest);
-      GLOBAL_MULTI_TENANT_RESTAURANTS.push(rest);
-      this.saveDatabase();
-    }
-
     if (!rest) return null;
 
     this.syncRestaurantToBackend(rest).catch(() => {});
@@ -2663,7 +2713,7 @@ export class DinelyApiClient {
   }
 
   async createCategory(catData: Partial<MenuCategory>): Promise<MenuCategory> {
-    const restId = this.resolveTenantRestaurantId(catData.restaurantId) || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(catData.restaurantId) || catData.restaurantId || this.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
     const payload = {
       id: catData.id,
@@ -2695,7 +2745,7 @@ export class DinelyApiClient {
   }
 
   async createMenuItem(itemData: Partial<MenuItem>): Promise<MenuItem> {
-    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || itemData.restaurantId || this.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
     const payload = {
       id: itemData.id,
@@ -2740,7 +2790,7 @@ export class DinelyApiClient {
   }
 
   async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
-    const restId = this.resolveTenantRestaurantId(updates.restaurantId) || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(updates.restaurantId) || updates.restaurantId || this.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
     const payload = {
       name: updates.name,
@@ -2784,7 +2834,7 @@ export class DinelyApiClient {
   }
 
   async deleteMenuItem(itemId: string, restaurantId?: string) {
-    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(restaurantId) || restaurantId || this.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`, {
       method: 'DELETE',
@@ -2964,7 +3014,7 @@ export class DinelyApiClient {
     const origin = getProductionOrigin();
     const newTable: Table = {
       id: tId,
-      restaurantId: targetRestId || 'rest-1787446097984',
+      restaurantId: targetRestId || '',
       tableNumber: tblNum,
       capacity: tableData.capacity || 4,
       section: tableData.section || 'Main Hall',
@@ -3292,7 +3342,7 @@ export class DinelyApiClient {
       }
     }
 
-    restId = this.resolveTenantRestaurantId(restId) || restId || this.getCurrentRestaurantId() || 'rest-1787446097984';
+    restId = this.resolveTenantRestaurantId(restId) || restId || this.getCurrentRestaurantId() || '';
 
     if (!tableId) {
       throw new Error('table_id is required to close table session.');
@@ -3722,7 +3772,7 @@ export class DinelyApiClient {
       return {
         restaurantId: remoteConfig.restaurantId || targetId,
         name: remoteConfig.name || rest?.name || 'Restaurant',
-        legalName: remoteConfig.legalName || rest?.legalName || rest?.name || 'CAFE.CO',
+        legalName: remoteConfig.legalName || rest?.legalName || rest?.name || '',
         state: remoteConfig.state || rest?.state || '',
         stateCode: remoteConfig.stateCode || rest?.stateCode || '',
         gstin: remoteConfig.gstin || rest?.gstin || '',
@@ -3745,7 +3795,7 @@ export class DinelyApiClient {
     return {
       restaurantId: targetId,
       name: rest?.name || 'Restaurant',
-      legalName: rest?.legalName || rest?.name || 'CAFE.CO',
+      legalName: rest?.legalName || rest?.name || '',
       state: rest?.state || '',
       stateCode: rest?.stateCode || '',
       gstin: rest?.gstin || rest?.gstNumber || '',
@@ -5071,7 +5121,7 @@ export class DinelyApiClient {
     priority?: string;
     tableSessionId?: string;
   }): Promise<CustomerRequest> {
-    const restId = this.resolveTenantRestaurantId(data.restaurantId) || data.restaurantId || this.getCurrentRestaurantId() || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(data.restaurantId) || data.restaurantId || this.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/customer-requests`, {
       method: 'POST',
@@ -5113,7 +5163,7 @@ export class DinelyApiClient {
   }
 
   async getCustomerRequests(restaurantId?: string, statusFilter?: string): Promise<CustomerRequest[]> {
-    const restId = this.resolveTenantRestaurantId(restaurantId) || restaurantId || this.getCurrentRestaurantId() || 'rest-1787446097984';
+    const restId = this.resolveTenantRestaurantId(restaurantId) || restaurantId || this.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
     let url = `${apiBase}/customer-requests?restaurant_id=${encodeURIComponent(restId)}`;
     if (statusFilter) {

@@ -41,8 +41,10 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
   const [customEtaInput, setCustomEtaInput] = useState('10');
 
   useEffect(() => {
-    const currentRestId = api.getCurrentRestaurantId() || 'rest-1787446097984';
-    realtimeBus.connect(currentRestId, 'BAR');
+    const currentRestId = api.getCurrentRestaurantId() || '';
+    if (currentRestId) {
+      realtimeBus.connect(currentRestId, 'BAR');
+    }
 
     loadBarOrders(true);
     const pollInterval = setInterval(() => loadBarOrders(false), 5000);
@@ -138,7 +140,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
           };
         });
 
-      setOrders(barOrders);
+      setOrders(barOrders as any);
     } catch (err) {
       console.error('Failed to load bar orders:', err);
     } finally {
@@ -251,7 +253,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadBarOrders}
+            onClick={() => loadBarOrders()}
             className="border-slate-800 text-slate-300 hover:bg-slate-800"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -559,7 +561,7 @@ const BarOrderCard: React.FC<{
         {/* Primary Action Button */}
         {!isCompleted && onAction && actionLabel && (
           <Button
-            variant={actionVariant}
+            variant={actionVariant === 'warning' ? 'brand' : (actionVariant as any)}
             onClick={onAction}
             className="w-full text-xs font-bold py-2 rounded-xl shadow-sm flex items-center justify-center gap-1.5"
           >

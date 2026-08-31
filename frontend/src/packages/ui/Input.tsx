@@ -5,14 +5,16 @@ import { twMerge } from 'tailwind-merge';
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  icon?: React.ReactNode;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   helperText?: string;
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, leftIcon, rightIcon, helperText, className, id, ...props }, ref) => {
+  ({ label, error, icon, leftIcon, rightIcon, helperText, className, id, ...props }, ref) => {
     const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const activeLeftIcon = leftIcon || icon;
 
     return (
       <div className="w-full space-y-1.5">
@@ -22,9 +24,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           </label>
         )}
         <div className="relative flex items-center">
-          {leftIcon && (
+          {activeLeftIcon && (
             <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
-              {leftIcon}
+              {activeLeftIcon}
             </div>
           )}
           <input
@@ -33,7 +35,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             className={twMerge(
               clsx(
                 'w-full bg-slate-950 text-slate-100 text-sm rounded-xl border border-slate-800 transition-all duration-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500 disabled:opacity-50 disabled:bg-slate-900',
-                leftIcon ? 'pl-10 pr-3.5 py-2.5' : 'px-3.5 py-2.5',
+                activeLeftIcon ? 'pl-10 pr-3.5 py-2.5' : 'px-3.5 py-2.5',
                 rightIcon ? 'pr-10' : '',
                 error && 'border-rose-500 focus:ring-rose-500',
                 className

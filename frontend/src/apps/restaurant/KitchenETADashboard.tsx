@@ -201,8 +201,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
   // Subscribe to Realtime Bus Events & Background Polling (Scoped by restaurant_id)
   useEffect(() => {
-    const currentRestId = api.getCurrentRestaurantId() || 'rest-1787446097984';
-    realtimeBus.connect(currentRestId, 'KITCHEN');
+    const currentRestId = api.getCurrentRestaurantId() || '';
+    if (currentRestId) {
+      realtimeBus.connect(currentRestId, 'KITCHEN');
+    }
 
     const fetchFreshOrders = () => {
       const restId = currentRestId || undefined;

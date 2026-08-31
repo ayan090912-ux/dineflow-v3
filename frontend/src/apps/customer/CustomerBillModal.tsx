@@ -101,7 +101,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
   // UPI Config Values Resolved from Server Config with Fallbacks
   const activeUpiId = billingConfig?.upiId || currentRestaurant?.upiId || '';
-  const activeMerchantName = billingConfig?.upiMerchantName || currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'CAFE.CO';
+  const activeMerchantName = billingConfig?.upiMerchantName || currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant';
   const activeQrUrl = billingConfig?.upiQrUrl || currentRestaurant?.upiQrUrl || '';
   const activeUpiEnabled = billingConfig?.upiEnabled !== undefined 
     ? Boolean(billingConfig.upiEnabled) 
@@ -203,7 +203,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     if (bill) {
       downloadDigitalReceiptPNG(
         bill,
-        activeMerchantName || currentRestaurant?.name || 'CAFE.CO',
+        activeMerchantName || currentRestaurant?.name || 'Restaurant',
         {
           legalName: billingConfig?.legalName || currentRestaurant?.legalName,
           gstin: billingConfig?.gstin || currentRestaurant?.gstin || currentRestaurant?.gstNumber,
@@ -249,7 +249,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   </div>
                   <div>
                     <h3 className="font-black text-white text-sm">
-                      {activeMerchantName || currentRestaurant?.name || 'CAFE.CO'}
+                      {activeMerchantName || currentRestaurant?.name || 'Restaurant'}
                     </h3>
                     <p className="text-[10px] text-slate-400 font-mono">
                       {billingConfig?.address || currentRestaurant?.address || 'Floor Table Experience'}
@@ -436,7 +436,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               {formatCurrency(bill?.grandTotal || 0)}
             </p>
             <p className="text-[11px] text-slate-300 font-semibold">
-              {activeMerchantName || currentRestaurant?.name || 'CAFE.CO'} • {standardTable} (Session #{tableSession?.id})
+              {activeMerchantName || currentRestaurant?.name || 'Restaurant'} • {standardTable} (Session #{tableSession?.id})
             </p>
           </div>
 
@@ -460,8 +460,6 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   <QRCodeDisplay
                     value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${(bill?.grandTotal || 0).toFixed(2)}&cu=INR`}
                     size={180}
-                    level="M"
-                    includeMargin={false}
                   />
                 </div>
               ) : null}

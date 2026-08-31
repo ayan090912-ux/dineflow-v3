@@ -54,7 +54,12 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   onStartTrial,
   onLogin,
   onOpenApp,
+  onNavigate,
 }) => {
+  const navigate = (path: string) => {
+    if (onNavigate) onNavigate(path);
+    else window.location.href = path;
+  };
   const [activeModuleTab, setActiveModuleTab] = useState<'customer' | 'waiter' | 'kitchen' | 'bar' | 'inventory' | 'owner'>('customer');
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
@@ -1048,7 +1053,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         isOpen={isPortalModalOpen}
         onClose={() => setIsPortalModalOpen(false)}
         title="Sign In to Dinely"
-        size="md"
+        maxWidth="md"
       >
         <div className="space-y-4 p-1">
           <p className="text-xs text-slate-400">

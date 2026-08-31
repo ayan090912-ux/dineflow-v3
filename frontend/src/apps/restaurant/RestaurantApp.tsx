@@ -79,7 +79,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api, getProductionOrigin } from '../../packages/api/client';
-import { Order, MenuItem, Table, Employee, InventoryItem, Supplier, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation, Bill } from '../../packages/types';
+import { Order, MenuItem, Table, Employee, InventoryItem, Supplier, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation, Bill, PaymentMethod } from '../../packages/types';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
 import { BarTerminal } from '../bar/BarTerminal';
@@ -118,6 +118,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [billingPaymentFilter, setBillingPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'UPI'>('ALL');
   const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'taxes' | 'settings'>('terminal');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = (type: 'info' | 'success' | 'warning' | 'error' | 'danger', title: string, message?: string) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const normalizedType: 'info' | 'success' | 'warning' | 'error' = type === 'danger' ? 'error' : (type as any);
+    setToasts((prev) => [...prev, { id, type: normalizedType, title, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
 
   // Category Management State
@@ -386,7 +395,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       return;
     }
     await api.createTable({
-      restaurantId: currentRestaurant?.id || 'rest-1787446097984',
+      restaurantId: currentRestaurant?.id || api.getCurrentRestaurantId() || '',
       tableNumber: newTableData.tableNumber,
       capacity: parseInt(newTableData.capacity) || 4,
       section: newTableData.section,
@@ -486,8 +495,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   };
 
   useEffect(() => {
-    const restId = currentRestaurant?.id || 'rest-1787446097984';
-    realtimeBus.connect(restId, 'OWNER');
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+    if (restId) {
+      realtimeBus.connect(restId, 'OWNER');
+    }
 
     loadData();
 
@@ -643,14 +654,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     loadData();
   };
 
-  const addToast = (type: ToastMessage['type'], title: string, message?: string) => {
-    const id = `toast-${Date.now()}`;
-    setToasts((prev) => [...prev, { id, type, title, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  };
-
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     await api.updateOrderStatus(orderId, newStatus);
     addToast('info', 'Order Status Updated', `Order #${orderId} moved to ${newStatus}`);
@@ -658,7 +661,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   };
 
   const handleToggleItemAvailability = async (item: MenuItem) => {
-    const restId = currentRestaurant?.id || 'rest-1787446097984';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     await api.toggleMenuItemAvailability(item.id, restId, item.isAvailable);
     addToast('success', 'Menu Availability Updated', `${item.name} is now ${!item.isAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}`);
     await loadData();
@@ -675,7 +678,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         return;
       }
 
-      const restId = currentRestaurant?.id || 'rest-1787446097984';
+      const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
       const isBar = isBarEnabled && activeCatalogMode === 'BAR';
       const isVeg = isBar ? false : newItem.isVegetarian !== false;
 
@@ -728,7 +731,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Validation Failed', 'Item name and price are required');
       return;
     }
-    const restId = currentRestaurant?.id || 'rest-1787446097984';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     const isVeg = editingItem.isVegetarian !== undefined ? editingItem.isVegetarian : (editingItem.dietaryType === 'VEG');
     await api.updateMenuItem(editingItem.id, {
       restaurantId: restId,
@@ -756,7 +759,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
   const handleDeleteItem = async () => {
     if (!deletingItem) return;
-    const restId = currentRestaurant?.id || 'rest-1787446097984';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     await api.deleteMenuItem(deletingItem.id, restId);
     addToast('info', 'Menu Item Deleted', `${deletingItem.name} removed from menu`);
     setDeletingItem(null);
@@ -2215,7 +2218,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                       const firstCat = (isBarEnabled && activeCatalogMode === 'BAR')
                         ? (barCategories[0]?.name || 'Cocktails')
                         : (foodCategories[0]?.id || foodCategories[0]?.name || 'cat-starters');
-                      setNewItem({ name: '', description: '', price: '', categoryId: firstCat, image: '' });
+                      setNewItem({ name: '', description: '', price: '', categoryId: firstCat, isVegetarian: true, image: '' });
                       setIsAddItemModalOpen(true);
                     }}
                     icon={<Plus className="w-3.5 h-3.5" />}
@@ -3206,7 +3209,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                                         addToast('success', 'Invoice Generated! 🧾', `${b.invoiceNumber || b.id} created for ${tbl.tableNumber}`);
                                         await loadData();
                                       } catch (err: any) {
-                                        addToast('danger', 'Invoice Error', err.message || 'Failed to generate invoice');
+                                        addToast('error', 'Invoice Error', err.message || 'Failed to generate invoice');
                                       }
                                     }}
                                     className="col-span-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs"
@@ -3849,7 +3852,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         isOpen={!!selectedTableQR}
         onClose={() => setSelectedTableQR(null)}
         title={`Custom QR Standee & Studio for ${selectedTableQR?.tableNumber}`}
-        maxWidth="5xl"
+        maxWidth="2xl"
       >
         {selectedTableQR && (
           <QRCodeDisplay
@@ -4081,9 +4084,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <div className="flex items-center justify-between pt-2 border-t border-slate-800">
               <span className="text-xs text-slate-300 font-medium">Availability Status</span>
               <Button
-                variant={editingItem.isAvailable ? 'success' : 'brand'}
+                variant="brand"
                 size="sm"
                 onClick={() => setEditingItem({ ...editingItem, isAvailable: !editingItem.isAvailable })}
+                className={editingItem.isAvailable ? 'bg-emerald-600 hover:bg-emerald-500' : ''}
               >
                 {editingItem.isAvailable ? 'In Stock (Active)' : '86ed (Unavailable)'}
               </Button>
@@ -5042,7 +5046,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                           onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
                           className="text-xs"
                         />
-                        <Button variant="success" size="sm" onClick={handleUpdateCategory} icon={<Save className="w-3.5 h-3.5" />}>
+                        <Button variant="brand" size="sm" onClick={handleUpdateCategory} icon={<Save className="w-3.5 h-3.5" />} className="bg-emerald-600 hover:bg-emerald-500">
                           Save
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => setEditingCategory(null)}>
@@ -5324,7 +5328,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                     setPaymentRefInput('');
                     await loadData();
                   } catch (err: any) {
-                    addToast('danger', 'Payment Error', err.message || 'Failed to record payment');
+                    addToast('error', 'Payment Error', err.message || 'Failed to record payment');
                   }
                 }}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5"

@@ -311,13 +311,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         }
       }
     }
-    if (!r) {
-      const targetFallbackId = activeRestId || 'rest-1787446097984';
-      r = await api.getRestaurantDetails(targetFallbackId);
-      if (!r) {
-        const rests = await api.getRestaurants();
-        r = rests.find((x) => x.name === 'CAFE.CO' || x.id === 'rest-1787446097984') || rests.find((x) => x.isApproved) || (rests.length > 0 ? rests[0] : null);
-      }
+    if (!r && activeRestId) {
+      r = await api.getRestaurantDetails(activeRestId);
     }
 
     if (r) {
@@ -1110,7 +1105,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Sticky Order Access Bar */}
       {(() => {
         const activeOrders = customerOrders.filter(
-          (o) => o.status !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+          (o) => (o.status as string) !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
         );
         if (activeOrders.length === 0) return null;
 
@@ -1376,7 +1371,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         restaurantId={
           currentRestaurant?.id ||
           (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('restaurant') || undefined : undefined) ||
-          'rest-1787446097984'
+          ''
         }
         onRequestSuccess={(title, note) => {
           addToast(

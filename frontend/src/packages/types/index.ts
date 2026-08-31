@@ -57,7 +57,7 @@ export function canAccessWorkspace(
   if (role === 'CHEF') {
     return workspace === 'kitchen';
   }
-  if (role === 'WAITER' || role === 'HOST' || role === 'CASHIER') {
+  if (role === 'WAITER' || (role as string) === 'HOST' || (role as string) === 'CASHIER') {
     return workspace === 'waiter';
   }
   if (role === 'BARTENDER' || role === 'BAR_STAFF') {
@@ -784,6 +784,7 @@ export interface InventoryItem {
   category: string;
   station?: 'KITCHEN' | 'BAR';
   quantity: number;
+  currentStock?: number;
   unit: string;
   minThreshold: number;
   costPerUnit: number;

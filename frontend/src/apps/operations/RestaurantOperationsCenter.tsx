@@ -167,7 +167,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
   const currentUser = api.getCurrentUser();
   const urlRestParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('restaurant') || new URLSearchParams(window.location.search).get('restaurantId') : null;
-  const currentRestaurantId = urlRestParam || api.getCurrentRestaurantId() || currentUser?.restaurantId || 'rest-1787446097984';
+  const currentRestaurantId = urlRestParam || api.getCurrentRestaurantId() || currentUser?.restaurantId || '';
   const staffName = currentUser?.name || 'Staff Member';
 
   const showToast = (title: string, desc: string, type: 'success' | 'warning' | 'info' = 'info') => {
@@ -334,8 +334,9 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
   // Inventory Critical Stock Alerts
   const inventoryAlerts = useMemo(() => {
     return inventory.filter((item) => {
-      const threshold = item.minThreshold || item.minimumThreshold || 5;
-      return item.currentStock <= threshold || item.status === 'LOW_STOCK' || item.status === 'OUT_OF_STOCK';
+      const threshold = item.minThreshold || (item as any).minimumThreshold || 5;
+      const stock = item.currentStock ?? item.quantity ?? 0;
+      return stock <= threshold || item.status === 'LOW_STOCK' || item.status === 'OUT_OF_STOCK';
     });
   }, [inventory]);
 
@@ -468,7 +469,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             <DinelyLogo size="sm" />
             <div className="hidden sm:block">
               <span className="text-xs font-black tracking-wider text-white uppercase block leading-none">
-                {restaurant?.name || 'CAFE.CO'}
+                {restaurant?.name || 'Restaurant Workspace'}
               </span>
               <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
                 <span>OP-CENTER</span>
