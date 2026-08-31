@@ -545,33 +545,20 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
 
           <div className="space-y-2 pt-2 border-t border-slate-800">
             <p className="text-[11px] font-mono font-bold text-rose-400 uppercase tracking-wider">
-              Management & Admin Portals
+              Management Portal
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
               <button
                 onClick={() => {
                   setIsPortalModalOpen(false);
                   window.location.pathname = '/restaurant/login';
                 }}
-                className="p-3.5 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-rose-500/50 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
+                className="w-full p-3.5 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-rose-500/50 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
                   <Utensils className="w-4 h-4" /> Restaurant Owner Portal
                 </div>
                 <div className="text-[10px] text-slate-400">Outlet POS, Floorplan & Menu OS</div>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsPortalModalOpen(false);
-                  window.location.pathname = '/admin/login';
-                }}
-                className="p-3.5 bg-[#12141d] hover:bg-slate-900 border border-indigo-500/20 hover:border-indigo-500/50 rounded-2xl text-left space-y-1 transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
-                  <Building2 className="w-4 h-4" /> Platform Admin Portal
-                </div>
-                <div className="text-[10px] text-slate-400">Global SaaS Console & Approvals</div>
               </button>
             </div>
           </div>

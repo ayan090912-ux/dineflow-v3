@@ -37,13 +37,14 @@ export function canAccessWorkspace(
 ): boolean {
   if (!user || !user.role) return false;
   const role = user.role;
+  const userEmail = (user.email || '').trim().toLowerCase();
 
-  // 1. Platform Admin / Super Admin has exclusive access to platform admin
+  // 1. Platform Admin has exclusive access to platform admin ONLY if email matches authorized account
   if (workspace === 'admin') {
-    return role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN';
+    return (role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') && userEmail === 'ayan090912@gmail.com';
   }
 
-  if (role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') {
+  if ((role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') && userEmail === 'ayan090912@gmail.com') {
     return true;
   }
 

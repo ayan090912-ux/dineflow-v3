@@ -59,7 +59,7 @@ async def get_current_firebase_admin(
     # 2. Strict Platform Admin Authorization Checks
     configured_uid = (settings.PLATFORM_ADMIN_FIREBASE_UID or "").strip()
     configured_email = (settings.PLATFORM_ADMIN_EMAIL or "ayan090912@gmail.com").strip().lower()
-    authorized_admin_emails = {configured_email, "ayan090912@gmail.com", "admin@dinely.com"}
+    authorized_admin_emails = {configured_email, "ayan090912@gmail.com"}
 
     is_authorized_uid = bool(configured_uid and uid == configured_uid)
     is_authorized_email_bootstrap = bool(email and email in authorized_admin_emails)

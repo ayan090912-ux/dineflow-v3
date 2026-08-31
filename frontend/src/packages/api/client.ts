@@ -991,7 +991,11 @@ export class DinelyApiClient {
         : (idTokenOrEmail.includes('@') ? idTokenOrEmail : '')
     ).trim().toLowerCase();
 
-    const adminEmail = emailCandidate || 'admin@dinely.com';
+    const adminEmail = emailCandidate || 'ayan090912@gmail.com';
+
+    if (adminEmail !== 'ayan090912@gmail.com') {
+      throw new Error('Access denied: Only the authorized Platform Administrator account (ayan090912@gmail.com) can access this portal.');
+    }
 
     if (!firebaseIdToken.startsWith('eyJ') && !firebaseIdToken.startsWith('firebase_token_')) {
       firebaseIdToken = `firebase_token_admin_${encodeURIComponent(adminEmail)}`;
@@ -1011,6 +1015,9 @@ export class DinelyApiClient {
       if (response.ok) {
         const verified = await response.json();
         const effectiveEmail = (verified.email || adminEmail).toLowerCase();
+        if (effectiveEmail !== 'ayan090912@gmail.com') {
+          throw new Error('Access denied: Unauthorized identity verification.');
+        }
         const adminUid = verified.uid || 'admin_uid';
 
         let adminUser = this.users.find((u) => u.role === 'PLATFORM_ADMIN' && u.email.toLowerCase() === effectiveEmail);
