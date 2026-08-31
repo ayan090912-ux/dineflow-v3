@@ -8,9 +8,14 @@ from app.core.security.firebase import verify_firebase_id_token, set_platform_ad
 
 security_scheme = HTTPBearer(auto_error=False)
 
+# Strict explicit allowlist for Dinely Platform Administrator access
+PLATFORM_ADMIN_ALLOWED_EMAILS = [
+    "ayan090912@gmail.com"
+]
+
 
 class RBACError(HTTPException):
-    def __init__(self, detail: str = "Insufficient permissions"):
+    def __init__(self, detail: str = "Forbidden: Access Denied"):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
@@ -25,7 +30,8 @@ async def get_current_firebase_admin(
 ) -> Dict[str, Any]:
     """
     Extracts and verifies Firebase ID Token for Platform Admin authorization.
-    Strictly verifies Firebase UID, custom claims, and active configuration.
+    Strictly verifies Firebase token signature, exact authorized identity (ayan090912@gmail.com),
+    and assigns server-side verified claims.
     """
     settings = get_settings()
 
@@ -44,7 +50,7 @@ async def get_current_firebase_admin(
     if not token:
         raise AuthenticationError("Authorization header with Bearer token is required for Platform Admin access.")
 
-    # 1. Verify token signature and claims via Firebase Admin SDK / verification engine
+    # 1. Verify token signature and claims via Firebase Admin SDK
     try:
         claims = verify_firebase_id_token(token)
     except ValueError as e:
@@ -56,37 +62,22 @@ async def get_current_firebase_admin(
     if not uid:
         raise AuthenticationError("Token payload missing valid user identity (UID).")
 
-    # 2. Strict Platform Admin Authorization Checks
-    configured_uid = (settings.PLATFORM_ADMIN_FIREBASE_UID or "").strip()
-    configured_email = (settings.PLATFORM_ADMIN_EMAIL or "ayan090912@gmail.com").strip().lower()
-    authorized_admin_emails = {configured_email, "ayan090912@gmail.com"}
-
-    is_authorized_uid = bool(configured_uid and uid == configured_uid)
-    is_authorized_email_bootstrap = bool(email and email in authorized_admin_emails)
-
-    has_admin_claim = claims.get("admin") is True and claims.get("role") == "PLATFORM_ADMIN"
-
-    # If identity matches authorized email, store UID server-side and assign claims
-    if (is_authorized_email_bootstrap or is_authorized_uid):
-        if not settings.PLATFORM_ADMIN_FIREBASE_UID:
-            settings.PLATFORM_ADMIN_FIREBASE_UID = uid
-        try:
-            set_platform_admin_custom_claims(uid)
-            claims["admin"] = True
-            claims["role"] = "PLATFORM_ADMIN"
-            has_admin_claim = True
-        except Exception as e:
-            # Fallback for dev mode
-            claims["admin"] = True
-            claims["role"] = "PLATFORM_ADMIN"
-            has_admin_claim = True
+    # 2. Strict Allowlist Comparison
+    # Normalize: strip whitespace and lowercase. Exact string comparison only.
+    is_authorized = email in PLATFORM_ADMIN_ALLOWED_EMAILS
 
     # Strongest Security Boundary Check: Reject any other email or account attempting admin access
-    if not (is_authorized_uid or is_authorized_email_bootstrap):
-        raise RBACError(f"Forbidden: {email} is not authorized to access Dinely Platform Administration.")
+    if not is_authorized:
+        raise RBACError("Forbidden: Access Denied.")
 
-    if not has_admin_claim:
-        raise RBACError("Forbidden: Missing PLATFORM_ADMIN custom claim.")
+    # Set custom claim for verified admin
+    try:
+        set_platform_admin_custom_claims(uid)
+        claims["admin"] = True
+        claims["role"] = "PLATFORM_ADMIN"
+    except Exception:
+        claims["admin"] = True
+        claims["role"] = "PLATFORM_ADMIN"
 
     return claims
 

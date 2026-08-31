@@ -23,7 +23,7 @@ import { Button, Card, Input, Badge, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { signInWithGooglePopup, signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 
-export type PortalType = 'admin' | 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'inventory';
+export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'inventory';
 
 interface RoleLoginPageProps {
   portal: PortalType;
@@ -41,16 +41,6 @@ const PORTAL_CONFIGS: Record<PortalType, {
   accentGradient: string;
   description: string;
 }> = {
-  admin: {
-    title: 'Dinely Platform Administration',
-    subtitle: 'Secure administrator access',
-    roleBadge: 'PLATFORM_ADMIN',
-    badgeVariant: 'brand',
-    icon: <Building2 className="w-6 h-6 text-indigo-400" />,
-    targetDashboard: '/admin/dashboard',
-    accentGradient: 'from-indigo-500 to-purple-600',
-    description: 'System control for platform administrators to verify restaurants, audit security logs, and monitor cloud health.',
-  },
   restaurant: {
     title: 'Restaurant Owner Login',
     subtitle: 'Restaurant Operating System & Management Dashboard',

@@ -10,7 +10,7 @@ import { InventoryTerminalOS } from './apps/inventory/InventoryTerminalOS';
 import { RestaurantOperationsCenter } from './apps/operations/RestaurantOperationsCenter';
 import { AuthPage } from './apps/auth/AuthPage';
 import { RoleLoginPage, PortalType } from './apps/auth/RoleLoginPage';
-import { UnauthorizedPage } from './apps/auth/UnauthorizedPage';
+import { NotFoundPage } from './apps/auth/NotFoundPage';
 import { ModuleNotEnabledPage } from './apps/auth/ModuleNotEnabledPage';
 import { SetupWizard } from './apps/onboarding/SetupWizard';
 import { PendingApprovalPage } from './apps/onboarding/PendingApprovalPage';
@@ -97,24 +97,10 @@ export default function App() {
                   navigateTo('/wizard?mode=create');
                 }}
                 onLogin={() => navigateTo('/restaurant/login')}
-                onOpenApp={(app) => {
-                  if (app === 'platform') navigateTo('/admin/login');
-                  else if (app === 'waiter') navigateTo('/waiter/login');
-                  else if (app === 'customer') navigateTo('/customer');
-                  else navigateTo('/restaurant/login');
-                }}
               />
             )}
 
             {/* Dedicated Login Portals */}
-            {currentPath === '/admin/login' && (
-              <RoleLoginPage
-                portal="admin"
-                onNavigate={navigateTo}
-                onLoginSuccess={(_, user) => setCurrentUser(user)}
-              />
-            )}
-
             {currentPath === '/restaurant/login' && (
               <RoleLoginPage
                 portal="restaurant"
@@ -175,13 +161,7 @@ export default function App() {
                   activeRestaurantId={currentRestaurant?.id}
                 />
               ) : currentUser ? (
-                <UnauthorizedPage
-                  requiredRole="INVENTORY MANAGER / OWNER"
-                  userRole={currentUser?.role}
-                  userEmail={currentUser?.email}
-                  targetPath="/inventory/terminal"
-                  onNavigate={navigateTo}
-                />
+                <NotFoundPage onNavigate={navigateTo} />
               ) : (
                 <RoleLoginPage
                   portal="inventory"
@@ -194,27 +174,12 @@ export default function App() {
               )
             )}
 
-            {/* Platform Admin Control Plane (Strictly isolated from normal restaurant users) */}
-            {currentPath.startsWith('/admin') && currentPath !== '/admin/login' && (
+            {/* Platform Admin Control Plane (Strictly isolated private internal system) */}
+            {currentPath.startsWith('/admin') && (
               checkWorkspaceAccess('admin') ? (
-                <PlatformApp onLogout={() => handleLogout('/admin/login')} />
-              ) : currentUser ? (
-                <UnauthorizedPage
-                  requiredRole="PLATFORM_ADMIN"
-                  userRole={currentUser?.role}
-                  userEmail={currentUser?.email}
-                  targetPath="/admin/dashboard"
-                  onNavigate={navigateTo}
-                />
+                <PlatformApp onLogout={() => handleLogout('/')} />
               ) : (
-                <RoleLoginPage
-                  portal="admin"
-                  onNavigate={navigateTo}
-                  onLoginSuccess={(_, user) => {
-                    setCurrentUser(user);
-                    navigateTo('/admin/dashboard');
-                  }}
-                />
+                <NotFoundPage onNavigate={navigateTo} />
               )
             )}
 
@@ -233,13 +198,7 @@ export default function App() {
                   />
                 )
               ) : currentUser ? (
-                <UnauthorizedPage
-                  requiredRole="RESTAURANT STAFF / OWNER"
-                  userRole={currentUser?.role}
-                  userEmail={currentUser?.email}
-                  targetPath="/operations"
-                  onNavigate={navigateTo}
-                />
+                <NotFoundPage onNavigate={navigateTo} />
               ) : (
                 <RoleLoginPage
                   portal="restaurant"
@@ -267,13 +226,7 @@ export default function App() {
                   />
                 )
               ) : currentUser ? (
-                <UnauthorizedPage
-                  requiredRole="RESTAURANT_OWNER"
-                  userRole={currentUser?.role}
-                  userEmail={currentUser?.email}
-                  targetPath="/restaurant/dashboard"
-                  onNavigate={navigateTo}
-                />
+                <NotFoundPage onNavigate={navigateTo} />
               ) : (
                 <RoleLoginPage
                   portal="restaurant"
@@ -338,13 +291,7 @@ export default function App() {
                   />
                 )
               ) : currentUser ? (
-                <UnauthorizedPage
-                  requiredRole="CHEF / KITCHEN STAFF / OWNER"
-                  userRole={currentUser?.role}
-                  userEmail={currentUser?.email}
-                  targetPath="/kitchen/dashboard"
-                  onNavigate={navigateTo}
-                />
+                <NotFoundPage onNavigate={navigateTo} />
               ) : (
                 <RoleLoginPage
                   portal="kitchen"
@@ -375,13 +322,7 @@ export default function App() {
                   <BarTerminal onLogout={() => handleLogout('/bar/login')} />
                 )
               ) : currentUser ? (
-                <UnauthorizedPage
-                  requiredRole="BARTENDER / BAR STAFF / OWNER"
-                  userRole={currentUser?.role}
-                  userEmail={currentUser?.email}
-                  targetPath="/bar/dashboard"
-                  onNavigate={navigateTo}
-                />
+                <NotFoundPage onNavigate={navigateTo} />
               ) : (
                 <RoleLoginPage
                   portal="bar"
@@ -412,13 +353,7 @@ export default function App() {
                   <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />
                 )
               ) : currentUser ? (
-                <UnauthorizedPage
-                  requiredRole="WAITER / FLOOR STAFF / OWNER"
-                  userRole={currentUser?.role}
-                  userEmail={currentUser?.email}
-                  targetPath="/waiter"
-                  onNavigate={navigateTo}
-                />
+                <NotFoundPage onNavigate={navigateTo} />
               ) : (
                 <RoleLoginPage
                   portal="waiter"

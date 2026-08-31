@@ -11,7 +11,7 @@ settings = get_settings()
 
 
 def create_fake_jwt(claims: dict) -> str:
-    """Helper to encode a un-signed base64 JSON payload for testing decoding handling."""
+    """Helper to encode an un-signed base64 JSON payload for testing token decoding."""
     header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256", "typ": "JWT"}).encode()).decode().rstrip("=")
     payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
     signature = "fake_signature"
@@ -20,20 +20,19 @@ def create_fake_jwt(claims: dict) -> str:
 
 class TestPlatformAdminAuthorization:
 
-    def test_unauthenticated_request_returns_401(self):
+    def test_1_unauthenticated_request_returns_401(self):
         response = client.get("/api/v1/admin/restaurants")
         assert response.status_code == 401
         assert "Authorization header" in response.json()["detail"]
 
-    def test_invalid_token_returns_401(self):
+    def test_2_invalid_token_returns_401(self):
         response = client.get(
             "/api/v1/admin/restaurants",
             headers={"Authorization": "Bearer invalid_garbage_token"}
         )
         assert response.status_code == 401
 
-    def test_restaurant_owner_token_returns_403(self):
-        # A token for a standard restaurant owner without admin claims or admin UID
+    def test_3_restaurant_owner_token_returns_403(self):
         owner_claims = {
             "uid": "uid_owner_999",
             "email": "owner@restaurant.com",
@@ -48,7 +47,7 @@ class TestPlatformAdminAuthorization:
         assert response.status_code == 403
         assert "Forbidden" in response.json()["detail"]
 
-    def test_waiter_token_returns_403(self):
+    def test_4_waiter_token_returns_403(self):
         waiter_claims = {
             "uid": "uid_waiter_123",
             "email": "waiter@restaurant.com",
@@ -62,7 +61,7 @@ class TestPlatformAdminAuthorization:
         )
         assert response.status_code == 403
 
-    def test_kitchen_token_returns_403(self):
+    def test_5_kitchen_token_returns_403(self):
         kitchen_claims = {
             "uid": "uid_chef_456",
             "email": "chef@restaurant.com",
@@ -76,7 +75,7 @@ class TestPlatformAdminAuthorization:
         )
         assert response.status_code == 403
 
-    def test_bar_token_returns_403(self):
+    def test_6_bar_token_returns_403(self):
         bar_claims = {
             "uid": "uid_bar_789",
             "email": "bartender@restaurant.com",
@@ -90,7 +89,7 @@ class TestPlatformAdminAuthorization:
         )
         assert response.status_code == 403
 
-    def test_inventory_token_returns_403(self):
+    def test_7_inventory_token_returns_403(self):
         inv_claims = {
             "uid": "uid_inv_111",
             "email": "inventory@restaurant.com",
@@ -104,8 +103,21 @@ class TestPlatformAdminAuthorization:
         )
         assert response.status_code == 403
 
-    def test_fake_role_in_request_ignored(self):
-        # A non-admin account claiming role=PLATFORM_ADMIN without authorized UID/email or server claim
+    def test_8_customer_token_returns_403(self):
+        cust_claims = {
+            "uid": "uid_cust_333",
+            "email": "guest@gmail.com",
+            "role": "CUSTOMER",
+            "admin": False
+        }
+        token = create_fake_jwt(cust_claims)
+        response = client.get(
+            "/api/v1/admin/restaurants",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+
+    def test_9_fake_role_payload_returns_403(self):
         fake_claims = {
             "uid": "uid_hacker_777",
             "email": "hacker@gmail.com",
@@ -119,24 +131,32 @@ class TestPlatformAdminAuthorization:
         )
         assert response.status_code == 403
 
-    def test_wrong_firebase_uid_returns_403(self):
-        wrong_uid_claims = {
-            "uid": "completely_wrong_uid_99999",
-            "email": "imposter@gmail.com",
-            "admin": False
-        }
-        token = create_fake_jwt(wrong_uid_claims)
-        response = client.get(
-            "/api/v1/admin/restaurants",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        assert response.status_code == 403
+    def test_10_similar_email_bypass_attempts_rejected(self):
+        bypass_emails = [
+            "ayan090912+test@gmail.com",
+            "ayan090912@googlemail.com",
+            "ayan090912@dinely.food",
+            "ayan.admin@gmail.com",
+            "another@gmail.com",
+        ]
+        for email in bypass_emails:
+            claims = {
+                "uid": f"uid_{email}",
+                "email": email,
+                "admin": True,
+                "role": "PLATFORM_ADMIN"
+            }
+            token = create_fake_jwt(claims)
+            response = client.get(
+                "/api/v1/admin/restaurants",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            assert response.status_code == 403, f"Expected 403 for {email}, got {response.status_code}"
 
-    def test_authorized_platform_admin_bootstrap_returns_200(self):
-        # Admin identity matching PLATFORM_ADMIN_EMAIL bootstrap
+    def test_11_authorized_platform_admin_ayan_returns_200(self):
         admin_claims = {
             "uid": "uid_real_admin_001",
-            "email": settings.PLATFORM_ADMIN_EMAIL or "ayan090912@gmail.com",
+            "email": "ayan090912@gmail.com",
             "email_verified": True,
             "admin": True,
             "role": "PLATFORM_ADMIN"
@@ -149,10 +169,10 @@ class TestPlatformAdminAuthorization:
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
-    def test_platform_admin_verify_token_endpoint(self):
+    def test_12_platform_admin_verify_token_endpoint(self):
         admin_claims = {
             "uid": "uid_real_admin_001",
-            "email": settings.PLATFORM_ADMIN_EMAIL or "ayan090912@gmail.com",
+            "email": "ayan090912@gmail.com",
             "email_verified": True,
             "admin": True,
             "role": "PLATFORM_ADMIN"
@@ -168,10 +188,42 @@ class TestPlatformAdminAuthorization:
         assert data["authenticated"] is True
         assert data["role"] == "PLATFORM_ADMIN"
 
-    def test_admin_audit_logs_endpoint(self):
+    def test_13_non_admin_cannot_mutate_platform_data(self):
+        owner_claims = {
+            "uid": "uid_owner_999",
+            "email": "owner@restaurant.com",
+            "role": "RESTAURANT_OWNER"
+        }
+        token = create_fake_jwt(owner_claims)
+
+        # 1. Approve restaurant
+        res1 = client.post(
+            "/api/v1/admin/restaurants/approve",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"restaurant_id": "rest-001"}
+        )
+        assert res1.status_code == 403
+
+        # 2. Suspend restaurant
+        res2 = client.post(
+            "/api/v1/admin/restaurants/suspend",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"restaurant_id": "rest-001", "reason": "test"}
+        )
+        assert res2.status_code == 403
+
+        # 3. Suspend user
+        res3 = client.post(
+            "/api/v1/admin/users/suspend",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"user_id": "usr-001", "reason": "test"}
+        )
+        assert res3.status_code == 403
+
+    def test_14_admin_audit_logs_endpoint(self):
         admin_claims = {
             "uid": "uid_real_admin_001",
-            "email": settings.PLATFORM_ADMIN_EMAIL or "ayan090912@gmail.com",
+            "email": "ayan090912@gmail.com",
             "admin": True,
             "role": "PLATFORM_ADMIN"
         }

@@ -89,6 +89,7 @@ import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { isModuleEnabled } from '../../packages/types';
+import { firebaseAuth, signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 
 interface RestaurantAppProps {
   onEditSetup?: () => void;
@@ -263,6 +264,37 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [businessDayHistory, setBusinessDayHistory] = useState<BusinessDay[]>([]);
   const [isCloseDayModalOpen, setIsCloseDayModalOpen] = useState(false);
   const [isClosingDayLoading, setIsClosingDayLoading] = useState(false);
+
+  const [isVerifyingPlatformAdmin, setIsVerifyingPlatformAdmin] = useState(false);
+
+  const handlePrivatePlatformAccess = async () => {
+    try {
+      setIsVerifyingPlatformAdmin(true);
+      let idToken = '';
+      const firebaseUser = firebaseAuth.currentUser;
+      if (firebaseUser) {
+        idToken = await firebaseUser.getIdToken(true);
+      } else {
+        const authRes = await signInPlatformAdminWithGoogle();
+        idToken = authRes.idToken || '';
+      }
+
+      if (!idToken) {
+        throw new Error('Authentication required');
+      }
+
+      const res = await api.loginPlatformAdmin(idToken, firebaseUser?.email || '');
+      if (res && res.user && res.user.email?.toLowerCase() === 'ayan090912@gmail.com') {
+        window.location.href = '/admin/dashboard';
+      } else {
+        throw new Error('Unauthorized');
+      }
+    } catch (err: any) {
+      addToast('error', 'Access Denied', 'Your account does not have permission to access Platform Administration.');
+    } finally {
+      setIsVerifyingPlatformAdmin(false);
+    }
+  };
 
   // Multi-Restaurant & Branch Outlet State
   const [allMyRestaurants, setAllMyRestaurants] = useState<any[]>([]);
@@ -1255,6 +1287,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <LogOut className="w-3.5 h-3.5 text-rose-400" />
             <span>Sign Out</span>
           </Button>
+
+          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 px-1">
+            <span>Dinely OS</span>
+            <button
+              onClick={handlePrivatePlatformAccess}
+              disabled={isVerifyingPlatformAdmin}
+              className="text-[10px] text-slate-600 hover:text-slate-400 cursor-pointer transition-colors"
+              title="Platform Control"
+            >
+              {isVerifyingPlatformAdmin ? 'Verifying...' : 'Platform'}
+            </button>
+          </div>
         </div>
       </aside>
 
