@@ -94,6 +94,10 @@ class ConnectionManager:
             if stale_websockets:
                 self.active_connections = [c for c in self.active_connections if c["websocket"] not in stale_websockets]
 
+    async def broadcast_to_restaurant(self, restaurant_id: str, message: dict):
+        event_type = message.get("type", "GenericEvent")
+        await self.broadcast_event(restaurant_id=restaurant_id, event_type=event_type, payload=message)
+
 # Global ConnectionManager instance
 ws_manager = ConnectionManager()
 
