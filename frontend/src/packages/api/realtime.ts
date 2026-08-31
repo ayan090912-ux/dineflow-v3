@@ -328,7 +328,7 @@ class RealTimeEventBus {
       } catch (e) {}
       this.ws = null;
     }
-    this.isConnected = false;
+    this.setStatus('DISCONNECTED');
   }
 
   public subscribe(listener: EventListener): () => void {

@@ -94,9 +94,10 @@ import { firebaseAuth, signInPlatformAdminWithGoogle } from '../../packages/auth
 interface RestaurantAppProps {
   onEditSetup?: () => void;
   onLogout?: () => void;
+  onNavigate?: (path: string) => void;
 }
 
-export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLogout }) => {
+export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLogout, onNavigate }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'workspace_settings'>('dashboard');
 
@@ -524,6 +525,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       clearInterval(interval);
     };
   }, [currentRestaurant?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [activeTab]);
 
 
   const loadData = async () => {

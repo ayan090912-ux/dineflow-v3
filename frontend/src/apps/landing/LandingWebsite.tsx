@@ -41,11 +41,13 @@ import {
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Modal, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
+import { navigate } from '../../packages/router';
 
 interface LandingWebsiteProps {
   onStartTrial: (ownerData?: any) => void;
   onLogin: () => void;
   onOpenApp: (app: 'restaurant' | 'waiter' | 'customer' | 'platform') => void;
+  onNavigate?: (path: string) => void;
 }
 
 export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
@@ -1057,7 +1059,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
             <button
               onClick={() => {
                 setIsPortalModalOpen(false);
-                window.location.pathname = '/restaurant/login';
+                if (onNavigate) onNavigate('/restaurant/login');
+                else navigate('/restaurant/login');
               }}
               className="w-full p-3.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left space-y-1 transition-all cursor-pointer group"
             >
@@ -1076,7 +1079,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               <button
                 onClick={() => {
                   setIsPortalModalOpen(false);
-                  window.location.pathname = '/waiter/login';
+                  if (onNavigate) onNavigate('/waiter/login');
+                  else navigate('/waiter/login');
                 }}
                 className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/50 rounded-xl text-left space-y-1 transition-all cursor-pointer"
               >
@@ -1089,7 +1093,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               <button
                 onClick={() => {
                   setIsPortalModalOpen(false);
-                  window.location.pathname = '/kitchen/login';
+                  if (onNavigate) onNavigate('/kitchen/login');
+                  else navigate('/kitchen/login');
                 }}
                 className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-rose-500/50 rounded-xl text-left space-y-1 transition-all cursor-pointer"
               >
@@ -1102,7 +1107,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               <button
                 onClick={() => {
                   setIsPortalModalOpen(false);
-                  window.location.pathname = '/bar/login';
+                  if (onNavigate) onNavigate('/bar/login');
+                  else navigate('/bar/login');
                 }}
                 className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 rounded-xl text-left space-y-1 transition-all cursor-pointer"
               >
@@ -1115,7 +1121,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
               <button
                 onClick={() => {
                   setIsPortalModalOpen(false);
-                  window.location.pathname = '/inventory/login';
+                  if (onNavigate) onNavigate('/inventory/login');
+                  else navigate('/inventory/login');
                 }}
                 className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 rounded-xl text-left space-y-1 transition-all cursor-pointer"
               >

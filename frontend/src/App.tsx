@@ -20,6 +20,7 @@ import { ErrorBoundary } from './packages/ui';
 import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant } from './packages/types';
+import { navigate } from './packages/router';
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
@@ -45,7 +46,7 @@ export default function App() {
     return () => unsubscribe();
   }, [currentPath, currentUser]);
 
-  // Sync state with browser location & popstate
+  // Sync state with browser location, popstate, pushState, and custom SPA navigation events
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname || '/';
@@ -54,11 +55,18 @@ export default function App() {
     };
 
     window.addEventListener('popstate', handleLocationChange);
-    return () => window.removeEventListener('popstate', handleLocationChange);
+    window.addEventListener('dinely_navigate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('dinely_navigate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, []);
 
   const navigateTo = (path: string) => {
-    window.history.pushState({}, '', path);
+    navigate(path);
     setCurrentPath(path);
     setCurrentUser(api.getCurrentUser(getPortalScopeFromPath(path)));
   };
@@ -97,6 +105,12 @@ export default function App() {
                   navigateTo('/wizard?mode=create');
                 }}
                 onLogin={() => navigateTo('/restaurant/login')}
+                onOpenApp={(app) => {
+                  if (app === 'restaurant') navigateTo('/restaurant/login');
+                  else if (app === 'waiter') navigateTo('/waiter/login');
+                  else if (app === 'customer') navigateTo('/customer');
+                }}
+                onNavigate={navigateTo}
               />
             )}
 
@@ -223,6 +237,7 @@ export default function App() {
                   <RestaurantApp
                     onEditSetup={() => navigateTo('/wizard')}
                     onLogout={() => handleLogout('/restaurant/login')}
+                    onNavigate={navigateTo}
                   />
                 )
               ) : currentUser ? (
