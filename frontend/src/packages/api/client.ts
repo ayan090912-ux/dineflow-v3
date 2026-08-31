@@ -38,6 +38,7 @@ import {
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
 export { realtimeBus } from './realtime';
+import { signOutFirebase } from '../auth/firebase';
 import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
 
 // High-performance non-blocking API helper
@@ -1449,37 +1450,60 @@ export class DinelyApiClient {
   }
 
   async logout(scope?: PortalScope) {
-    const targetScope = scope || getPortalScopeFromPath();
-    const user = this.currentUsersByScope[targetScope];
+    if (scope) {
+      const targetScope = scope;
+      const user = this.currentUsersByScope[targetScope];
 
-    if (user) {
-      const userEmail = user.email?.toLowerCase();
-      const emp = this.employees.find(
-        (e) => e.email?.toLowerCase() === userEmail || e.id === user.id?.replace(/^usr-/, '')
-      );
-      if (emp) {
-        emp.status = 'OFF_CLOCK';
-        realtimeBus.emit('StaffStatusUpdated' as any, {
-          employeeId: emp.id,
-          restaurantId: emp.restaurantId,
-          name: emp.name,
-          role: emp.role,
-          status: 'OFF_CLOCK',
-          data: emp,
-        });
+      if (user) {
+        const userEmail = user.email?.toLowerCase();
+        const emp = this.employees.find(
+          (e) => e.email?.toLowerCase() === userEmail || e.id === user.id?.replace(/^usr-/, '')
+        );
+        if (emp) {
+          emp.status = 'OFF_CLOCK';
+          realtimeBus.emit('StaffStatusUpdated' as any, {
+            employeeId: emp.id,
+            restaurantId: emp.restaurantId,
+            name: emp.name,
+            role: emp.role,
+            status: 'OFF_CLOCK',
+            data: emp,
+          });
+        }
       }
-    }
 
-    this.currentUsersByScope[targetScope] = null;
-    this.currentTokensByScope[targetScope] = null;
-    this.currentRestaurantIdsByScope[targetScope] = null;
+      this.currentUsersByScope[targetScope] = null;
+      this.currentTokensByScope[targetScope] = null;
+      this.currentRestaurantIdsByScope[targetScope] = null;
 
-    if (typeof window !== 'undefined') {
-      const storageKey = SESSION_KEYS[targetScope];
-      sessionStorage.removeItem(storageKey);
-      if (window.localStorage) {
-        localStorage.removeItem(storageKey);
+      if (typeof window !== 'undefined') {
+        const storageKey = SESSION_KEYS[targetScope];
+        sessionStorage.removeItem(storageKey);
+        if (window.localStorage) {
+          localStorage.removeItem(storageKey);
+        }
       }
+
+      if (targetScope === 'OWNER' || targetScope === 'ADMIN') {
+        await signOutFirebase();
+      }
+    } else {
+      // Global logout: clear all scopes and sign out of Firebase
+      for (const s of Object.keys(SESSION_KEYS) as PortalScope[]) {
+        this.currentUsersByScope[s] = null;
+        this.currentTokensByScope[s] = null;
+        this.currentRestaurantIdsByScope[s] = null;
+        if (typeof window !== 'undefined') {
+          const storageKey = SESSION_KEYS[s];
+          sessionStorage.removeItem(storageKey);
+          if (window.localStorage) {
+            localStorage.removeItem(storageKey);
+          }
+        }
+      }
+      this.currentUser = null;
+      this._currentRestaurantId = null;
+      await signOutFirebase();
     }
 
     this.saveDatabase();

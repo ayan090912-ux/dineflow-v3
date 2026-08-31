@@ -181,6 +181,7 @@ function AppContent() {
     ) {
       return (
         <LandingWebsite
+          currentUser={currentUser}
           onStartTrial={(ownerData) => {
             if (ownerData) setActiveOwnerData(ownerData);
             navigateTo('/wizard?mode=create');
@@ -192,6 +193,7 @@ function AppContent() {
             else if (app === 'customer') navigateTo('/customer');
           }}
           onNavigate={navigateTo}
+          onLogout={() => handleLogout('/')}
         />
       );
     }

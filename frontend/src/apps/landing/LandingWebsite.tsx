@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Utensils,
   Zap,
@@ -48,6 +48,8 @@ interface LandingWebsiteProps {
   onLogin: () => void;
   onOpenApp: (app: 'restaurant' | 'waiter' | 'customer' | 'platform') => void;
   onNavigate?: (path: string) => void;
+  onLogout?: () => void;
+  currentUser?: any;
 }
 
 export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
@@ -55,6 +57,8 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   onLogin,
   onOpenApp,
   onNavigate,
+  onLogout,
+  currentUser: propUser,
 }) => {
   const navigate = (path: string) => {
     if (onNavigate) onNavigate(path);
@@ -63,8 +67,13 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   const [activeModuleTab, setActiveModuleTab] = useState<'customer' | 'waiter' | 'kitchen' | 'bar' | 'inventory' | 'owner'>('customer');
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
+  const [localUser, setLocalUser] = useState<any>(() => propUser || api.getCurrentUser());
 
-  const currentUser = api.getCurrentUser();
+  useEffect(() => {
+    setLocalUser(propUser !== undefined ? propUser : api.getCurrentUser());
+  }, [propUser]);
+
+  const currentUser = propUser !== undefined ? propUser : localUser;
 
   const faqs = [
     {
@@ -177,7 +186,14 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
                 <button
                   onClick={async () => {
                     await api.logout();
-                    window.location.reload();
+                    setLocalUser(null);
+                    if (onLogout) {
+                      onLogout();
+                    } else if (onNavigate) {
+                      onNavigate('/');
+                    } else {
+                      window.location.reload();
+                    }
                   }}
                   className="p-2 rounded-full text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
                   title="Log Out"
