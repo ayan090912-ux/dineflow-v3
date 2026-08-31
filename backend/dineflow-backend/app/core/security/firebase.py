@@ -41,7 +41,7 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
     settings = get_settings()
 
     # 1. Attempt verification via official Firebase Admin SDK if available
-    if _firebase_admin_initialized:
+    if _firebase_admin_initialized and id_token.startswith("ey"):
         try:
             decoded = firebase_auth_admin.verify_id_token(id_token, check_revoked=True)
             return decoded
