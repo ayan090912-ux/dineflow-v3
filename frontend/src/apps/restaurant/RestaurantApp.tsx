@@ -1061,14 +1061,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
           {currentRestaurant.lifecycleStatus === 'DEACTIVATED' && (
             <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-2 text-slate-300 text-sm text-center">
               <p className="font-bold text-white text-base">Restaurant Currently Disabled</p>
-              <p className="text-slate-400 text-xs">Your restaurant property has been set to inactive by Platform Administrator. Customer ordering website is temporarily offline.</p>
+              <p className="text-slate-400 text-xs">Your restaurant property has been set to inactive. Customer ordering website is temporarily offline.</p>
             </div>
           )}
 
           {currentRestaurant.lifecycleStatus === 'SUSPENDED' && (
             <div className="bg-rose-500/10 p-6 rounded-2xl border border-rose-500/30 space-y-2 text-rose-200 text-sm text-center">
               <p className="font-bold text-white text-base">Account Suspended</p>
-              <p className="text-xs text-rose-300">Access to the Restaurant OS is currently disabled. Please contact Platform Support at support@dinely.com.</p>
+              <p className="text-xs text-rose-300">Access to the restaurant management dashboard is currently disabled. Please contact support at support@dinely.com.</p>
             </div>
           )}
 
@@ -3582,6 +3582,28 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   Save & Publish Settings & Theme Engine
                 </Button>
               </div>
+            </Card>
+
+            {/* Private Platform Access (Discreet owner section) */}
+            <Card className="bg-slate-900/40 border-slate-800/80 p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-slate-500" />
+                  <span className="text-xs font-bold text-slate-300">Platform Access</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Private management portal for verified platform administrators.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrivatePlatformAccess}
+                isLoading={isVerifyingPlatformAdmin}
+                className="text-xs border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              >
+                Platform Access →
+              </Button>
             </Card>
           </div>
         )}

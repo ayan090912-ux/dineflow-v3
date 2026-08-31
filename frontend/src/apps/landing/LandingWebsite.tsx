@@ -119,9 +119,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
             <span className="text-lg font-black tracking-tight text-white font-mono">
               dinely<span className="text-indigo-400">.food</span>
             </span>
-            <span className="hidden sm:inline-block px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-mono text-indigo-300 font-semibold">
-              Restaurant OS
-            </span>
           </div>
 
           {/* Navigation Links */}

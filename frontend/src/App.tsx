@@ -78,7 +78,7 @@ function AppContent() {
             id: fbUser.uid,
             name: fbUser.displayName || fbUser.email.split('@')[0],
             email: fbUser.email.toLowerCase(),
-            role: fbUser.email.toLowerCase() === 'ayan090912@gmail.com' ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
+            role: (scope === 'ADMIN' && fbUser.email.toLowerCase() === 'ayan090912@gmail.com') ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
           };
           api.setCurrentUser(appUser, scope);
         }
@@ -329,6 +329,19 @@ function AppContent() {
     }
 
     // 7. Platform Admin Control Plane (Isolated internal control plane)
+    if (cleanPath === '/admin/login') {
+      return (
+        <RoleLoginPage
+          portal="admin"
+          onNavigate={navigateTo}
+          onLoginSuccess={(_, user) => {
+            setCurrentUser(user);
+            navigateTo('/admin/dashboard');
+          }}
+        />
+      );
+    }
+
     if (cleanPath.startsWith('/admin')) {
       if (checkWorkspaceAccess('admin')) {
         return <PlatformApp onLogout={() => handleLogout('/')} />;

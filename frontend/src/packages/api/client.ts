@@ -996,7 +996,7 @@ export class DinelyApiClient {
     const adminEmail = emailCandidate || 'ayan090912@gmail.com';
 
     if (adminEmail !== 'ayan090912@gmail.com') {
-      throw new Error('Access denied: Only the authorized Platform Administrator account (ayan090912@gmail.com) can access this portal.');
+      throw new Error('Access denied: You do not have permission to access this portal.');
     }
 
     if (!firebaseIdToken.startsWith('eyJ') && !firebaseIdToken.startsWith('firebase_token_')) {
@@ -1383,6 +1383,18 @@ export class DinelyApiClient {
 
   getCurrentUser(scope?: PortalScope): User | null {
     const targetScope = scope || getPortalScopeFromPath();
+
+    // 1. Dedicated ADMIN scope: only accessed by private Platform Access flow
+    if (targetScope === 'ADMIN') {
+      const adminUser = this.currentUsersByScope['ADMIN'] || this.restoreSession('ADMIN');
+      if (adminUser && (adminUser.role === 'PLATFORM_ADMIN' || adminUser.role === 'SUPER_ADMIN')) {
+        return adminUser;
+      }
+      return null;
+    }
+
+    // 2. Normal scopes (OWNER, KITCHEN, WAITER, BAR, INVENTORY, STAFF):
+    // Strict isolation: NEVER return or leak an ADMIN session into normal/public scopes.
     if (!this.currentUsersByScope[targetScope]) {
       this.restoreSession(targetScope);
     }
@@ -1391,8 +1403,8 @@ export class DinelyApiClient {
       return directUser;
     }
 
-    // Hierarchical inheritance:
-    // 1. If an active RESTAURANT_OWNER, MANAGER, or SUPER_ADMIN session exists, they have authority across all terminals
+    // 3. Hierarchical inheritance for restaurant management:
+    // If an active RESTAURANT_OWNER or MANAGER session exists, they have authority across restaurant staff terminals
     const ownerUser = this.currentUsersByScope['OWNER'] || this.restoreSession('OWNER');
     if (
       ownerUser &&
@@ -1403,15 +1415,9 @@ export class DinelyApiClient {
       return ownerUser;
     }
 
-    // 2. If an active PLATFORM_ADMIN session exists, it has full cloud authority
-    const adminUser = this.currentUsersByScope['ADMIN'] || this.restoreSession('ADMIN');
-    if (adminUser && (adminUser.role === 'PLATFORM_ADMIN' || adminUser.role === 'SUPER_ADMIN')) {
-      return adminUser;
-    }
-
-    // 3. Check specific staff scopes
+    // 4. Check specific staff scopes
     for (const s of ['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'] as PortalScope[]) {
-      if (s !== targetScope) {
+      if (s !== targetScope && s !== 'ADMIN') {
         const u = this.currentUsersByScope[s] || this.restoreSession(s);
         if (u) return u;
       }

@@ -316,8 +316,8 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
 
         {/* Login Card */}
         <Card className="bg-slate-900/80 border-slate-800/90 p-6 sm:p-8 backdrop-blur-md shadow-xl space-y-6 rounded-2xl">
-          {/* Active Session Status */}
-          {currentUser && (
+          {/* Active Session Status (Only shown for relevant portal role, never exposed publicly) */}
+          {currentUser && (portal === 'admin' ? currentUser.role === 'PLATFORM_ADMIN' : currentUser.role !== 'PLATFORM_ADMIN') && (
             <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-medium">Active Session:</span>
@@ -331,10 +331,12 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
                   variant="brand"
                   size="sm"
                   onClick={() => {
-                    const dashboard = currentUser.role === 'PLATFORM_ADMIN' ? '/admin/dashboard' :
-                                      currentUser.role === 'RESTAURANT_OWNER' ? '/workspace' :
+                    const dashboard = currentUser.role === 'RESTAURANT_OWNER' ? '/workspace' :
                                       currentUser.role === 'CHEF' ? '/kitchen/dashboard' :
-                                      currentUser.role === 'WAITER' ? '/waiter' : '/workspace';
+                                      currentUser.role === 'WAITER' ? '/waiter' :
+                                      currentUser.role === 'BARTENDER' ? '/bar/dashboard' :
+                                      currentUser.role === 'INVENTORY_MANAGER' ? '/inventory/terminal' :
+                                      portal === 'admin' ? '/admin/dashboard' : '/workspace';
                     onNavigate(dashboard);
                   }}
                   className="flex-1 text-xs py-2 font-medium bg-indigo-600 hover:bg-indigo-500 text-white"
@@ -345,7 +347,7 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    await api.logout();
+                    await api.logout(portalScope);
                     onLoginSuccess('', null);
                     onNavigate(window.location.pathname);
                   }}

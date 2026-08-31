@@ -365,7 +365,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
           <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-2.5 text-amber-200">
             <Clock className="w-5 h-5 text-amber-400 shrink-0" />
             <div>
-              <p className="font-bold text-amber-300">Under Review by Platform Administrator</p>
+              <p className="font-bold text-amber-300">Application Under Review</p>
               <p className="text-[11px] text-amber-200/80">Submitted on {restaurant?.submittedAt || 'Today'}</p>
             </div>
           </div>
