@@ -162,3 +162,119 @@ class TestMultiTenantApprovalLifecycleSync:
         assert get_b_live.status_code == 200
         assert get_b_live.json()["is_approved"] is True
         assert get_b_live.json()["lifecycle_status"] == "LIVE"
+
+    def test_rejection_flow_and_idempotency(self):
+        admin_token = create_admin_jwt()
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        rest_c_id = f"test-rest-sync-c-{int(pytest.importorskip('time').time() * 1000)}"
+
+        # Step 1: Create Restaurant C
+        payload_c = {
+            "id": rest_c_id,
+            "name": "Sync Cantina C",
+            "cuisine": "Mexican",
+            "businessType": "RESTAURANT",
+            "ownerName": "Charlie Owner",
+            "ownerEmail": "charlie_c@test.com",
+            "ownerUid": "uid_owner_c",
+            "phone": "+1 555-0303",
+            "email": "contact@cantina-c.test",
+        }
+        resp_c = client.post("/api/v1/restaurants", json=payload_c)
+        assert resp_c.status_code == 201
+
+        # Step 2: Reject Restaurant C
+        rejection_reason = "Missing valid business registration documents."
+        reject_resp = client.post(
+            "/api/v1/admin/restaurants/reject",
+            json={"restaurant_id": rest_c_id, "reason": rejection_reason},
+            headers=admin_headers
+        )
+        assert reject_resp.status_code == 200
+        assert reject_resp.json()["lifecycleStatus"] == "REJECTED"
+        assert reject_resp.json()["isApproved"] is False
+
+        # Step 3: Verify Database State
+        get_c = client.get(f"/api/v1/restaurants/{rest_c_id}")
+        assert get_c.status_code == 200
+        data = get_c.json()
+        assert data["lifecycle_status"] == "REJECTED"
+        assert data["is_approved"] is False
+        assert data["rejection_reason"] == rejection_reason
+
+        # Step 4: Duplicate Reject is Idempotent
+        dup_reject_resp = client.post(
+            "/api/v1/admin/restaurants/reject",
+            json={"restaurant_id": rest_c_id, "reason": rejection_reason},
+            headers=admin_headers
+        )
+        assert dup_reject_resp.status_code == 200
+        assert dup_reject_resp.json()["lifecycleStatus"] == "REJECTED"
+        assert dup_reject_resp.json().get("already_rejected") is True
+
+    def test_duplicate_approval_is_idempotent(self):
+        admin_token = create_admin_jwt()
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        rest_d_id = f"test-rest-sync-d-{int(pytest.importorskip('time').time() * 1000)}"
+        client.post("/api/v1/restaurants", json={
+            "id": rest_d_id,
+            "name": "Sync Diner D",
+            "cuisine": "American",
+            "ownerName": "Dave Owner",
+            "ownerEmail": "dave@test.com",
+            "ownerUid": "uid_dave",
+        })
+
+        # 1st approval
+        appr1 = client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": rest_d_id}, headers=admin_headers)
+        assert appr1.status_code == 200
+        assert appr1.json()["lifecycleStatus"] == "LIVE"
+
+        # 2nd approval (Duplicate)
+        appr2 = client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": rest_d_id}, headers=admin_headers)
+        assert appr2.status_code == 200
+        assert appr2.json()["lifecycleStatus"] == "LIVE"
+        assert appr2.json().get("already_approved") is True
+
+    def test_unauthorized_approve_and_reject_actions(self):
+        # 1. Missing auth header returns 401
+        res_401_appr = client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": "any_id"})
+        assert res_401_appr.status_code == 401
+
+        res_401_rej = client.post("/api/v1/admin/restaurants/reject", json={"restaurant_id": "any_id"})
+        assert res_401_rej.status_code == 401
+
+        # 2. Non-admin owner token returns 403
+        owner_claims = {"uid": "uid_non_admin", "email": "regular_owner@test.com", "role": "RESTAURANT_OWNER"}
+        header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256"}).encode()).decode().rstrip("=")
+        payload = base64.urlsafe_b64encode(json.dumps(owner_claims).encode()).decode().rstrip("=")
+        owner_token = f"{header}.{payload}.sig"
+        owner_headers = {"Authorization": f"Bearer {owner_token}"}
+
+        res_403_appr = client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": "any_id"}, headers=owner_headers)
+        assert res_403_appr.status_code == 403
+
+        res_403_rej = client.post("/api/v1/admin/restaurants/reject", json={"restaurant_id": "any_id"}, headers=owner_headers)
+        assert res_403_rej.status_code == 403
+
+    def test_invalid_restaurant_id_returns_404(self):
+        admin_token = create_admin_jwt()
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        res_404_appr = client.post(
+            "/api/v1/admin/restaurants/approve",
+            json={"restaurant_id": "non_existent_restaurant_999999"},
+            headers=admin_headers
+        )
+        assert res_404_appr.status_code == 404
+        assert "not found" in res_404_appr.json()["detail"].lower()
+
+        res_404_rej = client.post(
+            "/api/v1/admin/restaurants/reject",
+            json={"restaurant_id": "non_existent_restaurant_999999", "reason": "test"},
+            headers=admin_headers
+        )
+        assert res_404_rej.status_code == 404
+        assert "not found" in res_404_rej.json()["detail"].lower()

@@ -199,16 +199,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       alert('A rejection reason is required before declining a restaurant application.');
       return;
     }
+    const reason = actionReason.trim();
+    const prevRestaurants = [...allRestaurants];
     setAllRestaurants((prev) =>
       prev.map((r) =>
-        r.id === id ? { ...r, isApproved: false, lifecycleStatus: 'REJECTED', rejectionReason: actionReason.trim() } : r
+        r.id === id ? { ...r, isApproved: false, lifecycleStatus: 'REJECTED', rejectionReason: reason, status: 'CLOSED' } : r
       )
     );
     try {
-      await api.rejectRestaurant(id, actionReason.trim());
+      await api.rejectRestaurant(id, reason);
       showSuccess('Application Declined. Owner notified.');
       closeModals();
     } catch (err: any) {
+      setAllRestaurants(prevRestaurants);
       alert(`Rejection error: ${err.message || 'Failed to reject'}`);
     }
   };

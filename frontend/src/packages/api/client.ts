@@ -38,7 +38,7 @@ import {
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
 export { realtimeBus } from './realtime';
-import { signOutFirebase } from '../auth/firebase';
+import { signOutFirebase, firebaseAuth } from '../auth/firebase';
 import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
 
 // High-performance non-blocking API helper
@@ -2073,7 +2073,31 @@ export class DinelyApiClient {
 
   async approveRestaurant(restaurantId: string) {
     const apiBase = getApiBaseUrl();
-    const headers = this.getAuthHeader('ADMIN');
+    let token = this.currentTokensByScope['ADMIN']?.accessToken ||
+                this.currentTokensByScope['OWNER']?.accessToken ||
+                (typeof window !== 'undefined' ? (
+                  localStorage.getItem('dinely_platform_admin_id_token') ||
+                  localStorage.getItem('dinely_auth_token') ||
+                  sessionStorage.getItem('dinely_admin_token')
+                ) : null);
+
+    if (!token && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+      try {
+        token = await firebaseAuth.currentUser.getIdToken();
+        if (token) {
+          localStorage.setItem('dinely_platform_admin_id_token', token);
+          sessionStorage.setItem('dinely_admin_token', token);
+        }
+      } catch (e) {
+        console.warn('Could not refresh Firebase token for approval:', e);
+      }
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const res = await fetch(`${apiBase}/admin/restaurants/approve`, {
       method: 'POST',
       headers,
@@ -2081,7 +2105,7 @@ export class DinelyApiClient {
     });
 
     if (!res.ok) {
-      let errMsg = 'Failed to approve restaurant';
+      let errMsg = `Failed to approve restaurant (HTTP ${res.status})`;
       try {
         const errJson = await res.json();
         errMsg = errJson.detail || errJson.message || errMsg;
@@ -2089,9 +2113,10 @@ export class DinelyApiClient {
       throw new Error(errMsg);
     }
 
+    const resJson = await res.json();
     const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
     if (rest) {
-      const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const now = new Date().toISOString();
       rest.isApproved = true;
       rest.status = 'OPEN';
       rest.lifecycleStatus = 'LIVE';
@@ -2130,28 +2155,65 @@ export class DinelyApiClient {
       });
 
       this.saveDatabase();
-      realtimeBus.emit('RESTAURANT_APPROVED', { restaurantId: rest.id, restaurantName: rest.name });
+      realtimeBus.emit('RESTAURANT_APPROVED', {
+        restaurantId: rest.id,
+        restaurant_id: rest.id,
+        restaurantName: rest.name,
+        lifecycleStatus: 'LIVE',
+        isApproved: true,
+      } as any);
     }
-    return rest;
+    return resJson;
   }
 
   async rejectRestaurant(restaurantId: string, reason = 'Application declined by administrator') {
-    try {
-      const apiBase = getApiBaseUrl();
-      const headers = this.getAuthHeader('ADMIN');
-      await fetch(`${apiBase}/admin/restaurants/reject`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ restaurant_id: restaurantId, reason }),
-      });
-    } catch (e) {
-      console.warn('Backend reject call failed:', e);
+    const apiBase = getApiBaseUrl();
+    let token = this.currentTokensByScope['ADMIN']?.accessToken ||
+                this.currentTokensByScope['OWNER']?.accessToken ||
+                (typeof window !== 'undefined' ? (
+                  localStorage.getItem('dinely_platform_admin_id_token') ||
+                  localStorage.getItem('dinely_auth_token') ||
+                  sessionStorage.getItem('dinely_admin_token')
+                ) : null);
+
+    if (!token && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+      try {
+        token = await firebaseAuth.currentUser.getIdToken();
+        if (token) {
+          localStorage.setItem('dinely_platform_admin_id_token', token);
+          sessionStorage.setItem('dinely_admin_token', token);
+        }
+      } catch (e) {
+        console.warn('Could not refresh Firebase token for rejection:', e);
+      }
     }
 
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${apiBase}/admin/restaurants/reject`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ restaurant_id: restaurantId, reason }),
+    });
+
+    if (!res.ok) {
+      let errMsg = `Failed to reject restaurant (HTTP ${res.status})`;
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.detail || errJson.message || errMsg;
+      } catch {}
+      throw new Error(errMsg);
+    }
+
+    const resJson = await res.json();
     const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
     if (rest) {
       rest.lifecycleStatus = 'REJECTED';
       rest.isApproved = false;
+      rest.status = 'CLOSED';
       rest.rejectionReason = reason;
 
       this.platformNotifications.unshift({
@@ -2177,9 +2239,16 @@ export class DinelyApiClient {
       });
 
       this.saveDatabase();
-      realtimeBus.emit('RESTAURANT_REJECTED' as any, { restaurantId: rest.id, reason });
+      realtimeBus.emit('RESTAURANT_REJECTED' as any, {
+        restaurantId: rest.id,
+        restaurant_id: rest.id,
+        restaurantName: rest.name,
+        lifecycleStatus: 'REJECTED',
+        rejectionReason: reason,
+        isApproved: false,
+      } as any);
     }
-    return rest;
+    return resJson;
   }
 
   async requestChangesRestaurant(restaurantId: string, reason: string) {

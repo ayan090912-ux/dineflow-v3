@@ -122,8 +122,11 @@ async def approve_restaurant(
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
     admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
+    clean_id = (action.restaurant_id or "").strip()
 
-    query = select(Restaurant).where(Restaurant.id == action.restaurant_id)
+    query = select(Restaurant).where(
+        or_(Restaurant.id == clean_id, func.lower(Restaurant.id) == func.lower(clean_id))
+    )
     result = await db.execute(query)
     rest = result.scalar_one_or_none()
 
@@ -139,6 +142,9 @@ async def approve_restaurant(
             "status": "SUCCESS",
             "message": f"Restaurant '{rest.name}' is already approved and LIVE.",
             "restaurant_id": action.restaurant_id,
+            "restaurantId": action.restaurant_id,
+            "isApproved": True,
+            "is_approved": True,
             "lifecycleStatus": "LIVE",
             "already_approved": True
         }
@@ -148,6 +154,8 @@ async def approve_restaurant(
     rest.status = "OPEN"
     rest.approved_at = datetime.now(timezone.utc)
     rest.approved_by = admin_email
+    rest.rejection_reason = None
+    rest.requested_changes = None
 
     # Ensure default initial categories exist for this tenant
     cat_query = select(MenuCategory).where(MenuCategory.restaurant_id == rest.id)
@@ -195,7 +203,7 @@ async def approve_restaurant(
         admin_uid=admin_uid,
         action="RESTAURANT_APPROVED",
         target_resource="RESTAURANT",
-        target_id=action.restaurant_id,
+        target_id=rest.id,
         ip_address=request.client.host if request.client else "127.0.0.1"
     )
 
@@ -203,9 +211,11 @@ async def approve_restaurant(
     await ws_manager.broadcast_global({
         "type": "RESTAURANT_APPROVED",
         "restaurantId": rest.id,
+        "restaurant_id": rest.id,
         "restaurantName": rest.name,
         "lifecycleStatus": "LIVE",
         "isApproved": True,
+        "is_approved": True,
         "ownerEmail": rest.owner_email,
         "approvedBy": admin_email,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -215,17 +225,19 @@ async def approve_restaurant(
         message={
             "type": "RestaurantStatusUpdated",
             "restaurantId": rest.id,
+            "restaurant_id": rest.id,
             "lifecycleStatus": "LIVE",
             "isApproved": True,
+            "is_approved": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
 
     return {
         "status": "SUCCESS",
-        "message": f"Restaurant '{rest.name}' ({action.restaurant_id}) approved successfully.",
-        "restaurant_id": action.restaurant_id,
-        "restaurantId": action.restaurant_id,
+        "message": f"Restaurant '{rest.name}' ({rest.id}) approved successfully.",
+        "restaurant_id": rest.id,
+        "restaurantId": rest.id,
         "isApproved": True,
         "is_approved": True,
         "lifecycleStatus": "LIVE",
@@ -252,8 +264,11 @@ async def reject_restaurant(
     Rejects a restaurant application with optional reason.
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+    clean_id = (action.restaurant_id or "").strip()
 
-    query = select(Restaurant).where(Restaurant.id == action.restaurant_id)
+    query = select(Restaurant).where(
+        or_(Restaurant.id == clean_id, func.lower(Restaurant.id) == func.lower(clean_id))
+    )
     result = await db.execute(query)
     rest = result.scalar_one_or_none()
 
@@ -262,6 +277,19 @@ async def reject_restaurant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Restaurant '{action.restaurant_id}' not found."
         )
+
+    # Idempotent: If already rejected, return immediate success
+    if rest.lifecycle_status == "REJECTED" and not rest.is_approved:
+        return {
+            "status": "SUCCESS",
+            "message": f"Restaurant '{rest.name}' is already REJECTED.",
+            "restaurant_id": rest.id,
+            "restaurantId": rest.id,
+            "isApproved": False,
+            "is_approved": False,
+            "lifecycleStatus": "REJECTED",
+            "already_rejected": True
+        }
 
     rest.is_approved = False
     rest.lifecycle_status = "REJECTED"
@@ -275,7 +303,7 @@ async def reject_restaurant(
         admin_uid=admin_uid,
         action="RESTAURANT_REJECTED",
         target_resource="RESTAURANT",
-        target_id=action.restaurant_id,
+        target_id=rest.id,
         ip_address=request.client.host if request.client else "127.0.0.1",
         details={"reason": action.reason}
     )
@@ -283,16 +311,45 @@ async def reject_restaurant(
     await ws_manager.broadcast_global({
         "type": "RESTAURANT_REJECTED",
         "restaurantId": rest.id,
+        "restaurant_id": rest.id,
+        "restaurantName": rest.name,
         "lifecycleStatus": "REJECTED",
+        "isApproved": False,
+        "is_approved": False,
+        "ownerEmail": rest.owner_email,
         "rejectionReason": rest.rejection_reason,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
+    await ws_manager.broadcast_to_restaurant(
+        restaurant_id=rest.id,
+        message={
+            "type": "RestaurantStatusUpdated",
+            "restaurantId": rest.id,
+            "restaurant_id": rest.id,
+            "lifecycleStatus": "REJECTED",
+            "isApproved": False,
+            "is_approved": False,
+            "rejectionReason": rest.rejection_reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
 
     return {
         "status": "SUCCESS",
-        "message": f"Restaurant {action.restaurant_id} rejected.",
-        "restaurant_id": action.restaurant_id,
-        "lifecycleStatus": "REJECTED"
+        "message": f"Restaurant {rest.name} ({rest.id}) rejected.",
+        "restaurant_id": rest.id,
+        "restaurantId": rest.id,
+        "isApproved": False,
+        "is_approved": False,
+        "lifecycleStatus": "REJECTED",
+        "restaurant": {
+            "id": rest.id,
+            "name": rest.name,
+            "isApproved": False,
+            "lifecycleStatus": "REJECTED",
+            "status": "CLOSED",
+            "rejectionReason": rest.rejection_reason,
+        }
     }
 
 
