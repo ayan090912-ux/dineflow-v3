@@ -280,13 +280,13 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
           <div className="bg-rose-950/60 p-6 rounded-2xl border border-rose-800/80 space-y-3 text-rose-200 text-sm leading-relaxed max-w-lg mx-auto text-left">
             <div className="font-bold text-white text-base flex items-center gap-2 text-rose-300">
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-              Rejection Reason from Platform Admin:
+              Feedback & Required Changes:
             </div>
             <div className="p-3 bg-slate-950/80 border border-rose-900/60 rounded-xl text-xs text-rose-200 font-mono">
               "{restaurant?.rejectionReason || 'Please verify business details, address, and table configuration.'}"
             </div>
             <p className="text-xs text-slate-300">
-              Please click <span className="font-bold text-white">Resubmit Application</span> below to update your details and resubmit for admin approval.
+              Please click <span className="font-bold text-white">Resubmit Application</span> below to update your details and resubmit for verification.
             </p>
           </div>
         ) : (

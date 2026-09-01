@@ -89,7 +89,7 @@ import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { isModuleEnabled } from '../../packages/types';
-import { firebaseAuth, signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
+import { firebaseAuth } from '../../packages/auth/firebase';
 
 interface RestaurantAppProps {
   onEditSetup?: () => void;
@@ -275,36 +275,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const [isCloseDayModalOpen, setIsCloseDayModalOpen] = useState(false);
   const [isClosingDayLoading, setIsClosingDayLoading] = useState(false);
 
-  const [isVerifyingPlatformAdmin, setIsVerifyingPlatformAdmin] = useState(false);
 
-  const handlePrivatePlatformAccess = async () => {
-    try {
-      setIsVerifyingPlatformAdmin(true);
-      let idToken = '';
-      const firebaseUser = firebaseAuth.currentUser;
-      if (firebaseUser) {
-        idToken = await firebaseUser.getIdToken(true);
-      } else {
-        const authRes = await signInPlatformAdminWithGoogle();
-        idToken = authRes.idToken || '';
-      }
-
-      if (!idToken) {
-        throw new Error('Authentication required');
-      }
-
-      const res = await api.loginPlatformAdmin(idToken, firebaseUser?.email || '');
-      if (res && res.user && res.user.email?.toLowerCase() === 'ayan090912@gmail.com') {
-        window.location.href = '/admin/dashboard';
-      } else {
-        throw new Error('Unauthorized');
-      }
-    } catch (err: any) {
-      addToast('error', 'Access Denied', 'Your account does not have permission to access Platform Administration.');
-    } finally {
-      setIsVerifyingPlatformAdmin(false);
-    }
-  };
 
   // Multi-Restaurant & Branch Outlet State
   const [allMyRestaurants, setAllMyRestaurants] = useState<any[]>([]);
@@ -643,14 +614,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   const handleRequestLaunch = async () => {
     if (!currentRestaurant) return;
     await api.submitRestaurantLaunch({ id: currentRestaurant.id, name: currentRestaurant.name });
-    addToast('success', 'Launch Request Submitted! 🚀', 'Platform Admin will review your restaurant application.');
+    addToast('success', 'Launch Request Submitted! 🚀', 'Your restaurant application has been submitted for review.');
     loadData();
   };
 
   const handleResubmitLaunch = async () => {
     if (!currentRestaurant) return;
     await api.resubmitRestaurantLaunch(currentRestaurant.id);
-    addToast('success', 'Launch Resubmitted! 🔄', 'Your updated application was sent to Platform Admin.');
+    addToast('success', 'Launch Resubmitted! 🔄', 'Your updated application has been submitted for review.');
     loadData();
   };
 
@@ -1296,16 +1267,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <span>Sign Out</span>
           </Button>
 
-          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 px-1">
-            <span>Dinely OS</span>
-            <button
-              onClick={handlePrivatePlatformAccess}
-              disabled={isVerifyingPlatformAdmin}
-              className="text-[10px] text-slate-600 hover:text-slate-400 cursor-pointer transition-colors"
-              title="Platform Control"
-            >
-              {isVerifyingPlatformAdmin ? 'Verifying...' : 'Platform'}
-            </button>
+          <div className="text-center text-[10px] text-slate-500 pt-1">
+            <span>Dinely Operating System</span>
           </div>
         </div>
       </aside>
@@ -1343,7 +1306,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   <div>
                     <h4 className="font-bold text-sm text-white">Launch Application Pending Review ⏳</h4>
                     <p className="text-xs text-sky-300/80">
-                      Your restaurant submission is queued for Platform Admin verification. Live customer ordering will unlock automatically upon approval.
+                      Your restaurant submission is currently under review. Live customer ordering will unlock automatically upon approval.
                     </p>
                   </div>
                 </div>
@@ -1360,7 +1323,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   <div>
                     <h4 className="font-bold text-sm text-white">Action Required: Modification Requested</h4>
                     <p className="text-xs text-amber-300/90 mt-0.5">
-                      Platform Admin message: "{currentRestaurant.requestedChanges || 'Please check tax number and menu items.'}"
+                      Review feedback: "{currentRestaurant.requestedChanges || 'Please check tax number and menu items.'}"
                     </p>
                   </div>
                 </div>
@@ -3582,28 +3545,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                   Save & Publish Settings & Theme Engine
                 </Button>
               </div>
-            </Card>
-
-            {/* Private Platform Access (Discreet owner section) */}
-            <Card className="bg-slate-900/40 border-slate-800/80 p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-slate-500" />
-                  <span className="text-xs font-bold text-slate-300">Platform Access</span>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Private management portal for verified platform administrators.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrivatePlatformAccess}
-                isLoading={isVerifyingPlatformAdmin}
-                className="text-xs border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-              >
-                Platform Access →
-              </Button>
             </Card>
           </div>
         )}
