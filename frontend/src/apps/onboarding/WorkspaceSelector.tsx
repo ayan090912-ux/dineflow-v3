@@ -104,11 +104,32 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
           </p>
         </div>
 
-        {/* Loading State */}
+        {/* Loading / Zero State / Grid */}
         {isLoading ? (
           <div className="py-20 text-center space-y-3 bg-slate-900/60 border border-slate-800/80 rounded-3xl backdrop-blur-xl">
             <div className="w-10 h-10 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
             <p className="text-xs text-slate-400 font-mono">Loading restaurant workspaces...</p>
+          </div>
+        ) : restaurants.length === 0 ? (
+          <div className="p-12 text-center space-y-6 bg-slate-900/60 border border-slate-800/80 rounded-3xl backdrop-blur-xl max-w-xl mx-auto shadow-2xl">
+            <div className="w-20 h-20 rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+              <Store className="w-10 h-10" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black text-white">Create your restaurant</h2>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                You do not have any restaurant workspaces yet. Complete our quick setup wizard to configure your QR menu, Kitchen KDS, tables, and billing.
+              </p>
+            </div>
+            <Button
+              variant="brand"
+              size="lg"
+              onClick={onCreateNewRestaurant}
+              className="px-8 py-3.5 text-sm font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-xl shadow-rose-950/40"
+              icon={<Plus className="w-4 h-4 mr-1" />}
+            >
+              Create Restaurant
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

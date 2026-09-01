@@ -1381,6 +1381,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 Add Menu Item
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (onNavigate) onNavigate('/workspace');
+                else window.location.href = '/workspace';
+              }}
+              className="text-xs border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800"
+              icon={<Store className="w-3.5 h-3.5 mr-1 text-rose-400" />}
+            >
+              Switch Restaurant
+            </Button>
             <Badge variant="success">Domain: {(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app</Badge>
           </div>
         </header>

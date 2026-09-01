@@ -209,9 +209,31 @@ function AppContent() {
         <RoleLoginPage
           portal="restaurant"
           onNavigate={navigateTo}
-          onLoginSuccess={(_, user) => {
+          onLoginSuccess={async (_, user) => {
             setCurrentUser(user);
-            navigateTo('/restaurant/dashboard');
+            try {
+              const myRests = await api.getOwnerRestaurants(user?.email, user?.id);
+              if (myRests.length === 0) {
+                navigateTo('/wizard?mode=create');
+              } else if (myRests.length === 1) {
+                const onlyRest = myRests[0];
+                await api.switchActiveRestaurant(onlyRest.id);
+                setCurrentRestaurant(onlyRest);
+                if (
+                  onlyRest.isApproved !== false &&
+                  onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
+                  onlyRest.lifecycleStatus !== 'REJECTED'
+                ) {
+                  navigateTo('/restaurant/dashboard');
+                } else {
+                  navigateTo('/restaurant/pending-approval');
+                }
+              } else {
+                navigateTo('/workspace');
+              }
+            } catch {
+              navigateTo('/workspace');
+            }
           }}
         />
       );
@@ -411,10 +433,56 @@ function AppContent() {
           <RoleLoginPage
             portal="restaurant"
             onNavigate={navigateTo}
-            onLoginSuccess={(_, user) => {
+            onLoginSuccess={async (_, user) => {
               setCurrentUser(user);
-              navigateTo('/restaurant/dashboard');
+              try {
+                const myRests = await api.getOwnerRestaurants(user?.email, user?.id);
+                if (myRests.length === 0) {
+                  navigateTo('/wizard?mode=create');
+                } else if (myRests.length === 1) {
+                  const onlyRest = myRests[0];
+                  await api.switchActiveRestaurant(onlyRest.id);
+                  setCurrentRestaurant(onlyRest);
+                  if (
+                    onlyRest.isApproved !== false &&
+                    onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
+                    onlyRest.lifecycleStatus !== 'REJECTED'
+                  ) {
+                    navigateTo('/restaurant/dashboard');
+                  } else {
+                    navigateTo('/restaurant/pending-approval');
+                  }
+                } else {
+                  navigateTo('/workspace');
+                }
+              } catch {
+                navigateTo('/workspace');
+              }
             }}
+          />
+        );
+      }
+
+      if (!currentRestaurant) {
+        return (
+          <WorkspaceSelector
+            user={currentUser}
+            onSelectRestaurant={async (rest) => {
+              await api.switchActiveRestaurant(rest.id);
+              const updated = (await api.getRestaurantDetails(rest.id)) || rest;
+              setCurrentRestaurant(updated);
+              if (
+                rest.isApproved !== false &&
+                updated?.lifecycleStatus !== 'PENDING_APPROVAL' &&
+                updated?.lifecycleStatus !== 'REJECTED'
+              ) {
+                navigateTo('/restaurant/dashboard');
+              } else {
+                navigateTo('/restaurant/pending-approval');
+              }
+            }}
+            onCreateNewRestaurant={() => navigateTo('/wizard?mode=create')}
+            onLogout={() => handleLogout('/restaurant/login')}
           />
         );
       }
