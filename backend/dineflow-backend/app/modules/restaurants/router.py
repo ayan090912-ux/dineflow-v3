@@ -49,6 +49,11 @@ class UpdateRestaurantSchema(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
+    ownerName: Optional[str] = None
+    ownerEmail: Optional[str] = None
+    ownerUid: Optional[str] = None
+    lifecycleStatus: Optional[str] = None
+    submittedAt: Optional[Any] = None
     currency: Optional[str] = None
     taxPercentage: Optional[float] = None
     theme: Optional[Any] = None
@@ -249,6 +254,16 @@ async def update_restaurant(restaurant_id: str, payload: UpdateRestaurantSchema,
         rest.has_tables = payload.hasTables
     if payload.enabledModules is not None:
         rest.enabled_modules = payload.enabledModules
+    if payload.ownerName:
+        rest.owner_name = payload.ownerName
+    if payload.ownerEmail:
+        rest.owner_email = payload.ownerEmail.strip().lower()
+    if payload.ownerUid:
+        rest.owner_uid = payload.ownerUid
+    if payload.lifecycleStatus:
+        rest.lifecycle_status = payload.lifecycleStatus.upper()
+    if payload.submittedAt is not None:
+        rest.submitted_at = datetime.now(timezone.utc)
     if payload.phone:
         rest.phone = payload.phone
     if payload.email:
@@ -279,9 +294,22 @@ async def update_restaurant(restaurant_id: str, payload: UpdateRestaurantSchema,
             "hasInventory": rest.has_inventory,
             "hasBilling": rest.has_billing,
             "hasTables": rest.has_tables,
+            "lifecycleStatus": rest.lifecycle_status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
+
+    if rest.lifecycle_status == "PENDING_APPROVAL":
+        await ws_manager.broadcast_global({
+            "type": "RestaurantRegistrationSubmitted",
+            "restaurantId": rest.id,
+            "restaurantName": rest.name,
+            "ownerEmail": rest.owner_email,
+            "ownerName": rest.owner_name,
+            "businessType": rest.business_type,
+            "lifecycleStatus": rest.lifecycle_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
     return rest
 

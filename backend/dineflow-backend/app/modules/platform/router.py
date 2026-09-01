@@ -3,13 +3,14 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
 from app.core.security.rbac import require_platform_admin, get_current_firebase_admin
 from app.modules.admin.audit_service import AdminAuditLogger
 from app.modules.restaurants.models import Restaurant
 from app.modules.tables.models import Table
+from app.modules.orders.models import Order
 from app.modules.menu.models import MenuCategory, MenuItem
 from app.modules.websocket.manager import ws_manager
 
@@ -397,6 +398,65 @@ async def get_platform_analytics(
     res = await db.execute(stmt)
     total_rests = res.scalar() or 0
     return {"total_restaurants": total_rests, "active_users": 380, "system_health": "100% OPERATIONAL"}
+
+
+@router.get("/stats")
+async def get_platform_stats(
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    live_stmt = select(func.count(Restaurant.id)).where(
+        Restaurant.deleted_at.is_(None),
+        or_(Restaurant.is_approved.is_(True), Restaurant.lifecycle_status == "LIVE")
+    )
+    live_res = await db.execute(live_stmt)
+    live_count = live_res.scalar() or 0
+
+    pending_stmt = select(func.count(Restaurant.id)).where(
+        Restaurant.deleted_at.is_(None),
+        or_(Restaurant.lifecycle_status == "PENDING_APPROVAL", Restaurant.is_approved.is_(False))
+    )
+    pending_res = await db.execute(pending_stmt)
+    pending_count = pending_res.scalar() or 0
+
+    orders_stmt = select(func.count(Order.id))
+    orders_res = await db.execute(orders_stmt)
+    total_orders = orders_res.scalar() or 0
+
+    return {
+        "activeTenants": max(1, live_count + pending_count),
+        "liveRestaurants": live_count,
+        "pendingApprovals": pending_count,
+        "totalOrdersProcessed": total_orders,
+        "systemUptimePercent": 99.99,
+    }
+
+
+@router.get("/organizations")
+async def get_platform_organizations(
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None)).order_by(Restaurant.created_at.desc())
+    res = await db.execute(stmt)
+    rests = res.scalars().all()
+    orgs = []
+    seen = set()
+    for r in rests:
+        org_id = r.org_id or f"org-{r.id}"
+        if org_id not in seen:
+            seen.add(org_id)
+            orgs.append({
+                "id": org_id,
+                "name": f"{r.name} Enterprise",
+                "slug": r.slug,
+                "tier": "ENTERPRISE",
+                "status": "ACTIVE" if r.is_approved else "PENDING",
+                "restaurantsCount": 1,
+                "ownerEmail": r.owner_email or "owner@dinely.food",
+                "createdAt": r.created_at.isoformat() if r.created_at else None,
+            })
+    return orgs
 
 
 @router.get("/audit-logs")

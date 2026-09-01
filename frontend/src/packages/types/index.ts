@@ -237,8 +237,10 @@ export interface Restaurant {
   ownerName?: string;
   ownerEmail?: string;
   ownerPhone?: string;
+  ownerUid?: string;
   submittedAt?: string;
   approvedAt?: string;
+  approvedBy?: string;
   createdAt?: string;
 }
 

@@ -83,6 +83,20 @@ function AppContent() {
     const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (fbUser) => {
       if (fbUser && fbUser.email) {
         const scope = getPortalScopeFromPath(window.location.pathname);
+        let token = '';
+        try {
+          token = await fbUser.getIdToken();
+          if (token) {
+            localStorage.setItem('dinely_auth_token', token);
+            if (scope === 'ADMIN' || fbUser.email.toLowerCase() === 'ayan090912@gmail.com') {
+              localStorage.setItem('dinely_platform_admin_id_token', token);
+              sessionStorage.setItem('dinely_admin_token', token);
+            }
+          }
+        } catch (e) {
+          console.warn('[App] Could not retrieve Firebase ID token:', e);
+        }
+
         let appUser = api.getCurrentUser(scope);
         if (!appUser) {
           appUser = {
@@ -92,6 +106,9 @@ function AppContent() {
             role: (scope === 'ADMIN' && fbUser.email.toLowerCase() === 'ayan090912@gmail.com') ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
           };
           api.setCurrentUser(appUser, scope);
+        }
+        if (token) {
+          api.setSessionTokens({ accessToken: token, refreshToken: token, expiresIn: 3600, tokenType: 'Bearer' }, scope);
         }
         setCurrentUser(appUser);
       }

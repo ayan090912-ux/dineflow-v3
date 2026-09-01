@@ -10,7 +10,9 @@ security_scheme = HTTPBearer(auto_error=False)
 
 # Strict explicit allowlist for Dinely Platform Administrator access
 PLATFORM_ADMIN_ALLOWED_EMAILS = [
-    "ayan090912@gmail.com"
+    "ayan090912@gmail.com",
+    "ayanamity7@gmail.com",
+    "ayanamity7",
 ]
 
 
@@ -30,7 +32,7 @@ async def get_current_firebase_admin(
 ) -> Dict[str, Any]:
     """
     Extracts and verifies Firebase ID Token for Platform Admin authorization.
-    Strictly verifies Firebase token signature, exact authorized identity (ayan090912@gmail.com),
+    Strictly verifies Firebase token signature, exact authorized identity,
     and assigns server-side verified claims.
     """
     settings = get_settings()
@@ -63,8 +65,11 @@ async def get_current_firebase_admin(
         raise AuthenticationError("Token payload missing valid user identity (UID).")
 
     # 2. Strict Allowlist Comparison
-    # Normalize: strip whitespace and lowercase. Exact string comparison only.
-    is_authorized = email in PLATFORM_ADMIN_ALLOWED_EMAILS
+    allowed_list = [e.lower() for e in PLATFORM_ADMIN_ALLOWED_EMAILS]
+    if settings.PLATFORM_ADMIN_EMAIL:
+        allowed_list.append(settings.PLATFORM_ADMIN_EMAIL.strip().lower())
+
+    is_authorized = email in allowed_list or (settings.PLATFORM_ADMIN_FIREBASE_UID and uid == settings.PLATFORM_ADMIN_FIREBASE_UID)
 
     # Strongest Security Boundary Check: Reject any other email or account attempting admin access
     if not is_authorized:

@@ -521,6 +521,11 @@ export class DinelyApiClient {
     this.currentTokensByScope[scope] = tokens;
   }
 
+  public setSessionTokens(tokens: AuthTokens | null, scope?: PortalScope) {
+    const targetScope = scope || getPortalScopeFromPath();
+    this.currentTokensByScope[targetScope] = tokens;
+  }
+
   constructor() {
     this.loadDatabase();
     this.restoreSession();
@@ -1374,7 +1379,11 @@ export class DinelyApiClient {
     const token = this.currentTokensByScope[targetScope]?.accessToken ||
                   this.currentTokensByScope['ADMIN']?.accessToken ||
                   this.currentTokensByScope['OWNER']?.accessToken ||
-                  (typeof window !== 'undefined' ? (localStorage.getItem('dinely_platform_admin_id_token') || sessionStorage.getItem('dinely_admin_token')) : null);
+                  (typeof window !== 'undefined' ? (
+                    localStorage.getItem('dinely_platform_admin_id_token') ||
+                    localStorage.getItem('dinely_auth_token') ||
+                    sessionStorage.getItem('dinely_admin_token')
+                  ) : null);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -1409,9 +1418,7 @@ export class DinelyApiClient {
     const ownerUser = this.currentUsersByScope['OWNER'] || this.restoreSession('OWNER');
     if (
       ownerUser &&
-      (ownerUser.role === 'RESTAURANT_OWNER' ||
-        ownerUser.role === 'SUPER_ADMIN' ||
-        (ownerUser.role as string) === 'MANAGER')
+      (ownerUser.role === 'RESTAURANT_OWNER' || ownerUser.role === 'MANAGER' || ownerUser.role === 'ADMIN')
     ) {
       return ownerUser;
     }
@@ -1428,85 +1435,105 @@ export class DinelyApiClient {
   }
 
   setCurrentUser(user: User | null, scope?: PortalScope) {
-    const targetScope = scope || getPortalScopeFromPath();
-    this.currentUsersByScope[targetScope] = user;
-    if (typeof window !== 'undefined') {
-      const storageKey = SESSION_KEYS[targetScope];
-      if (user) {
-        sessionStorage.setItem(storageKey, JSON.stringify(user));
-        localStorage.setItem(storageKey, JSON.stringify(user));
+    const targetScope = scope || (user?.role === 'PLATFORM_ADMIN' || user?.role === 'SUPER_ADMIN' ? 'ADMIN' : getPortalScopeFromPath());
+
+    if (user) {
+      this.currentUsersByScope[targetScope] = user;
+      const existingUserIdx = this.users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+      if (existingUserIdx >= 0) {
+        this.users[existingUserIdx] = { ...this.users[existingUserIdx], ...user };
       } else {
-        sessionStorage.removeItem(storageKey);
+        this.users.push(user);
+      }
+
+      if (user.restaurantId) {
+        this.currentRestaurantIdsByScope[targetScope] = user.restaurantId;
+        this._currentRestaurantId = user.restaurantId;
+      }
+
+      if (typeof window !== 'undefined') {
+        const storageKey = `dinely_user_${targetScope.toLowerCase()}`;
+        localStorage.setItem(storageKey, JSON.stringify(user));
+        sessionStorage.setItem(storageKey, JSON.stringify(user));
+      }
+    } else {
+      delete this.currentUsersByScope[targetScope];
+      if (typeof window !== 'undefined') {
+        const storageKey = `dinely_user_${targetScope.toLowerCase()}`;
         localStorage.removeItem(storageKey);
+        sessionStorage.removeItem(storageKey);
       }
     }
+    this.saveDatabase();
   }
 
-  getCurrentRestaurantId(scope?: PortalScope): string {
-    const targetScope = scope || getPortalScopeFromPath();
-    const user = this.getCurrentUser(targetScope);
-    const candidateId = this.currentRestaurantIdsByScope[targetScope] || user?.restaurantId || this._currentRestaurantId || undefined;
+  getCurrentRestaurantId(): string {
+    const scope = getPortalScopeFromPath();
+    const candidateId = this.currentRestaurantIdsByScope[scope] || this.getCurrentUser(scope)?.restaurantId || this._currentRestaurantId || '';
     return this.resolveTenantRestaurantId(candidateId) || candidateId || '';
   }
 
-  async logout(scope?: PortalScope) {
-    if (scope) {
-      const targetScope = scope;
-      const user = this.currentUsersByScope[targetScope];
+  setCurrentRestaurantId(id: string) {
+    const cleanId = String(id || '').trim();
+    const scope = getPortalScopeFromPath();
+    this.currentRestaurantIdsByScope[scope] = cleanId;
+    this._currentRestaurantId = cleanId;
 
-      if (user) {
-        const userEmail = user.email?.toLowerCase();
-        const emp = this.employees.find(
-          (e) => e.email?.toLowerCase() === userEmail || e.id === user.id?.replace(/^usr-/, '')
-        );
-        if (emp) {
-          emp.status = 'OFF_CLOCK';
-          realtimeBus.emit('StaffStatusUpdated' as any, {
-            employeeId: emp.id,
-            restaurantId: emp.restaurantId,
-            name: emp.name,
-            role: emp.role,
-            status: 'OFF_CLOCK',
-            data: emp,
-          });
-        }
-      }
-
-      this.currentUsersByScope[targetScope] = null;
-      this.currentTokensByScope[targetScope] = null;
-      this.currentRestaurantIdsByScope[targetScope] = null;
-
-      if (typeof window !== 'undefined') {
-        const storageKey = SESSION_KEYS[targetScope];
-        sessionStorage.removeItem(storageKey);
-        if (window.localStorage) {
-          localStorage.removeItem(storageKey);
-        }
-      }
-
-      if (targetScope === 'OWNER' || targetScope === 'ADMIN') {
-        await signOutFirebase();
-      }
-    } else {
-      // Global logout: clear all scopes and sign out of Firebase
-      for (const s of Object.keys(SESSION_KEYS) as PortalScope[]) {
-        this.currentUsersByScope[s] = null;
-        this.currentTokensByScope[s] = null;
-        this.currentRestaurantIdsByScope[s] = null;
-        if (typeof window !== 'undefined') {
-          const storageKey = SESSION_KEYS[s];
-          sessionStorage.removeItem(storageKey);
-          if (window.localStorage) {
-            localStorage.removeItem(storageKey);
-          }
-        }
-      }
-      this.currentUser = null;
-      this._currentRestaurantId = null;
-      await signOutFirebase();
+    const user = this.getCurrentUser(scope);
+    if (user) {
+      user.restaurantId = cleanId;
+      this.setCurrentUser(user, scope);
     }
 
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('dinely_active_restaurant_id', cleanId);
+      sessionStorage.setItem('dinely_restaurant_id', cleanId);
+      localStorage.setItem('dinely_active_restaurant_id', cleanId);
+      localStorage.setItem('dinely_restaurant_id', cleanId);
+    }
+  }
+
+  async logout(scope?: PortalScope) {
+    const targetScope = scope || getPortalScopeFromPath();
+    delete this.currentUsersByScope[targetScope];
+    delete this.currentTokensByScope[targetScope];
+    delete this.currentRestaurantIdsByScope[targetScope];
+
+    if (typeof window !== 'undefined') {
+      const storageKey = `dinely_user_${targetScope.toLowerCase()}`;
+      localStorage.removeItem(storageKey);
+      sessionStorage.removeItem(storageKey);
+      if (targetScope === 'ADMIN') {
+        localStorage.removeItem('dinely_platform_admin_id_token');
+        sessionStorage.removeItem('dinely_admin_token');
+      }
+      localStorage.removeItem('dinely_auth_token');
+    }
     this.saveDatabase();
+  }
+
+  async getOwnedRestaurants(ownerEmail?: string, ownerUid?: string): Promise<Restaurant[]> {
+    try {
+      const email = (ownerEmail || this.currentUser?.email || '').trim().toLowerCase();
+      const uid = (ownerUid || this.currentUser?.id || '').trim();
+      if (!email && !uid) return [];
+
+      const apiBase = getApiBaseUrl();
+      const params = new URLSearchParams();
+      if (email) params.append('owner_email', email);
+      if (uid) params.append('owner_uid', uid);
+
+      const res = await fetch(`${apiBase}/restaurants/owner/my?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data.map((r) => this.mapBackendRestaurant(r));
+        }
+      }
+    } catch (e) {
+      console.warn('getOwnedRestaurants notice:', e);
+    }
+    return [];
   }
 
   // --- Restaurant & Onboarding APIs ---
@@ -1519,16 +1546,19 @@ export class DinelyApiClient {
     hasTables?: boolean;
     hasKitchen?: boolean;
     hasWaiter?: boolean;
+    hasInventory?: boolean;
+    hasBilling?: boolean;
+    enabledModules?: string[];
     orderNumberPrefix?: string;
     address?: string;
     phone?: string;
     email?: string;
     ownerName?: string;
     ownerEmail?: string;
+    ownerUid?: string;
     features?: any;
     theme?: any;
   }) {
-    await delay(250);
     const id = `rest-${Date.now()}`;
     const slug = restData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const orgId = this.currentUser?.orgId || `org-${Date.now()}`;
@@ -1538,6 +1568,9 @@ export class DinelyApiClient {
     const hasKitchen = restData.hasKitchen !== undefined ? restData.hasKitchen : true;
     const hasWaiter = restData.hasWaiter !== undefined ? restData.hasWaiter : (hasTables !== false);
     const orderPrefix = restData.orderNumberPrefix || (bType === 'FOOD_TRUCK' ? '#F' : '#ORD');
+    const ownerEmail = (restData.ownerEmail || this.currentUser?.email || '').trim().toLowerCase();
+    const ownerName = restData.ownerName || this.currentUser?.name || 'Restaurant Owner';
+    const ownerUid = restData.ownerUid || this.currentUser?.id;
 
     const newRest: Restaurant = {
       id,
@@ -1550,20 +1583,24 @@ export class DinelyApiClient {
       hasTables,
       hasKitchen,
       hasWaiter,
+      hasInventory: restData.hasInventory !== false,
+      hasBilling: restData.hasBilling !== false,
+      enabledModules: restData.enabledModules,
       orderNumberPrefix: orderPrefix,
       address: restData.address || 'Main Street Center',
       phone: restData.phone || '+1 555-0100',
       email: restData.email || 'contact@dinely.com',
-      ownerName: restData.ownerName || this.currentUser?.name || 'Restaurant Owner',
-      ownerEmail: restData.ownerEmail || this.currentUser?.email || 'owner@restaurant.com',
+      ownerName,
+      ownerEmail,
+      ownerUid,
       domain: `${slug}.dinely.app`,
       isApproved: false,
-      lifecycleStatus: 'DRAFT',
+      lifecycleStatus: 'PENDING_APPROVAL',
       status: 'CLOSED',
       rating: 5.0,
       activeOrdersCount: 0,
       tablesCount: hasTables ? 8 : 0,
-      submittedAt: new Date().toLocaleDateString(),
+      submittedAt: new Date().toISOString(),
       theme: {
         restaurantId: id,
         restaurantName: restData.name,
@@ -1591,16 +1628,9 @@ export class DinelyApiClient {
       },
     };
 
-    this.restaurants.unshift(newRest);
-    this.currentRestaurantId = id;
-    if (this.currentUser) {
-      this.currentUser.restaurantId = id;
-    }
-
     try {
       const apiBase = getApiBaseUrl();
-      fetch(`${apiBase}/restaurants`, {
-
+      const res = await fetch(`${apiBase}/restaurants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1608,37 +1638,51 @@ export class DinelyApiClient {
           name: restData.name,
           cuisine: restData.cuisine || 'Multi-Cuisine',
           businessType: bType,
+          hasKitchen,
+          hasWaiter,
+          hasBar,
+          hasInventory: restData.hasInventory !== false,
+          hasBilling: restData.hasBilling !== false,
+          hasTables,
+          enabledModules: restData.enabledModules,
           phone: restData.phone || '+1 555-0100',
           email: restData.email || 'contact@dinely.com',
           address: restData.address || 'Main Street Center',
+          ownerName,
+          ownerEmail,
+          ownerUid,
           currency: 'INR (₹)',
           taxPercentage: 5.0,
+          theme: newRest.theme,
         }),
-      }).then(res => {
-        if (res.ok) {
-          fetch(`${apiBase}/restaurants/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ theme: newRest.theme }),
-          });
-          if (hasTables) {
-            for (let i = 1; i <= 8; i++) {
-              const tableNum = i < 10 ? `Table 0${i}` : `Table ${i}`;
-              const tableId = `tbl-${id}-table_${i < 10 ? '0' + i : i}`;
-              this.createTable({
-                id: tableId,
-                restaurantId: id,
-                tableNumber: tableNum,
-                capacity: 4,
-                section: i <= 6 ? 'Main Hall' : 'Terrace',
-              });
-            }
-          }
-        }
-      }).catch(err => console.warn("Notice saving restaurant to backend:", err));
-    } catch (e) {}
+      });
 
-    this.purgeDemoDataForRestaurant(id);
+      if (res.ok) {
+        const backendRest = await res.json();
+        if (backendRest && backendRest.id) {
+          newRest.id = backendRest.id;
+          newRest.lifecycleStatus = (backendRest.lifecycle_status || 'PENDING_APPROVAL') as RestaurantLifecycleStatus;
+          newRest.isApproved = Boolean(backendRest.is_approved);
+        }
+      }
+    } catch (e) {
+      console.warn('Backend createRestaurant notice:', e);
+    }
+
+    this.restaurants = [newRest, ...this.restaurants.filter((r) => r.id !== newRest.id)];
+    this.currentRestaurantId = newRest.id;
+    this.currentRestaurantIdsByScope['OWNER'] = newRest.id;
+    if (this.currentUser) {
+      this.currentUser.restaurantId = newRest.id;
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dinely_active_restaurant_id', newRest.id);
+      sessionStorage.setItem('dinely_active_restaurant_id', newRest.id);
+      localStorage.setItem('dinely_restaurant_id', newRest.id);
+      sessionStorage.setItem('dinely_restaurant_id', newRest.id);
+    }
+
+    this.purgeDemoDataForRestaurant(newRest.id);
     this.saveDatabase();
     return newRest;
   }
@@ -1653,11 +1697,9 @@ export class DinelyApiClient {
   }
 
   async submitRestaurantLaunch(setupData: any) {
-    await delay(400);
-
     const activeRestId = setupData.id || this.currentRestaurantId || this.currentUser?.restaurantId;
     let existing = this.restaurants.find((r) => r.id === activeRestId);
-    const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const now = new Date().toISOString();
 
     if (existing) {
       existing.name = setupData.restaurantName || setupData.name || existing.name;
@@ -1668,24 +1710,9 @@ export class DinelyApiClient {
       if (setupData.hasKitchen !== undefined) existing.hasKitchen = setupData.hasKitchen;
       if (setupData.hasWaiter !== undefined) existing.hasWaiter = setupData.hasWaiter;
       if (setupData.orderNumberPrefix) existing.orderNumberPrefix = setupData.orderNumberPrefix;
-      existing.restaurantType = setupData.restaurantType || existing.restaurantType;
       existing.address = setupData.address || existing.address;
-      existing.locality = setupData.locality || existing.locality;
-      existing.city = setupData.city || existing.city;
-      existing.state = setupData.state || existing.state;
-      existing.country = setupData.country || existing.country;
-      existing.postalCode = setupData.postalCode || existing.postalCode;
-      if (setupData.latitude !== undefined) existing.latitude = setupData.latitude;
-      if (setupData.longitude !== undefined) existing.longitude = setupData.longitude;
-      if (setupData.placeId) existing.placeId = setupData.placeId;
       existing.phone = setupData.phone || existing.phone;
       existing.email = setupData.email || existing.email;
-      existing.currency = setupData.currency || existing.currency;
-      existing.timezone = setupData.timezone || existing.timezone;
-      existing.indoorTablesCount = setupData.tables?.indoor || setupData.indoorTables || existing.indoorTablesCount || 8;
-      existing.outdoorTablesCount = setupData.tables?.outdoor || setupData.outdoorTables || existing.outdoorTablesCount || 4;
-      existing.vipTablesCount = setupData.tables?.vip || setupData.vipTables || existing.vipTablesCount || 2;
-      existing.tablesCount = (existing.indoorTablesCount || 0) + (existing.outdoorTablesCount || 0) + (existing.vipTablesCount || 0);
       existing.lifecycleStatus = 'PENDING_APPROVAL';
       existing.isApproved = false;
       existing.submittedAt = now;
@@ -1702,17 +1729,47 @@ export class DinelyApiClient {
         };
       }
 
-      this.platformNotifications.unshift({
-        id: `pnotif-${Date.now()}`,
-        recipientRole: 'PLATFORM_ADMIN',
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(existing.id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: existing.name,
+            cuisine: existing.cuisine,
+            businessType: existing.businessType,
+            hasKitchen: existing.hasKitchen,
+            hasWaiter: existing.hasWaiter,
+            hasBar: existing.hasBar,
+            hasTables: existing.hasTables,
+            enabledModules: existing.enabledModules || setupData.enabledModules,
+            address: existing.address,
+            phone: existing.phone,
+            email: existing.email,
+            ownerName: existing.ownerName || setupData.ownerName,
+            ownerEmail: existing.ownerEmail || setupData.ownerEmail,
+            ownerUid: existing.ownerUid || setupData.ownerUid,
+            lifecycleStatus: 'PENDING_APPROVAL',
+            submittedAt: now,
+            theme: existing.theme,
+          }),
+        });
+
+        if (res.ok) {
+          const updated = await res.json();
+          if (updated) {
+            existing.lifecycleStatus = (updated.lifecycle_status || 'PENDING_APPROVAL') as RestaurantLifecycleStatus;
+            existing.isApproved = Boolean(updated.is_approved);
+          }
+        }
+      } catch (e) {
+        console.warn('submitRestaurantLaunch backend sync notice:', e);
+      }
+
+      realtimeBus.emit('RestaurantRegistrationSubmitted' as any, {
         restaurantId: existing.id,
         restaurantName: existing.name,
-        title: 'New restaurant waiting for approval',
-        message: `New restaurant waiting for approval: ${existing.name}. Configuration and floorplan submitted by ${existing.ownerName} (${existing.ownerEmail}).`,
-        type: 'LAUNCH_REQUESTED',
-        timestamp: 'Just now',
-        isRead: false,
-      });
+      } as any);
 
       this.saveDatabase();
       return existing;
@@ -1723,13 +1780,23 @@ export class DinelyApiClient {
   // --- Platform Admin Control Plane APIs ---
 
   async getPlatformStats() {
-    await delay(100);
-    const activeRests = this.restaurants.filter((r) => !r.isDeleted);
-    const liveRestaurants = activeRests.filter((r) => r.isApproved || r.lifecycleStatus === 'LIVE').length;
-    const pendingApprovals = activeRests.filter((r) => r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved).length;
+    try {
+      const apiBase = getApiBaseUrl();
+      const headers = this.getAuthHeader('ADMIN');
+      const res = await fetch(`${apiBase}/admin/stats`, { headers });
+      if (res.ok) {
+        const stats = await res.json();
+        return stats;
+      }
+    } catch (e) {
+      console.warn('Backend getPlatformStats failed, calculating from real restaurants:', e);
+    }
+    const activeRests = await this.getPlatformRestaurants();
+    const liveRestaurants = activeRests.filter((r) => !r.isDeleted && (r.isApproved || r.lifecycleStatus === 'LIVE')).length;
+    const pendingApprovals = activeRests.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved)).length;
 
     return {
-      activeTenants: this.organizations.length || (liveRestaurants ? 1 : 0),
+      activeTenants: Math.max(1, liveRestaurants + pendingApprovals),
       liveRestaurants,
       pendingApprovals,
       totalOrdersProcessed: this.orders.length,
@@ -1738,50 +1805,77 @@ export class DinelyApiClient {
   }
 
   async getOrganizations() {
-    await delay(100);
-    return [...this.organizations];
+    try {
+      const apiBase = getApiBaseUrl();
+      const headers = this.getAuthHeader('ADMIN');
+      const res = await fetch(`${apiBase}/admin/organizations`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) return data;
+      }
+    } catch (e) {
+      console.warn('Backend getOrganizations failed:', e);
+    }
+    const rests = await this.getPlatformRestaurants();
+    return rests.map((r) => ({
+      id: r.orgId || `org-${r.id}`,
+      name: `${r.name} Enterprise`,
+      slug: r.slug,
+      tier: 'ENTERPRISE' as const,
+      status: r.isApproved ? ('ACTIVE' as const) : ('PENDING' as const),
+      restaurantsCount: 1,
+      ownerEmail: r.ownerEmail || 'owner@dinely.food',
+      createdAt: r.submittedAt || new Date().toISOString(),
+    }));
   }
 
   async getPendingRestaurants() {
-    await delay(100);
-    return this.restaurants.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved));
+    const all = await this.getPlatformRestaurants();
+    return all.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved));
   }
 
   async getAllRestaurants() {
-    await delay(100);
-    return [...this.restaurants];
+    return this.getPlatformRestaurants();
   }
 
   private mapBackendRestaurant(r: any): Restaurant {
+    const bType = (r.businessType || r.business_type || 'RESTAURANT').toUpperCase();
     return {
       id: r.id,
       orgId: r.org_id || r.orgId || 'org-dinely',
       name: r.name,
       slug: r.slug || r.name.toLowerCase().replace(/\s+/g, '-'),
       cuisine: r.cuisine || 'Multi-Cuisine',
-      businessType: r.business_type || r.businessType || 'RESTAURANT',
-      hasBar: r.has_bar !== false && r.hasBar !== false,
-      hasTables: r.has_tables !== false && r.hasTables !== false,
-      hasKitchen: r.has_kitchen !== false && r.hasKitchen !== false,
-      hasWaiter: r.has_waiter !== false && r.hasWaiter !== false,
-      hasInventory: r.has_inventory !== false && r.hasInventory !== false,
-      hasBilling: r.has_billing !== false && r.hasBilling !== false,
-      orderNumberPrefix: r.order_number_prefix || r.orderNumberPrefix || '#ORD',
+      businessType: bType as BusinessType,
+      hasBar: r.hasBar !== false && r.has_bar !== false,
+      hasTables: r.hasTables !== false && r.has_tables !== false,
+      hasKitchen: r.hasKitchen !== false && r.has_kitchen !== false,
+      hasWaiter: r.hasWaiter !== false && r.has_waiter !== false,
+      hasInventory: r.hasInventory !== false && r.has_inventory !== false,
+      hasBilling: r.hasBilling !== false && r.has_billing !== false,
+      enabledModules: r.enabledModules || r.enabled_modules,
+      orderNumberPrefix: r.orderNumberPrefix || r.order_number_prefix || '#ORD',
       address: r.address || '',
       phone: r.phone || '',
       email: r.email || '',
-      ownerName: r.owner_name || r.ownerName || '',
-      ownerEmail: r.owner_email || r.ownerEmail || '',
+      ownerName: r.ownerName || r.owner_name || '',
+      ownerEmail: r.ownerEmail || r.owner_email || '',
+      ownerUid: r.ownerUid || r.owner_uid || '',
       domain: r.domain || '',
-      isApproved: r.is_approved !== false && r.isApproved !== false,
+      isApproved: Boolean(r.isApproved || r.is_approved),
       status: r.status || 'OPEN',
-      lifecycleStatus: (r.lifecycle_status || r.lifecycleStatus || 'APPROVED') as RestaurantLifecycleStatus,
-      rating: r.rating || 4.8,
+      lifecycleStatus: (r.lifecycleStatus || r.lifecycle_status || (r.isApproved || r.is_approved ? 'LIVE' : 'PENDING_APPROVAL')) as RestaurantLifecycleStatus,
+      rejectionReason: r.rejectionReason || r.rejection_reason,
+      requestedChanges: r.requestedChanges || r.requested_changes,
+      approvedAt: r.approvedAt || r.approved_at,
+      approvedBy: r.approvedBy || r.approved_by,
+      submittedAt: r.submittedAt || r.submitted_at || r.createdAt || r.created_at,
+      rating: r.rating || 5.0,
       activeOrdersCount: 0,
-      tablesCount: r.tables_count || r.tablesCount || 12,
+      tablesCount: r.tablesCount || r.tables_count || 8,
       currency: r.currency || 'INR (₹)',
-      taxPercentage: r.tax_percentage || r.taxPercentage || 5.0,
-      theme: r.theme_json || r.theme || {
+      taxPercentage: r.taxPercentage || r.tax_percentage || 5.0,
+      theme: r.theme || r.theme_json || {
         restaurantId: r.id,
         restaurantName: r.name,
         logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
@@ -2439,7 +2533,16 @@ export class DinelyApiClient {
   }
 
   async getRestaurantDetails(restaurantId?: string) {
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    let targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) {
+      const owned = await this.getOwnedRestaurants();
+      if (owned.length > 0) {
+        targetId = owned[0].id;
+        this._currentRestaurantId = targetId;
+        const scope = getPortalScopeFromPath();
+        this.currentRestaurantIdsByScope[scope] = targetId;
+      }
+    }
     if (!targetId) return null;
 
     try {
@@ -2448,100 +2551,23 @@ export class DinelyApiClient {
       if (res.ok) {
         const data = await res.json();
         if (data && data.id) {
-          const bType = (data.business_type || 'RESTAURANT').toUpperCase();
-          const mappedModules = data.enabled_modules || (
-            bType === 'FOOD_CART'
-              ? ['kitchen', 'inventory', 'billing', ...(data.has_waiter ? ['waiter'] : [])]
-              : bType === 'BAR'
-              ? ['bar', 'kitchen', 'waiter', 'inventory', 'billing']
-              : ['kitchen', 'waiter', 'inventory', 'billing', ...(data.has_bar ? ['bar'] : [])]
-          );
-
-          const mappedRest: Restaurant = {
-            id: data.id,
-            orgId: data.org_id || 'org-dinely',
-            name: data.name,
-            slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-'),
-            cuisine: data.cuisine || 'Multi-Cuisine',
-            businessType: bType as BusinessType,
-            hasBar: data.has_bar !== false,
-            hasTables: data.has_tables !== false,
-            hasKitchen: data.has_kitchen !== false,
-            hasWaiter: data.has_waiter !== false,
-            hasInventory: data.has_inventory !== false,
-            hasBilling: data.has_billing !== false,
-            enabledModules: mappedModules,
-            orderNumberPrefix: data.order_number_prefix || '#ORD',
-            address: data.address || '',
-            phone: data.phone || '',
-            email: data.email || '',
-            ownerName: data.owner_name || '',
-            ownerEmail: data.owner_email || '',
-            domain: data.domain || '',
-            isApproved: data.is_approved !== false,
-            status: data.status || 'OPEN',
-            lifecycleStatus: (data.lifecycle_status || 'APPROVED') as RestaurantLifecycleStatus,
-            rating: data.rating || 4.8,
-            activeOrdersCount: 0,
-            tablesCount: data.tables_count || 12,
-            currency: data.currency || 'INR (₹)',
-            taxPercentage: data.tax_percentage || 5.0,
-            legalName: data.legal_name || data.legalName || data.name || '',
-            state: data.state || '',
-            stateCode: data.state_code || data.stateCode || '',
-            gstin: data.gstin || data.gstNumber || '',
-            gstNumber: data.gstin || data.gstNumber || '',
-            pan: data.pan || '',
-            invoicePrefix: data.invoice_prefix || data.invoicePrefix || 'INV-',
-            invoiceStartingNumber: data.invoice_starting_number !== undefined ? Number(data.invoice_starting_number) : (data.invoiceStartingNumber || 1001),
-            serviceChargePercentage: data.service_charge_percentage !== undefined ? Number(data.service_charge_percentage) : (data.serviceChargePercentage || 0.0),
-            serviceChargeEnabled: data.service_charge_enabled !== undefined ? Boolean(data.service_charge_enabled) : Boolean(data.serviceChargeEnabled),
-            upiId: data.upi_id || data.upiId || '',
-            upiMerchantName: data.upi_merchant_name || data.upiMerchantName || data.name || '',
-            upiQrUrl: data.upi_qr_url || data.upiQrUrl || '',
-            upiEnabled: data.upi_enabled !== undefined ? Boolean(data.upi_enabled) : (data.upiEnabled !== undefined ? Boolean(data.upiEnabled) : true),
-            theme: data.theme_json || {
-              restaurantId: data.id,
-              restaurantName: data.name,
-              logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
-              bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-              primaryColor: '#f43f5e',
-              secondaryColor: '#475569',
-              accentColor: '#fbbf24',
-              backgroundColor: '#0f172a',
-              textColor: '#ffffff',
-              fontFamily: 'sans',
-              borderRadius: 'lg',
-              currency: data.currency || 'INR (₹)',
-            },
-          };
+          const mappedRest = this.mapBackendRestaurant(data);
+          // Sync with in-memory store
+          const existingIdx = this.restaurants.findIndex((r) => r.id === mappedRest.id);
+          if (existingIdx >= 0) {
+            this.restaurants[existingIdx] = { ...this.restaurants[existingIdx], ...mappedRest };
+          } else {
+            this.restaurants.push(mappedRest);
+          }
           return this.ensureRestaurantDefaults(mappedRest);
         }
       }
     } catch (e) {
-      console.warn('API fetch for restaurant details failed, using synchronized multi-tenant store:', e);
+      console.warn('API fetch for getRestaurantDetails failed:', e);
     }
 
-    let rest = this.restaurants.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
-    if (!rest) {
-      rest = GLOBAL_MULTI_TENANT_RESTAURANTS.find((r) => !r.isDeleted && (r.id === targetId || r.slug === targetId || r.id.toLowerCase() === targetId.toLowerCase()));
-    }
-    if (!rest) return null;
-
-    this.syncRestaurantToBackend(rest).catch(() => {});
-
-    const scope = getPortalScopeFromPath();
-    if (scope !== 'CUSTOMER') {
-      const user = this.getCurrentUser(scope);
-      if (user && user.role === 'RESTAURANT_OWNER') {
-        const isOwner = rest.ownerEmail?.toLowerCase() === user.email?.toLowerCase() || rest.email?.toLowerCase() === user.email?.toLowerCase();
-        if (!isOwner && (user.role as string) !== 'SUPER_ADMIN' && (user.role as string) !== 'PLATFORM_ADMIN') {
-          return null;
-        }
-      }
-    }
-
-    return this.ensureRestaurantDefaults(rest);
+    const local = this.restaurants.find((r) => r.id === targetId || (targetId && r.id.toLowerCase() === targetId.toLowerCase()));
+    return local ? this.ensureRestaurantDefaults(local) : null;
   }
 
   async updateRestaurantDetails(restaurantId: string, updates: Partial<Restaurant>) {
