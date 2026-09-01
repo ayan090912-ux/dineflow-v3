@@ -365,7 +365,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Validation Error', 'Table Number is required.');
       return;
     }
-    await api.createTable({
+    const created = await api.createTable({
       restaurantId: currentRestaurant?.id || api.getCurrentRestaurantId() || '',
       tableNumber: newTableData.tableNumber,
       capacity: parseInt(newTableData.capacity) || 4,
@@ -373,6 +373,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       shape: newTableData.shape,
       isVip: newTableData.isVip,
     });
+    if (created) {
+      setTables((prev) => [...prev.filter((t) => t.id !== created.id), created]);
+    }
     addToast('success', 'Table Created! 🪑', `${newTableData.tableNumber} added to ${newTableData.section}.`);
     setIsCreateTableModalOpen(false);
     setNewTableData({
@@ -382,7 +385,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       shape: 'RECTANGLE',
       isVip: false,
     });
-    await loadData();
   };
 
   const handleUpdateTableDetails = async () => {
@@ -394,17 +396,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       shape: editingTable.shape,
       isVip: editingTable.isVip,
     });
+    setTables((prev) =>
+      prev.map((t) => (t.id === editingTable.id ? { ...t, ...editingTable } : t))
+    );
     addToast('success', 'Table Updated! 📝', `${editingTable.tableNumber} updated successfully.`);
     setIsEditTableModalOpen(false);
     setEditingTable(null);
-    await loadData();
   };
 
   const handleDeleteTable = async (tableId: string, tableNumber: string) => {
     if (confirm(`Are you sure you want to remove ${tableNumber} from floor plan?`)) {
       await api.deleteTable(tableId);
+      setTables((prev) => prev.filter((t) => t.id !== tableId));
       addToast('success', 'Table Removed 🗑️', `${tableNumber} deleted.`);
-      await loadData();
     }
   };
 
@@ -414,17 +418,21 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       return;
     }
     await api.mergeTables(selectedTableIdsForMerge, customMergeLabel);
+    setTables((prev) =>
+      prev.map((t) => (selectedTableIdsForMerge.includes(t.id) ? { ...t, isMerged: true, groupLabel: customMergeLabel } : t))
+    );
     addToast('success', 'Tables Merged Successfully! 🔗', 'Kitchen, Waiters, and Staff notified.');
     setIsMergeTablesModalOpen(false);
     setSelectedTableIdsForMerge([]);
     setCustomMergeLabel('');
-    await loadData();
   };
 
   const handleUnmergeTables = async (tableIds: string[]) => {
     await api.unmergeTables(tableIds);
+    setTables((prev) =>
+      prev.map((t) => (tableIds.includes(t.id) ? { ...t, isMerged: false, groupLabel: undefined } : t))
+    );
     addToast('success', 'Tables Unmerged 🔓', 'Tables split back into individual seats.');
-    await loadData();
   };
 
   const handleReserveTable = async () => {
@@ -440,6 +448,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       partySize: parseInt(reservationForm.partySize) || 4,
       notes: reservationForm.notes,
     });
+    setTables((prev) =>
+      prev.map((t) =>
+        t.id === tableToReserve.id
+          ? {
+              ...t,
+              status: 'RESERVED',
+              isReserved: true,
+              reservedForName: reservationForm.reservedForName,
+              reservedForPhone: reservationForm.reservedForPhone,
+              reservationTime: reservationForm.reservationTime,
+            }
+          : t
+      )
+    );
     addToast('success', 'Table Reserved! 🔒', `${tableToReserve.tableNumber} reserved for ${reservationForm.reservedForName}.`);
     setIsReserveTableModalOpen(false);
     setTableToReserve(null);
@@ -450,19 +472,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       partySize: '4',
       notes: '',
     });
-    await loadData();
   };
 
   const handleCancelReservation = async (tableId: string, tableNumber: string) => {
     await api.cancelTableReservation(tableId);
+    setTables((prev) =>
+      prev.map((t) => (t.id === tableId ? { ...t, status: 'AVAILABLE', isReserved: false, reservedForName: undefined } : t))
+    );
     addToast('info', 'Reservation Cancelled 🔓', `${tableNumber} is now available.`);
-    await loadData();
   };
 
   const handleCheckInGuest = async (tableId: string, tableNumber: string, guestName: string) => {
     await api.checkInReservedTable(tableId);
+    setTables((prev) =>
+      prev.map((t) => (t.id === tableId ? { ...t, status: 'OCCUPIED', isOccupied: true, isReserved: false } : t))
+    );
     addToast('success', 'Guest Seated! 🎉', `${guestName} checked in at ${tableNumber}.`);
-    await loadData();
   };
 
   useEffect(() => {
@@ -474,43 +499,69 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     loadData();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      loadData();
       if (event.type === 'order_created' || event.type === 'OrderCreated') {
         addToast('info', 'New Customer Order Received! 🛎️', `Table ${event.tableNumber || 'Guest'} placed an order`);
+        api.getOrders(restId).then(setOrders).catch(() => {});
+        api.getActiveTableSessions(restId).then((sess) => setActiveSessions(sess || [])).catch(() => {});
       } else if (event.type === 'service_request_created' || event.type === 'WaiterCalled') {
         addToast('warning', 'Waiter Assistance Call 🔔', `Table ${event.tableNumber || 'Guest'} requested support.`);
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
-        addToast('info', 'Table Session Closed 🧹', `Table ${event.tableNumber || ''} session ended and set to VACANT.`);
+        const tblNum = (event as any).tableNumber || '';
+        const sessId = (event as any).tableSessionId || (event as any).sessionId;
+        addToast('info', 'Table Session Closed 🧹', `Table ${tblNum} session ended and set to VACANT.`);
+        if (sessId) {
+          setActiveSessions((prev) => prev.filter((s) => s.id !== sessId));
+        }
+        setTables((prev) =>
+          prev.map((t) => (t.tableNumber === tblNum || (t as any).number === tblNum ? { ...t, status: 'AVAILABLE', isOccupied: false } : t))
+        );
       } else if (event.type === 'BillRequested') {
         addToast('success', 'Bill Request Received 🧾', `Table ${event.tableNumber} requested final check.`);
+        api.getBills(restId).then((b) => setBills(b || [])).catch(() => {});
       } else if (event.type === 'ETAUpdated') {
         addToast('info', 'ETA Adjusted ⏱️', `Order #${event.orderId} ETA set to ${event.estimatedPrepTimeMinutes}m`);
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === event.orderId
+              ? {
+                  ...o,
+                  estimatedPrepTimeMinutes: event.estimatedPrepTimeMinutes,
+                  etaTargetTimestamp: event.etaTargetTimestamp,
+                }
+              : o
+          )
+        );
       } else if (event.type === 'BusinessDayClosed') {
         addToast('warning', 'Business Day Closed 🌅', 'Daily closing summary archived in history.');
+        api.getCurrentBusinessDay(restId).then(setCurrentBusinessDay).catch(() => {});
       } else if (event.type === 'BusinessDayOpened') {
         addToast('success', 'New Business Day Opened ☀️', 'Now recording orders for new business day.');
+        api.getCurrentBusinessDay(restId).then(setCurrentBusinessDay).catch(() => {});
       } else if (event.type === 'StaffStatusUpdated') {
         if (event.status === 'ON_CLOCK') {
           addToast('success', 'Staff Member Online 🟢', `${event.name} (${event.role}) logged in and is now ACTIVE in app.`);
         } else {
           addToast('info', 'Staff Member Offline ⚪', `${event.name} logged out.`);
         }
+        setEmployees((prev) =>
+          prev.map((emp) => (emp.id === event.employeeId || emp.name === event.name ? { ...emp, isClockedIn: event.status === 'ON_CLOCK' } : emp))
+        );
       }
     });
 
+    // Gentle fallback sync every 60 seconds (replaces destructive 5s full-reload loop)
     const interval = setInterval(() => {
-      loadData();
-    }, 5000);
+      if (document.visibilityState === 'visible') {
+        api.getOrders(restId).then(setOrders).catch(() => {});
+        api.getActiveTableSessions(restId).then((s) => setActiveSessions(s || [])).catch(() => {});
+      }
+    }, 60000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
   }, [currentRestaurant?.id]);
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
 
 
   const loadData = async () => {
@@ -575,67 +626,81 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     }
     const restId = currentRestaurant?.id || 'rest-1';
     if (categoryModalMode === 'FOOD') {
-      await api.addCategory({ restaurantId: restId, name: newCategoryInput.trim() });
+      const added = await api.addCategory({ restaurantId: restId, name: newCategoryInput.trim() });
+      if (added) {
+        setFoodCategories((prev) => [...prev, added]);
+      }
       addToast('success', 'Food Category Added 🍽️', `Added "${newCategoryInput.trim()}"`);
     } else {
-      await api.addBarCategory({ restaurantId: restId, name: newCategoryInput.trim() });
+      const added = await api.addBarCategory({ restaurantId: restId, name: newCategoryInput.trim() });
+      if (added) {
+        setBarCategories((prev) => [...prev, added]);
+      }
       addToast('success', 'Bar Category Added 🍸', `Added "${newCategoryInput.trim()}"`);
     }
     setNewCategoryInput('');
-    await loadData();
   };
 
   const handleUpdateCategory = async () => {
     if (!editingCategory || !editingCategory.name.trim()) return;
     if (categoryModalMode === 'FOOD') {
       await api.updateCategory(editingCategory.id, { name: editingCategory.name.trim() });
+      setFoodCategories((prev) =>
+        prev.map((c) => (c.id === editingCategory.id ? { ...c, name: editingCategory.name.trim() } : c))
+      );
       addToast('success', 'Category Renamed ✏️', `Updated to "${editingCategory.name.trim()}"`);
     } else {
       await api.updateBarCategory(editingCategory.id, { name: editingCategory.name.trim() });
+      setBarCategories((prev) =>
+        prev.map((c) => (c.id === editingCategory.id ? { ...c, name: editingCategory.name.trim() } : c))
+      );
       addToast('success', 'Bar Category Renamed ✏️', `Updated to "${editingCategory.name.trim()}"`);
     }
     setEditingCategory(null);
-    await loadData();
   };
 
   const handleDeleteCategory = async () => {
     if (!deletingCategory) return;
     if (deletingCategory.type === 'FOOD') {
       await api.deleteCategory(deletingCategory.id);
+      setFoodCategories((prev) => prev.filter((c) => c.id !== deletingCategory.id));
       addToast('info', 'Category Deleted 🗑️', `Deleted category "${deletingCategory.name}"`);
     } else {
       await api.deleteBarCategory(deletingCategory.id);
+      setBarCategories((prev) => prev.filter((c) => c.id !== deletingCategory.id));
       addToast('info', 'Bar Category Deleted 🗑️', `Deleted category "${deletingCategory.name}"`);
     }
     setDeletingCategory(null);
-    await loadData();
   };
 
   const handleRequestLaunch = async () => {
     if (!currentRestaurant) return;
     await api.submitRestaurantLaunch({ id: currentRestaurant.id, name: currentRestaurant.name });
     addToast('success', 'Launch Request Submitted! 🚀', 'Your restaurant application has been submitted for review.');
-    loadData();
   };
 
   const handleResubmitLaunch = async () => {
     if (!currentRestaurant) return;
     await api.resubmitRestaurantLaunch(currentRestaurant.id);
     addToast('success', 'Launch Resubmitted! 🔄', 'Your updated application has been submitted for review.');
-    loadData();
   };
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     await api.updateOrderStatus(orderId, newStatus);
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+    );
     addToast('info', 'Order Status Updated', `Order #${orderId} moved to ${newStatus}`);
-    loadData();
   };
 
   const handleToggleItemAvailability = async (item: MenuItem) => {
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+    const newAvail = !item.isAvailable;
+    setMenuItems((prev) =>
+      prev.map((m) => (m.id === item.id ? { ...m, isAvailable: newAvail } : m))
+    );
     await api.toggleMenuItemAvailability(item.id, restId, item.isAvailable);
-    addToast('success', 'Menu Availability Updated', `${item.name} is now ${!item.isAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}`);
-    await loadData();
+    addToast('success', 'Menu Availability Updated', `${item.name} is now ${newAvail ? 'AVAILABLE' : 'UNAVAILABLE'}`);
   };
 
   const handleAddItem = async () => {
@@ -663,7 +728,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
       const cleanPrice = parseFloat(newItem.price.toString().replace(/[^0-9.]/g, '')) || 0;
 
-      await api.addMenuItem({
+      const added = await api.addMenuItem({
         restaurantId: restId,
         categoryId: finalCat,
         barCategory: isBar ? (finalCat as any) : undefined,
@@ -680,13 +745,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         glassSize: isBar ? '60ml Peg' : undefined,
       });
 
+      if (added) {
+        setMenuItems((prev) => [...prev, added]);
+      }
+
       addToast('success', `${isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `"${newItem.name.trim()}" added to catalog`);
       setIsAddItemModalOpen(false);
       setSelectedMenuCategory('ALL');
       setMenuSearchQuery('');
       setDietaryFilter('ALL');
       setNewItem({ name: '', description: '', price: '', categoryId: isBar ? defaultBarCat : defaultFoodCat, isVegetarian: true, image: '' });
-      await loadData();
     } catch (err: any) {
       addToast('error', 'Failed to Add Item', err.message || 'An error occurred while adding the dish.');
     }
@@ -704,7 +772,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     }
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     const isVeg = editingItem.isVegetarian !== undefined ? editingItem.isVegetarian : (editingItem.dietaryType === 'VEG');
-    await api.updateMenuItem(editingItem.id, {
+    const itemUpdates = {
       restaurantId: restId,
       name: editingItem.name,
       description: editingItem.description,
@@ -712,7 +780,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       categoryId: editingItem.categoryId,
       barCategory: editingItem.barCategory,
       isVegetarian: isVeg,
-      dietaryType: isVeg ? 'VEG' : 'NON_VEG',
+      dietaryType: (isVeg ? 'VEG' : 'NON_VEG') as 'VEG' | 'NON_VEG',
       brand: editingItem.brand,
       alcoholPercentage: editingItem.alcoholPercentage,
       glassSize: editingItem.glassSize,
@@ -721,20 +789,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       isAvailable: editingItem.isAvailable,
       targetDestination: editingItem.targetDestination,
       isAlcoholic: editingItem.isAlcoholic,
-    });
+    };
+    await api.updateMenuItem(editingItem.id, itemUpdates);
+    setMenuItems((prev) =>
+      prev.map((m) => (m.id === editingItem.id ? { ...m, ...itemUpdates } : m))
+    );
     addToast('success', 'Menu Item Updated', `${editingItem.name} updated successfully`);
     setIsEditItemModalOpen(false);
     setEditingItem(null);
-    await loadData();
   };
 
   const handleDeleteItem = async () => {
     if (!deletingItem) return;
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     await api.deleteMenuItem(deletingItem.id, restId);
+    setMenuItems((prev) => prev.filter((m) => m.id !== deletingItem.id));
     addToast('info', 'Menu Item Deleted', `${deletingItem.name} removed from menu`);
     setDeletingItem(null);
-    await loadData();
   };
 
 
@@ -762,6 +833,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       });
 
       if (created) {
+        setEmployees((prev) => [...prev.filter((e) => e.id !== created.id), created]);
         addToast('success', 'Staff Member Created 🎉', `${created.name} (${created.role}) can now log in with password: ${initialPass}`);
         setIsAddStaffModalOpen(false);
         setNewStaff({
@@ -774,7 +846,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
           hourlyRate: '18.50',
         });
         setNewStaffPassword('');
-        await loadData();
       }
     } catch (err: any) {
       addToast('error', 'Employee Creation Failed ❌', err.message || 'Error persisting employee record to database.');
@@ -783,7 +854,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
 
   const handleSaveEditStaff = async () => {
     if (!editingStaff) return;
-    await api.updateEmployee(editingStaff.id, {
+    const staffUpdates = {
       name: editingStaff.name,
       role: editingStaff.role,
       email: editingStaff.email,
@@ -791,23 +862,28 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       shift: editingStaff.shift,
       assignedSection: editingStaff.assignedSection,
       hourlyRate: editingStaff.hourlyRate,
-    });
+    };
+    await api.updateEmployee(editingStaff.id, staffUpdates);
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === editingStaff.id ? { ...e, ...staffUpdates } : e))
+    );
     addToast('success', 'Staff Record Updated', `${editingStaff.name}'s profile was updated.`);
     setIsEditStaffModalOpen(false);
     setEditingStaff(null);
-    loadData();
   };
 
   const handleToggleAccountDisabled = async (employeeId: string, currentName: string) => {
     const updated = await api.toggleEmployeeAccountStatus(employeeId);
     if (updated) {
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === employeeId ? { ...e, isAccountDisabled: updated.isAccountDisabled } : e))
+      );
       if (updated.isAccountDisabled) {
         addToast('warning', 'Staff Account Access Disabled', `${currentName} can no longer log in.`);
       } else {
         addToast('success', 'Staff Account Access Restored', `${currentName} can now log in.`);
       }
     }
-    loadData();
   };
 
   const handleOpenResetPasswordModal = (employee: Employee) => {
@@ -823,21 +899,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     addToast('success', 'Password Reset Completed', `${resetPassStaff.name}'s portal password was updated.`);
     setIsResetPassModalOpen(false);
     setResetPassStaff(null);
-    loadData();
   };
 
   const handleDeleteStaff = async (employeeId: string, name: string) => {
     await api.deleteEmployee(employeeId);
+    setEmployees((prev) => prev.filter((e) => e.id !== employeeId));
     addToast('info', 'Staff Member Deleted', `${name} has been removed from staff roster.`);
-    loadData();
   };
 
   const handleToggleStaffStatus = async (employeeId: string, currentStatus: Employee['status']) => {
     const nextStatus: Employee['status'] =
       currentStatus === 'ON_CLOCK' ? 'ON_BREAK' : currentStatus === 'ON_BREAK' ? 'OFF_CLOCK' : 'ON_CLOCK';
     await api.updateEmployeeStatus(employeeId, nextStatus);
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === employeeId ? { ...e, status: nextStatus, isClockedIn: nextStatus === 'ON_CLOCK' } : e))
+    );
     addToast('success', 'Staff Clock Status Updated', `Status changed to ${nextStatus.replace('_', ' ')}`);
-    loadData();
   };
 
   // Raw Material & Supplier Handlers

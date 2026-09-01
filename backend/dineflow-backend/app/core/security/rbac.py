@@ -70,14 +70,9 @@ async def get_current_firebase_admin(
     if not is_authorized:
         raise RBACError("Forbidden: Access Denied.")
 
-    # Set custom claim for verified admin
-    try:
-        set_platform_admin_custom_claims(uid)
-        claims["admin"] = True
-        claims["role"] = "PLATFORM_ADMIN"
-    except Exception:
-        claims["admin"] = True
-        claims["role"] = "PLATFORM_ADMIN"
+    # Verified admin claims set in-memory for this request
+    claims["admin"] = True
+    claims["role"] = "PLATFORM_ADMIN"
 
     return claims
 

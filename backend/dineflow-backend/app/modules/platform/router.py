@@ -132,6 +132,16 @@ async def approve_restaurant(
             detail=f"Restaurant '{action.restaurant_id}' not found."
         )
 
+    # Idempotent: If already live and approved, return immediate success without redundant writes
+    if rest.is_approved and rest.lifecycle_status == "LIVE":
+        return {
+            "status": "SUCCESS",
+            "message": f"Restaurant '{rest.name}' is already approved and LIVE.",
+            "restaurant_id": action.restaurant_id,
+            "lifecycleStatus": "LIVE",
+            "already_approved": True
+        }
+
     rest.is_approved = True
     rest.lifecycle_status = "LIVE"
     rest.status = "OPEN"
@@ -214,7 +224,19 @@ async def approve_restaurant(
         "status": "SUCCESS",
         "message": f"Restaurant '{rest.name}' ({action.restaurant_id}) approved successfully.",
         "restaurant_id": action.restaurant_id,
-        "lifecycleStatus": "LIVE"
+        "restaurantId": action.restaurant_id,
+        "isApproved": True,
+        "is_approved": True,
+        "lifecycleStatus": "LIVE",
+        "restaurant": {
+            "id": rest.id,
+            "name": rest.name,
+            "isApproved": True,
+            "lifecycleStatus": "LIVE",
+            "status": "OPEN",
+            "approvedAt": rest.approved_at.isoformat() if rest.approved_at else None,
+            "approvedBy": rest.approved_by,
+        }
     }
 
 

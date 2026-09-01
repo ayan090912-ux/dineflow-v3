@@ -1978,16 +1978,21 @@ export class DinelyApiClient {
   }
 
   async approveRestaurant(restaurantId: string) {
-    try {
-      const apiBase = getApiBaseUrl();
-      const headers = this.getAuthHeader('ADMIN');
-      await fetch(`${apiBase}/admin/restaurants/approve`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ restaurant_id: restaurantId }),
-      });
-    } catch (e) {
-      console.warn('Backend approve call failed:', e);
+    const apiBase = getApiBaseUrl();
+    const headers = this.getAuthHeader('ADMIN');
+    const res = await fetch(`${apiBase}/admin/restaurants/approve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ restaurant_id: restaurantId }),
+    });
+
+    if (!res.ok) {
+      let errMsg = 'Failed to approve restaurant';
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.detail || errJson.message || errMsg;
+      } catch {}
+      throw new Error(errMsg);
     }
 
     const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
@@ -1999,39 +2004,6 @@ export class DinelyApiClient {
       rest.approvedAt = now;
       rest.rejectionReason = undefined;
       rest.requestedChanges = undefined;
-
-      // Ensure tables entered during setup are created in DB
-      const targetId = rest.id;
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food';
-      const totalCount = Math.max(1, rest.tablesCount || (rest.indoorTablesCount || 8) + (rest.outdoorTablesCount || 2));
-
-      let existingTables = (this.tables || []).filter((t) => t.restaurantId === targetId);
-      if (existingTables.length === 0) {
-        let tableNum = 1;
-        const mainCount = Math.ceil(totalCount * 0.75);
-        for (let i = 0; i < totalCount; i++) {
-          const tName = `Table ${String(tableNum).padStart(2, '0')}`;
-          const isOutdoor = i >= mainCount;
-          this.tables.push({
-            id: `tbl-${targetId}-${tableNum}`,
-            restaurantId: targetId,
-            tableNumber: tName,
-            capacity: 4,
-            section: isOutdoor ? 'Patio & Outdoor' : 'Main Dining Hall',
-            shape: isOutdoor ? 'ROUND' : 'RECTANGLE',
-            status: 'AVAILABLE',
-            qrCodeUrl: `${origin}/customer?restaurant=${targetId}&tableId=tbl-${targetId}-${tableNum}&table=${encodeURIComponent(tName)}`,
-          });
-          tableNum++;
-        }
-      }
-
-      // Update active tenant pointers and session
-      this.currentRestaurantId = rest.id;
-      if (this.currentUser) {
-        this.currentUser.restaurantId = rest.id;
-        this.saveSession(this.currentUser, this.currentUser.tokens || ({} as any), rest.id);
-      }
 
       // Ensure associated owner user is linked to this restaurant
       const user = this.users.find(

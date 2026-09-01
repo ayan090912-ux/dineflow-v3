@@ -74,6 +74,16 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100);",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS items_snapshot_json JSONB;",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS orders_snapshot_json JSONB;",
+        # High-Performance Indexes for Neon PostgreSQL Queries
+        "CREATE INDEX IF NOT EXISTS idx_orders_rest_status ON orders (restaurant_id, status);",
+        "CREATE INDEX IF NOT EXISTS idx_orders_rest_created ON orders (restaurant_id, created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_table_sessions_rest_status ON table_sessions (restaurant_id, status);",
+        "CREATE INDEX IF NOT EXISTS idx_bills_rest_status ON bills (restaurant_id, status);",
+        "CREATE INDEX IF NOT EXISTS idx_bills_rest_created ON bills (restaurant_id, created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_customer_requests_rest_status ON customer_requests (restaurant_id, status);",
+        "CREATE INDEX IF NOT EXISTS idx_tables_rest_num ON tables (restaurant_id, table_number);",
+        "CREATE INDEX IF NOT EXISTS idx_restaurants_lifecycle ON restaurants (lifecycle_status);",
+        "CREATE INDEX IF NOT EXISTS idx_restaurants_approved ON restaurants (is_approved);",
     ]
     for stmt in alter_statements:
         try:

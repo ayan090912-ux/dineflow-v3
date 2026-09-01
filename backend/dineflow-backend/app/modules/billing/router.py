@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, or_
 
 from app.core.database.connection import get_db
 from app.modules.restaurants.models import Restaurant
@@ -72,41 +72,26 @@ async def find_restaurant_by_identifier(restaurant_id: str, db: AsyncSession) ->
     
     clean_id = restaurant_id.strip()
 
-    # 1. Direct ID match
-    stmt = select(Restaurant).where(Restaurant.id == clean_id, Restaurant.deleted_at.is_(None))
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
-    if rest:
-        return rest
-    
-    # 2. Case-insensitive ID match
-    stmt = select(Restaurant).where(func.lower(Restaurant.id) == clean_id.lower(), Restaurant.deleted_at.is_(None))
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
-    if rest:
-        return rest
-
-    # 3. Slug match
-    stmt = select(Restaurant).where(Restaurant.slug == clean_id.lower(), Restaurant.deleted_at.is_(None))
+    # Fast single indexed query covering exact ID, lowercased ID, slug, and lowercased name
+    stmt = select(Restaurant).where(
+        Restaurant.deleted_at.is_(None),
+        or_(
+            Restaurant.id == clean_id,
+            func.lower(Restaurant.id) == clean_id.lower(),
+            Restaurant.slug == clean_id.lower(),
+            func.lower(Restaurant.name) == clean_id.lower()
+        )
+    ).limit(1)
     res = await db.execute(stmt)
     rest = res.scalar_one_or_none()
     if rest:
         return rest
 
-    # 4. Name match (case-insensitive)
-    stmt = select(Restaurant).where(func.lower(Restaurant.name) == clean_id.lower(), Restaurant.deleted_at.is_(None))
-    res = await db.execute(stmt)
-    rest = res.scalar_one_or_none()
-    if rest:
-        return rest
-
-    # 5. Fallback for default identifiers
+    # Fallback for default identifiers if explicitly requested
     if clean_id.lower() in ["rest-1", "default", "current", "cafe-co", "cafeco"]:
-        stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None)).order_by(Restaurant.created_at.asc())
+        stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None)).order_by(Restaurant.created_at.asc()).limit(1)
         res = await db.execute(stmt)
-        rest = res.scalars().first()
-        if rest:
-            return rest
+        return res.scalar_one_or_none()
 
     return None
 
@@ -566,6 +551,8 @@ async def list_restaurant_bills(
     status_filter: Optional[str] = None,
     payment_status: Optional[str] = None,
     table_number: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
     rest = await find_restaurant_by_identifier(restaurant_id, db)
@@ -579,6 +566,7 @@ async def list_restaurant_bills(
     if table_number:
         query = query.where(Bill.table_number == table_number)
 
+    query = query.limit(limit).offset(offset)
     res = await db.execute(query)
     bills = list(res.scalars().all())
     return [format_bill_response(b) for b in bills]

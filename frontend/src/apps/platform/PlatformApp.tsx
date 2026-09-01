@@ -80,33 +80,54 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [reminderType, setReminderType] = useState('PAYMENT');
   const [reminderMessage, setReminderMessage] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
+  const [isApproving, setIsApproving] = useState(false);
 
   useEffect(() => {
     loadData();
     const unsub = realtimeBus.subscribe((event: any) => {
-      if (
-        event.type === 'RestaurantRegistrationSubmitted' ||
-        event.type === 'RESTAURANT_APPROVED' ||
-        event.type === 'RESTAURANT_REJECTED' ||
-        event.type === 'RestaurantStatusUpdated'
-      ) {
-        loadData();
+      if (event.type === 'RESTAURANT_APPROVED') {
+        const approvedId = event.restaurantId || event.restaurant_id;
+        if (approvedId) {
+          setAllRestaurants((prev) =>
+            prev.map((r) =>
+              r.id === approvedId ? { ...r, isApproved: true, lifecycleStatus: 'LIVE', status: 'OPEN' } : r
+            )
+          );
+        }
+      } else if (event.type === 'RestaurantRegistrationSubmitted') {
+        api.getPlatformRestaurants().then(setAllRestaurants).catch(() => {});
+        api.getPlatformStats().then(setStats).catch(() => {});
+      } else if (event.type === 'RestaurantStatusUpdated') {
+        const rId = event.restaurantId || event.restaurant_id;
+        if (rId && event.lifecycleStatus) {
+          setAllRestaurants((prev) =>
+            prev.map((r) =>
+              r.id === rId ? { ...r, lifecycleStatus: event.lifecycleStatus, isApproved: event.isApproved ?? r.isApproved } : r
+            )
+          );
+        }
       }
     });
     return () => unsub();
   }, []);
 
   const loadData = async () => {
-    const s = await api.getPlatformStats();
-    const orgs = await api.getOrganizations();
-    const allRests = await api.getPlatformRestaurants();
-    const logs = await api.getAuditLogs();
-    const orders = await api.getOrders();
-    setStats(s);
-    setOrganizations(orgs);
-    setAllRestaurants(allRests);
-    setAuditLogs(logs);
-    setAllOrders(orders);
+    try {
+      const [s, orgs, allRests, logs, orders] = await Promise.all([
+        api.getPlatformStats().catch(() => null),
+        api.getOrganizations().catch(() => []),
+        api.getPlatformRestaurants().catch(() => []),
+        api.getAuditLogs().catch(() => []),
+        api.getOrders().catch(() => []),
+      ]);
+      if (s) setStats(s);
+      if (orgs) setOrganizations(orgs);
+      if (allRests) setAllRestaurants(allRests);
+      if (logs) setAuditLogs(logs);
+      if (orders) setAllOrders(orders);
+    } catch (e) {
+      console.warn('PlatformApp loadData warning:', e);
+    }
   };
 
   const platformChartData = React.useMemo(() => {
@@ -151,10 +172,26 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   });
 
   const handleApprove = async (id: string) => {
-    await api.approveRestaurant(id);
-    showSuccess('Restaurant Approved & Activated Live! 🚀');
-    closeModals();
-    await loadData();
+    if (isApproving) return;
+    setIsApproving(true);
+    const prevRestaurants = [...allRestaurants];
+    // Instant optimistic update: set approved & LIVE
+    setAllRestaurants((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, isApproved: true, lifecycleStatus: 'LIVE', status: 'OPEN' } : r
+      )
+    );
+    try {
+      await api.approveRestaurant(id);
+      showSuccess('Restaurant Approved & Activated Live! 🚀');
+      closeModals();
+    } catch (err: any) {
+      // Revert optimistic update on failure
+      setAllRestaurants(prevRestaurants);
+      alert(`Approval error: ${err.message || 'Failed to approve restaurant'}`);
+    } finally {
+      setIsApproving(false);
+    }
   };
 
   const handleReject = async (id: string) => {
@@ -162,52 +199,100 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       alert('A rejection reason is required before declining a restaurant application.');
       return;
     }
-    await api.rejectRestaurant(id, actionReason.trim());
-    showSuccess('Application Declined. Owner notified.');
-    closeModals();
-    await loadData();
+    setAllRestaurants((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, isApproved: false, lifecycleStatus: 'REJECTED', rejectionReason: actionReason.trim() } : r
+      )
+    );
+    try {
+      await api.rejectRestaurant(id, actionReason.trim());
+      showSuccess('Application Declined. Owner notified.');
+      closeModals();
+    } catch (err: any) {
+      alert(`Rejection error: ${err.message || 'Failed to reject'}`);
+    }
   };
 
   const handleRequestChanges = async (id: string) => {
-    await api.requestChangesRestaurant(id, actionReason || 'Please verify GST number and add menu items.');
-    showSuccess('Changes Requested. Owner notified.');
-    closeModals();
-    await loadData();
+    const reason = actionReason || 'Please verify GST number and add menu items.';
+    setAllRestaurants((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, requestedChanges: reason } : r
+      )
+    );
+    try {
+      await api.requestChangesRestaurant(id, reason);
+      showSuccess('Changes Requested. Owner notified.');
+      closeModals();
+    } catch (err: any) {
+      alert(`Request error: ${err.message || 'Failed to request changes'}`);
+    }
   };
 
   const handleActivate = async (id: string) => {
-    await api.activateRestaurant(id);
-    showSuccess('Restaurant Activated successfully.');
-    closeModals();
-    await loadData();
+    setAllRestaurants((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, status: 'OPEN', lifecycleStatus: 'LIVE', isApproved: true } : r
+      )
+    );
+    try {
+      await api.activateRestaurant(id);
+      showSuccess('Restaurant Activated successfully.');
+      closeModals();
+    } catch (err: any) {
+      alert(`Activation error: ${err.message}`);
+    }
   };
 
   const handleDeactivate = async (id: string) => {
-    await api.deactivateRestaurant(id, actionReason || 'Deactivated by Platform Admin.');
-    showSuccess('Restaurant set to Inactive/Deactivated.');
-    closeModals();
-    await loadData();
+    setAllRestaurants((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, status: 'CLOSED' } : r
+      )
+    );
+    try {
+      await api.deactivateRestaurant(id, actionReason || 'Deactivated by Platform Admin.');
+      showSuccess('Restaurant set to Inactive/Deactivated.');
+      closeModals();
+    } catch (err: any) {
+      alert(`Deactivation error: ${err.message}`);
+    }
   };
 
   const handleSuspend = async (id: string) => {
-    await api.suspendRestaurant(id, actionReason || 'Administrative Suspension');
-    showSuccess('Account Suspended. Owner login disabled.');
-    closeModals();
-    await loadData();
+    setAllRestaurants((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, lifecycleStatus: 'SUSPENDED' } : r
+      )
+    );
+    try {
+      await api.suspendRestaurant(id, actionReason || 'Administrative Suspension');
+      showSuccess('Account Suspended. Owner login disabled.');
+      closeModals();
+    } catch (err: any) {
+      alert(`Suspension error: ${err.message}`);
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await api.deleteRestaurant(id);
-    showSuccess('Restaurant soft-deleted. Record retained in DB.');
-    closeModals();
-    await loadData();
+    setAllRestaurants((prev) => prev.filter((r) => r.id !== id));
+    try {
+      await api.deleteRestaurant(id);
+      showSuccess('Restaurant soft-deleted. Record retained in DB.');
+      closeModals();
+    } catch (err: any) {
+      alert(`Delete error: ${err.message}`);
+    }
   };
 
   const handleSendReminder = async (id: string) => {
-    await api.sendReminder(id, reminderType, reminderMessage);
-    showSuccess('Reminder Notification dispatched to Owner!');
-    closeModals();
-    await loadData();
+    try {
+      await api.sendReminder(id, reminderType, reminderMessage);
+      showSuccess('Reminder Notification dispatched to Owner!');
+      closeModals();
+    } catch (err: any) {
+      alert(`Reminder error: ${err.message}`);
+    }
   };
 
   const showSuccess = (msg: string) => {
@@ -1065,8 +1150,15 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               </Button>
 
               {actionModal === 'APPROVE' && (
-                <Button variant="brand" size="sm" onClick={() => handleApprove(selectedRestaurant.id)} className="bg-emerald-600 hover:bg-emerald-500 font-bold">
-                  Confirm Approval & Launch
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => handleApprove(selectedRestaurant.id)}
+                  disabled={isApproving}
+                  isLoading={isApproving}
+                  className="bg-emerald-600 hover:bg-emerald-500 font-bold min-w-[200px]"
+                >
+                  {isApproving ? 'Approving & Launching...' : 'Confirm Approval & Launch'}
                 </Button>
               )}
 

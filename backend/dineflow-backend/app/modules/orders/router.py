@@ -328,6 +328,8 @@ async def get_customer_orders(
 async def get_restaurant_orders(
     restaurant_id: str,
     active_only: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -348,10 +350,9 @@ async def get_restaurant_orders(
             else:
                 query = query.where(Order.status.in_(["PENDING", "PREPARING", "READY"]))
 
-        query = query.order_by(Order.created_at.desc())
+        query = query.order_by(Order.created_at.desc()).limit(limit).offset(offset)
         result = await db.execute(query)
         orders = result.scalars().all()
-        print(f"[KITCHEN_ORDER_FETCH] restaurant_id={restaurant_id} active_only={active_only} count={len(orders)}")
         return [format_order_response(o) for o in orders]
     except Exception as e:
         print("[KITCHEN_ORDER_FETCH_EXCEPT]:", e)

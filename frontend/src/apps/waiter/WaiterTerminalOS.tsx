@@ -197,10 +197,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   useEffect(() => {
     loadData(false);
 
-    // Safety-net reconciliation polling (relaxed 12s interval to prevent UI freezing)
+    // Safety-net reconciliation sync (relaxed 60s interval to prevent UI freezing)
     const pollInterval = setInterval(() => {
-      loadData(true);
-    }, 12000);
+      if (document.visibilityState === 'visible') {
+        loadData(true);
+      }
+    }, 60000);
 
     const handledEventIds = new Set<string>();
 
@@ -386,10 +388,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     showToast('Request Accepted ✅', 'Customer request accepted.', 'success');
     try {
       await api.updateCustomerRequest(requestId, 'IN_PROGRESS', waiterName);
-      loadData();
     } catch (err: any) {
       showToast('Error', err.message || 'Failed to accept request', 'warning');
-      loadData();
+      loadData(true);
     }
   };
 
@@ -401,10 +402,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     showToast('Request Completed ✅', 'Request fulfilled and cleared.', 'success');
     try {
       await api.updateCustomerRequest(requestId, 'COMPLETED', waiterName);
-      loadData();
     } catch (err: any) {
       showToast('Error', err.message || 'Failed to complete request', 'warning');
-      loadData();
+      loadData(true);
     }
   };
 
@@ -417,10 +417,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     showToast('Order Delivered 🎉', `Order #${orderId} delivered to customer`, 'success');
     try {
       await api.deliverOrder(orderId);
-      loadData();
     } catch (err: any) {
       showToast('Delivery Error ⚠️', err.message || 'Failed to deliver order', 'warning');
-      loadData();
+      loadData(true);
     }
   };
 

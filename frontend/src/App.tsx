@@ -1,21 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { LandingWebsite } from './apps/landing/LandingWebsite';
-import { PlatformApp } from './apps/platform/PlatformApp';
-import { RestaurantApp } from './apps/restaurant/RestaurantApp';
-import { CustomerApp } from './apps/customer/CustomerApp';
-import { WaiterTerminalOS } from './apps/waiter/WaiterTerminalOS';
-import { KitchenETADashboard } from './apps/restaurant/KitchenETADashboard';
-import { BarTerminal } from './apps/bar/BarTerminal';
-import { InventoryTerminalOS } from './apps/inventory/InventoryTerminalOS';
-import { RestaurantOperationsCenter } from './apps/operations/RestaurantOperationsCenter';
-import { AuthPage } from './apps/auth/AuthPage';
-import { RoleLoginPage } from './apps/auth/RoleLoginPage';
-import { NotFoundPage } from './apps/auth/NotFoundPage';
-import { ModuleNotEnabledPage } from './apps/auth/ModuleNotEnabledPage';
-import { SetupWizard } from './apps/onboarding/SetupWizard';
-import { PendingApprovalPage } from './apps/onboarding/PendingApprovalPage';
-import { WorkspaceSelector } from './apps/onboarding/WorkspaceSelector';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
 import { ErrorBoundary, DinelyLogo } from './packages/ui';
 import { api, getPortalScopeFromPath } from './packages/api/client';
@@ -24,6 +8,33 @@ import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } 
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
 import { firebaseAuth } from './packages/auth/firebase';
 import { Loader2 } from 'lucide-react';
+
+// Lazy-loaded route bundles for optimal bundle size and instantaneous initial load
+const LandingWebsite = lazy(() => import('./apps/landing/LandingWebsite').then(m => ({ default: m.LandingWebsite })));
+const PlatformApp = lazy(() => import('./apps/platform/PlatformApp').then(m => ({ default: m.PlatformApp })));
+const RestaurantApp = lazy(() => import('./apps/restaurant/RestaurantApp').then(m => ({ default: m.RestaurantApp })));
+const CustomerApp = lazy(() => import('./apps/customer/CustomerApp').then(m => ({ default: m.CustomerApp })));
+const WaiterTerminalOS = lazy(() => import('./apps/waiter/WaiterTerminalOS').then(m => ({ default: m.WaiterTerminalOS })));
+const KitchenETADashboard = lazy(() => import('./apps/restaurant/KitchenETADashboard').then(m => ({ default: m.KitchenETADashboard })));
+const BarTerminal = lazy(() => import('./apps/bar/BarTerminal').then(m => ({ default: m.BarTerminal })));
+const InventoryTerminalOS = lazy(() => import('./apps/inventory/InventoryTerminalOS').then(m => ({ default: m.InventoryTerminalOS })));
+const RestaurantOperationsCenter = lazy(() => import('./apps/operations/RestaurantOperationsCenter').then(m => ({ default: m.RestaurantOperationsCenter })));
+const AuthPage = lazy(() => import('./apps/auth/AuthPage').then(m => ({ default: m.AuthPage })));
+const RoleLoginPage = lazy(() => import('./apps/auth/RoleLoginPage').then(m => ({ default: m.RoleLoginPage })));
+const NotFoundPage = lazy(() => import('./apps/auth/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
+const ModuleNotEnabledPage = lazy(() => import('./apps/auth/ModuleNotEnabledPage').then(m => ({ default: m.ModuleNotEnabledPage })));
+const SetupWizard = lazy(() => import('./apps/onboarding/SetupWizard').then(m => ({ default: m.SetupWizard })));
+const PendingApprovalPage = lazy(() => import('./apps/onboarding/PendingApprovalPage').then(m => ({ default: m.PendingApprovalPage })));
+const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector').then(m => ({ default: m.WorkspaceSelector })));
+
+function RouteLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3">
+      <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
+      <span className="text-xs font-semibold text-slate-400">Loading workspace...</span>
+    </div>
+  );
+}
 
 function AppContent() {
   const [currentPath, setCurrentPath] = useState<string>(() => {
@@ -90,12 +101,17 @@ function AppContent() {
     return () => unsubscribeAuth();
   }, []);
 
-  // Fetch active restaurant details when route, user, or scope changes
+  // Fetch active restaurant details on mount or when restaurant ID changes (not on every sub-route)
   useEffect(() => {
     let isMounted = true;
+    const activeRestId = api.getCurrentRestaurantId();
+    if (currentRestaurant && currentRestaurant.id === activeRestId) {
+      return;
+    }
+
     const loadRestaurant = async () => {
       try {
-        const rest = await api.getRestaurantDetails();
+        const rest = await api.getRestaurantDetails(activeRestId || undefined);
         if (isMounted && rest) {
           setCurrentRestaurant(rest);
         }
@@ -125,7 +141,7 @@ function AppContent() {
       isMounted = false;
       unsubRealtime();
     };
-  }, [cleanPath, currentUser]);
+  }, [currentUser]);
 
   // Load orders for kitchen view when kitchen path is active
   useEffect(() => {
@@ -715,7 +731,9 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       <div className="flex-1 flex flex-col">
-        {renderRoute}
+        <Suspense fallback={<RouteLoadingFallback />}>
+          {renderRoute}
+        </Suspense>
       </div>
     </div>
   );

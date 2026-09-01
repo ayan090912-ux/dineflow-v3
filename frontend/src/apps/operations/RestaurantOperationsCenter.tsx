@@ -220,10 +220,12 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
   useEffect(() => {
     loadAllOperationsData(false);
 
-    // Auto-poll fallback every 4 seconds to guarantee consistency
+    // Auto-poll fallback every 60 seconds when visible (replaces aggressive 4s storm)
     const pollInterval = setInterval(() => {
-      loadAllOperationsData(true);
-    }, 4000);
+      if (document.visibilityState === 'visible') {
+        loadAllOperationsData(true);
+      }
+    }, 60000);
 
     // Connect WebSocket
     const restId = currentRestaurantId;
@@ -247,17 +249,15 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
         handledEventIds.add(evtId);
       }
 
-      // Live Reload Data
-      loadAllOperationsData(true);
-
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const tblNum = (event as any).tableNumber || (event as any).table_number || 'Floor';
 
-      // Event Ticker & Audio Notifications
+      // Targeted Event Handling
       if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated') {
         const reqType = (event as any).requestType || 'WATER';
         if (!isAudioMuted) playChime('WAITER');
         showToast(`Customer Request 🛎️`, `${tblNum} requested ${reqType}`, 'warning');
+        api.getCustomerRequests(restId).then(setCustomerRequests).catch(() => {});
         setAuditEvents((prev) => [
           { id: `ev-${Date.now()}`, time: nowStr, text: `${tblNum}: Requested ${reqType}`, type: 'WAITER' },
           ...prev.slice(0, 40),
@@ -265,6 +265,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
       } else if (event.type === 'order_created' || event.type === 'OrderCreated') {
         if (!isAudioMuted) playChime('ORDER');
         showToast(`New Order Placed 🔥`, `Order #${(event.orderId || '').slice(-4)} from ${tblNum}`, 'success');
+        api.getOrders(restId).then(setOrders).catch(() => {});
+        api.getActiveTableSessions(restId).then(setActiveSessions).catch(() => {});
         setAuditEvents((prev) => [
           { id: `ev-${Date.now()}`, time: nowStr, text: `New Order: ${tblNum} (Total: ₹${(event as any).grandTotal || '0'})`, type: 'ORDER' },
           ...prev.slice(0, 40),
@@ -272,12 +274,22 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
       } else if (event.type === 'order_ready' || event.type === 'OrderReady') {
         if (!isAudioMuted) playChime('READY');
         showToast(`Plate Ready to Serve 🍽️`, `Order for ${tblNum} is ready at pickup counter`, 'info');
+        setOrders((prev) =>
+          prev.map((o) => (o.id === event.orderId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o))
+        );
         setAuditEvents((prev) => [
           { id: `ev-${Date.now()}`, time: nowStr, text: `Kitchen: Order for ${tblNum} is READY`, type: 'KITCHEN' },
           ...prev.slice(0, 40),
         ]);
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
+        const sessId = (event as any).tableSessionId || (event as any).sessionId;
         showToast(`Table Session Closed 🧹`, `Table ${tblNum} session closed & cleared`, 'info');
+        if (sessId) {
+          setActiveSessions((prev) => prev.filter((s) => s.id !== sessId));
+        }
+        setTables((prev) =>
+          prev.map((t) => (t.tableNumber === tblNum || (t as any).number === tblNum ? { ...t, status: 'AVAILABLE', isOccupied: false } : t))
+        );
         setAuditEvents((prev) => [
           { id: `ev-${Date.now()}`, time: nowStr, text: `Floor: Table ${tblNum} session closed`, type: 'TABLE' },
           ...prev.slice(0, 40),

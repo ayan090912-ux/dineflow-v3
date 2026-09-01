@@ -32,6 +32,8 @@ if "sqlite" not in db_url:
         "pool_size": settings.DB_POOL_SIZE,
         "max_overflow": settings.DB_MAX_OVERFLOW,
         "pool_pre_ping": settings.DB_POOL_PRE_PING,
+        "pool_recycle": 300,
+        "pool_timeout": 30,
         "connect_args": {"ssl": True} if "localhost" not in db_url and "127.0.0.1" not in db_url else {}
     })
 

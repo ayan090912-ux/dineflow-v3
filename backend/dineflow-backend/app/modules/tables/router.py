@@ -51,24 +51,15 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     active_tbl_ids = {s.table_id for s in active_sessions}
     active_tbl_nums = {s.table_number for s in active_sessions}
 
-    # Dynamically update table status based strictly on active customer session
-    modified = False
+    # Dynamically derive table occupancy based on active customer sessions in-memory
     for tbl in tables:
         is_session_active = (tbl.id in active_tbl_ids) or (tbl.table_number in active_tbl_nums)
         if is_session_active:
-            if tbl.status == "AVAILABLE" or not tbl.is_occupied:
-                tbl.status = "OCCUPIED"
-                tbl.is_occupied = True
-                modified = True
-        else:
-            if tbl.status != "AVAILABLE" or tbl.is_occupied:
-                tbl.status = "AVAILABLE"
-                tbl.is_occupied = False
-                tbl.active_session_id = None
-                modified = True
-
-    if modified:
-        await db.commit()
+            tbl.status = "OCCUPIED"
+            tbl.is_occupied = True
+        elif tbl.status == "OCCUPIED" and not tbl.is_reserved:
+            tbl.status = "AVAILABLE"
+            tbl.is_occupied = False
 
     return tables
 
