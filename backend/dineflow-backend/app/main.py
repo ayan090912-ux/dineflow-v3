@@ -18,7 +18,7 @@ import app.modules.tables.models
 import app.modules.orders.models
 import app.modules.customer_requests.models
 import app.modules.taxes.models
-from app.scripts.cafe_co_migration import run_migration
+from app.scripts.clean_production_applications import run_clean_production_applications
 
 
 from sqlalchemy import text
@@ -63,6 +63,9 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255);",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS public_slug VARCHAR(255);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismissed_by VARCHAR(255);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismiss_reason TEXT;",
         "UPDATE restaurants SET public_slug = slug WHERE public_slug IS NULL;",
         # Bills Columns
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
@@ -86,12 +89,14 @@ async def ensure_db_schema_columns(conn):
         "CREATE INDEX IF NOT EXISTS idx_tables_rest_num ON tables (restaurant_id, table_number);",
         "CREATE INDEX IF NOT EXISTS idx_restaurants_lifecycle ON restaurants (lifecycle_status);",
         "CREATE INDEX IF NOT EXISTS idx_restaurants_approved ON restaurants (is_approved);",
+        "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_uid ON restaurants (owner_uid);",
+        "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_email ON restaurants (owner_email);",
     ]
     for stmt in alter_statements:
         try:
             await conn.execute(text(stmt))
-        except Exception as err:
-            print(f"[SCHEMA_MIGRATION_NOTICE] {stmt} -> {err}")
+        except Exception as e:
+            pass
 
 
 
@@ -101,7 +106,7 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await ensure_db_schema_columns(conn)
             await conn.run_sync(Base.metadata.create_all)
-        await run_migration()
+        await run_clean_production_applications()
     except Exception as e:
         print("[STARTUP NOTICE] Database table initialization:", e)
     yield

@@ -35,6 +35,7 @@ import {
   Globe,
   Lock,
   LogOut,
+  Archive,
 } from 'lucide-react';
 import {
   Button,
@@ -75,7 +76,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   // Modals state
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   const [viewDetailModal, setViewDetailModal] = useState(false);
-  const [actionModal, setActionModal] = useState<'APPROVE' | 'REJECT' | 'REQUEST_CHANGES' | 'ACTIVATE' | 'DEACTIVATE' | 'SUSPEND' | 'DELETE' | 'REMINDER' | null>(null);
+  const [actionModal, setActionModal] = useState<'APPROVE' | 'REJECT' | 'REQUEST_CHANGES' | 'DISMISS' | 'ACTIVATE' | 'DEACTIVATE' | 'SUSPEND' | 'DELETE' | 'REMINDER' | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [reminderType, setReminderType] = useState('PAYMENT');
   const [reminderMessage, setReminderMessage] = useState('');
@@ -229,6 +230,24 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       closeModals();
     } catch (err: any) {
       alert(`Request error: ${err.message || 'Failed to request changes'}`);
+    }
+  };
+
+  const handleDismiss = async (id: string) => {
+    const reason = actionReason.trim() || 'Archived test or duplicate application from approval queue';
+    const prevRestaurants = [...allRestaurants];
+    setAllRestaurants((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, isApproved: false, lifecycleStatus: 'ARCHIVED', status: 'CLOSED' } : r
+      )
+    );
+    try {
+      await api.dismissRestaurant(id, reason);
+      showSuccess('Application archived and safely removed from queue.');
+      closeModals();
+    } catch (err: any) {
+      setAllRestaurants(prevRestaurants);
+      alert(`Dismiss error: ${err.message || 'Failed to dismiss application'}`);
     }
   };
 
@@ -635,7 +654,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         setViewDetailModal(true);
                       }}
                     >
-                      View Restaurant
+                      View
                     </Button>
                     <Button
                       variant="brand"
@@ -670,6 +689,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       }}
                     >
                       Reject
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                      title="Archive/Dismiss test or duplicate record"
+                      icon={<Archive className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setSelectedRestaurant(rest);
+                        setActionModal('DISMISS');
+                      }}
+                    >
+                      Dismiss
                     </Button>
                   </div>
                 </Card>
@@ -1094,6 +1126,24 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               </p>
             )}
 
+            {actionModal === 'DISMISS' && (
+              <div className="space-y-3">
+                <p className="text-slate-300">
+                  Archiving <strong>{selectedRestaurant.name}</strong> removes it from the operational pending approval queue without pretending it was approved or rejected.
+                </p>
+                <div>
+                  <label className="text-slate-200 font-semibold mb-1 block">Archive Note / Reason:</label>
+                  <input
+                    type="text"
+                    value={actionReason}
+                    onChange={(e) => setActionReason(e.target.value)}
+                    placeholder="e.g. Test fixture, duplicate application, or demo record"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              </div>
+            )}
+
             {(actionModal === 'REJECT' || actionModal === 'REQUEST_CHANGES' || actionModal === 'DEACTIVATE' || actionModal === 'SUSPEND') && (
               <div className="space-y-2">
                 <label className="text-slate-200 font-semibold">
@@ -1168,6 +1218,12 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               {actionModal === 'REJECT' && (
                 <Button variant="danger" size="sm" onClick={() => handleReject(selectedRestaurant.id)}>
                   Confirm Rejection
+                </Button>
+              )}
+
+              {actionModal === 'DISMISS' && (
+                <Button variant="outline" size="sm" onClick={() => handleDismiss(selectedRestaurant.id)} className="border-slate-700 text-slate-200 hover:bg-slate-800">
+                  Confirm Archive
                 </Button>
               )}
 

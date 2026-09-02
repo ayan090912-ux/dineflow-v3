@@ -95,6 +95,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
   // Step 2: Business Details & Location
   const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || '');
+  const [phone, setPhone] = useState(initialOwnerData?.phone || '');
   const [country, setCountry] = useState('India');
   const [state, setState] = useState('');
   const [city, setCity] = useState('');
@@ -107,6 +108,19 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [selectedLocationObj, setSelectedLocationObj] = useState<StructuredAddress | null>(null);
   const [hasSeating, setHasSeating] = useState<boolean>(true);
   const [tablesCount, setTablesCount] = useState<number>(10);
+
+  const validatePhone = (rawPhone: string) => {
+    const digits = (rawPhone || '').replace(/\D/g, '');
+    if (!digits || digits.length < 10) {
+      return { valid: false, error: 'Please enter a valid owner phone number with at least 10 digits.' };
+    }
+    const isRepeating = /^(\d)\1+$/.test(digits);
+    const isSequential = '01234567890123456789'.includes(digits) || '98765432109876543210'.includes(digits);
+    if (isRepeating || isSequential || digits === '1234567890' || digits === '0000000000' || digits === '9999999999') {
+      return { valid: false, error: 'Please provide an authentic, reachable phone number.' };
+    }
+    return { valid: true, error: null };
+  };
 
   // Step 3: Terminal Selection State
   const [enableKitchen, setEnableKitchen] = useState<boolean>(true);
@@ -241,6 +255,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
+      const phoneCheck = validatePhone(phone);
+      if (!phoneCheck.valid) {
+        setErrorMessage(phoneCheck.error || 'Please provide a valid owner contact phone number.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
       if (!country.trim() || !city.trim() || !address.trim()) {
         setErrorMessage('Please enter country, city, and street address.');
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -283,6 +303,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         throw new Error('Owner account session not found. Please authenticate with Google first.');
       }
 
+      const phoneCheck = validatePhone(phone);
+      if (!phoneCheck.valid) {
+        throw new Error(phoneCheck.error || 'Please provide a valid owner phone number.');
+      }
+
       const fullAddress = [address, city, state, country, postalCode ? `PIN: ${postalCode}` : ''].filter(Boolean).join(', ');
       const isNoSeating = businessType === 'FOOD_CART' && !hasSeating;
       const finalTablesCount = isNoSeating ? 0 : tablesCount;
@@ -295,16 +320,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       if (enableInventory) enabledModules.push('inventory');
       if (enableBilling) enabledModules.push('billing');
 
-      // 1. Create new restaurant record
+      // 1. Create new restaurant record with real owner identity
       const newRest = await api.createRestaurantForOwner({
-        name: restaurantName,
+        name: restaurantName.trim(),
         businessType: businessType,
         hasBar: enableBar && businessType !== 'FOOD_CART',
         hasTables: !isNoSeating,
         hasKitchen: enableKitchen,
         hasWaiter: enableWaiter && !isNoSeating,
         address: fullAddress,
-        phone: user.phone || '+91 98765 43210',
+        phone: phone.trim(),
         email: user.email,
         ownerName: user.name || user.firstName || user.email.split('@')[0],
         ownerEmail: user.email,
@@ -313,7 +338,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       // 2. Submit application for Platform Admin Approval
       const updatedRest = await api.submitRestaurantLaunch({
         id: newRest.id,
-        restaurantName,
+        restaurantName: restaurantName.trim(),
         businessType,
         hasBar: enableBar && businessType !== 'FOOD_CART',
         hasTables: !isNoSeating,
@@ -331,7 +356,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         latitude,
         longitude,
         placeId,
-        phone: user.phone || '+91 98765 43210',
+        phone: phone.trim(),
         email: user.email,
         tables: {
           indoor: isNoSeating ? 0 : Math.ceil(finalTablesCount * 0.8),
@@ -533,14 +558,36 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
               </div>
 
               <div className="space-y-5">
-                <Input
-                  label="Business / Venue Name *"
-                  placeholder="e.g. Lumiere Bistro or Cafe.Co"
-                  value={restaurantName}
-                  onChange={(e) => setRestaurantName(e.target.value)}
-                  icon={<Store className="w-4 h-4 text-slate-500" />}
-                  required
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Business / Venue Name *"
+                    placeholder="e.g. Lumiere Bistro or Cafe.Co"
+                    value={restaurantName}
+                    onChange={(e) => setRestaurantName(e.target.value)}
+                    icon={<Store className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
+                  <Input
+                    label="Owner Contact Phone Number *"
+                    placeholder="e.g. +91 98765 43210"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    icon={<PhoneCall className="w-4 h-4 text-slate-500" />}
+                    required
+                  />
+                </div>
+
+                {/* Verified Owner Identity Banner */}
+                {currentUser && (
+                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="text-slate-400">Authenticated Owner Account:</span>
+                      <strong className="text-white font-mono">{currentUser.email}</strong>
+                    </div>
+                    <Badge variant="success" className="text-[10px] font-mono">VERIFIED</Badge>
+                  </div>
+                )}
 
                 <AddressAutocomplete
                   value={address}

@@ -56,3 +56,6 @@ class Restaurant(Base, TimestampMixin, SoftDeleteMixin):
     upi_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     billing_settings_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     theme_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    dismiss_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

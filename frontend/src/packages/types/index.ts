@@ -113,7 +113,7 @@ export interface RestaurantFeatures {
 }
 
 export interface ThemeConfig {
-  restaurantId: string;
+  restaurantId?: string;
   restaurantName: string;
   logo: string;
   bannerUrl: string;

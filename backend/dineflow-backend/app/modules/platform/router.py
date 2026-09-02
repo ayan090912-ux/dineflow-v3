@@ -65,13 +65,31 @@ async def verify_platform_admin_token(
 
 @router.get("/restaurants")
 async def get_all_restaurants(
+    lifecycle_status: Optional[str] = None,
+    search: Optional[str] = None,
     admin_claims: Dict[str, Any] = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_db)
 ) -> List[Dict[str, Any]]:
     """
     Protected endpoint to list all platform restaurants from PostgreSQL.
+    Supports filtering by lifecycle_status (e.g. PENDING_APPROVAL, LIVE, ARCHIVED).
     """
-    stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None)).order_by(Restaurant.created_at.desc())
+    stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None))
+
+    if lifecycle_status:
+        stmt = stmt.where(Restaurant.lifecycle_status == lifecycle_status)
+    if search:
+        term = f"%{search.lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Restaurant.name).like(term),
+                func.lower(Restaurant.owner_name).like(term),
+                func.lower(Restaurant.owner_email).like(term),
+                func.lower(Restaurant.phone).like(term),
+            )
+        )
+
+    stmt = stmt.order_by(Restaurant.created_at.desc())
     result = await db.execute(stmt)
     rests = result.scalars().all()
 
@@ -81,6 +99,9 @@ async def get_all_restaurants(
             "id": r.id,
             "name": r.name,
             "slug": r.slug,
+            "publicSlug": r.public_slug or r.slug,
+            "public_slug": r.public_slug or r.slug,
+            "domain": r.domain or f"https://{r.public_slug or r.slug}.dinely.app",
             "cuisine": r.cuisine,
             "businessType": r.business_type,
             "ownerName": r.owner_name,
@@ -101,6 +122,9 @@ async def get_all_restaurants(
             "hasTables": r.has_tables,
             "rejectionReason": r.rejection_reason,
             "requestedChanges": r.requested_changes,
+            "dismissedAt": r.dismissed_at.isoformat() if r.dismissed_at else None,
+            "dismissedBy": r.dismissed_by,
+            "dismissReason": r.dismiss_reason,
             "approvedAt": r.approved_at.isoformat() if r.approved_at else None,
             "approvedBy": r.approved_by,
             "submittedAt": r.submitted_at.isoformat() if r.submitted_at else (r.created_at.isoformat() if r.created_at else None),
@@ -182,6 +206,7 @@ async def approve_restaurant(
         tbl_query = select(Table).where(Table.restaurant_id == rest.id)
         tbl_res = await db.execute(tbl_query)
         if not tbl_res.scalars().first():
+            pub_slug = rest.public_slug or rest.slug or "restaurant"
             for i in range(1, 9):
                 t_num = f"Table {str(i).zfill(2)}"
                 t_id = f"tbl-{rest.id}-table_{str(i).zfill(2)}"
@@ -193,7 +218,7 @@ async def approve_restaurant(
                     capacity=4,
                     status="AVAILABLE",
                     is_occupied=False,
-                    qr_code_url=f"https://dinely.food/customer?restaurant={rest.id}&tableId={t_id}&table={t_num}"
+                    qr_code_url=f"https://{pub_slug}.dinely.app/customer?table={t_num}"
                 ))
 
     await db.commit()
@@ -349,6 +374,108 @@ async def reject_restaurant(
             "lifecycleStatus": "REJECTED",
             "status": "CLOSED",
             "rejectionReason": rest.rejection_reason,
+        }
+    }
+
+
+@router.post("/restaurants/dismiss")
+async def dismiss_restaurant(
+    action: RestaurantStatusAction,
+    request: Request,
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Dismisses/archives a test, synthetic, or duplicate restaurant application from the operational approval queue without deleting audit history.
+    """
+    admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+    admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
+    clean_id = (action.restaurant_id or "").strip()
+
+    query = select(Restaurant).where(
+        or_(Restaurant.id == clean_id, func.lower(Restaurant.id) == func.lower(clean_id))
+    )
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+
+    if not rest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{action.restaurant_id}' not found."
+        )
+
+    # Idempotent
+    if rest.lifecycle_status == "ARCHIVED":
+        return {
+            "status": "SUCCESS",
+            "message": f"Restaurant '{rest.name}' is already archived.",
+            "restaurant_id": rest.id,
+            "restaurantId": rest.id,
+            "lifecycleStatus": "ARCHIVED",
+            "already_archived": True
+        }
+
+    rest.lifecycle_status = "ARCHIVED"
+    rest.is_approved = False
+    rest.status = "CLOSED"
+    rest.dismissed_at = datetime.now(timezone.utc)
+    rest.dismissed_by = admin_email
+    rest.dismiss_reason = action.reason or "Archived from pending approval queue by administrator"
+
+    await db.commit()
+    await db.refresh(rest)
+
+    AdminAuditLogger.log_action(
+        admin_uid=admin_uid,
+        action="RESTAURANT_DISMISSED",
+        target_resource="RESTAURANT",
+        target_id=rest.id,
+        ip_address=request.client.host if request.client else "127.0.0.1",
+        details={"reason": rest.dismiss_reason}
+    )
+
+    await ws_manager.broadcast_global({
+        "type": "RESTAURANT_DISMISSED",
+        "restaurantId": rest.id,
+        "restaurant_id": rest.id,
+        "restaurantName": rest.name,
+        "lifecycleStatus": "ARCHIVED",
+        "isApproved": False,
+        "is_approved": False,
+        "ownerEmail": rest.owner_email,
+        "dismissReason": rest.dismiss_reason,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    await ws_manager.broadcast_to_restaurant(
+        restaurant_id=rest.id,
+        message={
+            "type": "RestaurantStatusUpdated",
+            "restaurantId": rest.id,
+            "restaurant_id": rest.id,
+            "lifecycleStatus": "ARCHIVED",
+            "isApproved": False,
+            "is_approved": False,
+            "dismissReason": rest.dismiss_reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    return {
+        "status": "SUCCESS",
+        "message": f"Restaurant '{rest.name}' ({rest.id}) archived from approval queue.",
+        "restaurant_id": rest.id,
+        "restaurantId": rest.id,
+        "isApproved": False,
+        "is_approved": False,
+        "lifecycleStatus": "ARCHIVED",
+        "dismissedAt": rest.dismissed_at.isoformat() if rest.dismissed_at else None,
+        "restaurant": {
+            "id": rest.id,
+            "name": rest.name,
+            "isApproved": False,
+            "lifecycleStatus": "ARCHIVED",
+            "status": "CLOSED",
+            "dismissReason": rest.dismiss_reason,
         }
     }
 

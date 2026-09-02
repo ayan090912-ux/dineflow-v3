@@ -223,217 +223,10 @@ export function normalizeOrder(raw: any): Order {
   };
 }
 
-
-// Global Multi-Tenant SaaS Central Store (Multi-tenant persistent registry across all browser contexts & devices)
-export const GLOBAL_MULTI_TENANT_RESTAURANTS: Restaurant[] = [
-  {
-    id: 'rest-1787446097984',
-    orgId: 'org-cafe-co',
-    name: 'CAFE.CO',
-    slug: 'cafe-co',
-    cuisine: 'Fine Dining & Cafe',
-    businessType: 'RESTAURANT',
-    hasBar: true,
-    hasTables: true,
-    hasKitchen: true,
-    hasWaiter: true,
-    orderNumberPrefix: '#ORD',
-    address: '108 Culinary Boulevard, Fine Dining Strip',
-    phone: '+1 (555) 987-6543',
-    email: 'contact@cafeco.food',
-    ownerName: 'Cafe Owner',
-    ownerEmail: 'owner@cafeco.food',
-    domain: 'cafeco.dinely.app',
-    isApproved: true,
-    isAutoApproved: true,
-    lifecycleStatus: 'APPROVED',
-    status: 'OPEN',
-    rating: 4.9,
-    activeOrdersCount: 0,
-    currency: 'INR (₹)',
-    taxPercentage: 5.0,
-    createdAt: new Date().toISOString(),
-    theme: {
-      restaurantId: 'rest-1787446097984',
-      restaurantName: 'CAFE.CO',
-      logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
-      bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-      primaryColor: '#f43f5e',
-      secondaryColor: '#475569',
-      accentColor: '#fbbf24',
-      backgroundColor: '#0f172a',
-      textColor: '#ffffff',
-      fontFamily: 'sans',
-      borderRadius: 'lg',
-      currency: 'INR (₹)',
-    },
-  },
-  {
-    id: 'rest-1',
-    orgId: 'org-lumiere',
-    name: 'Lumière Bistro',
-    slug: 'lumiere-bistro',
-    cuisine: 'French Fine Dining',
-    businessType: 'RESTAURANT',
-    hasBar: true,
-    hasTables: true,
-    hasKitchen: true,
-    hasWaiter: true,
-    orderNumberPrefix: '#ORD',
-    address: '42 Avenue des Champs, Gourmet Quarter',
-    phone: '+1 (555) 345-6789',
-    email: 'contact@lumierebistro.food',
-    ownerName: 'Chef Lumiere',
-    ownerEmail: 'owner@lumiere.food',
-    domain: 'lumiere.dinely.app',
-    isApproved: true,
-    isAutoApproved: true,
-    lifecycleStatus: 'APPROVED',
-    status: 'OPEN',
-    rating: 4.8,
-    activeOrdersCount: 0,
-    currency: 'INR (₹)',
-    taxPercentage: 5.0,
-    createdAt: new Date().toISOString(),
-    theme: {
-      restaurantId: 'rest-1',
-      restaurantName: 'Lumière Bistro',
-      logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
-      bannerUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-      primaryColor: '#e11d48',
-      secondaryColor: '#475569',
-      accentColor: '#f59e0b',
-      backgroundColor: '#0f172a',
-      textColor: '#ffffff',
-      fontFamily: 'sans',
-      borderRadius: 'lg',
-      currency: 'INR (₹)',
-    },
-  },
-];
-
-export const GLOBAL_MULTI_TENANT_CATEGORIES: MenuCategory[] = [
-  { id: 'cat-cafe-1', restaurantId: 'rest-1787446097984', name: 'Starters & Appetizers', sortOrder: 1 },
-  { id: 'cat-cafe-2', restaurantId: 'rest-1787446097984', name: 'Main Course', sortOrder: 2 },
-  { id: 'cat-cafe-3', restaurantId: 'rest-1787446097984', name: 'Gourmet Desserts', sortOrder: 3 },
-  { id: 'cat-cafe-4', restaurantId: 'rest-1787446097984', name: 'Beverages & Drinks', sortOrder: 4 },
-  { id: 'cat-1-1', restaurantId: 'rest-1', name: 'Starters & Appetizers', sortOrder: 1 },
-  { id: 'cat-1-2', restaurantId: 'rest-1', name: 'Main Course', sortOrder: 2 },
-  { id: 'cat-1-3', restaurantId: 'rest-1', name: 'Gourmet Desserts', sortOrder: 3 },
-  { id: 'cat-1-4', restaurantId: 'rest-1', name: 'Beverages & Drinks', sortOrder: 4 },
-];
-
-export const GLOBAL_MULTI_TENANT_MENU_ITEMS: MenuItem[] = [
-  {
-    id: 'item-cafe-1',
-    restaurantId: 'rest-1787446097984',
-    categoryId: 'cat-cafe-1',
-    name: 'Crispy Risotto Balls',
-    description: 'Stuffed with wild forest mushrooms and aged mozzarella, served with truffle aioli.',
-    price: 14.50,
-    imageUrl: 'https://images.unsplash.com/photo-1541529086526-db283c563270?w=600&auto=format&fit=crop&q=80',
-    isAvailable: true,
-    isVeg: true,
-    isVegetarian: true,
-    dietaryType: 'VEG',
-    targetDestination: 'KITCHEN',
-    preparationTimeMinutes: 12,
-  },
-  {
-    id: 'item-cafe-2',
-    restaurantId: 'rest-1787446097984',
-    categoryId: 'cat-cafe-2',
-    name: 'Pan-Seared Salmon Fillet',
-    description: 'Atlantic salmon served over saffron risotto with lemon herb reduction.',
-    price: 28.90,
-    imageUrl: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&auto=format&fit=crop&q=80',
-    isAvailable: true,
-    isVeg: false,
-    isVegetarian: false,
-    dietaryType: 'NON_VEG',
-    targetDestination: 'KITCHEN',
-    preparationTimeMinutes: 20,
-  },
-  {
-    id: 'item-cafe-3',
-    restaurantId: 'rest-1787446097984',
-    categoryId: 'cat-cafe-3',
-    name: 'Classic Tiramisu',
-    description: 'Layers of espresso-soaked ladyfingers and whipped mascarpone cream.',
-    price: 9.50,
-    imageUrl: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=600&auto=format&fit=crop&q=80',
-    isAvailable: true,
-    isVeg: true,
-    isVegetarian: true,
-    dietaryType: 'VEG',
-    targetDestination: 'KITCHEN',
-    preparationTimeMinutes: 8,
-  },
-  {
-    id: 'item-cafe-4',
-    restaurantId: 'rest-1787446097984',
-    categoryId: 'cat-cafe-4',
-    name: 'Artisanal Smoked Old Fashioned',
-    description: 'Bourbon whiskey infused with aromatic bitters and oak wood smoke.',
-    price: 16.00,
-    imageUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600&auto=format&fit=crop&q=80',
-    isAvailable: true,
-    isVeg: true,
-    isVegetarian: true,
-    dietaryType: 'VEG',
-    targetDestination: 'BAR',
-    isAlcoholic: true,
-    preparationTimeMinutes: 5,
-  },
-  {
-    id: 'item-1-1',
-    restaurantId: 'rest-1',
-    categoryId: 'cat-1-1',
-    name: 'Truffle Mushroom Crostini',
-    description: 'Sourdough crostini with sauteed wild mushrooms and truffle glaze.',
-    price: 12.00,
-    imageUrl: 'https://images.unsplash.com/photo-1541529086526-db283c563270?w=600&auto=format&fit=crop&q=80',
-    isAvailable: true,
-    isVeg: true,
-    isVegetarian: true,
-    dietaryType: 'VEG',
-    targetDestination: 'KITCHEN',
-    preparationTimeMinutes: 10,
-  },
-];
-
-export const GLOBAL_MULTI_TENANT_TABLES: Table[] = [
-  ...Array.from({ length: 12 }, (_, i) => {
-    const restId = 'rest-1787446097984';
-    const tNum = `Table ${String(i + 1).padStart(2, '0')}`;
-    const tId = `tbl-${restId}-${tNum.toLowerCase().replace(/\s+/g, '_')}`;
-    return {
-      id: tId,
-      restaurantId: restId,
-      tableNumber: tNum,
-      section: i < 6 ? 'MAIN_HALL' : 'TERRACE',
-      capacity: 4,
-      status: 'AVAILABLE' as const,
-      isOccupied: false,
-      qrCodeUrl: `https://dinely.food/customer?restaurant=${restId}&tableId=${tId}&table=${encodeURIComponent(tNum)}`,
-    };
-  }),
-  ...Array.from({ length: 12 }, (_, i) => {
-    const restId = 'rest-1';
-    const tNum = `Table ${String(i + 1).padStart(2, '0')}`;
-    const tId = `tbl-${restId}-${tNum.toLowerCase().replace(/\s+/g, '_')}`;
-    return {
-      id: tId,
-      restaurantId: restId,
-      tableNumber: tNum,
-      section: i < 6 ? 'MAIN_HALL' : 'TERRACE',
-      capacity: 4,
-      status: 'AVAILABLE' as const,
-      isOccupied: false,
-      qrCodeUrl: `https://dinely.food/customer?restaurant=${restId}&tableId=${tId}&table=${encodeURIComponent(tNum)}`,
-    };
-  }),
-];
+export const GLOBAL_MULTI_TENANT_RESTAURANTS: Restaurant[] = [];
+export const GLOBAL_MULTI_TENANT_CATEGORIES: MenuCategory[] = [];
+export const GLOBAL_MULTI_TENANT_MENU_ITEMS: MenuItem[] = [];
+export const GLOBAL_MULTI_TENANT_TABLES: Table[] = [];
 
 const DATABASE_STORAGE_KEY = 'dinely_production_db_v3';
 
@@ -2257,6 +2050,69 @@ export class DinelyApiClient {
 
   async requestChangesRestaurant(restaurantId: string, reason: string) {
     return this.rejectRestaurant(restaurantId, reason);
+  }
+
+  async dismissRestaurant(restaurantId: string, reason = 'Archived from pending approval queue by administrator') {
+    const apiBase = getApiBaseUrl();
+    let token = this.currentTokensByScope['ADMIN']?.accessToken ||
+                this.currentTokensByScope['OWNER']?.accessToken ||
+                (typeof window !== 'undefined' ? (
+                  localStorage.getItem('dinely_platform_admin_id_token') ||
+                  localStorage.getItem('dinely_auth_token') ||
+                  sessionStorage.getItem('dinely_admin_token')
+                ) : null);
+
+    if (!token && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+      try {
+        token = await firebaseAuth.currentUser.getIdToken();
+        if (token) {
+          localStorage.setItem('dinely_platform_admin_id_token', token);
+          sessionStorage.setItem('dinely_admin_token', token);
+        }
+      } catch (e) {
+        console.warn('Could not refresh Firebase token for dismissal:', e);
+      }
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${apiBase}/admin/restaurants/dismiss`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ restaurant_id: restaurantId, reason }),
+    });
+
+    if (!res.ok) {
+      let errMsg = `Failed to dismiss restaurant (HTTP ${res.status})`;
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.detail || errJson.message || errMsg;
+      } catch {}
+      throw new Error(errMsg);
+    }
+
+    const resJson = await res.json();
+    const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
+    if (rest) {
+      rest.lifecycleStatus = 'ARCHIVED';
+      rest.isApproved = false;
+      rest.status = 'CLOSED';
+      (rest as any).dismissReason = reason;
+
+      this.saveDatabase();
+      realtimeBus.emit('RESTAURANT_DISMISSED' as any, {
+        restaurantId: rest.id,
+        restaurant_id: rest.id,
+        restaurantName: rest.name,
+        lifecycleStatus: 'ARCHIVED',
+        dismissReason: reason,
+        isApproved: false,
+      } as any);
+    }
+    return resJson;
   }
 
   async suspendRestaurant(restaurantId: string, reason = 'Administrative Suspension') {
