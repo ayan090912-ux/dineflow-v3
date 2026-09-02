@@ -37,14 +37,12 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   const currentUser = user || api.getCurrentUser();
   const userName = currentUser?.name || currentUser?.firstName || currentUser?.email?.split('@')[0] || 'Owner';
 
-  useEffect(() => {
-    loadOwnerRestaurants();
-  }, [currentUser?.email]);
-
-  const loadOwnerRestaurants = async () => {
+  const loadOwnerRestaurants = async (targetEmail?: string, targetUid?: string) => {
     setIsLoading(true);
     try {
-      const list = await api.getOwnerRestaurants(currentUser?.email);
+      const email = targetEmail || currentUser?.email;
+      const uid = targetUid || currentUser?.id;
+      const list = await api.getOwnerRestaurants(email, uid);
       setRestaurants(list);
     } catch (e) {
       console.error('Failed to load owner restaurants:', e);
@@ -52,6 +50,17 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadOwnerRestaurants();
+    const safetyTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 4000);
+
+    return () => {
+      clearTimeout(safetyTimer);
+    };
+  }, [currentUser?.email, currentUser?.id]);
 
   const handleLogout = async () => {
     await api.logout();

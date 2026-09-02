@@ -1666,8 +1666,9 @@ export class DinelyApiClient {
 
   private mapBackendRestaurant(r: any): Restaurant {
     const bType = (r.businessType || r.business_type || 'RESTAURANT').toUpperCase();
-    const cleanSlug = (r.slug || r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')).toLowerCase();
-    const pubSlug = (r.publicSlug || r.public_slug || cleanSlug).toLowerCase();
+    const cleanSlug = (r.slug || r.name || 'restaurant').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'restaurant';
+    const pubSlug = (r.publicSlug || r.public_slug || cleanSlug).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'restaurant';
+    const canonicalDomain = `https://${pubSlug}.dinely.app`;
     return {
       id: r.id,
       orgId: r.org_id || r.orgId || 'org-dinely',
@@ -1690,7 +1691,7 @@ export class DinelyApiClient {
       ownerName: r.ownerName || r.owner_name || '',
       ownerEmail: r.ownerEmail || r.owner_email || '',
       ownerUid: r.ownerUid || r.owner_uid || '',
-      domain: r.domain || '',
+      domain: canonicalDomain,
       isApproved: Boolean(r.isApproved || r.is_approved),
       status: r.status || 'OPEN',
       lifecycleStatus: (r.lifecycleStatus || r.lifecycle_status || (r.isApproved || r.is_approved ? 'LIVE' : 'PENDING_APPROVAL')) as RestaurantLifecycleStatus,
@@ -1724,8 +1725,11 @@ export class DinelyApiClient {
   async getOwnerRestaurants(ownerEmail?: string, ownerUid?: string): Promise<Restaurant[]> {
     const scope = getPortalScopeFromPath();
     const user = this.getCurrentUser(scope);
-    const email = (ownerEmail || user?.email || '').trim().toLowerCase();
-    const uid = (ownerUid || user?.id || '').trim();
+    const email = (ownerEmail || user?.email || (typeof window !== 'undefined' && firebaseAuth.currentUser?.email) || '').trim().toLowerCase();
+    const uid = (ownerUid || user?.id || (typeof window !== 'undefined' && firebaseAuth.currentUser?.uid) || '').trim();
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
 
     try {
       const apiBase = getApiBaseUrl();
@@ -1733,7 +1737,11 @@ export class DinelyApiClient {
       if (email) params.append('owner_email', email);
       if (uid) params.append('owner_uid', uid);
 
-      const res = await fetch(`${apiBase}/restaurants/owner/my?${params.toString()}`);
+      const res = await fetch(`${apiBase}/restaurants/owner/my?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -1751,6 +1759,7 @@ export class DinelyApiClient {
         }
       }
     } catch (e) {
+      clearTimeout(timeoutId);
       console.warn('[API] getOwnerRestaurants fetch warning:', e);
     }
 

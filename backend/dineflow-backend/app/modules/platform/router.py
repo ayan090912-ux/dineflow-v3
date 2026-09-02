@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -95,13 +96,15 @@ async def get_all_restaurants(
 
     output = []
     for r in rests:
+        clean_slug = re.sub(r"[^a-z0-9]+", "-", (r.public_slug or r.slug or r.name or "restaurant").strip().lower()).strip("-") or "restaurant"
+        canonical_domain = f"https://{clean_slug}.dinely.app"
         output.append({
             "id": r.id,
             "name": r.name,
-            "slug": r.slug,
-            "publicSlug": r.public_slug or r.slug,
-            "public_slug": r.public_slug or r.slug,
-            "domain": r.domain or f"https://{r.public_slug or r.slug}.dinely.app",
+            "slug": clean_slug,
+            "publicSlug": clean_slug,
+            "public_slug": clean_slug,
+            "domain": canonical_domain,
             "cuisine": r.cuisine,
             "businessType": r.business_type,
             "ownerName": r.owner_name,
