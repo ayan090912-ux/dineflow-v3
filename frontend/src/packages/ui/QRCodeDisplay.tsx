@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { getProductionOrigin } from '../api/client';
+import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../utils/tenantResolver';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Badge } from './Badge';
@@ -187,29 +188,19 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   const cleanTableId = (tableId || (effectiveRestId ? `tbl-${effectiveRestId}-${safeTableNum.toLowerCase().replace(/\s+/g, '_')}` : '')).trim();
 
   let defaultUrl = '';
-  if (isPickup || safeTableNum.toUpperCase() === 'COUNTER') {
-    defaultUrl = `${defaultOrigin}/customer${effectiveRestId ? `?restaurant=${effectiveRestId}` : ''}`;
+  if (effectiveRestId) {
+    defaultUrl = getRestaurantCustomerUrl(
+      effectiveRestId,
+      isPickup || safeTableNum.toUpperCase() === 'COUNTER' ? 'COUNTER' : safeTableNum,
+      cleanTableId
+    );
   } else {
-    defaultUrl = `${defaultOrigin}/customer?restaurant=${effectiveRestId || ''}&tableId=${cleanTableId}&table=${encodeURIComponent(safeTableNum)}`;
+    defaultUrl = `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}`;
   }
 
   // Exact encoded customer destination URL (single source of truth for display, QR code, copy link, and live view)
   const candidateUrl = url || value;
-  const isValidCandidateUrl =
-    candidateUrl &&
-    candidateUrl.includes('/customer') &&
-    (candidateUrl.includes('table=') || candidateUrl.includes('tableId=')) &&
-    candidateUrl.includes('restaurant=') &&
-    !candidateUrl.includes('.dinely.app/order');
-
-  let rawUrl = isValidCandidateUrl ? candidateUrl : defaultUrl;
-
-  // Sanitize rawUrl to ALWAYS use production HTTPS origin, purging any localhost/http/IP/subdomain addresses
-  let qrUrl = rawUrl;
-  if (rawUrl) {
-    qrUrl = rawUrl
-      .replace(/^https?:\/\/[^/]+/, defaultOrigin);
-  }
+  const qrUrl = candidateUrl || defaultUrl;
 
   // Copy link to clipboard
   const handleCopyLink = () => {

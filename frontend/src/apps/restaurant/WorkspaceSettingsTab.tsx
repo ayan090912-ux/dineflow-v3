@@ -14,10 +14,15 @@ import {
   Info,
   Building2,
   Layers,
+  Globe,
+  ExternalLink,
+  QrCode,
+  Copy,
 } from 'lucide-react';
 import { Button, Card, Badge } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Restaurant, BusinessType } from '../../packages/types';
+import { getRestaurantPublicDomain, getRestaurantCustomerUrl } from '../../packages/utils/tenantResolver';
 
 interface WorkspaceSettingsTabProps {
   restaurant: Restaurant | null;
@@ -35,6 +40,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [hasSeating, setHasSeating] = useState<boolean>(restaurant?.hasTables !== false);
   const [isSaving, setIsSaving] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   useEffect(() => {
     if (restaurant) {
@@ -97,6 +103,16 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const publicDomain = getRestaurantPublicDomain(restaurant);
+  const customerUrl = getRestaurantCustomerUrl(restaurant);
+
+  const handleCopyPublicUrl = () => {
+    navigator.clipboard.writeText(customerUrl);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2000);
+    addToast('success', 'Link Copied', 'Tenant public menu link copied to clipboard.');
   };
 
   const modulesConfig = [
@@ -180,6 +196,51 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
           Save Workspace Changes
         </Button>
       </div>
+
+      {/* Tenant Public Subdomain & Customer Portal Card */}
+      <Card className="bg-slate-900 border-indigo-500/30 p-6 rounded-2xl space-y-4 shadow-xl shadow-indigo-950/20 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shrink-0">
+              <Globe className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider font-mono">Public Tenant Domain</span>
+                <Badge variant="success" className="font-mono text-[10px]">LIVE SUBDOMAIN</Badge>
+              </div>
+              <h4 className="text-lg font-black text-white font-mono mt-0.5">
+                {publicDomain}
+              </h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Your restaurant's dedicated customer ordering domain. Scanned QR codes and public diners access this exclusive subdomain.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyPublicUrl}
+              className="text-xs border-slate-700 hover:bg-slate-800 text-slate-200"
+              icon={<Copy className="w-3.5 h-3.5 mr-1" />}
+            >
+              {copiedUrl ? 'Copied! ✓' : 'Copy Link'}
+            </Button>
+            <a
+              href={customerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-950/40"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open Customer App
+            </a>
+          </div>
+        </div>
+      </Card>
 
       {/* Business Model Summary Box */}
       <Card className="bg-slate-900 border-slate-800 p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

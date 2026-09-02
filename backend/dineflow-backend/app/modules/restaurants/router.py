@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Any, List
@@ -12,6 +13,39 @@ from app.modules.tables.models import Table
 from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
+
+async def generate_unique_public_slug(db: AsyncSession, name: str, exclude_id: Optional[str] = None) -> str:
+    clean = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    if not clean:
+        clean = "restaurant"
+    candidate = clean
+    counter = 1
+    while True:
+        stmt = select(Restaurant.id).where(
+            or_(Restaurant.slug == candidate, Restaurant.public_slug == candidate),
+            Restaurant.deleted_at.is_(None)
+        )
+        if exclude_id:
+            stmt = stmt.where(Restaurant.id != exclude_id)
+        res = await db.execute(stmt)
+        if not res.scalar_one_or_none():
+            return candidate
+        counter += 1
+        candidate = f"{clean}-{counter}"
+
+def extract_subdomain_from_hostname(hostname: Optional[str]) -> Optional[str]:
+    if not hostname:
+        return None
+    host = hostname.split(":")[0].strip().lower()
+    if host.endswith(".dinely.app"):
+        sub = host[:-len(".dinely.app")].strip()
+        if sub and sub not in ("www", "app", "api", "platform", "admin", "staging"):
+            return sub
+    if host.endswith(".localhost"):
+        sub = host[:-len(".localhost")].strip()
+        if sub and sub not in ("www", "app", "api", "platform", "admin", "staging"):
+            return sub
+    return None
 
 class CreateRestaurantSchema(BaseModel):
     id: Optional[str] = None
@@ -67,16 +101,138 @@ class WorkspaceModulesSchema(BaseModel):
     hasBilling: Optional[bool] = None
     hasTables: Optional[bool] = None
 
+@router.get("/public/resolve")
+async def resolve_public_restaurant(
+    hostname: Optional[str] = Query(None),
+    slug: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    target_slug = slug
+    if not target_slug and hostname:
+        target_slug = extract_subdomain_from_hostname(hostname)
+
+    if not target_slug:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurant subdomain or slug not specified"
+        )
+
+    clean_slug = target_slug.strip().lower()
+    query = select(Restaurant).where(
+        or_(
+            func.lower(Restaurant.public_slug) == clean_slug,
+            func.lower(Restaurant.slug) == clean_slug,
+            Restaurant.id == target_slug.strip()
+        ),
+        Restaurant.deleted_at.is_(None)
+    )
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+
+    if not rest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{target_slug}' not found"
+        )
+
+    pub_slug = rest.public_slug or rest.slug
+    return {
+        "id": rest.id,
+        "name": rest.name,
+        "slug": rest.slug,
+        "publicSlug": pub_slug,
+        "domain": rest.domain or f"https://{pub_slug}.dinely.app",
+        "cuisine": rest.cuisine,
+        "businessType": rest.business_type,
+        "hasBar": rest.has_bar,
+        "hasTables": rest.has_tables,
+        "hasKitchen": rest.has_kitchen,
+        "hasWaiter": rest.has_waiter,
+        "hasInventory": rest.has_inventory,
+        "hasBilling": rest.has_billing,
+        "enabledModules": rest.enabled_modules,
+        "phone": rest.phone,
+        "email": rest.email,
+        "address": rest.address,
+        "currency": rest.currency,
+        "taxPercentage": rest.tax_percentage,
+        "isApproved": rest.is_approved,
+        "lifecycleStatus": rest.lifecycle_status,
+        "status": rest.status,
+        "upiId": rest.upi_id,
+        "upiMerchantName": rest.upi_merchant_name,
+        "upiQrUrl": rest.upi_qr_url,
+        "upiEnabled": rest.upi_enabled,
+        "theme": rest.theme_json,
+    }
+
+@router.get("/public/slug/{slug}")
+async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(get_db)):
+    clean_slug = slug.strip().lower()
+    query = select(Restaurant).where(
+        or_(
+            func.lower(Restaurant.public_slug) == clean_slug,
+            func.lower(Restaurant.slug) == clean_slug,
+            Restaurant.id == slug.strip()
+        ),
+        Restaurant.deleted_at.is_(None)
+    )
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+
+    if not rest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{slug}' not found"
+        )
+
+    pub_slug = rest.public_slug or rest.slug
+    return {
+        "id": rest.id,
+        "name": rest.name,
+        "slug": rest.slug,
+        "publicSlug": pub_slug,
+        "domain": rest.domain or f"https://{pub_slug}.dinely.app",
+        "cuisine": rest.cuisine,
+        "businessType": rest.business_type,
+        "hasBar": rest.has_bar,
+        "hasTables": rest.has_tables,
+        "hasKitchen": rest.has_kitchen,
+        "hasWaiter": rest.has_waiter,
+        "hasInventory": rest.has_inventory,
+        "hasBilling": rest.has_billing,
+        "enabledModules": rest.enabled_modules,
+        "phone": rest.phone,
+        "email": rest.email,
+        "address": rest.address,
+        "currency": rest.currency,
+        "taxPercentage": rest.tax_percentage,
+        "isApproved": rest.is_approved,
+        "lifecycleStatus": rest.lifecycle_status,
+        "status": rest.status,
+        "upiId": rest.upi_id,
+        "upiMerchantName": rest.upi_merchant_name,
+        "upiQrUrl": rest.upi_qr_url,
+        "upiEnabled": rest.upi_enabled,
+        "theme": rest.theme_json,
+    }
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = Depends(get_db)):
     rest_id = payload.id or f"rest-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
-    slug = payload.name.lower().replace(" ", "-").replace("'", "").replace('"', "")
+    public_slug = await generate_unique_public_slug(db, payload.name, rest_id)
+    domain_url = f"https://{public_slug}.dinely.app"
 
     query = select(Restaurant).where(Restaurant.id == rest_id)
     result = await db.execute(query)
     existing = result.scalar_one_or_none()
 
     if existing:
+        if not existing.public_slug:
+            existing.public_slug = public_slug
+            existing.domain = domain_url
+            await db.commit()
+            await db.refresh(existing)
         return existing
 
     # Compute default enabled modules if not provided
@@ -100,7 +256,9 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
     new_rest = Restaurant(
         id=rest_id,
         name=payload.name,
-        slug=slug,
+        slug=public_slug,
+        public_slug=public_slug,
+        domain=domain_url,
         cuisine=payload.cuisine or "Multi-Cuisine",
         business_type=b_type,
         has_kitchen=payload.hasKitchen if payload.hasKitchen is not None else ("kitchen" in modules),
@@ -132,7 +290,7 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
     db.add(new_rest)
     await db.flush()
 
-    # Pre-create tables strictly for this tenant
+    # Pre-create tables strictly for this tenant with tenant subdomain QR url
     if has_tables:
         for i in range(1, 9):
             t_num = f"Table {str(i).zfill(2)}"
@@ -145,7 +303,7 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
                 capacity=4,
                 status="AVAILABLE",
                 is_occupied=False,
-                qr_code_url=f"https://dinely.food/customer?restaurant={rest_id}&tableId={t_id}&table={t_num}"
+                qr_code_url=f"https://{public_slug}.dinely.app/customer?table={t_num}"
             ))
 
     await db.commit()
@@ -156,6 +314,8 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
         "type": "RestaurantRegistrationSubmitted",
         "restaurantId": rest_id,
         "restaurantName": new_rest.name,
+        "publicSlug": public_slug,
+        "domain": domain_url,
         "ownerEmail": new_rest.owner_email,
         "ownerName": new_rest.owner_name,
         "businessType": new_rest.business_type,

@@ -169,6 +169,7 @@ export interface Restaurant {
   orgId: string;
   name: string;
   slug: string;
+  publicSlug?: string;
   cuisine: string;
   businessType?: BusinessType;
   hasBar?: boolean;

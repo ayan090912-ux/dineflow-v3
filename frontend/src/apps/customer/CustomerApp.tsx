@@ -50,6 +50,7 @@ import { CustomerLiveTracker } from './CustomerLiveTracker';
 import { CustomerBillModal } from './CustomerBillModal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { matchTableNumber, formatStandardTableNumber } from '../../packages/utils/tableUtils';
+import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 
 export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   tableNumber = 'Table 01',
@@ -286,20 +287,29 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
     }
 
+    const domainResolution = getTenantFromHostname();
+    const urlTenantParam = urlParams?.get('tenant') || urlParams?.get('slug');
     const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId') || pathRestParam;
     const urlTableIdParam = urlParams?.get('tableId') || pathTableIdParam;
-    const activeRestId =
-      urlRestParam ||
-      api.getCurrentRestaurantId() ||
-      (typeof window !== 'undefined' && window.localStorage
-        ? localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id')
-        : null) ||
-      undefined;
 
     let r: Restaurant | null = null;
-    if (urlRestParam) {
+
+    // 1. Resolve strictly from Tenant Subdomain (e.g. the-dunk.dinely.app -> the-dunk)
+    if (domainResolution.isTenantSubdomain && domainResolution.slug) {
+      r = await api.resolveRestaurantBySlug(domainResolution.slug);
+    }
+
+    // 2. Resolve from explicit query parameter override
+    if (!r && urlTenantParam) {
+      r = await api.resolveRestaurantBySlug(urlTenantParam);
+    }
+
+    // 3. Resolve from explicit restaurant ID param
+    if (!r && urlRestParam) {
       r = await api.getRestaurantDetails(urlRestParam);
     }
+
+    // 4. Resolve from table ID lookup
     if (!r && urlTableIdParam) {
       const rests = await api.getRestaurants();
       for (const restItem of rests) {
@@ -311,11 +321,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         }
       }
     }
-    if (!r && activeRestId) {
-      r = await api.getRestaurantDetails(activeRestId);
-    }
 
     if (r) {
+      setRestaurantError(null);
       setCurrentRestaurant(r);
       api.currentRestaurantId = r.id;
       if (r.theme) {
@@ -332,6 +340,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setMenuItems(items);
       setFoodCategories(cats);
       await loadInitialOrder(undefined, r.id);
+    } else {
+      setRestaurantError('RESTAURANT_NOT_FOUND');
     }
     return r || null;
   };

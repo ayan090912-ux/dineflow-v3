@@ -11,19 +11,40 @@ from app.modules.tables.models import Table, TableSession
 
 router = APIRouter()
 
+async def _get_restaurant_public_slug(restaurant_id: str, db: AsyncSession) -> str:
+    try:
+        from app.modules.restaurants.models import Restaurant
+        res_rest = await db.execute(select(Restaurant).where(
+            (Restaurant.id == restaurant_id) | 
+            (Restaurant.slug == restaurant_id) |
+            (Restaurant.public_slug == restaurant_id)
+        ))
+        rest_obj = res_rest.scalar_one_or_none()
+        if rest_obj:
+            return rest_obj.public_slug or rest_obj.slug or rest_obj.id
+    except Exception:
+        pass
+    return restaurant_id
+
 async def _get_valid_restaurant_ids(restaurant_id: Optional[str], db: AsyncSession) -> list[str]:
     if not restaurant_id:
         return []
     valid = [restaurant_id]
     try:
         from app.modules.restaurants.models import Restaurant
-        res_rest = await db.execute(select(Restaurant).where((Restaurant.id == restaurant_id) | (Restaurant.slug == restaurant_id)))
+        res_rest = await db.execute(select(Restaurant).where(
+            (Restaurant.id == restaurant_id) | 
+            (Restaurant.slug == restaurant_id) |
+            (Restaurant.public_slug == restaurant_id)
+        ))
         rest_obj = res_rest.scalar_one_or_none()
         if rest_obj:
             if rest_obj.id not in valid:
                 valid.append(rest_obj.id)
             if rest_obj.slug and rest_obj.slug not in valid:
                 valid.append(rest_obj.slug)
+            if rest_obj.public_slug and rest_obj.public_slug not in valid:
+                valid.append(rest_obj.public_slug)
     except Exception:
         pass
     return valid
@@ -45,21 +66,22 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
         (TableSession.restaurant_id == restaurant_id) &
         (TableSession.status == "ACTIVE")
     )
-    res_active = await db.execute(query_active_sessions)
-    active_sessions = res_active.scalars().all()
+    res_sesses = await db.execute(query_active_sessions)
+    active_sessions = res_sesses.scalars().all()
+    active_session_map = {sess.table_id: sess.id for sess in active_sessions}
+    active_session_num_map = {sess.table_number: sess.id for sess in active_sessions}
 
-    active_tbl_ids = {s.table_id for s in active_sessions}
-    active_tbl_nums = {s.table_number for s in active_sessions}
-
-    # Dynamically derive table occupancy based on active customer sessions in-memory
-    for tbl in tables:
-        is_session_active = (tbl.id in active_tbl_ids) or (tbl.table_number in active_tbl_nums)
-        if is_session_active:
-            tbl.status = "OCCUPIED"
-            tbl.is_occupied = True
-        elif tbl.status == "OCCUPIED" and not tbl.is_reserved:
-            tbl.status = "AVAILABLE"
-            tbl.is_occupied = False
+    for t in tables:
+        sess_id = active_session_map.get(t.id) or active_session_num_map.get(t.table_number)
+        if sess_id:
+            t.status = "OCCUPIED"
+            t.is_occupied = True
+            t.active_session_id = sess_id
+        else:
+            if t.status == "OCCUPIED":
+                t.status = "AVAILABLE"
+                t.is_occupied = False
+                t.active_session_id = None
 
     return tables
 
@@ -74,12 +96,14 @@ async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depen
 
 @router.post("/{restaurant_id}/tables", status_code=status.HTTP_201_CREATED)
 async def create_table(restaurant_id: str, payload: CreateTableSchema, db: AsyncSession = Depends(get_db)):
-    t_num = payload.tableNumber
-    t_id = payload.id or f"tbl-{restaurant_id}-{t_num.lower().replace(' ', '_')}"
+    t_num = payload.tableNumber.strip()
+    clean_num = t_num.lower().replace(" ", "_")
+    t_id = payload.id or f"tbl-{restaurant_id}-{clean_num}"
+    pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
 
-    query_existing = select(Table).where((Table.id == t_id) | ((Table.restaurant_id == restaurant_id) & (Table.table_number == t_num)))
-    res_existing = await db.execute(query_existing)
-    existing = res_existing.scalar_one_or_none()
+    query = select(Table).where((Table.restaurant_id == restaurant_id) & ((Table.id == t_id) | (Table.table_number == t_num)))
+    result = await db.execute(query)
+    existing = result.scalar_one_or_none()
 
     if existing:
         if payload.section:
@@ -98,7 +122,7 @@ async def create_table(restaurant_id: str, payload: CreateTableSchema, db: Async
         capacity=payload.capacity or 4,
         status="AVAILABLE",
         is_occupied=False,
-        qr_code_url=f"https://dinely.food/customer?restaurant={restaurant_id}&tableId={t_id}&table={t_num}"
+        qr_code_url=f"https://{pub_slug}.dinely.app/customer?table={t_num}"
     )
     db.add(new_tbl)
     await db.commit()
@@ -171,6 +195,7 @@ async def get_or_create_table_session(restaurant_id: str, table_id: str, table_n
     db.add(new_sess)
 
     if not tbl:
+        pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
         tbl = Table(
             id=resolved_tbl_id,
             restaurant_id=restaurant_id,
@@ -179,7 +204,7 @@ async def get_or_create_table_session(restaurant_id: str, table_id: str, table_n
             capacity=4,
             status="OCCUPIED",
             is_occupied=True,
-            qr_code_url=f"https://dinely.food/customer?restaurant={restaurant_id}&tableId={resolved_tbl_id}&table={resolved_tbl_num}"
+            qr_code_url=f"https://{pub_slug}.dinely.app/customer?table={resolved_tbl_num}"
         )
         db.add(tbl)
     else:

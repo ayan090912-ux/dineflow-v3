@@ -79,6 +79,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api, getProductionOrigin } from '../../packages/api/client';
+import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../../packages/utils/tenantResolver';
 import { Order, MenuItem, Table, Employee, InventoryItem, Supplier, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation, Bill, PaymentMethod } from '../../packages/types';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
@@ -1853,7 +1854,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             <Card className="bg-slate-900 border-slate-800 p-8 max-w-xl mx-auto text-center space-y-6 shadow-2xl">
               <div className="p-6 bg-slate-950 rounded-3xl border border-sky-500/30 inline-block shadow-inner">
                 <QRCodeDisplay
-                  url={`${getProductionOrigin()}/customer?restaurant=${currentRestaurant?.id || ''}&table=COUNTER`}
+                  url={getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}
                   tableNumber="COUNTER"
                   restaurantName={currentRestaurant?.name || theme?.restaurantName || 'Food Truck'}
                   restaurantLogo={theme?.logo}
@@ -3908,7 +3909,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       >
         {selectedTableQR && (
           <QRCodeDisplay
-            url={`${getProductionOrigin()}/customer?restaurant=${currentRestaurant?.id || ''}&tableId=${selectedTableQR.id}&table=${encodeURIComponent(selectedTableQR.tableNumber)}`}
+            url={getRestaurantCustomerUrl(currentRestaurant, selectedTableQR.tableNumber, selectedTableQR.id)}
             tableId={selectedTableQR.id}
             tableNumber={selectedTableQR.tableNumber}
             restaurantName={currentRestaurant?.name || theme.restaurantName || 'Lumière Bistro'}

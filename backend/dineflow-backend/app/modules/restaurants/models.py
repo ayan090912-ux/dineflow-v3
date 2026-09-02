@@ -13,6 +13,7 @@ class Restaurant(Base, TimestampMixin, SoftDeleteMixin):
     org_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     slug: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    public_slug: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True, index=True)
     cuisine: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     business_type: Mapped[str] = mapped_column(String(50), default="RESTAURANT", nullable=False)
     has_bar: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

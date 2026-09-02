@@ -7,6 +7,7 @@ import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } from './packages/types';
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
 import { firebaseAuth } from './packages/auth/firebase';
+import { getTenantFromHostname } from './packages/utils/tenantResolver';
 import { Loader2 } from 'lucide-react';
 
 // Lazy-loaded route bundles for optimal bundle size and instantaneous initial load
@@ -200,6 +201,12 @@ function AppContent() {
 
   // Main Route Dispatcher with Comprehensive State Handling
   const renderRoute = useMemo(() => {
+    // 0. Tenant-Specific Public Domain Routing (e.g. https://<slug>.dinely.app)
+    const domainResolution = getTenantFromHostname();
+    if (domainResolution.isTenantSubdomain && domainResolution.slug) {
+      return <CustomerApp />;
+    }
+
     // 1. Landing Website & Public Marketing Pages
     if (
       cleanPath === '/' ||

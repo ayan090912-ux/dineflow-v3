@@ -40,6 +40,7 @@ import { realtimeBus } from './realtime';
 export { realtimeBus } from './realtime';
 import { signOutFirebase, firebaseAuth } from '../auth/firebase';
 import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
+import { getTenantFromHostname, getRestaurantPublicDomain, getRestaurantCustomerUrl } from '../utils/tenantResolver';
 
 // High-performance non-blocking API helper
 const delay = (_ms = 0) => Promise.resolve();
@@ -1840,11 +1841,14 @@ export class DinelyApiClient {
 
   private mapBackendRestaurant(r: any): Restaurant {
     const bType = (r.businessType || r.business_type || 'RESTAURANT').toUpperCase();
+    const cleanSlug = (r.slug || r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')).toLowerCase();
+    const pubSlug = (r.publicSlug || r.public_slug || cleanSlug).toLowerCase();
     return {
       id: r.id,
       orgId: r.org_id || r.orgId || 'org-dinely',
       name: r.name,
-      slug: r.slug || r.name.toLowerCase().replace(/\s+/g, '-'),
+      slug: cleanSlug,
+      publicSlug: pubSlug,
       cuisine: r.cuisine || 'Multi-Cuisine',
       businessType: bType as BusinessType,
       hasBar: r.hasBar !== false && r.has_bar !== false,
@@ -2637,6 +2641,43 @@ export class DinelyApiClient {
 
     const local = this.restaurants.find((r) => r.id === targetId || (targetId && r.id.toLowerCase() === targetId.toLowerCase()));
     return local ? this.ensureRestaurantDefaults(local) : null;
+  }
+
+  async resolveRestaurantBySlug(slug: string): Promise<Restaurant | null> {
+    if (!slug || !slug.trim()) return null;
+    const cleanSlug = slug.trim().toLowerCase();
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/public/slug/${encodeURIComponent(cleanSlug)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.id) {
+          const mapped = this.mapBackendRestaurant(data);
+          const existingIdx = this.restaurants.findIndex((r) => r.id === mapped.id);
+          if (existingIdx >= 0) {
+            this.restaurants[existingIdx] = { ...this.restaurants[existingIdx], ...mapped };
+          } else {
+            this.restaurants.push(mapped);
+          }
+          return this.ensureRestaurantDefaults(mapped);
+        }
+      }
+    } catch (e) {
+      console.warn('API resolveRestaurantBySlug failed:', e);
+    }
+    const local = this.restaurants.find(
+      (r) =>
+        (r.publicSlug && r.publicSlug.toLowerCase() === cleanSlug) ||
+        (r.slug && r.slug.toLowerCase() === cleanSlug) ||
+        r.id === cleanSlug
+    );
+    return local ? this.ensureRestaurantDefaults(local) : null;
+  }
+
+  async resolveRestaurantFromHostname(hostname?: string): Promise<Restaurant | null> {
+    const resolution = getTenantFromHostname(hostname);
+    if (!resolution.slug) return null;
+    return this.resolveRestaurantBySlug(resolution.slug);
   }
 
   async updateRestaurantDetails(restaurantId: string, updates: Partial<Restaurant>) {

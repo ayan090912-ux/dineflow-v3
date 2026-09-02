@@ -62,6 +62,8 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255);",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS public_slug VARCHAR(255);",
+        "UPDATE restaurants SET public_slug = slug WHERE public_slug IS NULL;",
         # Bills Columns
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",
@@ -122,7 +124,7 @@ cors_origins = settings.CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*dinely\.food|https://.*onrender\.com|http://.*",
+    allow_origin_regex=r"https://.*dinely\.food|https://.*dinely\.app|https://.*onrender\.com|http://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
