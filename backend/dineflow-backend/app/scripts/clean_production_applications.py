@@ -58,19 +58,19 @@ async def run_clean_production_applications():
                 is_synthetic_demo = True
 
             if is_synthetic_demo:
-                if r.lifecycle_status == "PENDING_APPROVAL":
-                    r.lifecycle_status = "ARCHIVED"
-                    r.is_approved = False
-                    r.status = "CLOSED"
-                    r.dismissed_at = datetime.now(timezone.utc)
-                    r.dismissed_by = "system_production_cleanup"
-                    r.dismiss_reason = "Cleaned historical test/synthetic fixture from approval queue"
-                    cleaned_count += 1
-                    print(f"-> Archived synthetic pending record: id={r.id}, name='{r.name}', owner={r.owner_email}")
+                r.deleted_at = datetime.now(timezone.utc)
+                r.lifecycle_status = "ARCHIVED"
+                r.is_approved = False
+                r.status = "CLOSED"
+                r.dismissed_at = datetime.now(timezone.utc)
+                r.dismissed_by = "system_production_cleanup"
+                r.dismiss_reason = "Cleaned historical test/synthetic fixture from approval queue"
+                cleaned_count += 1
+                print(f"-> Archived and cleaned synthetic record: id={r.id}, name='{r.name}', owner={r.owner_email}")
 
         if cleaned_count > 0:
             await db.commit()
-            print(f"[SUCCESS] Safely archived {cleaned_count} synthetic pending applications from approval queue.")
+            print(f"[SUCCESS] Safely cleaned {cleaned_count} synthetic demo applications from database.")
         else:
             print("[INFO] No synthetic pending applications found in queue.")
 

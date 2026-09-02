@@ -449,7 +449,7 @@ async def dismiss_restaurant(
     await ws_manager.broadcast_to_restaurant(
         restaurant_id=rest.id,
         message={
-            "type": "RestaurantStatusUpdated",
+            "type": "RestaurantRegistrationDismissed",
             "restaurantId": rest.id,
             "restaurant_id": rest.id,
             "lifecycleStatus": "ARCHIVED",
@@ -462,12 +462,12 @@ async def dismiss_restaurant(
 
     return {
         "status": "SUCCESS",
-        "message": f"Restaurant '{rest.name}' ({rest.id}) archived from approval queue.",
+        "message": f"Restaurant '{rest.name}' ({rest.id}) archived and dismissed from approval queue.",
         "restaurant_id": rest.id,
         "restaurantId": rest.id,
+        "lifecycleStatus": "ARCHIVED",
         "isApproved": False,
         "is_approved": False,
-        "lifecycleStatus": "ARCHIVED",
         "dismissedAt": rest.dismissed_at.isoformat() if rest.dismissed_at else None,
         "restaurant": {
             "id": rest.id,
@@ -477,6 +477,66 @@ async def dismiss_restaurant(
             "status": "CLOSED",
             "dismissReason": rest.dismiss_reason,
         }
+    }
+
+
+@router.post("/restaurants/purge-demo")
+async def purge_demo_fixtures(
+    request: Request,
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Purges/soft-deletes all synthetic demo and test applications from the system,
+    providing a fresh restart for real production operations.
+    """
+    fake_emails = [
+        "owner@cafeco.food",
+        "chaat@dinely.food",
+        "contact@cafeco.food",
+        "owner@lumiere.food",
+        "contact@lumierebistro.food",
+    ]
+    fake_names = [
+        "Mumbai Chaat Cart",
+        "TRIK",
+        "Delhi Street Chaat",
+    ]
+
+    query = select(Restaurant).where(Restaurant.deleted_at.is_(None))
+    result = await db.execute(query)
+    all_rests = result.scalars().all()
+
+    cleaned_count = 0
+    now = datetime.now(timezone.utc)
+    for r in all_rests:
+        is_fake_email = r.owner_email in fake_emails or r.email in fake_emails
+        is_fake_name = any(fn.lower() in (r.name or "").lower() for fn in fake_names)
+        is_synthetic_test_id = (
+            r.id.startswith("rest-test-") or
+            r.id.startswith("rest-dunk-") or
+            r.id.startswith("rest-cafe-") or
+            r.id.startswith("rest-resolve-") or
+            r.id.startswith("rest-qr-tenant-") or
+            r.id in ["rest-1", "rest-1787446097984", "rest-1787655544312"]
+        )
+        if is_fake_email or is_fake_name or (is_synthetic_test_id and (r.owner_uid is None or r.owner_uid.startswith("uid_") or r.owner_uid.startswith("test_"))):
+            r.deleted_at = now
+            r.lifecycle_status = "ARCHIVED"
+            r.is_approved = False
+            r.status = "CLOSED"
+            r.dismissed_at = now
+            r.dismissed_by = admin_claims.get("email", "admin")
+            r.dismiss_reason = "Purged synthetic demo record"
+            cleaned_count += 1
+
+    if cleaned_count > 0:
+        await db.commit()
+
+    return {
+        "status": "SUCCESS",
+        "message": f"Successfully purged {cleaned_count} synthetic demo records.",
+        "purged_count": cleaned_count
     }
 
 

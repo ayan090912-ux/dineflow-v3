@@ -369,7 +369,39 @@ export class DinelyApiClient {
       console.error('Failed to load database from localStorage:', e);
     }
 
+    this.purgeLegacyDemoData();
     this.sanitizeTableSessions();
+  }
+
+  public purgeLegacyDemoData() {
+    const fakeEmails = ['owner@cafeco.food', 'chaat@dinely.food', 'contact@cafeco.food', 'owner@lumiere.food', 'contact@lumierebistro.food'];
+    const fakeNames = ['mumbai chaat cart', 'trik', 'delhi street chaat', 'cafe.co', 'lumière bistro', 'lumiere bistro'];
+    const fakeIds = ['rest-1', 'rest-1787446097984', 'rest-1787655544312'];
+
+    this.restaurants = this.restaurants.filter((r) => {
+      const isFakeEmail = fakeEmails.includes((r.ownerEmail || '').toLowerCase()) || fakeEmails.includes((r.email || '').toLowerCase());
+      const isFakeName = fakeNames.some((fn) => (r.name || '').toLowerCase().trim() === fn);
+      const isFakeId = fakeIds.includes(r.id);
+      return !isFakeEmail && !isFakeName && !isFakeId;
+    });
+  }
+
+  async purgePlatformDemoData(): Promise<any> {
+    const apiBase = getApiBaseUrl();
+    const token = this.getAuthHeader('ADMIN');
+    const res = await fetch(`${apiBase}/admin/restaurants/purge-demo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...token,
+      },
+    });
+    this.purgeLegacyDemoData();
+    this.saveDatabase();
+    if (!res.ok) {
+      throw new Error(`Failed to purge demo records (HTTP ${res.status})`);
+    }
+    return res.json();
   }
 
   private sanitizeTableSessions() {

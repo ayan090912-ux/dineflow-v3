@@ -82,9 +82,34 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [reminderMessage, setReminderMessage] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
   const [isApproving, setIsApproving] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
+  const [incomingAlert, setIncomingAlert] = useState<{ id: string; name: string; ownerEmail?: string } | null>(null);
+
+  const playNotificationChime = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        const audioCtx = new AudioContextClass();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.setValueAtTime(880.00, audioCtx.currentTime + 0.12); // A5
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
+    // Connect Platform Admin to Global WebSocket events
+    realtimeBus.connect('global', 'ADMIN');
     loadData();
+
     const unsub = realtimeBus.subscribe((event: any) => {
       if (event.type === 'RESTAURANT_APPROVED') {
         const approvedId = event.restaurantId || event.restaurant_id;
@@ -95,21 +120,32 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             )
           );
         }
-      } else if (event.type === 'RestaurantRegistrationSubmitted') {
-        api.getPlatformRestaurants().then(setAllRestaurants).catch(() => {});
-        api.getPlatformStats().then(setStats).catch(() => {});
-      } else if (event.type === 'RestaurantStatusUpdated') {
-        const rId = event.restaurantId || event.restaurant_id;
-        if (rId && event.lifecycleStatus) {
-          setAllRestaurants((prev) =>
-            prev.map((r) =>
-              r.id === rId ? { ...r, lifecycleStatus: event.lifecycleStatus, isApproved: event.isApproved ?? r.isApproved } : r
-            )
-          );
-        }
+      } else if (
+        event.type === 'RestaurantRegistrationSubmitted' ||
+        event.type === 'RestaurantSubmitted' ||
+        event.type === 'APPLICATION_CREATED'
+      ) {
+        playNotificationChime();
+        setIncomingAlert({
+          id: event.restaurantId || event.restaurant_id,
+          name: event.restaurantName || 'New Restaurant',
+          ownerEmail: event.ownerEmail,
+        });
+        loadData();
+      } else if (event.type === 'RestaurantStatusUpdated' || event.type === 'RESTAURANT_REJECTED' || event.type === 'RESTAURANT_DISMISSED') {
+        loadData();
       }
     });
-    return () => unsub();
+
+    // High-reliability live sync polling
+    const pollInterval = setInterval(() => {
+      loadData();
+    }, 8000);
+
+    return () => {
+      unsub();
+      clearInterval(pollInterval);
+    };
   }, []);
 
   const loadData = async () => {
@@ -146,31 +182,6 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     }
     return result;
   }, [allOrders]);
-
-  const pendingRestaurants = allRestaurants.filter(
-    (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved)
-  );
-
-  const filteredRestaurants = allRestaurants.filter((r) => {
-    if (statusFilter === 'DELETED') return r.isDeleted || r.lifecycleStatus === 'DELETED';
-    if (r.isDeleted || r.lifecycleStatus === 'DELETED') return false;
-
-    if (statusFilter === 'LIVE') return r.lifecycleStatus === 'LIVE' || r.isApproved;
-    if (statusFilter === 'PENDING') return r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved;
-    if (statusFilter === 'INACTIVE') return r.lifecycleStatus === 'DEACTIVATED';
-    if (statusFilter === 'SUSPENDED') return r.lifecycleStatus === 'SUSPENDED';
-
-    return true;
-  }).filter((r) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      r.name.toLowerCase().includes(q) ||
-      (r.ownerName && r.ownerName.toLowerCase().includes(q)) ||
-      (r.ownerEmail && r.ownerEmail.toLowerCase().includes(q)) ||
-      (r.cuisine && r.cuisine.toLowerCase().includes(q))
-    );
-  });
 
   const handleApprove = async (id: string) => {
     if (isApproving) return;
@@ -317,6 +328,22 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     }
   };
 
+  const handlePurgeDemoData = async () => {
+    if (!window.confirm('Are you sure you want to clean all synthetic demo records? This will ensure only authentic registered restaurants are displayed.')) {
+      return;
+    }
+    setIsPurging(true);
+    try {
+      const res = await api.purgePlatformDemoData();
+      showSuccess(`Fresh Reset Complete: Cleaned ${res.purged_count || 0} synthetic demo records! 🧹`);
+      await loadData();
+    } catch (e: any) {
+      alert(`Purge error: ${e.message || 'Failed to purge demo records'}`);
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   const showSuccess = (msg: string) => {
     setActionSuccessMsg(msg);
     setTimeout(() => setActionSuccessMsg(''), 4000);
@@ -330,6 +357,27 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     setReminderMessage('');
   };
 
+  const pendingRestaurants = allRestaurants.filter(
+    (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
+  );
+
+  const filteredRestaurants = allRestaurants.filter((r) => {
+    if (r.isDeleted) return false;
+    if (statusFilter === 'LIVE' && !r.isApproved) return false;
+    if (statusFilter === 'PENDING' && (r.isApproved || r.lifecycleStatus !== 'PENDING_APPROVAL')) return false;
+    if (statusFilter === 'INACTIVE' && (r.status !== 'CLOSED' || r.lifecycleStatus === 'LIVE')) return false;
+    if (statusFilter === 'SUSPENDED' && r.lifecycleStatus !== 'SUSPENDED') return false;
+    if (statusFilter === 'DELETED' && !r.isDeleted) return false;
+
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      r.name.toLowerCase().includes(q) ||
+      (r.ownerEmail && r.ownerEmail.toLowerCase().includes(q)) ||
+      (r.ownerName && r.ownerName.toLowerCase().includes(q)) ||
+      (r.cuisine && r.cuisine.toLowerCase().includes(q))
+    );
+  });
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col sm:flex-row font-sans">
       {/* Platform Admin Sidebar */}
@@ -406,6 +454,46 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
       {/* Main Content Area */}
       <main className="flex-1 p-6 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+        {/* Realtime Incoming Application Alert */}
+        {incomingAlert && (
+          <div className="mb-6 p-4 rounded-2xl bg-rose-500/20 border-2 border-rose-500/50 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xl animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-rose-500/30 text-rose-300">
+                <Bell className="w-6 h-6 animate-bounce text-rose-400" />
+              </div>
+              <div>
+                <h4 className="font-black text-sm text-white flex items-center gap-2">
+                  ⚡ Realtime Application Received: <span className="text-rose-400 font-mono">{incomingAlert.name}</span>
+                </h4>
+                <p className="text-xs text-slate-300">
+                  {incomingAlert.ownerEmail ? `Owner: ${incomingAlert.ownerEmail}` : 'A new restaurant owner'} submitted an application for launch approval. Review details now.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => {
+                  setActiveTab('pending');
+                  setIncomingAlert(null);
+                }}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md"
+              >
+                Review Application
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIncomingAlert(null)}
+                className="text-xs border-slate-700 text-slate-300 hover:bg-slate-800"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Notification Alert Banner */}
         {actionSuccessMsg && (
           <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2 shadow-lg animate-fadeIn">
@@ -414,7 +502,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           </div>
         )}
 
-        {pendingRestaurants.length > 0 && (
+        {pendingRestaurants.length > 0 && !incomingAlert && (
           <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex items-center justify-between shadow-xl">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400">
@@ -457,7 +545,18 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             </h2>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePurgeDemoData}
+              disabled={isPurging}
+              isLoading={isPurging}
+              className="border-slate-800 text-slate-400 hover:text-amber-400 hover:bg-slate-800 text-xs"
+              icon={<Trash2 className="w-3.5 h-3.5" />}
+            >
+              Purge Demo Records
+            </Button>
             <Button
               variant="outline"
               size="sm"
