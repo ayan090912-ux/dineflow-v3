@@ -228,7 +228,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       setCurrentUser(user);
       setIsAuthInitializing(false);
 
-      if (authRes.hasRestaurant && authRes.restaurant) {
+      const searchParams = new URLSearchParams(window.location.search);
+      const isCreateMode = searchParams.get('mode') === 'create' || searchParams.get('new') === 'true' || window.location.hash.includes('create');
+
+      if (!isCreateMode && authRes.hasRestaurant && authRes.restaurant) {
         if (authRes.restaurant.isApproved || authRes.restaurant.lifecycleStatus === 'APPROVED' || authRes.restaurant.lifecycleStatus === 'ACTIVE') {
           if (onNavigate) onNavigate('/workspace');
           return;

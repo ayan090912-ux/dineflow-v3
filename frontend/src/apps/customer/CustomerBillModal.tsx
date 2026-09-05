@@ -50,7 +50,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
   const [isCallingWaiter, setIsCallingWaiter] = useState(false);
 
-  const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
+  const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
   const standardTable = formatStandardTableNumber(tableNumber);
 
   // Load Running Bill

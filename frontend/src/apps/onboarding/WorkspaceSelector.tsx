@@ -32,34 +32,34 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   onLogout,
 }) => {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [viewState, setViewState] = useState<'INITIALIZING' | 'LOADING' | 'READY' | 'EMPTY' | 'ERROR'>('INITIALIZING');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const currentUser = user || api.getCurrentUser();
   const userName = currentUser?.name || currentUser?.firstName || currentUser?.email?.split('@')[0] || 'Owner';
 
   const loadOwnerRestaurants = async (targetEmail?: string, targetUid?: string) => {
-    setIsLoading(true);
+    setViewState('LOADING');
+    setErrorMessage('');
     try {
       const email = targetEmail || currentUser?.email;
       const uid = targetUid || currentUser?.id;
       const list = await api.getOwnerRestaurants(email, uid);
       setRestaurants(list);
-    } catch (e) {
+      if (list.length === 0) {
+        setViewState('EMPTY');
+      } else {
+        setViewState('READY');
+      }
+    } catch (e: any) {
       console.error('Failed to load owner restaurants:', e);
-    } finally {
-      setIsLoading(false);
+      setErrorMessage(e?.message || 'Unable to connect to Dinely Cloud. Please check your internet or retry.');
+      setViewState('ERROR');
     }
   };
 
   useEffect(() => {
     loadOwnerRestaurants();
-    const safetyTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 4000);
-
-    return () => {
-      clearTimeout(safetyTimer);
-    };
   }, [currentUser?.email, currentUser?.id]);
 
   const handleLogout = async () => {
@@ -113,13 +113,43 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
           </p>
         </div>
 
-        {/* Loading / Zero State / Grid */}
-        {isLoading ? (
+        {/* Loading / Zero State / Error / Grid */}
+        {viewState === 'INITIALIZING' || viewState === 'LOADING' ? (
           <div className="py-20 text-center space-y-3 bg-slate-900/60 border border-slate-800/80 rounded-3xl backdrop-blur-xl">
             <div className="w-10 h-10 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
             <p className="text-xs text-slate-400 font-mono">Loading restaurant workspaces...</p>
           </div>
-        ) : restaurants.length === 0 ? (
+        ) : viewState === 'ERROR' ? (
+          <div className="p-10 text-center space-y-5 bg-slate-900/80 border border-rose-900/40 rounded-3xl backdrop-blur-xl max-w-lg mx-auto shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-white">Connection Issue</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {errorMessage || 'Failed to retrieve your restaurant list from the server.'}
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => loadOwnerRestaurants()}
+                className="px-6 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white"
+              >
+                Retry Connection
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCreateNewRestaurant}
+                className="px-4 py-2.5 text-xs font-bold border-slate-700 text-slate-300"
+              >
+                Create Restaurant
+              </Button>
+            </div>
+          </div>
+        ) : viewState === 'EMPTY' || restaurants.length === 0 ? (
           <div className="p-12 text-center space-y-6 bg-slate-900/60 border border-slate-800/80 rounded-3xl backdrop-blur-xl max-w-xl mx-auto shadow-2xl">
             <div className="w-20 h-20 rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
               <Store className="w-10 h-10" />

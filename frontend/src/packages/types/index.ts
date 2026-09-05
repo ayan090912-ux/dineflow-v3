@@ -428,6 +428,7 @@ export interface BillingConfig {
   stateCode: string;
   gstin: string;
   pan: string;
+  taxPercentage?: number;
   address?: string;
   phone?: string;
   email?: string;

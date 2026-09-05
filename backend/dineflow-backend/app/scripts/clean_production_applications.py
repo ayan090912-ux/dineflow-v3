@@ -47,11 +47,8 @@ async def run_clean_production_applications():
             is_fake_name = any(fn.lower() in (r.name or "").lower() for fn in fake_names)
             is_synthetic_test_id = (
                 r.id.startswith("rest-test-") or
-                r.id.startswith("rest-dunk-") or
-                r.id.startswith("rest-cafe-") or
-                r.id.startswith("rest-resolve-") or
-                r.id.startswith("rest-qr-tenant-") or
-                r.id in ["rest-1", "rest-1787446097984", "rest-1787655544312"]
+                r.id.startswith("rest-synthetic-") or
+                r.id.startswith("test-fixture-")
             )
 
             if is_fake_email or is_fake_name or (is_synthetic_test_id and (r.owner_uid is None or r.owner_uid.startswith("uid_") or r.owner_uid.startswith("test_"))):

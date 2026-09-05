@@ -28,13 +28,22 @@ engine_kwargs = {
     "future": True
 }
 if "sqlite" not in db_url:
+    is_remote = "localhost" not in db_url and "127.0.0.1" not in db_url
+    connect_args = {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "command_timeout": 60,
+    }
+    if is_remote:
+        connect_args["ssl"] = "require"
+
     engine_kwargs.update({
         "pool_size": settings.DB_POOL_SIZE,
         "max_overflow": settings.DB_MAX_OVERFLOW,
-        "pool_pre_ping": settings.DB_POOL_PRE_PING,
-        "pool_recycle": 300,
+        "pool_pre_ping": True,
+        "pool_recycle": 60,
         "pool_timeout": 30,
-        "connect_args": {"ssl": True} if "localhost" not in db_url and "127.0.0.1" not in db_url else {}
+        "connect_args": connect_args,
     })
 
 # Create async engine
@@ -61,13 +70,12 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
-        finally:
-            await session.close()
+        except Exception:
+            await session.rollback()
+            raise

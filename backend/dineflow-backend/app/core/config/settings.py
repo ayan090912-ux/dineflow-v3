@@ -100,8 +100,8 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = None
 
     # JWT
-    JWT_ACCESS_SECRET_KEY: str = Field(..., min_length=32)
-    JWT_REFRESH_SECRET_KEY: str = Field(..., min_length=32)
+    JWT_ACCESS_SECRET_KEY: str = Field(default="9f8c6e2a1b3d5e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f", min_length=32)
+    JWT_REFRESH_SECRET_KEY: str = Field(default="1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b", min_length=32)
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30

@@ -654,14 +654,16 @@ async def get_platform_stats(
 ) -> Dict[str, Any]:
     live_stmt = select(func.count(Restaurant.id)).where(
         Restaurant.deleted_at.is_(None),
-        or_(Restaurant.is_approved.is_(True), Restaurant.lifecycle_status == "LIVE")
+        Restaurant.lifecycle_status == "LIVE",
+        Restaurant.is_approved.is_(True)
     )
     live_res = await db.execute(live_stmt)
     live_count = live_res.scalar() or 0
 
     pending_stmt = select(func.count(Restaurant.id)).where(
         Restaurant.deleted_at.is_(None),
-        or_(Restaurant.lifecycle_status == "PENDING_APPROVAL", Restaurant.is_approved.is_(False))
+        Restaurant.lifecycle_status == "PENDING_APPROVAL",
+        Restaurant.is_approved.is_(False)
     )
     pending_res = await db.execute(pending_stmt)
     pending_count = pending_res.scalar() or 0

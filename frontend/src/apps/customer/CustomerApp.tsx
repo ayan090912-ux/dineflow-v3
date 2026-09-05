@@ -374,7 +374,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   };
 
   const getTableStorageKey = (restId?: string, tableNum?: string) => {
-    const rId = restId || currentRestaurant?.id || 'rest-1';
+    const rId = restId || currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     const tNum = (tableNum || selectedTableNum || tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '');
     return `dinely_customer_active_orders_${rId}_${tNum}`;
   };
@@ -492,7 +492,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const hasKitchenItems = orderItems.some((i) => i.targetDestination === 'KITCHEN');
     const targetDest = hasBarItems && hasKitchenItems ? 'MIXED' : hasBarItems ? 'BAR' : 'KITCHEN';
 
-    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || 'rest-1';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     const isNoTable = currentRestaurant?.hasTables === false;
 
     try {

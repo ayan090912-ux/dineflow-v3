@@ -682,15 +682,17 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
           </div>
         )}
 
-        {/* Back to Home Link */}
-        <div className="text-center">
-          <button
-            onClick={() => onNavigate('/')}
-            className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-          >
-            ← Back to Dinely Home Page
-          </button>
-        </div>
+        {/* Back to Home Link (Hidden for Platform Admin) */}
+        {portal !== 'admin' && (
+          <div className="text-center">
+            <button
+              onClick={() => onNavigate('/')}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              ← Back to Dinely Home Page
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

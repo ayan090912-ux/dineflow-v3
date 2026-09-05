@@ -625,7 +625,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Validation Error', 'Category name cannot be empty.');
       return;
     }
-    const restId = currentRestaurant?.id || 'rest-1';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     if (categoryModalMode === 'FOOD') {
       const added = await api.addCategory({ restaurantId: restId, name: newCategoryInput.trim() });
       if (added) {
@@ -817,7 +817,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       return;
     }
     try {
-      const restId = currentRestaurant?.id || 'rest-1';
+      const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
       const initialPass = newStaffPassword || (newStaff.role === 'CHEF' ? 'kitchen123' : newStaff.role === 'WAITER' ? 'waiter123' : 'staff123');
       const created = await api.addEmployee({
         restaurantId: restId,
@@ -924,7 +924,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Validation Failed', 'Supplier company name is required');
       return;
     }
-    const restId = currentRestaurant?.id || 'rest-1';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     await api.addSupplier({
       restaurantId: restId,
       name: newSupplier.name,
@@ -960,7 +960,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       addToast('error', 'Validation Failed', 'Item name is required');
       return;
     }
-    const restId = currentRestaurant?.id || 'rest-1';
+    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     const selectedSup = suppliers.find((s) => s.id === newInventory.supplierId);
 
     await api.addInventoryItem({
@@ -3066,7 +3066,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             {/* SUBTAB 4: OWNER BILLING & UPI SETTINGS */}
             {billingSubTab === 'settings' && (
               <OwnerBillingSettings
-                restaurantId={currentRestaurant?.id || 'rest-1'}
+                restaurantId={currentRestaurant?.id || api.getCurrentRestaurantId() || ''}
                 currentRestaurant={currentRestaurant}
                 addToast={addToast}
                 onConfigSaved={loadData}
@@ -3076,7 +3076,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
             {/* SUBTAB 3: TAXES MANAGEMENT */}
             {billingSubTab === 'taxes' && (
               <TaxManagement
-                restaurantId={currentRestaurant?.id || 'rest-1'}
+                restaurantId={currentRestaurant?.id || api.getCurrentRestaurantId() || ''}
                 currencySymbol={theme.currency || '₹'}
                 categories={foodCategories}
                 menuItems={menuItems}
@@ -3239,7 +3239,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                                         disabled={settlingBillId === activeBill.id}
                                         onClick={async () => {
                                           setSettlingBillId(activeBill.id);
-                                          await api.closeTableSettlement(currentRestaurant?.id || 'rest-1', activeBill.id, 'Cashier');
+                                          await api.closeTableSettlement(currentRestaurant?.id || api.getCurrentRestaurantId() || '', activeBill.id, 'Cashier');
                                           addToast('success', 'Table Closed & Reset! 🧹', `${tbl.tableNumber} is now available.`);
                                           setSettlingBillId(null);
                                           await loadData();
@@ -3255,7 +3255,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                                     size="sm"
                                     onClick={async () => {
                                       try {
-                                        const b = await api.generateTableInvoice(currentRestaurant?.id || 'rest-1', {
+                                        const b = await api.generateTableInvoice(currentRestaurant?.id || api.getCurrentRestaurantId() || '', {
                                           tableNumber: tbl.tableNumber,
                                           tableId: tbl.id,
                                         });
@@ -5370,7 +5370,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
                 onClick={async () => {
                   try {
                     const updated = await api.markBillPayment(
-                      currentRestaurant?.id || 'rest-1',
+                      currentRestaurant?.id || api.getCurrentRestaurantId() || '',
                       paymentBillModal.id,
                       paymentMethodInput,
                       paymentVerifiedByInput || 'Staff',

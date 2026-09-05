@@ -424,10 +424,11 @@ export class DinelyApiClient {
       }
     });
 
-    const origin = getProductionOrigin();
     this.tables.forEach((tbl) => {
-      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app') || tbl.qrCodeUrl.includes('localhost') || tbl.qrCodeUrl.includes('127.0.0.1') || !tbl.qrCodeUrl.includes('tableId=')) {
-        tbl.qrCodeUrl = `${origin}/customer?restaurant=${tbl.restaurantId || ''}&tableId=${tbl.id}&table=${encodeURIComponent(tbl.tableNumber)}`;
+      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || (!tbl.qrCodeUrl.includes('.dinely.app') && !tbl.qrCodeUrl.includes('table='))) {
+        const rest = this.restaurants.find((r) => r.id === tbl.restaurantId);
+        const slug = rest?.publicSlug || rest?.slug || tbl.restaurantId;
+        tbl.qrCodeUrl = getRestaurantCustomerUrl(slug, tbl.tableNumber, tbl.id);
       }
       const activeSession = this.tableSessions.find(
         (s) => s.status === 'ACTIVE' && (s.restaurantId === tbl.restaurantId || !s.restaurantId) && (s.tableId === tbl.id || matchTableNumber(s.tableNumber, tbl.tableNumber))
@@ -767,17 +768,28 @@ export class DinelyApiClient {
       this.users.unshift(user);
     }
 
-    // 2. Find restaurant associated with this owner
-    const restaurant = this.restaurants.find(
-      (r) => !r.isDeleted && (r.id === user?.restaurantId || r.ownerEmail?.toLowerCase() === normalizedEmail)
-    );
+    // 2. Query Neon PostgreSQL for all restaurants associated with this owner Google account
+    const ownerRestaurants = await this.getOwnerRestaurants(normalizedEmail, googleData.googleUid);
+
+    let restaurant: Restaurant | null = null;
+    if (ownerRestaurants.length > 0) {
+      // Prioritize live/approved restaurants or latest pending application
+      restaurant =
+        ownerRestaurants.find((r) => r.isApproved || r.lifecycleStatus === 'APPROVED' || r.lifecycleStatus === 'LIVE' || r.lifecycleStatus === 'ACTIVE') ||
+        ownerRestaurants.find((r) => r.lifecycleStatus === 'PENDING_APPROVAL') ||
+        ownerRestaurants[0];
+    } else {
+      restaurant = this.restaurants.find(
+        (r) => !r.isDeleted && (r.id === user?.restaurantId || (r.ownerEmail && r.ownerEmail.toLowerCase() === normalizedEmail))
+      ) || null;
+    }
 
     if (restaurant && restaurant.lifecycleStatus === 'SUSPENDED') {
       throw new Error('Your restaurant account has been suspended by Platform Admin. Access is temporarily disabled.');
     }
 
-    if (restaurant && restaurant.isDeleted) {
-      throw new Error('This restaurant account has been permanently removed by Platform Admin.');
+    if (restaurant && (restaurant.lifecycleStatus === 'ARCHIVED' || (restaurant as any).isDeleted)) {
+      restaurant = null;
     }
 
     const tokens: AuthTokens = {
@@ -790,6 +802,8 @@ export class DinelyApiClient {
     user.tokens = tokens;
     if (restaurant) {
       user.restaurantId = restaurant.id;
+      this.currentRestaurantId = restaurant.id;
+      this.currentRestaurantIdsByScope['OWNER'] = restaurant.id;
     }
 
     this.saveSession(user, tokens, restaurant?.id || null);
@@ -812,6 +826,7 @@ export class DinelyApiClient {
       isNewUser,
       hasRestaurant: !!restaurant,
       restaurant,
+      ownerRestaurants,
     };
   }
 
@@ -3860,7 +3875,26 @@ export class DinelyApiClient {
   }
 
   async getBillingConfig(restaurantId?: string): Promise<BillingConfig> {
-    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+      return {
+        restaurantId: '',
+        name: '',
+        legalName: '',
+        state: '',
+        stateCode: '',
+        currency: 'INR (₹)',
+        taxPercentage: 5.0,
+        serviceChargePercentage: 0,
+        serviceChargeEnabled: false,
+        gstin: '',
+        pan: '',
+        invoicePrefix: 'INV-',
+        invoiceStartingNumber: 1001,
+        upiId: '',
+        upiMerchantName: '',
+        upiQrUrl: '',
+        upiEnabled: true,
+      };
     const apiBase = getApiBaseUrl();
     let remoteConfig: any = null;
     try {
@@ -4377,11 +4411,10 @@ export class DinelyApiClient {
     };
   }
 
-
-
   async addCategory(data: { restaurantId?: string; name: string; icon?: string }) {
     await delay(150);
-    const restId = this.resolveTenantRestaurantId(data.restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(data.restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected");
     const newCat: MenuCategory = {
       id: `cat-${Date.now()}`,
       restaurantId: restId,
@@ -4424,7 +4457,7 @@ export class DinelyApiClient {
   // --- Dedicated Bar Category APIs ---
   async getBarCategories(restaurantId?: string) {
     await delay(100);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
     if (!targetId) return [];
     let cats = this.barCategories.filter((c) => c.restaurantId === targetId);
     if (cats.length === 0) {
@@ -4444,7 +4477,8 @@ export class DinelyApiClient {
 
   async addBarCategory(data: { restaurantId?: string; name: string; isEnabled?: boolean }) {
     await delay(150);
-    const restId = this.resolveTenantRestaurantId(data.restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(data.restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected");
     const newCat: BarCategory = {
       id: `bcat-${Date.now()}`,
       restaurantId: restId,
@@ -4486,14 +4520,15 @@ export class DinelyApiClient {
   // --- Dedicated Bar Menu Item APIs ---
   async getBarMenuItems(restaurantId?: string) {
     await delay(100);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
     if (!targetId) return [];
     return this.barMenuItems.filter((m) => m.restaurantId === targetId);
   }
 
   async addBarMenuItem(itemData: Partial<BarMenuItem>) {
     await delay(150);
-    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(itemData.restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected");
     const newItem: BarMenuItem = {
       id: `bitem-${Date.now()}`,
       restaurantId: restId,
@@ -4565,7 +4600,8 @@ export class DinelyApiClient {
 
   async bulkImportBarMenuItems(restaurantId: string, items: Partial<BarMenuItem>[]) {
     await delay(200);
-    const restId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected");
     const created = items.map((i, idx) => ({
       id: `bitem-${Date.now()}-${idx}`,
       restaurantId: restId,
@@ -4597,14 +4633,15 @@ export class DinelyApiClient {
   async getEmployees(restaurantId?: string) {
     this.loadDatabase();
     await delay(100);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
     if (!targetId) return [];
     return this.employees.filter((e) => e.restaurantId === targetId);
   }
 
   async addEmployee(empData: Partial<Employee>) {
     await delay(150);
-    const restId = this.resolveTenantRestaurantId(empData.restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(empData.restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected");
     
     if (empData.email) {
       const existing = this.employees.find(
@@ -4686,14 +4723,15 @@ export class DinelyApiClient {
   async getSuppliers(restaurantId?: string) {
     this.loadDatabase();
     await delay(50);
-    const targetId = this.resolveTenantRestaurantId(restaurantId);
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
     if (!targetId) return [];
     return this.suppliers.filter((s) => s.restaurantId === targetId);
   }
 
   async addSupplier(supData: Partial<Supplier>) {
     await delay(100);
-    const restId = this.resolveTenantRestaurantId(supData.restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(supData.restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected");
     const newSup: Supplier = {
       id: `sup-${Date.now()}`,
       restaurantId: restId,
@@ -4719,7 +4757,8 @@ export class DinelyApiClient {
 
   async addInventoryItem(invData: Partial<InventoryItem>) {
     await delay(150);
-    const restId = this.resolveTenantRestaurantId(invData.restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(invData.restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected");
     const category = invData.category || 'Pantry';
     const isBarCategory = category.toLowerCase().includes('bar') || category.toLowerCase().includes('liquor') || category.toLowerCase().includes('spirit') || category.toLowerCase().includes('wine') || category.toLowerCase().includes('cocktail') || category.toLowerCase().includes('beer') || category.toLowerCase().includes('beverage');
     const station = invData.station || (isBarCategory ? 'BAR' : 'KITCHEN');
@@ -5104,7 +5143,8 @@ export class DinelyApiClient {
   }
 
   async createTax(restaurantId: string, taxData: Partial<Tax>): Promise<Tax> {
-    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
     const apiBase = getApiBaseUrl();
     const payload = {
       name: taxData.name,
@@ -5147,7 +5187,8 @@ export class DinelyApiClient {
   }
 
   async updateTax(restaurantId: string, taxId: string, updates: Partial<Tax>): Promise<Tax> {
-    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
     const apiBase = getApiBaseUrl();
     const payload = {
       name: updates.name,
@@ -5190,7 +5231,8 @@ export class DinelyApiClient {
   }
 
   async activateTax(restaurantId: string, taxId: string): Promise<Tax> {
-    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes/${encodeURIComponent(taxId)}/activate`, {
       method: 'POST',
@@ -5202,7 +5244,8 @@ export class DinelyApiClient {
   }
 
   async deactivateTax(restaurantId: string, taxId: string): Promise<Tax> {
-    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes/${encodeURIComponent(taxId)}/deactivate`, {
       method: 'POST',
@@ -5214,7 +5257,8 @@ export class DinelyApiClient {
   }
 
   async calculateTaxes(restaurantId: string, items: any[], orderType: string = 'DINE_IN') {
-    const targetId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!targetId) return null;
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/taxes/calculate`, {
       method: 'POST',
@@ -5350,10 +5394,9 @@ export class DinelyApiClient {
     };
   }
 
-
-
   async createOrder(orderData: Partial<Order>): Promise<Order> {
-    const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || 'rest-1';
+    const restId = this.resolveTenantRestaurantId(orderData.restaurantId) || this.getCurrentRestaurantId();
+    if (!restId) throw new Error("No active restaurant selected for order creation");
 
     try {
       const apiBase = getApiBaseUrl();
@@ -5440,7 +5483,6 @@ export class DinelyApiClient {
     }
   }
 
-
   async getKitchenAnalytics(restaurantId?: string) {
     await delay(50);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
@@ -5516,7 +5558,8 @@ export class DinelyApiClient {
 
   // Customer & Portal Helper APIs
   async requestBill(tableNumber: string, restaurantId?: string) {
-    const targetRestId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetRestId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!targetRestId) throw new Error("No active restaurant selected");
     const req = {
       id: `req-${Date.now()}`,
       restaurantId: targetRestId,
@@ -5551,7 +5594,8 @@ export class DinelyApiClient {
   }
 
   async callWaiter(tableNumber: string, reason: string, restaurantId?: string) {
-    const targetRestId = this.resolveTenantRestaurantId(restaurantId) || 'rest-1';
+    const targetRestId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
+    if (!targetRestId) throw new Error("No active restaurant selected");
     const req = {
       id: `req-${Date.now()}`,
       restaurantId: targetRestId,
