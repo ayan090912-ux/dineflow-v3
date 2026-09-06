@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "https://dinely.food",
         "https://www.dinely.food",
+        "https://dinely-cd6cd.web.app",
+        "https://dinely-cd6cd.firebaseapp.com",
         "https://dineflow-v3.onrender.com",
         "http://localhost:5173",
         "http://localhost:3000",

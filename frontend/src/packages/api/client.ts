@@ -1773,7 +1773,7 @@ export class DinelyApiClient {
     const uid = (ownerUid || user?.id || (typeof window !== 'undefined' && firebaseAuth.currentUser?.uid) || '').trim();
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
       const apiBase = getApiBaseUrl();
