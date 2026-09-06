@@ -422,7 +422,12 @@ async def update_restaurant(restaurant_id: str, payload: UpdateRestaurantSchema,
         rest.owner_uid = payload.ownerUid
     if payload.lifecycleStatus:
         rest.lifecycle_status = payload.lifecycleStatus.upper()
-    if payload.submittedAt is not None:
+        if rest.lifecycle_status == "PENDING_APPROVAL":
+            rest.is_approved = False
+            rest.rejection_reason = None
+            rest.requested_changes = None
+            rest.submitted_at = datetime.now(timezone.utc)
+    if payload.submittedAt is not None and rest.lifecycle_status != "PENDING_APPROVAL":
         rest.submitted_at = datetime.now(timezone.utc)
     if payload.phone:
         rest.phone = payload.phone
@@ -463,13 +468,30 @@ async def update_restaurant(restaurant_id: str, payload: UpdateRestaurantSchema,
         await ws_manager.broadcast_global({
             "type": "RestaurantRegistrationSubmitted",
             "restaurantId": rest.id,
+            "restaurant_id": rest.id,
             "restaurantName": rest.name,
             "ownerEmail": rest.owner_email,
             "ownerName": rest.owner_name,
             "businessType": rest.business_type,
             "lifecycleStatus": rest.lifecycle_status,
+            "isApproved": False,
+            "is_approved": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
+        await ws_manager.broadcast_to_restaurant(
+            restaurant_id=restaurant_id,
+            message={
+                "type": "RestaurantStatusUpdated",
+                "restaurantId": rest.id,
+                "restaurant_id": rest.id,
+                "lifecycleStatus": "PENDING_APPROVAL",
+                "isApproved": False,
+                "is_approved": False,
+                "rejectionReason": None,
+                "requestedChanges": None,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
     return rest
 

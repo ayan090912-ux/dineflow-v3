@@ -1540,6 +1540,23 @@ export class DinelyApiClient {
   async submitRestaurantLaunch(setupData: any) {
     const activeRestId = setupData.id || this.currentRestaurantId || this.currentUser?.restaurantId;
     let existing = this.restaurants.find((r) => r.id === activeRestId);
+
+    if (!existing && activeRestId) {
+      try {
+        const apiBase = getApiBaseUrl();
+        const fetchRes = await fetch(`${apiBase}/restaurants/${encodeURIComponent(activeRestId)}`);
+        if (fetchRes.ok) {
+          const rawData = await fetchRes.json();
+          if (rawData && rawData.id) {
+            existing = this.mapBackendRestaurant(rawData);
+            this.restaurants.push(existing);
+          }
+        }
+      } catch (e) {
+        console.warn('submitRestaurantLaunch prefetch notice:', e);
+      }
+    }
+
     const now = new Date().toISOString();
 
     if (existing) {
@@ -1601,6 +1618,8 @@ export class DinelyApiClient {
           if (updated) {
             existing.lifecycleStatus = (updated.lifecycle_status || 'PENDING_APPROVAL') as RestaurantLifecycleStatus;
             existing.isApproved = Boolean(updated.is_approved);
+            existing.rejectionReason = updated.rejection_reason || undefined;
+            existing.requestedChanges = updated.requested_changes || undefined;
           }
         }
       } catch (e) {
@@ -1610,6 +1629,16 @@ export class DinelyApiClient {
       realtimeBus.emit('RestaurantRegistrationSubmitted' as any, {
         restaurantId: existing.id,
         restaurantName: existing.name,
+        lifecycleStatus: 'PENDING_APPROVAL',
+        isApproved: false,
+      } as any);
+
+      realtimeBus.emit('RestaurantStatusUpdated' as any, {
+        restaurantId: existing.id,
+        lifecycleStatus: 'PENDING_APPROVAL',
+        isApproved: false,
+        rejectionReason: undefined,
+        requestedChanges: undefined,
       } as any);
 
       this.saveDatabase();
@@ -3069,16 +3098,7 @@ export class DinelyApiClient {
   }
 
   async resubmitRestaurantLaunch(restaurantId: string) {
-    await delay(300);
-    const rest = this.restaurants.find((r) => r.id === restaurantId);
-    if (rest) {
-      rest.lifecycleStatus = 'PENDING_APPROVAL';
-      rest.isApproved = false;
-      rest.rejectionReason = undefined;
-      rest.requestedChanges = undefined;
-      this.saveDatabase();
-    }
-    return rest;
+    return await this.submitRestaurantLaunch({ id: restaurantId, lifecycleStatus: 'PENDING_APPROVAL' });
   }
 
 

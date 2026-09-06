@@ -82,3 +82,80 @@ def test_platform_stats_and_pending_count_accuracy():
 
     stats_after_rej = client.get("/api/v1/admin/stats", headers=admin_headers).json()
     assert stats_after_rej["pendingApprovals"] == init_pending
+
+
+def test_restaurant_rejection_resubmission_and_approval_lifecycle():
+    admin_token = create_admin_jwt()
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    t_stamp = int(time.time() * 1000)
+
+    rest_id = f"rest-resubmit-cycle-{t_stamp}"
+    # 1. Create Restaurant -> PENDING_APPROVAL
+    create_resp = client.post("/api/v1/restaurants", json={
+        "id": rest_id,
+        "name": f"Resubmit Cycle Venue {t_stamp}",
+        "ownerName": "Resubmit Tester",
+        "ownerEmail": f"resubmit_{t_stamp}@gmail.com",
+        "ownerUid": f"uid_resubmit_{t_stamp}",
+        "phone": "+919876543210",
+        "address": "123 Test St",
+        "businessType": "RESTAURANT",
+    })
+    assert create_resp.status_code == 201
+    created_data = create_resp.json()
+    assert created_data["lifecycle_status"] == "PENDING_APPROVAL"
+    assert created_data["is_approved"] is False
+
+    # 2. Platform Admin Rejects application with reason
+    rej_resp = client.post("/api/v1/admin/restaurants/reject", headers=admin_headers, json={
+        "restaurant_id": rest_id,
+        "reason": "Please provide verified business address and phone.",
+    })
+    assert rej_resp.status_code == 200
+    rej_data = rej_resp.json()
+    assert rej_data["lifecycleStatus"] == "REJECTED"
+    assert rej_data["isApproved"] is False
+
+    # Verify restaurant details shows REJECTED with rejection reason
+    get_rej = client.get(f"/api/v1/restaurants/{rest_id}")
+    assert get_rej.status_code == 200
+    assert get_rej.json()["lifecycle_status"] == "REJECTED"
+    assert get_rej.json()["rejection_reason"] == "Please provide verified business address and phone."
+
+    # 3. Owner Resubmits application with updated details
+    resubmit_resp = client.put(f"/api/v1/restaurants/{rest_id}", json={
+        "name": f"Resubmit Cycle Venue Updated {t_stamp}",
+        "address": "456 Verified Blvd, Mumbai",
+        "phone": "+919988776655",
+        "lifecycleStatus": "PENDING_APPROVAL",
+    })
+    assert resubmit_resp.status_code == 200
+    resubmitted_data = resubmit_resp.json()
+    assert resubmitted_data["lifecycle_status"] == "PENDING_APPROVAL"
+    assert resubmitted_data["is_approved"] is False
+    assert resubmitted_data["rejection_reason"] is None
+    assert resubmitted_data["address"] == "456 Verified Blvd, Mumbai"
+
+    # 4. Platform Admin sees it in PENDING_APPROVAL queue again
+    queue_resp = client.get("/api/v1/admin/restaurants?lifecycle_status=PENDING_APPROVAL", headers=admin_headers)
+    assert queue_resp.status_code == 200
+    pending_items = [r for r in queue_resp.json() if r["id"] == rest_id]
+    assert len(pending_items) == 1
+    assert pending_items[0]["lifecycleStatus"] == "PENDING_APPROVAL"
+    assert pending_items[0]["rejectionReason"] is None
+
+    # 5. Platform Admin Approves the resubmitted application
+    appr_resp = client.post("/api/v1/admin/restaurants/approve", headers=admin_headers, json={
+        "restaurant_id": rest_id,
+    })
+    assert appr_resp.status_code == 200
+    appr_data = appr_resp.json()
+    assert appr_data["lifecycleStatus"] == "LIVE"
+    assert appr_data["isApproved"] is True
+
+    # Verify restaurant details is now LIVE
+    get_live = client.get(f"/api/v1/restaurants/{rest_id}")
+    assert get_live.status_code == 200
+    assert get_live.json()["lifecycle_status"] == "LIVE"
+    assert get_live.json()["is_approved"] is True
+

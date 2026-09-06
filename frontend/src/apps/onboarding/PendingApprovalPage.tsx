@@ -53,15 +53,17 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     }, 3000);
 
     const unsub = realtimeBus.subscribe((event: any) => {
-      if (event.type === 'RESTAURANT_APPROVED' || event.type === 'RestaurantStatusUpdated') {
+      const evtType = event?.type;
+      if (
+        evtType === 'RESTAURANT_APPROVED' ||
+        evtType === 'RestaurantStatusUpdated' ||
+        evtType === 'RESTAURANT_REJECTED' ||
+        evtType === 'RestaurantRegistrationSubmitted' ||
+        evtType === 'RESTAURANT_DISMISSED'
+      ) {
         const evtRestId = event.restaurantId || event.restaurant_id;
         if (!restaurantId || !evtRestId || evtRestId === restaurantId || (restaurant && evtRestId === restaurant.id)) {
-          loadRestaurantData();
-        }
-      } else if (event.type === 'RESTAURANT_REJECTED') {
-        const evtRestId = event.restaurantId || event.restaurant_id;
-        if (!restaurantId || !evtRestId || evtRestId === restaurantId || (restaurant && evtRestId === restaurant.id)) {
-          loadRestaurantData();
+          loadRestaurantDataSilent();
         }
       }
     });
