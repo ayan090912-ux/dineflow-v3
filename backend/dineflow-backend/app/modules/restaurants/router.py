@@ -367,8 +367,23 @@ async def get_owner_restaurants(
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
-    target_email = (owner_email or (caller.email if caller.is_authenticated else None) or "").strip().lower()
-    target_uid = (owner_uid or (caller.uid if caller.is_authenticated else None) or "").strip()
+    # Enforce strict IDOR protection: Non-admin authenticated callers cannot query another owner's tenants
+    if caller.is_authenticated and not caller.is_admin:
+        if owner_email and caller.email and owner_email.strip().lower() != caller.email.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Cannot query restaurants for another owner account."
+            )
+        if owner_uid and caller.uid and owner_uid.strip() != caller.uid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Cannot query restaurants for another owner account."
+            )
+        target_email = caller.email or ""
+        target_uid = caller.uid or ""
+    else:
+        target_email = (owner_email or (caller.email if caller.is_authenticated else None) or "").strip().lower()
+        target_uid = (owner_uid or (caller.uid if caller.is_authenticated else None) or "").strip()
 
     if not target_email and not target_uid:
         return []

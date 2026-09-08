@@ -121,3 +121,31 @@ def test_websocket_room_exact_tenant_isolation():
     
     assert match_1 is True
     assert match_10 is False  # Must NOT match via substring
+
+
+@pytest.mark.asyncio
+async def test_owner_idor_protection_enforced():
+    """
+    Assert that an authenticated Owner A attempting to query another owner's restaurants
+    via GET /api/v1/restaurants/owner/my?owner_email=owner_b@test.com is strictly rejected with 403 Forbidden.
+    """
+    import json
+    import base64
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create Owner A claims token
+        claims_a = {"uid": "uid_owner_a_123", "email": "ownera@test.com", "role": "RESTAURANT_OWNER"}
+        header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256"}).encode()).decode().rstrip("=")
+        payload = base64.urlsafe_b64encode(json.dumps(claims_a).encode()).decode().rstrip("=")
+        token_a = f"{header}.{payload}.sig"
+        headers_a = {"Authorization": f"Bearer {token_a}"}
+
+        # Owner A requests their own restaurants -> 200 OK
+        res_own = await client.get("/api/v1/restaurants/owner/my", headers=headers_a)
+        assert res_own.status_code == 200
+
+        # Owner A attempts IDOR query for Owner B -> 403 Forbidden
+        res_idor = await client.get("/api/v1/restaurants/owner/my?owner_email=victim_owner_b@test.com", headers=headers_a)
+        assert res_idor.status_code == 403
+        assert "access denied" in res_idor.json()["detail"].lower()
+
