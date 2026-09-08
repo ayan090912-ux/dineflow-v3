@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -103,16 +104,13 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
 
     req_dict = format_request_dict(new_req)
 
-    # Realtime Broadcast to Waiter and Owner terminals
-    try:
-        await ws_manager.broadcast_event(
-            restaurant_id=payload.restaurantId,
-            event_type="service_request_created",
-            payload=req_dict,
-            target_audience=["WAITER", "OWNER"]
-        )
-    except Exception as ws_err:
-        print("[WS_BROADCAST_NOTICE] service_request_created:", ws_err)
+    # Realtime Broadcast to Waiter and Owner terminals (non-blocking)
+    asyncio.create_task(ws_manager.broadcast_event(
+        restaurant_id=payload.restaurantId,
+        event_type="service_request_created",
+        payload=req_dict,
+        target_audience=["WAITER", "OWNER"]
+    ))
 
     return req_dict
 
@@ -230,15 +228,12 @@ async def update_customer_request(
 
     req_dict = format_request_dict(req)
 
-    # Realtime Broadcast update to Waiter, Customer, and Owner
-    try:
-        await ws_manager.broadcast_event(
-            restaurant_id=req.restaurant_id,
-            event_type="service_request_updated",
-            payload=req_dict,
-            target_audience=["WAITER", "CUSTOMER", "OWNER"]
-        )
-    except Exception as ws_err:
-        print("[WS_BROADCAST_NOTICE] service_request_updated:", ws_err)
+    # Realtime Broadcast update to Waiter, Customer, and Owner (non-blocking)
+    asyncio.create_task(ws_manager.broadcast_event(
+        restaurant_id=req.restaurant_id,
+        event_type="service_request_updated",
+        payload=req_dict,
+        target_audience=["WAITER", "CUSTOMER", "OWNER"]
+    ))
 
     return req_dict

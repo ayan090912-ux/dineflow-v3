@@ -1,5 +1,6 @@
 import re
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
@@ -325,8 +326,8 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
     await db.commit()
     await db.refresh(new_rest)
 
-    # Realtime notification to Platform Admin and Global Bus
-    await ws_manager.broadcast_global({
+    # Realtime notification to Platform Admin and Global Bus (non-blocking)
+    asyncio.create_task(ws_manager.broadcast_global({
         "type": "RestaurantRegistrationSubmitted",
         "restaurantId": rest_id,
         "restaurantName": new_rest.name,
@@ -337,7 +338,7 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
         "businessType": new_rest.business_type,
         "lifecycleStatus": new_rest.lifecycle_status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    }))
 
     return new_rest
 
@@ -510,8 +511,8 @@ async def update_restaurant(
     await db.commit()
     await db.refresh(rest)
 
-    # Broadcast realtime configuration update
-    await ws_manager.broadcast_to_restaurant(
+    # Broadcast realtime configuration update (non-blocking)
+    asyncio.create_task(ws_manager.broadcast_to_restaurant(
         restaurant_id=restaurant_id,
         message={
             "type": "WorkspaceConfigUpdated",
@@ -527,10 +528,10 @@ async def update_restaurant(
             "lifecycleStatus": rest.lifecycle_status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    )
+    ))
 
     if rest.lifecycle_status == "PENDING_APPROVAL":
-        await ws_manager.broadcast_global({
+        asyncio.create_task(ws_manager.broadcast_global({
             "type": "RestaurantRegistrationSubmitted",
             "restaurantId": rest.id,
             "restaurant_id": rest.id,
@@ -542,8 +543,8 @@ async def update_restaurant(
             "isApproved": False,
             "is_approved": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
-        await ws_manager.broadcast_to_restaurant(
+        }))
+        asyncio.create_task(ws_manager.broadcast_to_restaurant(
             restaurant_id=restaurant_id,
             message={
                 "type": "RestaurantStatusUpdated",
@@ -556,7 +557,7 @@ async def update_restaurant(
                 "requestedChanges": None,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-        )
+        ))
 
     return rest
 
@@ -586,8 +587,8 @@ async def update_workspace_modules(
     await db.commit()
     await db.refresh(rest)
 
-    # Broadcast realtime configuration update
-    await ws_manager.broadcast_to_restaurant(
+    # Broadcast realtime configuration update (non-blocking)
+    asyncio.create_task(ws_manager.broadcast_to_restaurant(
         restaurant_id=restaurant_id,
         message={
             "type": "WorkspaceConfigUpdated",
@@ -602,7 +603,7 @@ async def update_workspace_modules(
             "hasTables": rest.has_tables,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    )
+    ))
 
     return {
         "status": "success",
