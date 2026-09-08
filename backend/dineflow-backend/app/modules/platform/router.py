@@ -1,3 +1,4 @@
+import asyncio
 import re
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
@@ -247,8 +248,8 @@ async def approve_restaurant(
         ip_address=request.client.host if request.client else "127.0.0.1"
     )
 
-    # Realtime notification to Owner and all terminals
-    await ws_manager.broadcast_global({
+    # Realtime notification to Owner and all terminals (scheduled asynchronously so WebSocket buffer or lock never delays HTTP response)
+    asyncio.create_task(ws_manager.broadcast_global({
         "type": "RESTAURANT_APPROVED",
         "restaurantId": rest.id,
         "restaurant_id": rest.id,
@@ -259,8 +260,8 @@ async def approve_restaurant(
         "ownerEmail": rest.owner_email,
         "approvedBy": admin_email,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
-    await ws_manager.broadcast_to_restaurant(
+    }))
+    asyncio.create_task(ws_manager.broadcast_to_restaurant(
         restaurant_id=rest.id,
         message={
             "type": "RestaurantStatusUpdated",
@@ -271,7 +272,7 @@ async def approve_restaurant(
             "is_approved": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    )
+    ))
 
     return {
         "status": "SUCCESS",
@@ -361,7 +362,8 @@ async def reject_restaurant(
         details={"reason": action.reason}
     )
 
-    await ws_manager.broadcast_global({
+    # Realtime notification to Owner and all terminals (scheduled asynchronously)
+    asyncio.create_task(ws_manager.broadcast_global({
         "type": "RESTAURANT_REJECTED",
         "restaurantId": rest.id,
         "restaurant_id": rest.id,
@@ -372,8 +374,8 @@ async def reject_restaurant(
         "ownerEmail": rest.owner_email,
         "rejectionReason": rest.rejection_reason,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
-    await ws_manager.broadcast_to_restaurant(
+    }))
+    asyncio.create_task(ws_manager.broadcast_to_restaurant(
         restaurant_id=rest.id,
         message={
             "type": "RestaurantStatusUpdated",
@@ -385,7 +387,7 @@ async def reject_restaurant(
             "rejectionReason": rest.rejection_reason,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    )
+    ))
 
     return {
         "status": "SUCCESS",

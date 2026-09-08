@@ -86,7 +86,7 @@ class ConnectionManager:
             for conn in target_conns:
                 ws = conn["websocket"]
                 try:
-                    await ws.send_text(json_str)
+                    await asyncio.wait_for(ws.send_text(json_str), timeout=1.5)
                 except Exception as err:
                     print(f"[WS_SEND_ERROR] error={err}")
                     stale_websockets.append(ws)
@@ -116,7 +116,7 @@ class ConnectionManager:
             for conn in self.active_connections:
                 ws = conn["websocket"]
                 try:
-                    await ws.send_text(json_str)
+                    await asyncio.wait_for(ws.send_text(json_str), timeout=1.5)
                 except Exception:
                     stale_websockets.append(ws)
             if stale_websockets:

@@ -1974,17 +1974,12 @@ export class DinelyApiClient {
 
   async approveRestaurant(restaurantId: string) {
     const apiBase = getApiBaseUrl();
-    let token = this.currentTokensByScope['ADMIN']?.accessToken ||
-                this.currentTokensByScope['OWNER']?.accessToken ||
-                (typeof window !== 'undefined' ? (
-                  localStorage.getItem('dinely_platform_admin_id_token') ||
-                  localStorage.getItem('dinely_auth_token') ||
-                  sessionStorage.getItem('dinely_admin_token')
-                ) : null);
+    let token: string | null = null;
 
-    if (!token && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+    // Prioritize fresh token from active authenticated Firebase user directly
+    if (typeof window !== 'undefined' && firebaseAuth.currentUser) {
       try {
-        token = await firebaseAuth.currentUser.getIdToken();
+        token = await firebaseAuth.currentUser.getIdToken(true);
         if (token) {
           localStorage.setItem('dinely_platform_admin_id_token', token);
           sessionStorage.setItem('dinely_admin_token', token);
@@ -1994,16 +1989,40 @@ export class DinelyApiClient {
       }
     }
 
+    if (!token) {
+      token = this.currentTokensByScope['ADMIN']?.accessToken ||
+              this.currentTokensByScope['OWNER']?.accessToken ||
+              (typeof window !== 'undefined' ? (
+                localStorage.getItem('dinely_platform_admin_id_token') ||
+                localStorage.getItem('dinely_auth_token') ||
+                sessionStorage.getItem('dinely_admin_token')
+              ) : null);
+    }
+
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${apiBase}/admin/restaurants/approve`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ restaurant_id: restaurantId }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let res: Response;
+    try {
+      res = await fetch(`${apiBase}/admin/restaurants/approve`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ restaurant_id: restaurantId }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('Approval request timed out after 15 seconds. Please check server status and retry.');
+      }
+      throw err;
+    }
 
     if (!res.ok) {
       let errMsg = `Failed to approve restaurant (HTTP ${res.status})`;
@@ -2069,17 +2088,11 @@ export class DinelyApiClient {
 
   async rejectRestaurant(restaurantId: string, reason = 'Application declined by administrator') {
     const apiBase = getApiBaseUrl();
-    let token = this.currentTokensByScope['ADMIN']?.accessToken ||
-                this.currentTokensByScope['OWNER']?.accessToken ||
-                (typeof window !== 'undefined' ? (
-                  localStorage.getItem('dinely_platform_admin_id_token') ||
-                  localStorage.getItem('dinely_auth_token') ||
-                  sessionStorage.getItem('dinely_admin_token')
-                ) : null);
+    let token: string | null = null;
 
-    if (!token && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+    if (typeof window !== 'undefined' && firebaseAuth.currentUser) {
       try {
-        token = await firebaseAuth.currentUser.getIdToken();
+        token = await firebaseAuth.currentUser.getIdToken(true);
         if (token) {
           localStorage.setItem('dinely_platform_admin_id_token', token);
           sessionStorage.setItem('dinely_admin_token', token);
@@ -2089,16 +2102,40 @@ export class DinelyApiClient {
       }
     }
 
+    if (!token) {
+      token = this.currentTokensByScope['ADMIN']?.accessToken ||
+              this.currentTokensByScope['OWNER']?.accessToken ||
+              (typeof window !== 'undefined' ? (
+                localStorage.getItem('dinely_platform_admin_id_token') ||
+                localStorage.getItem('dinely_auth_token') ||
+                sessionStorage.getItem('dinely_admin_token')
+              ) : null);
+    }
+
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${apiBase}/admin/restaurants/reject`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ restaurant_id: restaurantId, reason }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let res: Response;
+    try {
+      res = await fetch(`${apiBase}/admin/restaurants/reject`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ restaurant_id: restaurantId, reason }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('Rejection request timed out after 15 seconds. Please retry.');
+      }
+      throw err;
+    }
 
     if (!res.ok) {
       let errMsg = `Failed to reject restaurant (HTTP ${res.status})`;

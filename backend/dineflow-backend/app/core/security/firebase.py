@@ -40,10 +40,10 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
     """
     settings = get_settings()
 
-    # 1. Attempt verification via official Firebase Admin SDK if available
+    # 1. Attempt verification via official Firebase Admin SDK if available (check_revoked=False verifies signature locally via public certs without hanging on GCP metadata server)
     if _firebase_admin_initialized and id_token.startswith("ey"):
         try:
-            decoded = firebase_auth_admin.verify_id_token(id_token, check_revoked=True)
+            decoded = firebase_auth_admin.verify_id_token(id_token, check_revoked=False)
             return decoded
         except Exception as err:
             logger.warning(f"Firebase Admin SDK token verification failed: {err}. Falling back to JWT payload decode.")

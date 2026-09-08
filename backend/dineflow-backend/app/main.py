@@ -112,8 +112,7 @@ async def ensure_db_schema_columns(conn):
 
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _background_startup_init():
     try:
         async with engine.begin() as conn:
             await ensure_db_schema_columns(conn)
@@ -121,7 +120,14 @@ async def lifespan(app: FastAPI):
         await run_clean_production_applications()
     except Exception as e:
         print("[STARTUP NOTICE] Database table initialization:", e)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Launch startup migration tasks asynchronously in background so uvicorn binds to port immediately
+    bg_task = asyncio.create_task(_background_startup_init())
     yield
+    if not bg_task.done():
+        bg_task.cancel()
 
 
 app = FastAPI(

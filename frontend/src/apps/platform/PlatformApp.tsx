@@ -82,6 +82,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [reminderMessage, setReminderMessage] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
   const [isApproving, setIsApproving] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const [isActionInProgress, setIsActionInProgress] = useState<string | null>(null);
   const [isPurging, setIsPurging] = useState(false);
   const [incomingAlert, setIncomingAlert] = useState<{ id: string; name: string; ownerEmail?: string } | null>(null);
@@ -187,21 +188,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const handleApprove = async (id: string) => {
     if (isApproving) return;
     setIsApproving(true);
-    const prevRestaurants = [...allRestaurants];
-    // Instant optimistic update: set approved & LIVE
-    setAllRestaurants((prev) =>
-      prev.map((r) =>
-        r.id === id ? { ...r, isApproved: true, lifecycleStatus: 'LIVE', status: 'OPEN' } : r
-      )
-    );
+    setApprovalError(null);
     try {
       await api.approveRestaurant(id);
+      // Instant update: set approved & LIVE in state
+      setAllRestaurants((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, isApproved: true, lifecycleStatus: 'LIVE', status: 'OPEN' } : r
+        )
+      );
       showSuccess('Restaurant Approved & Activated Live! 🚀');
       closeModals();
     } catch (err: any) {
-      // Revert optimistic update on failure
-      setAllRestaurants(prevRestaurants);
-      alert(`Approval error: ${err.message || 'Failed to approve restaurant'}`);
+      setApprovalError(err.message || 'Failed to approve restaurant. Please retry.');
     } finally {
       setIsApproving(false);
     }
@@ -364,6 +363,9 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     setActionModal(null);
     setActionReason('');
     setReminderMessage('');
+    setApprovalError(null);
+    setIsApproving(false);
+    setIsActionInProgress(null);
   };
 
   const pendingRestaurants = allRestaurants.filter(
@@ -1305,6 +1307,22 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               </div>
             )}
 
+            {actionModal === 'APPROVE' && approvalError && (
+              <div className="mb-3 p-3 bg-rose-950/60 border border-rose-500/40 rounded-xl text-xs text-rose-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-mono text-[11px]">
+                  ⚠️ {approvalError}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleApprove(selectedRestaurant.id)}
+                  disabled={isApproving}
+                  className="px-2.5 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow transition"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
               <Button variant="outline" size="sm" onClick={closeModals}>
                 Cancel
@@ -1319,7 +1337,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   isLoading={isApproving}
                   className="bg-emerald-600 hover:bg-emerald-500 font-bold min-w-[200px]"
                 >
-                  {isApproving ? 'Approving & Launching...' : 'Confirm Approval & Launch'}
+                  {isApproving ? 'Approving & Launching...' : (approvalError ? 'Retry Approval & Launch' : 'Confirm Approval & Launch')}
                 </Button>
               )}
 
