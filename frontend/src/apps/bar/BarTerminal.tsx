@@ -14,7 +14,6 @@ import {
   User,
   LogOut,
   RefreshCw,
-  Sparkles,
   Search,
   Filter,
   Volume2,
@@ -22,6 +21,8 @@ import {
   Plus,
   Minus,
   Activity,
+  ArrowRight,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Modal, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -86,8 +87,14 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
         }
 
         // Only alert on newly created drink orders
-        if (event.type === 'order_created' || event.type === 'OrderCreated' || (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')) {
-          setLastNotification(`New Drink Order #${event.orderId || event.parentOrderId || event.id || ''} for Table ${event.tableNumber || 'Bar'} 🍸`);
+        if (
+          event.type === 'order_created' ||
+          event.type === 'OrderCreated' ||
+          (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')
+        ) {
+          setLastNotification(
+            `New Beverage Ticket #${(event.orderId || event.parentOrderId || event.id || '').slice(-4)} for Table ${event.tableNumber || 'Bar'}`
+          );
           if (soundEnabled) {
             playNotificationSound();
           }
@@ -101,15 +108,14 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     };
   }, [soundEnabled]);
 
-
   const playNotificationSound = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
       gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
       osc.connect(gain);
@@ -150,7 +156,12 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      const stationStatus = newStatus === 'READY' ? 'READY' : newStatus === 'PREPARING' || newStatus === 'PREPARING_DRINKS' ? 'PREPARING' : 'COMPLETED';
+      const stationStatus =
+        newStatus === 'READY'
+          ? 'READY'
+          : newStatus === 'PREPARING' || newStatus === 'PREPARING_DRINKS'
+          ? 'PREPARING'
+          : 'COMPLETED';
       await api.updateFulfillmentTicketStatus(orderId, stationStatus, 'BAR');
       await api.updateBarStatus(orderId, stationStatus);
       await loadBarOrders(false);
@@ -182,7 +193,13 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
   // Divide orders into Bar Pipeline stages based strictly on barStatus
   const pendingOrders = orders.filter(
-    (o) => (o.barStatus === 'PENDING' || !o.barStatus) && o.barStatus !== 'PREPARING' && o.barStatus !== 'ACCEPTED' && o.barStatus !== 'READY' && o.barStatus !== 'COMPLETED' && o.status !== 'CANCELLED'
+    (o) =>
+      (o.barStatus === 'PENDING' || !o.barStatus) &&
+      o.barStatus !== 'PREPARING' &&
+      o.barStatus !== 'ACCEPTED' &&
+      o.barStatus !== 'READY' &&
+      o.barStatus !== 'COMPLETED' &&
+      o.status !== 'CANCELLED'
   );
   const preparingOrders = orders.filter(
     (o) => o.barStatus === 'PREPARING' || o.barStatus === 'ACCEPTED'
@@ -191,91 +208,94 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
   const completedOrders = orders.filter((o) => o.barStatus === 'COMPLETED');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
+    <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col font-sans selection:bg-amber-500/30 selection:text-white">
       {/* Top Banner Notification */}
       {lastNotification && (
-        <div className="bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-lg">
-          <span className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-slate-950 animate-bounce" />
-            {lastNotification}
-          </span>
-          <button onClick={() => setLastNotification('')} className="hover:opacity-80">
-            ✕
+        <div className="bg-[#1a140d] border-b border-amber-500/20 text-amber-200 px-6 py-2.5 text-xs font-mono flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span>{lastNotification}</span>
+          </div>
+          <button
+            onClick={() => setLastNotification('')}
+            className="text-amber-400/60 hover:text-amber-200 text-xs px-2 py-0.5 rounded transition-colors"
+          >
+            Dismiss
           </button>
         </div>
       )}
 
       {/* Bar Terminal Top Navigation Header */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between shadow-2xl sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-600 to-amber-500 text-white shadow-xl shadow-purple-950/40">
-            <Wine className="w-6 h-6 animate-pulse" />
+      <header className="bg-[#0e1117] border-b border-white/[0.08] px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-amber-400">
+            <Wine className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <DinelyLogo size="sm" />
-              <h1 className="text-xl font-black text-white tracking-tight">Bar Terminal</h1>
-              <Badge variant="brand" className="bg-purple-600/30 text-purple-300 border-purple-500/40 text-[10px]">
-                BARTENDER KDS
-              </Badge>
+              <h1 className="text-base font-semibold text-white tracking-tight">Bar Station</h1>
+              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] text-white/70">
+                Mixology KDS
+              </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono">
-              Live Mixology Station & Drink Fulfillment Queue
+            <p className="text-xs text-white/40 font-mono mt-0.5">
+              Fulfillment queue & craft beverage dispensing
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Quick Metrics Badge */}
-          <div className="hidden md:flex items-center gap-4 px-4 py-2 rounded-2xl bg-slate-950 border border-slate-800 text-xs">
+          {/* Quick Metrics */}
+          <div className="hidden md:flex items-center gap-4 px-4 py-2 rounded-xl bg-white/[0.02] border border-white/[0.08] text-xs font-mono">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span className="text-slate-400">Queue:</span>
-              <strong className="text-amber-300">{pendingOrders.length + preparingOrders.length} Drinks</strong>
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-white/50">Queue:</span>
+              <strong className="text-white font-semibold">{pendingOrders.length + preparingOrders.length}</strong>
             </div>
-            <span className="text-slate-700">|</span>
+            <span className="text-white/20">/</span>
             <div className="flex items-center gap-2">
-              <span className="text-slate-400">Ready:</span>
-              <strong className="text-emerald-400">{readyOrders.length} Orders</strong>
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-white/50">Ready:</span>
+              <strong className="text-emerald-400 font-semibold">{readyOrders.length}</strong>
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="border-slate-800 text-slate-300"
-            title={soundEnabled ? 'Mute Order Audio Alerts' : 'Enable Order Audio Alerts'}
+            className={`p-2.5 rounded-xl border text-xs transition-colors ${
+              soundEnabled
+                ? 'border-white/[0.08] bg-white/[0.04] text-white/80 hover:text-white'
+                : 'border-white/[0.08] bg-white/[0.02] text-white/30 hover:text-white/50'
+            }`}
+            title={soundEnabled ? 'Mute alert chime' : 'Enable alert chime'}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
-          </Button>
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-400" /> : <VolumeX className="w-4 h-4" />}
+          </button>
 
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => loadBarOrders()}
-            className="border-slate-800 text-slate-300 hover:bg-slate-800"
+            className="p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] text-white/80 hover:text-white transition-colors"
+            title="Refresh order queue"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
+          </button>
 
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={async () => {
               await api.logout();
               if (onLogout) onLogout();
               else window.location.href = '/bar/login';
             }}
-            className="border-rose-900/50 text-rose-300 hover:bg-rose-950/40"
-            icon={<LogOut className="w-4 h-4" />}
+            className="px-3 py-2 rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-300/80 hover:text-rose-200 hover:bg-rose-500/10 text-xs font-medium transition-colors flex items-center gap-1.5"
           >
-            Sign Out
-          </Button>
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
         </div>
       </header>
 
-      {/* BAR TODAY Operational Statistics Bar */}
+      {/* Operational Summary Bar */}
       {(() => {
         const received = pendingOrders.length;
         const preparing = preparingOrders.length;
@@ -283,22 +303,23 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
         const completed = completedOrders.length;
 
         return (
-          <div className="bg-slate-900/90 border-b border-slate-800/80 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-            <span className="font-bold text-slate-300 font-sans flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
-              <Activity className="w-3.5 h-3.5 text-purple-400" /> BAR TODAY STATS:
+          <div className="bg-[#0e1117]/60 border-b border-white/[0.06] px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+            <span className="text-white/40 uppercase text-[11px] tracking-wider flex items-center gap-2">
+              <Activity className="w-3.5 h-3.5 text-amber-400" />
+              <span>Shift Metrics</span>
             </span>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="flex items-center gap-1.5 text-amber-300 bg-amber-950/40 border border-amber-800/50 px-2.5 py-1 rounded-lg">
-                <span>Bar Received:</span> <span className="font-black text-amber-400">{received}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] text-white/70">
+                Incoming: <strong className="text-amber-400 font-semibold">{received}</strong>
               </span>
-              <span className="flex items-center gap-1.5 text-purple-300 bg-purple-950/40 border border-purple-800/50 px-2.5 py-1 rounded-lg">
-                <span>Preparing:</span> <span className="font-black text-purple-400">{preparing}</span>
+              <span className="px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] text-white/70">
+                Mixology: <strong className="text-sky-400 font-semibold">{preparing}</strong>
               </span>
-              <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-lg">
-                <span>Ready:</span> <span className="font-black text-emerald-400">{ready}</span>
+              <span className="px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] text-white/70">
+                At Pass: <strong className="text-emerald-400 font-semibold">{ready}</strong>
               </span>
-              <span className="flex items-center gap-1.5 text-sky-300 bg-sky-950/40 border border-sky-800/50 px-2.5 py-1 rounded-lg">
-                <span>Completed Today:</span> <span className="font-black text-sky-400">{completed}</span>
+              <span className="px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] text-white/50">
+                Dispatched: <strong className="text-white/80 font-semibold">{completed}</strong>
               </span>
             </div>
           </div>
@@ -307,17 +328,17 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 
       {/* Main Bar Preparation KanBan Pipeline */}
       <main className="flex-1 p-6 overflow-x-auto">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-w-[1100px]">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5 min-w-[1100px]">
           {/* COLUMN 1: INCOMING DRINK ORDERS */}
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-800/50 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase tracking-wider">
-                <Clock className="w-4 h-4" />
-                <span>1. Incoming Drinks</span>
+          <div className="space-y-3">
+            <div className="p-3 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white/80 font-medium text-xs">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>1. Incoming Queue</span>
               </div>
-              <Badge variant="warning" className="font-mono font-bold text-xs">
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
                 {pendingOrders.length}
-              </Badge>
+              </span>
             </div>
 
             <div className="space-y-3">
@@ -325,31 +346,31 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
                 <BarOrderCard
                   key={ord.id}
                   order={ord}
-                  actionLabel="Start Mixology 🍸"
-                  actionVariant="warning"
+                  actionLabel="Start Prep"
+                  actionVariant="primary"
                   onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
                   onAdjustEta={(delta) => handleAdjustEta(ord.id, delta)}
                   onCustomEta={() => setSelectedOrderForEta(ord)}
                 />
               ))}
               {pendingOrders.length === 0 && (
-                <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl text-slate-500 text-xs">
-                  No incoming drink orders
+                <div className="p-8 text-center bg-white/[0.01] border border-dashed border-white/[0.06] rounded-xl text-white/30 text-xs">
+                  No pending beverage tickets
                 </div>
               )}
             </div>
           </div>
 
           {/* COLUMN 2: PREPARING DRINKS */}
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-800/50 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-indigo-300 font-bold text-xs uppercase tracking-wider">
-                <Wine className="w-4 h-4 animate-spin" />
+          <div className="space-y-3">
+            <div className="p-3 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white/80 font-medium text-xs">
+                <Wine className="w-3.5 h-3.5 text-sky-400" />
                 <span>2. Mixology & Pouring</span>
               </div>
-              <Badge variant="brand" className="font-mono font-bold text-xs">
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">
                 {preparingOrders.length}
-              </Badge>
+              </span>
             </div>
 
             <div className="space-y-3">
@@ -357,31 +378,31 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
                 <BarOrderCard
                   key={ord.id}
                   order={ord}
-                  actionLabel="Mark Ready ✨"
-                  actionVariant="brand"
+                  actionLabel="Mark as Ready"
+                  actionVariant="success"
                   onAction={() => handleUpdateStatus(ord.id, 'READY')}
                   onAdjustEta={(delta) => handleAdjustEta(ord.id, delta)}
                   onCustomEta={() => setSelectedOrderForEta(ord)}
                 />
               ))}
               {preparingOrders.length === 0 && (
-                <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl text-slate-500 text-xs">
-                  No drinks currently being prepared
+                <div className="p-8 text-center bg-white/[0.01] border border-dashed border-white/[0.06] rounded-xl text-white/30 text-xs">
+                  No drinks currently in preparation
                 </div>
               )}
             </div>
           </div>
 
           {/* COLUMN 3: READY FOR PICKUP */}
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-800/50 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs uppercase tracking-wider">
-                <Sparkles className="w-4 h-4" />
+          <div className="space-y-3">
+            <div className="p-3 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white/80 font-medium text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 <span>3. Ready at Bar Pass</span>
               </div>
-              <Badge variant="success" className="font-mono font-bold text-xs">
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                 {readyOrders.length}
-              </Badge>
+              </span>
             </div>
 
             <div className="space-y-3">
@@ -389,35 +410,40 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
                 <BarOrderCard
                   key={ord.id}
                   order={ord}
-                  actionLabel="Delivered to Guest 🍽️"
-                  actionVariant="success"
+                  actionLabel="Hand Over to Floor"
+                  actionVariant="neutral"
                   onAction={() => handleUpdateStatus(ord.id, 'DELIVERED')}
                 />
               ))}
               {readyOrders.length === 0 && (
-                <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl text-slate-500 text-xs">
-                  No drinks waiting at the pass
+                <div className="p-8 text-center bg-white/[0.01] border border-dashed border-white/[0.06] rounded-xl text-white/30 text-xs">
+                  Pass is clear
                 </div>
               )}
             </div>
           </div>
 
           {/* COLUMN 4: COMPLETED ORDERS */}
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-slate-400 font-bold text-xs uppercase tracking-wider">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                <span>4. Completed Shift Orders</span>
+          <div className="space-y-3">
+            <div className="p-3 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white/60 font-medium text-xs">
+                <Check className="w-3.5 h-3.5 text-white/40" />
+                <span>4. Recent Dispatches</span>
               </div>
-              <Badge variant="outline" className="font-mono font-bold text-xs">
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-white/[0.04] text-white/50 border border-white/[0.08]">
                 {completedOrders.length}
-              </Badge>
+              </span>
             </div>
 
             <div className="space-y-3">
               {completedOrders.slice(0, 5).map((ord) => (
                 <BarOrderCard key={ord.id} order={ord} isCompleted />
               ))}
+              {completedOrders.length === 0 && (
+                <div className="p-8 text-center bg-white/[0.01] border border-dashed border-white/[0.06] rounded-xl text-white/30 text-xs">
+                  No completed orders yet
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -427,11 +453,11 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
       <Modal
         isOpen={!!selectedOrderForEta}
         onClose={() => setSelectedOrderForEta(null)}
-        title={`Set Custom Drink Prep ETA for Table ${selectedOrderForEta?.tableNumber}`}
+        title={`Set Beverage Prep Time • Table ${selectedOrderForEta?.tableNumber}`}
       >
         <div className="space-y-4 text-xs">
           <Input
-            label="Estimated Drink Prep Time (Minutes)"
+            label="Estimated Prep Duration (Minutes)"
             type="number"
             value={customEtaInput}
             onChange={(e) => setCustomEtaInput(e.target.value)}
@@ -440,8 +466,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
             <Button variant="outline" size="sm" onClick={() => setSelectedOrderForEta(null)}>
               Cancel
             </Button>
-            <Button variant="brand" size="sm" onClick={handleSaveCustomEta} className="bg-purple-600 font-bold">
-              Update ETA
+            <Button variant="brand" size="sm" onClick={handleSaveCustomEta} className="font-medium">
+              Save Duration
             </Button>
           </div>
         </div>
@@ -454,65 +480,65 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
 const BarOrderCard: React.FC<{
   order: Order;
   actionLabel?: string;
-  actionVariant?: 'warning' | 'brand' | 'success';
+  actionVariant?: 'primary' | 'success' | 'neutral';
   onAction?: () => void;
   onAdjustEta?: (deltaMinutes: number) => void;
   onCustomEta?: () => void;
   isCompleted?: boolean;
-}> = ({ order, actionLabel, actionVariant = 'brand', onAction, onAdjustEta, onCustomEta, isCompleted }) => {
+}> = ({ order, actionLabel, actionVariant = 'primary', onAction, onAdjustEta, onCustomEta, isCompleted }) => {
   const drinkItems = order.items.filter((i) => getFulfillmentStation(i) === 'BAR');
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.25, ease: 'easeOut' }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.2 }}
     >
-      <Card className="bg-slate-900 border border-slate-800/80 p-4 space-y-3 shadow-md rounded-2xl relative overflow-hidden group hover:border-slate-700/80 transition-all">
+      <div className={`p-4 rounded-xl bg-[#12151b] border ${isCompleted ? 'border-white/[0.04] opacity-60' : 'border-white/[0.08] hover:border-white/[0.14]'} transition-colors space-y-3 shadow-sm`}>
         {/* Header Info */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 text-xs font-bold">
-              📍 {order.tableNumber}
+            <span className="px-2 py-0.5 rounded bg-white/[0.04] text-white/90 border border-white/[0.08] text-xs font-mono font-semibold">
+              Table {order.tableNumber}
             </span>
-            <span className="text-[11px] font-mono text-slate-400">#{order.id.slice(-4)}</span>
+            <span className="text-[11px] font-mono text-white/40">#{order.id.slice(-4)}</span>
           </div>
-          <div className="flex items-center gap-1 text-[10px] text-amber-400 font-mono">
+          <div className="flex items-center gap-1 text-[11px] text-amber-400/90 font-mono">
             <Clock className="w-3 h-3" />
             <span>{order.estimatedPrepTimeMinutes || 10}m ETA</span>
           </div>
         </div>
 
         {order.customerName && (
-          <p className="text-[11px] text-slate-300 font-bold flex items-center gap-1">
-            <User className="w-3 h-3 text-sky-400" />
-            <span>Guest: {order.customerName}</span>
-          </p>
+          <div className="text-[11px] text-white/60 flex items-center gap-1.5">
+            <User className="w-3 h-3 text-white/40" />
+            <span>{order.customerName}</span>
+          </div>
         )}
 
         {/* Drink Items List */}
-        <div className="space-y-2 py-1 border-y border-slate-800/80">
+        <div className="space-y-2 py-2 border-y border-white/[0.06]">
           {drinkItems.map((item, idx) => (
             <div key={idx} className="flex items-start justify-between gap-2 text-xs">
               <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-white text-sm">{item.quantity}x</span>
-                  <span className="font-bold text-slate-200">{item.name}</span>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono font-bold text-white text-xs">{item.quantity}x</span>
+                  <span className="font-medium text-white/90">{item.name}</span>
                 </div>
                 {item.glassSize && (
-                  <span className="text-[10px] font-mono text-sky-300 block">
+                  <span className="text-[10px] font-mono text-white/40 block">
                     Serving: {item.glassSize} {item.alcoholPercentage ? `• ${item.alcoholPercentage}% ABV` : ''}
                   </span>
                 )}
                 {item.notes && (
-                  <span className="text-[10px] text-amber-300 italic block">
-                    Option/Note: "{item.notes}"
+                  <span className="text-[10px] text-amber-300/80 italic block">
+                    Note: "{item.notes}"
                   </span>
                 )}
               </div>
-              <span className="font-mono font-bold text-emerald-400 text-xs shrink-0">
+              <span className="font-mono text-white/50 text-[11px] shrink-0">
                 ₹{(item.price * item.quantity).toFixed(2)}
               </span>
             </div>
@@ -521,29 +547,29 @@ const BarOrderCard: React.FC<{
 
         {/* ETA Adjustment Buttons */}
         {!isCompleted && onAdjustEta && (
-          <div className="flex items-center justify-between gap-2 text-[10px] font-mono bg-slate-950/80 p-1.5 rounded-xl border border-slate-800/80">
-            <span className="text-slate-400">Adjust ETA:</span>
+          <div className="flex items-center justify-between gap-2 text-[10px] font-mono bg-white/[0.02] px-2 py-1 rounded-lg border border-white/[0.04]">
+            <span className="text-white/40">Adjust prep:</span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => onAdjustEta(-5)}
-                className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 hover:bg-slate-700 font-bold transition-colors"
-                title="Decrease prep time by 5 minutes"
+                className="px-1.5 py-0.5 rounded bg-white/[0.04] text-white/70 hover:text-white hover:bg-white/[0.08] transition-colors"
+                title="Minus 5 minutes"
               >
                 -5m
               </button>
               <button
                 onClick={() => onAdjustEta(5)}
-                className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 hover:bg-slate-700 font-bold transition-colors"
-                title="Increase prep time by 5 minutes"
+                className="px-1.5 py-0.5 rounded bg-white/[0.04] text-white/70 hover:text-white hover:bg-white/[0.08] transition-colors"
+                title="Plus 5 minutes"
               >
                 +5m
               </button>
               {onCustomEta && (
                 <button
                   onClick={onCustomEta}
-                  className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30 font-bold transition-colors"
+                  className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
                 >
-                  Set
+                  Custom
                 </button>
               )}
             </div>
@@ -552,7 +578,7 @@ const BarOrderCard: React.FC<{
 
         {/* Special Instructions */}
         {order.specialInstructions && (
-          <div className="text-xs bg-rose-500/10 text-rose-300 p-2 rounded-xl border border-rose-500/20 flex items-start gap-1.5">
+          <div className="text-xs bg-rose-500/10 text-rose-300/90 p-2 rounded-lg border border-rose-500/20 flex items-start gap-1.5">
             <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400 mt-0.5" />
             <span>Note: {order.specialInstructions}</span>
           </div>
@@ -560,15 +586,22 @@ const BarOrderCard: React.FC<{
 
         {/* Primary Action Button */}
         {!isCompleted && onAction && actionLabel && (
-          <Button
-            variant={actionVariant === 'warning' ? 'brand' : (actionVariant as any)}
+          <button
             onClick={onAction}
-            className="w-full text-xs font-bold py-2 rounded-xl shadow-sm flex items-center justify-center gap-1.5"
+            className={`w-full py-2 px-3 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              actionVariant === 'primary'
+                ? 'bg-amber-500 text-black hover:bg-amber-400 font-semibold'
+                : actionVariant === 'success'
+                ? 'bg-emerald-500 text-black hover:bg-emerald-400 font-semibold'
+                : 'bg-white/[0.06] text-white/90 hover:bg-white/[0.1] border border-white/[0.08]'
+            }`}
           >
             <span>{actionLabel}</span>
-          </Button>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         )}
-      </Card>
+      </div>
     </motion.div>
   );
 };
+

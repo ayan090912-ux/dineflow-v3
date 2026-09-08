@@ -11,8 +11,6 @@ import {
   Building2,
   MapPin,
   Grid,
-  Sparkles,
-  ShieldCheck,
 } from 'lucide-react';
 import { Button, Card, Badge, DinelyLogo } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
@@ -146,109 +144,104 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-8 font-sans relative overflow-x-hidden">
-      {/* Background Lighting Glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-rose-600/10 via-amber-500/10 to-indigo-600/10 blur-[150px] rounded-full pointer-events-none" />
-
-      {/* Header Bar */}
-      <header className="max-w-5xl w-full mx-auto flex items-center justify-between py-4 px-6 bg-slate-900/80 border border-slate-800 rounded-2xl backdrop-blur-xl z-10 shadow-xl">
-        <div className="flex items-center gap-3">
-          <DinelyLogo size="sm" />
-          <Badge variant="brand" className="text-[10px]">Workspace Selector</Badge>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:block text-right text-xs">
-            <p className="font-bold text-white">{userName}</p>
-            <p className="text-[10px] text-slate-400 font-mono">{currentUser?.email}</p>
+    <div className="min-h-screen bg-[#0b0d11] text-[#f3f4f6] flex flex-col justify-between font-sans selection:bg-[#f97316] selection:text-[#0b0d11]">
+      {/* Editorial Header Bar */}
+      <header className="border-b border-[#1e232e] bg-[#0b0d11]/80 backdrop-blur-md sticky top-0 z-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-[#f97316] flex items-center justify-center text-[#0b0d11] font-bold text-xs shadow-sm">
+              D
+            </div>
+            <span className="text-base font-bold tracking-tight text-white font-display">
+              dinely<span className="text-[#f97316]">.food</span>
+            </span>
+            <span className="text-slate-600 text-sm hidden sm:inline">•</span>
+            <span className="text-xs font-mono text-slate-400 hidden sm:inline">Workspace Hub</span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLogout}
-            className="text-xs border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
-            icon={<LogOut className="w-3.5 h-3.5" />}
-          >
-            Sign Out
-          </Button>
+
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:block text-right text-xs">
+              <p className="font-semibold text-white">{userName}</p>
+              <p className="text-[11px] text-slate-500 font-mono">{currentUser?.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1.5 rounded-lg border border-[#2d3545] hover:border-slate-500 bg-[#1a1e27] hover:bg-[#222734] text-xs font-medium text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="max-w-5xl w-full mx-auto my-8 space-y-8 relative z-10">
-        {/* Welcome Banner */}
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-rose-400">
-            <Sparkles className="w-3.5 h-3.5 text-rose-400" />
-            <span>Dinely Multi-Tenant OS</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-            Welcome back, <span className="text-rose-400">{userName}</span>
+      <main className="max-w-6xl w-full mx-auto my-10 px-4 sm:px-6 flex-1 space-y-8">
+        {/* Clean Welcome Headline */}
+        <div className="space-y-1.5 text-left border-b border-[#1e232e] pb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight font-display">
+            Welcome back, {userName}
           </h1>
-          <p className="text-sm text-slate-400">
-            Choose a restaurant workspace to manage or onboard a new venue outlet.
+          <p className="text-xs sm:text-sm text-slate-400">
+            Select an active restaurant outlet to launch the operations workspace, or onboard a new venue.
           </p>
         </div>
 
         {/* Loading / Zero State / Error / Grid */}
         {viewState === 'INITIALIZING' || viewState === 'LOADING' ? (
-          <div className="py-20 text-center space-y-3 bg-slate-900/60 border border-slate-800/80 rounded-3xl backdrop-blur-xl">
-            <div className="w-10 h-10 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
+          <div className="py-24 text-center space-y-3 border border-[#1e232e] rounded-2xl bg-[#12151b]">
+            <div className="w-8 h-8 border-2 border-[#f97316]/20 border-t-[#f97316] rounded-full animate-spin mx-auto" />
             <p className="text-xs text-slate-400 font-mono">Loading restaurant workspaces...</p>
           </div>
         ) : viewState === 'ERROR' ? (
-          <div className="p-10 text-center space-y-5 bg-slate-900/80 border border-rose-900/40 rounded-3xl backdrop-blur-xl max-w-lg mx-auto shadow-2xl">
-            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
-              <AlertTriangle className="w-7 h-7" />
+          <div className="p-8 text-center space-y-4 border border-red-500/20 rounded-2xl bg-[#12151b] max-w-lg mx-auto shadow-lg">
+            <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mx-auto">
+              <AlertTriangle className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-lg font-black text-white">Connection Issue</h3>
+              <h3 className="text-base font-bold text-white">Connection Issue</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
                 {errorMessage || 'Failed to retrieve your restaurant list from the server.'}
               </p>
             </div>
-            <div className="flex items-center justify-center gap-3">
-              <Button
-                variant="brand"
-                size="sm"
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
                 onClick={() => loadOwnerRestaurants()}
-                className="px-6 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white"
+                className="px-4 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors cursor-pointer"
               >
-                Retry Connection
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
+                Retry
+              </button>
+              <button
                 onClick={onCreateNewRestaurant}
-                className="px-4 py-2.5 text-xs font-bold border-slate-700 text-slate-300"
+                className="px-4 py-2 rounded-lg border border-[#2d3545] bg-[#1a1e27] hover:bg-[#222734] text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
               >
                 Create Restaurant
-              </Button>
+              </button>
             </div>
           </div>
         ) : viewState === 'EMPTY' || restaurants.length === 0 ? (
-          <div className="p-12 text-center space-y-6 bg-slate-900/60 border border-slate-800/80 rounded-3xl backdrop-blur-xl max-w-xl mx-auto shadow-2xl">
-            <div className="w-20 h-20 rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
-              <Store className="w-10 h-10" />
+          <div className="p-12 text-center space-y-5 border border-[#1e232e] rounded-2xl bg-[#12151b] max-w-lg mx-auto shadow-lg">
+            <div className="w-14 h-14 rounded-xl bg-[#1a1e27] border border-[#2d3545] flex items-center justify-center text-[#f97316] mx-auto">
+              <Store className="w-7 h-7" />
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-black text-white">Create your restaurant</h2>
-              <p className="text-sm text-slate-400 leading-relaxed">
-                You do not have any restaurant workspaces yet. Complete our quick setup wizard to configure your QR menu, Kitchen KDS, tables, and billing.
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-bold text-white font-display">Create your first restaurant</h2>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+                You don't have any restaurant outlets configured yet. Complete our quick setup wizard to configure your venue.
               </p>
             </div>
-            <Button
-              variant="brand"
-              size="lg"
-              onClick={onCreateNewRestaurant}
-              className="px-8 py-3.5 text-sm font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-xl shadow-rose-950/40"
-              icon={<Plus className="w-4 h-4 mr-1" />}
-            >
-              Create Restaurant
-            </Button>
+            <div className="pt-2">
+              <button
+                onClick={onCreateNewRestaurant}
+                className="px-6 py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors cursor-pointer shadow-sm inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Onboard Restaurant</span>
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 text-left">
             {/* Owner's Existing Restaurants */}
             {restaurants.map((rest) => {
               const isApproved =
@@ -269,14 +262,13 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
                   rest.lifecycleStatus !== 'SUSPENDED');
               const isRejected = rest.lifecycleStatus === 'REJECTED';
               const isArchived = rest.lifecycleStatus === 'ARCHIVED';
-              const isSuspended = rest.lifecycleStatus === 'SUSPENDED';
 
               const logo = rest.theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80';
 
               return (
-                <Card
+                <div
                   key={rest.id}
-                  className="bg-slate-900/90 border-slate-800/90 hover:border-slate-700 p-6 flex flex-col justify-between space-y-5 rounded-3xl transition-all duration-300 hover:shadow-2xl hover:shadow-rose-950/20 backdrop-blur-xl group"
+                  className="border border-[#1e232e] hover:border-[#2d3545] bg-[#12151b] p-5 rounded-xl flex flex-col justify-between space-y-5 transition-all shadow-sm group"
                 >
                   <div className="space-y-4">
                     <div className="flex items-start justify-between gap-3">
@@ -284,132 +276,126 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
                         <img
                           src={logo}
                           alt={rest.name}
-                          className="w-14 h-14 rounded-2xl object-cover border border-slate-800 shadow-md group-hover:scale-105 transition-transform"
+                          className="w-12 h-12 rounded-lg object-cover border border-[#2d3545] shrink-0"
                         />
                         <div className="space-y-0.5">
-                          <h3 className="font-bold text-white text-lg tracking-tight group-hover:text-rose-400 transition-colors">
+                          <h3 className="font-bold text-white text-base tracking-tight group-hover:text-[#f97316] transition-colors font-display">
                             {rest.name}
                           </h3>
                           <p className="text-xs text-slate-400 flex items-center gap-1">
                             <Building2 className="w-3 h-3 text-slate-500" />
-                            {rest.businessType || rest.cuisine || 'Casual Dining'}
+                            <span>{rest.businessType || rest.cuisine || 'Casual Dining'}</span>
                           </p>
                         </div>
                       </div>
 
-                      <Badge
-                        variant={
-                          isApproved ? 'success' :
-                          isPending ? 'warning' :
-                          isRejected ? 'danger' :
-                          isArchived ? 'default' : 'danger'
-                        }
-                        className="text-[10px] uppercase font-bold shrink-0"
+                      {/* Status Tag */}
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase tracking-wider shrink-0 ${
+                          isApproved
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : isPending
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : isRejected
+                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                            : 'bg-slate-800 text-slate-400 border-slate-700'
+                        }`}
                       >
-                        {isApproved ? 'Active' : isPending ? 'Pending Approval' : isRejected ? 'Rejected' : isArchived ? 'Archived' : 'Suspended'}
-                      </Badge>
+                        {isApproved ? 'Live' : isPending ? 'Under Review' : isRejected ? 'Action Required' : 'Archived'}
+                      </span>
                     </div>
 
-                    <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/80 text-xs space-y-1.5 text-slate-300">
+                    <div className="p-3 rounded-lg bg-[#0b0d11] border border-[#1e232e] text-xs space-y-1.5 text-slate-300">
                       <div className="flex items-center gap-1.5 text-slate-400 truncate">
                         <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                         <span className="truncate">{rest.address || 'Address N/A'}{rest.city ? `, ${rest.city}` : ''}</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800/60">
-                        <span className="text-slate-500 font-semibold flex items-center gap-1">
-                          <Grid className="w-3 h-3 text-rose-400" /> Dining Tables
+                      <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-[#1e232e]">
+                        <span className="text-slate-500 flex items-center gap-1">
+                          <Grid className="w-3 h-3 text-slate-400" /> Dining Tables
                         </span>
-                        <span className="font-bold text-rose-400">
+                        <span className="font-semibold text-slate-300 font-mono">
                           {rest.tablesCount || rest.indoorTablesCount || 10} Tables
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Primary Action Button based on Status */}
+                  {/* Primary Action Button */}
                   <div>
                     {isApproved ? (
-                      <Button
-                        variant="brand"
+                      <button
                         disabled={openingRestId === rest.id}
                         onClick={() => handleSelectRestaurant(rest)}
-                        className="w-full text-xs font-bold py-3 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/40"
-                        icon={
-                          openingRestId === rest.id ? (
-                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin ml-1" />
-                          ) : (
-                            <ArrowRight className="w-4 h-4 ml-1" />
-                          )
-                        }
+                        className="w-full text-xs font-bold py-2.5 rounded-lg bg-[#1a1e27] hover:bg-[#222734] border border-[#2d3545] hover:border-[#f97316] text-white transition-all cursor-pointer flex items-center justify-center gap-2"
                       >
-                        {openingRestId === rest.id ? 'Opening Restaurant...' : 'Open Restaurant →'}
-                      </Button>
+                        {openingRestId === rest.id ? (
+                          <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <span>Open Workspace</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-[#f97316]" />
+                          </>
+                        )}
+                      </button>
                     ) : isPending ? (
-                      <Button
-                        variant="outline"
+                      <button
                         disabled={openingRestId === rest.id}
                         onClick={() => handleSelectRestaurant(rest)}
-                        className="w-full text-xs font-bold py-3 border-amber-500/50 text-amber-300 hover:bg-amber-500/10"
-                        icon={<Clock className="w-4 h-4 mr-1 text-amber-400 animate-pulse" />}
+                        className="w-full text-xs font-semibold py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        View Status ⏳
-                      </Button>
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Review Status</span>
+                      </button>
                     ) : isRejected ? (
-                      <Button
-                        variant="outline"
+                      <button
                         disabled={openingRestId === rest.id}
                         onClick={() => handleSelectRestaurant(rest)}
-                        className="w-full text-xs font-bold py-3 border-rose-500/50 text-rose-300 hover:bg-rose-500/10"
-                        icon={<XCircle className="w-4 h-4 mr-1 text-rose-400" />}
+                        className="w-full text-xs font-semibold py-2.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        View Reason & Resubmit ❌
-                      </Button>
+                        <XCircle className="w-3.5 h-3.5 text-red-400" />
+                        <span>View Reason & Resubmit</span>
+                      </button>
                     ) : (
-                      <Button
-                        variant="outline"
+                      <button
                         disabled
-                        className="w-full text-xs py-3 border-slate-800 text-slate-500"
+                        className="w-full text-xs py-2.5 rounded-lg border border-[#1e232e] text-slate-600 cursor-not-allowed"
                       >
                         {isArchived ? 'Archived Outlet' : 'Access Suspended'}
-                      </Button>
+                      </button>
                     )}
                   </div>
-                </Card>
+                </div>
               );
             })}
 
             {/* Create New Restaurant Card */}
-            <Card
+            <div
               onClick={onCreateNewRestaurant}
-              className="bg-slate-900/60 border-2 border-dashed border-slate-800 hover:border-rose-500/60 p-8 flex flex-col items-center justify-center text-center space-y-4 rounded-3xl cursor-pointer transition-all duration-300 hover:bg-slate-900/90 group"
+              className="border border-dashed border-[#2d3545] hover:border-[#f97316] p-6 rounded-xl flex flex-col items-center justify-center text-center space-y-3 cursor-pointer transition-all bg-[#0b0d11]/40 hover:bg-[#12151b] group min-h-[220px]"
             >
-              <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 group-hover:scale-110 group-hover:bg-rose-500 group-hover:text-white transition-all shadow-xl">
-                <Plus className="w-7 h-7" />
+              <div className="w-11 h-11 rounded-lg bg-[#1a1e27] border border-[#2d3545] flex items-center justify-center text-slate-400 group-hover:text-[#f97316] group-hover:border-[#f97316] transition-colors">
+                <Plus className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-bold text-white text-lg group-hover:text-rose-400 transition-colors">
-                  Create a new restaurant
+                <h3 className="font-semibold text-white text-sm group-hover:text-[#f97316] transition-colors font-display">
+                  Onboard another restaurant
                 </h3>
-                <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-                  Onboard another restaurant, bistro, bar, cloud kitchen, or cafe outlet.
+                <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                  Add another bistro, bar, cloud kitchen, or cafe outlet to your portfolio.
                 </p>
               </div>
-              <div className="pt-2">
-                <span className="text-xs font-bold text-rose-400 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                  Start setup wizard →
-                </span>
-              </div>
-            </Card>
+              <span className="text-xs font-semibold text-[#f97316] inline-flex items-center gap-1 pt-1 group-hover:translate-x-0.5 transition-transform">
+                Start setup wizard →
+              </span>
+            </div>
           </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="text-center text-xs text-slate-500 py-4 max-w-5xl w-full mx-auto border-t border-slate-900 flex items-center justify-between">
-        <span>© Dinely Cloud Platform • Enterprise Multi-Outlet OS</span>
-        <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" /> Tenant Data Isolated
-        </span>
+      {/* Minimal Footer */}
+      <footer className="border-t border-[#1e232e] py-6 px-4 text-center text-xs text-slate-600">
+        Dinely Restaurant Operating System • Enterprise Multi-Tenant Architecture
       </footer>
     </div>
   );

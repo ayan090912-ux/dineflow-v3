@@ -28,13 +28,13 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const variantStyles = {
-    primary: 'bg-rose-600 text-white hover:bg-rose-500 shadow-sm focus:ring-rose-500',
-    secondary: 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700/60 focus:ring-slate-600',
-    outline: 'border border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 hover:text-white focus:ring-slate-700',
-    ghost: 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100 focus:ring-slate-700',
-    danger: 'bg-rose-600/90 text-white hover:bg-rose-500 border border-rose-500/40 shadow-sm focus:ring-rose-500',
-    brand: 'bg-rose-600 text-white hover:bg-rose-500 shadow-sm focus:ring-rose-500',
-    success: 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm focus:ring-emerald-500',
+    primary: 'bg-white text-slate-950 hover:bg-white/90 shadow-sm focus:ring-white/20',
+    secondary: 'bg-white/[0.06] text-white hover:bg-white/[0.1] border border-white/[0.08] focus:ring-white/20',
+    outline: 'border border-white/[0.08] bg-transparent text-white/80 hover:bg-white/[0.04] hover:text-white focus:ring-white/20',
+    ghost: 'text-white/60 hover:bg-white/[0.04] hover:text-white focus:ring-white/20',
+    danger: 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 shadow-sm focus:ring-rose-500/30',
+    brand: 'bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-sm focus:ring-amber-500/30',
+    success: 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 shadow-sm focus:ring-emerald-500/30',
   };
 
   return (

@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   BellRing,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import {
   Button,
@@ -183,14 +184,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
 
       if (event.type === 'ETAUpdated') {
-        addToast('info', 'ETA Updated ⏱️', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
+        addToast('info', 'ETA Updated', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
       } else if (event.type === 'OrderAccepted') {
-        addToast('success', 'Order Accepted! 🔥', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
+        addToast('success', 'Order Accepted', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
       } else if (event.type === 'OrderReady' || event.type === 'order_ready') {
-        addToast('success', 'Order Ready! ✨', 'Your food/drinks are prepared and ready.');
+        addToast('success', 'Order Ready', 'Your food/drinks are prepared and ready.');
       } else if (event.type === 'OrderDelivered' || event.type === 'order_status_updated') {
         if (event.status === 'DELIVERED') {
-          addToast('success', 'Served 🍽️', 'Enjoy your order!');
+          addToast('success', 'Order Served', 'Enjoy your order!');
         }
       }
     });
@@ -344,7 +345,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const handleCheckInAndUnlockTable = async () => {
     if (!currentTable) return;
     await api.checkInReservedTable(currentTable.id);
-    addToast('success', 'Table Unlocked! 🎉', `Welcome ${currentTable.reservationDetails?.reservedForName || 'Guest'}. You may now order.`);
+    addToast('success', 'Table Unlocked', `Welcome ${currentTable.reservationDetails?.reservedForName || 'Guest'}. You may now order.`);
     await loadTableInfo();
   };
 
@@ -365,7 +366,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     setIsAgeModalOpen(false);
     setCurrentMenuTab('BAR');
     setActiveCategory('all');
-    addToast('success', 'Age Verified 🍸', 'Welcome to the Bar Lounge Menu!');
+    addToast('success', 'Age Verified', 'Welcome to the Bar Lounge Menu.');
   };
 
   const getTableStorageKey = (restId?: string, tableNum?: string) => {
@@ -513,8 +514,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setIsOrderStatusModalOpen(true);
       addToast(
         'success',
-        'Order Transmitted! 🎉',
-        `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`
+        'Order Transmitted',
+        `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`.trim()
       );
     } catch (err: any) {
       console.error('Order checkout failed:', err);
@@ -529,7 +530,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const handleRequestBill = async () => {
     await api.requestBill(selectedTableNum);
-    addToast('success', 'Bill Requested 🧾', `Your waiter is bringing check for ${selectedTableNum}.`);
+    addToast('success', 'Bill Requested', `Your waiter is bringing the check for ${selectedTableNum}.`);
   };
 
   const subtotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
@@ -558,19 +559,19 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (restaurantError === 'RESTAURANT_NOT_FOUND') {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
         <div className="space-y-6 text-center my-auto">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-rose-500/10 border-2 border-rose-500/40 flex items-center justify-center shadow-2xl shadow-rose-950/40">
-            <AlertTriangle className="w-10 h-10 text-rose-400" />
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+            <AlertTriangle className="w-8 h-8" />
           </div>
           <div className="space-y-2">
-            <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40">
-              ⚠️ Venue Unavailable
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-medium uppercase bg-white/[0.04] text-white/60 border border-white/[0.08]">
+              Venue Unavailable
             </span>
-            <h2 className="text-2xl font-black text-white">Restaurant menu unavailable</h2>
-            <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-              The menu for this restaurant specified in the QR code is currently unavailable or has no active items. Please ask floor staff for assistance.
+            <h2 className="text-xl font-semibold text-white">Menu Currently Unavailable</h2>
+            <p className="text-xs text-white/50 max-w-xs mx-auto leading-relaxed">
+              The menu for this restaurant is temporarily offline or has no active items. Please ask floor staff for assistance.
             </p>
           </div>
         </div>
@@ -580,19 +581,19 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (tableError === 'TABLE_NOT_FOUND') {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
         <div className="space-y-6 text-center my-auto">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center shadow-2xl shadow-amber-950/40">
-            <QrCode className="w-10 h-10 text-amber-400" />
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <QrCode className="w-8 h-8" />
           </div>
           <div className="space-y-2">
-            <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
-              ⚠️ Table QR Error
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-medium uppercase bg-white/[0.04] text-white/60 border border-white/[0.08]">
+              Table Code Error
             </span>
-            <h2 className="text-2xl font-black text-white">Invalid Table QR Code</h2>
-            <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-              The table specified in this QR code is invalid or no longer active for this venue. Please request assistance from floor staff.
+            <h2 className="text-xl font-semibold text-white">Unrecognized Table Code</h2>
+            <p className="text-xs text-white/50 max-w-xs mx-auto leading-relaxed">
+              The table specified in this QR code could not be verified. Please request assistance from our floor staff.
             </p>
           </div>
         </div>
@@ -605,45 +606,45 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (isTableReserved) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
         <div className="space-y-6 text-center my-auto">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center shadow-2xl shadow-amber-950/40">
-            <Lock className="w-10 h-10 text-amber-400 animate-pulse" />
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <Lock className="w-8 h-8" />
           </div>
 
           <div className="space-y-1">
-            <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
-              🔒 Table Reserved
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-medium uppercase bg-white/[0.04] text-white/60 border border-white/[0.08]">
+              Table Reserved
             </span>
-            <h2 className="text-2xl font-black text-white">{selectedTableNum} is Reserved</h2>
-            <p className="text-xs text-slate-400">
-              {currentTable.section || 'Main Dining Room'} • Capacity: {currentTable.capacity} Seats
+            <h2 className="text-xl font-semibold text-white">{selectedTableNum} is Reserved</h2>
+            <p className="text-xs text-white/50">
+              {currentTable.section || 'Main Dining Room'} • Capacity: {currentTable.capacity} Guests
             </p>
           </div>
 
-          <Card className="bg-slate-900 border-amber-500/30 p-5 space-y-3 text-left">
-            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
-              <Calendar className="w-4 h-4" />
-              Reservation Notice
+          <div className="bg-[#12151b] border border-white/[0.08] p-5 rounded-xl space-y-3 text-left">
+            <div className="flex items-center gap-2 text-white/80 font-medium text-xs">
+              <Calendar className="w-4 h-4 text-amber-400" />
+              <span>Reservation Details</span>
             </div>
 
-            <div className="space-y-1.5 text-xs text-slate-300 font-mono">
-              <p>Guest Name: <strong className="text-white font-sans">{currentTable.reservationDetails?.reservedForName || 'Private Guest'}</strong></p>
-              <p>Reserved Time: <strong className="text-amber-300">{currentTable.reservationDetails?.reservationTime || '7:30 PM'}</strong></p>
-              <p>Party Size: <strong className="text-white">{currentTable.reservationDetails?.partySize || currentTable.capacity} Persons</strong></p>
+            <div className="space-y-1 text-xs text-white/60 font-mono">
+              <p>Guest: <strong className="text-white font-sans">{currentTable.reservationDetails?.reservedForName || 'Private Guest'}</strong></p>
+              <p>Time: <strong className="text-amber-300 font-sans">{currentTable.reservationDetails?.reservationTime || '7:30 PM'}</strong></p>
+              <p>Party: <strong className="text-white font-sans">{currentTable.reservationDetails?.partySize || currentTable.capacity} Persons</strong></p>
             </div>
-          </Card>
+          </div>
 
           <div className="space-y-3 pt-2">
             <Button
               variant="brand"
-              className="w-full py-3.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-950/50"
+              className="w-full py-3 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-black rounded-lg"
               onClick={handleCheckInAndUnlockTable}
               icon={<UserCheck className="w-4 h-4" />}
             >
-              I am {currentTable.reservationDetails?.reservedForName || 'the Reserved Guest'} (Check In)
+              Check In as {currentTable.reservationDetails?.reservedForName || 'Reserved Guest'}
             </Button>
           </div>
         </div>
@@ -653,45 +654,42 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (isSessionEnded) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 max-w-md mx-auto border-x border-slate-800 relative font-sans">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
         <div className="space-y-6 text-center my-auto">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center shadow-2xl shadow-emerald-950/40">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400 animate-pulse" />
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <CheckCircle2 className="w-8 h-8" />
           </div>
 
           <div className="space-y-2">
-            <span className="px-3.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-              ✓ Table Session Closed
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-medium uppercase bg-white/[0.04] text-white/60 border border-white/[0.08]">
+              Session Closed
             </span>
-            <h2 className="text-2xl font-black text-white">Thank You for Dining with Us!</h2>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
-              Your session for <strong className="text-white">{selectedTableNum}</strong> has been closed by floor staff. We hope you enjoyed your meal!
+            <h2 className="text-xl font-semibold text-white">Thank You for Dining with Us</h2>
+            <p className="text-xs text-white/50 leading-relaxed max-w-xs mx-auto">
+              Your dining session for <strong className="text-white">{selectedTableNum}</strong> has concluded. We look forward to welcoming you again.
             </p>
           </div>
 
-          <Card className="bg-slate-900 border-slate-800 p-5 space-y-3 text-left">
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
-              <Sparkles className="w-4 h-4" />
-              Start New Visit
-            </div>
-            <p className="text-xs text-slate-300">
-              To place a new order or start a new dining session, tap below to refresh or re-scan the QR code.
+          <div className="bg-[#12151b] border border-white/[0.08] p-5 rounded-xl space-y-2 text-left">
+            <p className="font-medium text-xs text-white">Starting a new visit?</p>
+            <p className="text-xs text-white/50">
+              To place a new order, tap below to refresh or re-scan your table QR code.
             </p>
-          </Card>
+          </div>
 
           <div className="space-y-3 pt-2">
             <Button
               variant="brand"
-              className="w-full py-3.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50"
+              className="w-full py-3 text-xs font-semibold bg-white/[0.08] hover:bg-white/[0.12] text-white border border-white/[0.1] rounded-lg"
               onClick={async () => {
                 setIsSessionEnded(false);
                 await loadTableInfo();
               }}
               icon={<RefreshCw className="w-4 h-4" />}
             >
-              Start New Dining Session 🚀
+              Start New Session
             </Button>
           </div>
         </div>
@@ -702,56 +700,32 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const isBarTheme = currentMenuTab === 'BAR';
 
   return (
-    <div className={`min-h-screen font-sans pb-44 sm:pb-48 max-w-md mx-auto relative border-x border-slate-800 shadow-2xl transition-colors duration-500 ${
-      isBarTheme ? 'bg-gradient-to-b from-slate-950 via-slate-900 to-amber-950/40 text-slate-100' : 'bg-slate-900 text-slate-100'
-    }`}>
+    <div className={`min-h-screen font-sans pb-44 sm:pb-48 max-w-md mx-auto relative border-x border-white/[0.08] bg-[#0b0d11] text-[#f0f2f5]`}>
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
-      {/* DINELY CUSTOMER DEV DEBUG PANEL */}
-      {(import.meta.env.DEV || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.search.includes('debug')))) && (
-        <div className="bg-slate-950/95 border-b border-amber-500/40 p-2.5 text-[10px] font-mono text-amber-300 space-y-1 z-50 sticky top-0 shadow-lg">
-          <div className="font-bold text-amber-400 flex items-center justify-between">
-            <span>[DINELY CUSTOMER DEBUG]</span>
-            <span className="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">DEV MODE</span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-300">
-            <div>Restaurant: <span className="text-white font-bold">{currentRestaurant?.id || 'N/A'}</span></div>
-            <div>Table ID: <span className="text-white font-bold">{currentTable?.id || 'N/A'}</span></div>
-            <div>Table Number: <span className="text-white font-bold">{selectedTableNum}</span></div>
-            <div>Session: <span className="text-amber-200 font-bold">{currentTableSession?.id || 'N/A'}</span></div>
-            <div>Orders Returned: <span className="text-emerald-400 font-bold">{customerOrders.length}</span></div>
-            <div>First Order Table: <span className="text-white font-bold">{customerOrders[0]?.tableId || customerOrders[0]?.tableNumber || 'None'}</span></div>
-          </div>
-        </div>
-      )}
-
       {/* Hero Banner Header */}
-      <div className="relative h-52 w-full bg-slate-800 overflow-hidden">
+      <div className="relative h-48 w-full bg-[#12151b] overflow-hidden">
         <img
           src={isBarTheme ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1200&auto=format&fit=crop&q=80' : theme.bannerUrl}
           alt={theme.restaurantName}
-          className="w-full h-full object-cover brightness-75 transition-all duration-700"
+          className="w-full h-full object-cover brightness-[0.7] transition-all duration-700"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0d11] via-[#0b0d11]/40 to-transparent" />
 
         {/* Floating Action Buttons Top Right */}
         <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
           {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
             <button
               onClick={() => setIsOrderStatusModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-950/60 flex items-center gap-1.5 cursor-pointer border border-emerald-300/60 animate-pulse transition-all"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500 text-black hover:bg-amber-400 flex items-center gap-1.5 transition-colors shadow-sm"
             >
               <Clock className="w-3.5 h-3.5" />
-              <span>Order Status ({customerOrders.filter((o) => o.status !== 'CANCELLED').length}) 🛵</span>
+              <span>Orders ({customerOrders.filter((o) => o.status !== 'CANCELLED').length})</span>
             </button>
           )}
 
-          <div
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5 ${
-              isBarTheme ? 'bg-amber-600' : 'bg-rose-600'
-            }`}
-          >
-            <span>📍 {selectedTableNum}</span>
+          <div className="px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-black/60 backdrop-blur-md text-white border border-white/[0.1]">
+            <span>{selectedTableNum}</span>
           </div>
         </div>
 
@@ -760,12 +734,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           <img
             src={theme.logo}
             alt={theme.restaurantName}
-            className="w-16 h-16 rounded-2xl object-cover border-2 border-white/20 shadow-xl"
+            className="w-14 h-14 rounded-xl object-cover border border-white/20 shadow-lg bg-[#0b0d11]"
           />
           <div>
-            <h1 className="text-xl font-black text-white tracking-tight">{theme.restaurantName}</h1>
-            <p className="text-xs text-slate-300 font-medium flex items-center gap-2 mt-0.5">
-              <span>⭐ 4.9 (120+ reviews)</span> • <span>{isBarTheme ? 'VIP Cocktail & Wine Lounge 🍷' : 'Fine Dining Restaurant'}</span>
+            <h1 className="text-lg font-semibold text-white tracking-tight">{theme.restaurantName}</h1>
+            <p className="text-xs text-white/60 font-medium flex items-center gap-2 mt-0.5">
+              <span className="flex items-center gap-1">
+                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                <span>4.9</span>
+              </span>
+              <span>•</span>
+              <span className="text-white/40">{isBarTheme ? 'Craft Cocktails & Wine Lounge' : 'Dining Room Experience'}</span>
             </p>
           </div>
         </div>
@@ -773,87 +752,79 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Quick Action Bar (Call Waiter, Live Order Tracker & My Bill) */}
       {currentRestaurant?.hasTables !== false ? (
-        <div className="p-3 grid grid-cols-3 gap-2 bg-slate-950 border-b border-slate-800/80 sticky top-0 z-20 backdrop-blur-md bg-slate-950/90">
-          <Button
-            variant="outline"
-            size="sm"
+        <div className="p-2.5 grid grid-cols-3 gap-2 bg-[#0b0d11]/90 border-b border-white/[0.08] sticky top-0 z-20 backdrop-blur-md">
+          <button
             onClick={handleCallWaiter}
-            className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 py-2 rounded-xl font-bold text-xs flex items-center justify-center px-2"
-            icon={<PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+            className="py-2 px-2 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-white/80 hover:text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
           >
-            <span className="truncate">Waiter</span>
-          </Button>
+            <PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="truncate">Call Staff</span>
+          </button>
 
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => setIsOrderStatusModalOpen(true)}
-            className={`border-rose-500/40 text-rose-300 hover:bg-rose-500/10 py-2 rounded-xl font-bold text-xs flex items-center justify-center px-2 relative ${
+            className={`py-2 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
               customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0
-                ? 'bg-rose-500/20 border-rose-500 text-white font-extrabold shadow-md'
-                : ''
+                ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300 font-semibold'
+                : 'bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-white/80 hover:text-white'
             }`}
-            icon={<Clock className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
           >
+            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="truncate">Orders</span>
             {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black shrink-0">
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[10px] font-bold font-mono">
                 {customerOrders.filter((o) => o.status !== 'CANCELLED').length}
               </span>
             )}
-          </Button>
+          </button>
 
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => setIsBillModalOpen(true)}
-            className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 py-2 rounded-xl font-bold text-xs flex items-center justify-center px-2"
-            icon={<Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+            className="py-2 px-2 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-white/80 hover:text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
           >
-            <span className="truncate">My Bill 🧾</span>
-          </Button>
+            <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="truncate">Bill</span>
+          </button>
         </div>
       ) : (
-        <div className="px-4 py-2.5 bg-sky-500/10 border-b border-sky-500/30 text-sky-200 flex items-center justify-between text-xs font-bold sticky top-0 z-20 backdrop-blur-md">
+        <div className="px-4 py-2 bg-white/[0.02] border-b border-white/[0.08] text-white/70 flex items-center justify-between text-xs font-mono sticky top-0 z-20 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <ShoppingBag className="w-4 h-4 text-sky-400" />
-            <span>Counter Pickup Ordering — Direct to Kitchen</span>
+            <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+            <span>Counter Pickup Ordering</span>
           </div>
-          <Badge variant="warning" className="text-[10px]">PICKUP</Badge>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08]">PICKUP</span>
         </div>
       )}
-
-
 
       {/* Food Menu ⇄ Bar Menu Switcher (If Bar Feature is Enabled) */}
       {(currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR') && (
         <div className="px-4 pt-3 pb-1">
-          <div className="grid grid-cols-2 p-1 bg-slate-950 rounded-2xl border border-slate-800 text-xs font-bold shadow-inner">
+          <div className="grid grid-cols-2 p-1 bg-[#12151b] rounded-xl border border-white/[0.08] text-xs font-medium">
             <button
               onClick={() => handleSwitchMenuTab('FOOD')}
-              className={`py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 ${
+              className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 currentMenuTab === 'FOOD'
-                  ? 'bg-rose-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-white/[0.08] text-white font-semibold'
+                  : 'text-white/40 hover:text-white'
               }`}
             >
-              <Utensils className="w-4 h-4" />
+              <Utensils className="w-3.5 h-3.5" />
               <span>Food Menu</span>
             </button>
 
             <button
               onClick={() => handleSwitchMenuTab('BAR')}
-              className={`py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 ${
+              className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 currentMenuTab === 'BAR'
-                  ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/20'
+                  : 'text-white/40 hover:text-white'
               }`}
             >
-              <Wine className="w-4 h-4 text-amber-300" />
-              <span>Bar Menu</span>
+              <Wine className="w-3.5 h-3.5 text-amber-400" />
+              <span>Beverages & Bar</span>
               {isAgeConfirmed && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
-                  21+ ✓
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  21+
                 </span>
               )}
             </button>
@@ -861,58 +832,54 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
-
-
       {/* Menu Filter Tabs */}
       <div className="p-4 space-y-3">
         {/* Search */}
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+          <Search className="w-3.5 h-3.5 absolute left-3.5 top-3 text-white/40" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={isBarTheme ? "Search whiskey, cocktails, wine, beer..." : "Search menu items..."}
-            className={`w-full bg-slate-800 text-slate-100 text-xs rounded-xl pl-10 pr-4 py-2.5 border focus:outline-none ${
-              isBarTheme ? 'border-amber-500/40 focus:border-amber-400' : 'border-slate-700/80 focus:border-rose-500'
-            }`}
+            placeholder={isBarTheme ? "Search cocktails, wine, spirits, craft beers..." : "Search dishes, appetizers, desserts..."}
+            className="w-full bg-[#12151b] text-white text-xs rounded-xl pl-9 pr-4 py-2.5 border border-white/[0.08] focus:border-amber-400/60 focus:outline-none placeholder:text-white/30"
           />
         </div>
 
         {/* Dietary Veg/Non-Veg Quick Filter */}
         {!isBarTheme && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl">
+          <div className="flex items-center gap-1.5 p-1 bg-[#12151b] border border-white/[0.08] rounded-xl text-xs">
             <button
               onClick={() => setDietaryFilter('ALL')}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all text-center ${
-                dietaryFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
+              className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors text-center ${
+                dietaryFilter === 'ALL' ? 'bg-white/[0.06] text-white' : 'text-white/40 hover:text-white'
               }`}
             >
-              All Food 🍽️
+              All Dishes
             </button>
 
             <button
               onClick={() => setDietaryFilter('VEG')}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 dietaryFilter === 'VEG'
-                  ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 shadow'
-                  : 'text-slate-400 hover:text-emerald-400'
+                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                  : 'text-white/40 hover:text-emerald-400'
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-              <span>🟢 Veg</span>
+              <span>Veg Only</span>
             </button>
 
             <button
               onClick={() => setDietaryFilter('NON_VEG')}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 dietaryFilter === 'NON_VEG'
-                  ? 'bg-rose-950/90 text-rose-300 border border-rose-500/50 shadow'
-                  : 'text-slate-400 hover:text-rose-400'
+                  ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+                  : 'text-white/40 hover:text-rose-400'
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-              <span>🔴 Non-Veg</span>
+              <span>Non-Veg</span>
             </button>
           </div>
         )}
@@ -921,13 +888,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           <button
             onClick={() => setActiveCategory('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
               activeCategory === 'all'
-                ? isBarTheme ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'bg-rose-600 text-white shadow-md'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                ? 'bg-amber-500 text-black font-semibold'
+                : 'bg-[#12151b] text-white/60 hover:text-white border border-white/[0.08]'
             }`}
           >
-            All {isBarTheme ? 'Drinks 🍸' : 'Categories'}
+            All {isBarTheme ? 'Beverages' : 'Categories'}
           </button>
           {(isBarTheme
             ? [
@@ -954,10 +921,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                 activeCategory === cat.id
-                  ? isBarTheme ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'bg-rose-600 text-white shadow-md'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-amber-500 text-black font-semibold'
+                  : 'bg-[#12151b] text-white/60 hover:text-white border border-white/[0.08]'
               }`}
             >
               {cat.name}
@@ -966,17 +933,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
 
         {/* Menu Items List */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredItems.map((item) => {
             const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
             return (
-              <Card
+              <div
                 key={item.id}
-                className={`p-3.5 flex gap-3.5 transition-all cursor-pointer rounded-2xl group ${
-                  isBarTheme
-                    ? 'bg-slate-900/90 border-amber-500/30 hover:border-amber-400 shadow-xl shadow-amber-950/20'
-                    : 'bg-slate-800/80 border-slate-700/60 hover:border-slate-600'
-                }`}
+                className="p-3.5 flex gap-3.5 transition-colors cursor-pointer rounded-xl bg-[#12151b] border border-white/[0.08] hover:border-white/[0.16] shadow-sm group"
                 onClick={() => {
                   setSelectedItem(item);
                   setQuantity(1);
@@ -987,10 +950,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                   <img
                     src={item.image}
                     alt={item.name}
-                    className="w-24 h-24 rounded-xl object-cover border border-slate-700/80 group-hover:scale-105 transition-transform"
+                    className="w-22 h-22 rounded-lg object-cover border border-white/[0.08] group-hover:opacity-90 transition-opacity"
                   />
                   {item.isAlcoholic && (
-                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-950/90 text-purple-300 border border-purple-500/40">
+                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-white/80 border border-white/[0.1]">
                       {item.alcoholPercentage || 40}% ABV
                     </span>
                   )}
@@ -1001,75 +964,72 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                       <div className="flex items-center gap-1.5 min-w-0">
                         {!isBarTheme && !item.isAlcoholic && (
                           <span
-                            className={`inline-flex items-center justify-center border p-0.5 rounded-[4px] shrink-0 ${
-                              isVeg ? 'border-emerald-500 bg-emerald-950/80' : 'border-rose-500 bg-rose-950/80'
+                            className={`inline-flex items-center justify-center border p-0.5 rounded-[3px] shrink-0 ${
+                              isVeg ? 'border-emerald-500/60 bg-emerald-500/10' : 'border-rose-500/60 bg-rose-500/10'
                             }`}
                             title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
                           >
-                            <span className={`w-2 h-2 rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${isVeg ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                           </span>
                         )}
-                        <h3 className="text-sm font-bold text-slate-100 truncate">{item.name}</h3>
+                        <h3 className="text-xs font-semibold text-white truncate">{item.name}</h3>
                       </div>
 
                       <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                        className={`text-[9px] font-mono px-1.5 py-0.2 rounded shrink-0 ${
                           isVeg
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                            : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                         }`}
                       >
-                        {isVeg ? 'Veg' : 'Non-Veg'}
+                        {isVeg ? 'VEG' : 'NON-VEG'}
                       </span>
                     </div>
-                  {item.brand && (
-                    <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>
-                  )}
-                  <p className="text-xs text-slate-400 line-clamp-2 mt-1">{item.description}</p>
-                  {(item.glassSize || item.bottleSize) && (
-                    <p className="text-[10px] text-purple-300 font-mono mt-0.5">
-                      Serving: {item.glassSize || item.bottleSize}
-                    </p>
-                  )}
-                </div>
+                    {item.brand && (
+                      <p className="text-[10px] text-amber-400/90 font-mono mt-0.5">{item.brand}</p>
+                    )}
+                    <p className="text-xs text-white/50 line-clamp-2 mt-1 leading-relaxed">{item.description}</p>
+                    {(item.glassSize || item.bottleSize) && (
+                      <p className="text-[10px] text-white/40 font-mono mt-0.5">
+                        Serving: {item.glassSize || item.bottleSize}
+                      </p>
+                    )}
+                  </div>
 
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/50">
-                  <span className="text-sm font-black text-emerald-400">
-                    {formatPrice(item.price)}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="brand"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const station = getFulfillmentStation(item);
-                      const itemToAdd = {
-                        ...item,
-                        targetDestination: station,
-                      };
-                      setCart((prev) => {
-                        const existing = prev.find((c) => c.item.id === item.id);
-                        if (existing) {
-                          return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
-                        }
-                        return [...prev, { item: itemToAdd, quantity: 1 }];
-                      });
-                      addToast('success', 'Added to Order Cart 🛒', `1x ${item.name}`);
-                    }}
-                    className={`text-xs py-1 px-3 rounded-lg font-bold ${
-                      isBarTheme ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' : 'bg-rose-600 hover:bg-rose-500'
-                    }`}
-                  >
-                    Add +
-                  </Button>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.06]">
+                    <span className="text-xs font-mono font-semibold text-white">
+                      {formatPrice(item.price)}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const station = getFulfillmentStation(item);
+                        const itemToAdd = {
+                          ...item,
+                          targetDestination: station,
+                        };
+                        setCart((prev) => {
+                          const existing = prev.find((c) => c.item.id === item.id);
+                          if (existing) {
+                            return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+                          }
+                          return [...prev, { item: itemToAdd, quantity: 1 }];
+                        });
+                        addToast('success', 'Added to order', `1x ${item.name}`);
+                      }}
+                      className="text-xs py-1 px-3 rounded-lg font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </Card>
-          );
+            );
           })}
           {filteredItems.length === 0 && (
-            <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-slate-400 text-xs">
-              No items available in this category.
+            <div className="p-8 text-center bg-[#12151b] border border-dashed border-white/[0.08] rounded-xl text-white/40 text-xs">
+              No items found in this category.
             </div>
           )}
         </div>
@@ -1092,76 +1052,21 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         <div className="fixed bottom-4 left-4 right-4 z-40 max-w-md mx-auto">
           <button
             onClick={() => setIsCartOpen(true)}
-            className={`w-full text-white font-bold p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:opacity-95 transition-opacity active:scale-[0.98] ${
-              isBarTheme ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950' : 'bg-rose-600'
-            }`}
+            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold p-3.5 rounded-xl shadow-2xl border border-amber-400/30 flex items-center justify-between transition-all active:scale-[0.99]"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center font-mono text-xs font-black">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center font-mono text-xs font-bold text-slate-950">
                 {totalCartCount}
               </div>
-              <span className="text-sm font-black">View Order Cart</span>
+              <span className="text-xs font-semibold">View Order Cart</span>
             </div>
-            <span className="font-mono text-base font-black">{formatPrice(subtotal)} →</span>
+            <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
+              <span>{formatPrice(subtotal)}</span>
+              <ChevronRight className="w-4 h-4" />
+            </div>
           </button>
         </div>
       )}
-
-      {/* Sticky Order Access Bar */}
-      {(() => {
-        const activeOrders = customerOrders.filter(
-          (o) => (o.status as string) !== 'PAID' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
-        );
-        if (activeOrders.length === 0) return null;
-
-        const latestOrd = activeOrders[0];
-
-        return (
-          <div
-            className={`fixed left-4 right-4 z-40 max-w-md mx-auto transition-all duration-300 ${
-              totalCartCount > 0 ? 'bottom-20' : 'bottom-4'
-            }`}
-          >
-            <div
-              onClick={handleScrollToActiveOrders}
-              className={`w-full p-3 rounded-2xl shadow-2xl border flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all backdrop-blur-md ${
-                isRecentStatusPulse
-                  ? 'bg-rose-950/95 border-rose-500 text-white ring-2 ring-rose-400 shadow-rose-950/80 animate-pulse'
-                  : 'bg-slate-900/95 border-slate-700/80 text-white hover:border-slate-600 shadow-slate-950/80'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30">
-                  <BellRing className="w-4 h-4 text-rose-400 animate-pulse" />
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white">
-                    {activeOrders.length}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs font-black text-white flex items-center gap-1.5">
-                    {activeOrders.length === 1 ? '1 Active Order' : `${activeOrders.length} Active Orders`}
-                    {latestOrd && (
-                      <span className="text-[10px] text-rose-400 font-normal font-mono">
-                        (#{latestOrd.id} • {latestOrd.status})
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-[10px] text-slate-400">Tap to track live preparation</p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                aria-label="Track active orders"
-                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1 shadow-md transition-colors shrink-0"
-              >
-                <span>{activeOrders.length === 1 ? 'Track Order' : `Track ${activeOrders.length} Orders`}</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Item Selection & Customization Modal */}
       <Modal
@@ -1170,27 +1075,40 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         title={selectedItem?.name}
       >
         {selectedItem && (
-          <div className="space-y-4 text-xs">
-            <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-48 object-cover rounded-2xl" />
+          <div className="space-y-4 text-xs font-sans">
+            <div className="relative rounded-xl overflow-hidden border border-white/[0.08] bg-[#12151b]">
+              <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-44 object-cover" />
+              <div className="absolute top-2.5 left-2.5">
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded font-medium ${
+                    selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG'
+                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-rose-950/80 text-rose-400 border border-rose-500/30'
+                  }`}
+                >
+                  {selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG' ? 'VEG' : 'NON-VEG'}
+                </span>
+              </div>
+            </div>
             
             {selectedItem.brand && (
-              <p className="text-amber-400 font-mono font-bold">Brand: {selectedItem.brand}</p>
+              <p className="text-amber-400 font-mono text-xs font-medium">Brand: {selectedItem.brand}</p>
             )}
             
-            <p className="text-slate-300">{selectedItem.description}</p>
+            <p className="text-white/60 leading-relaxed text-xs">{selectedItem.description}</p>
 
             {selectedItem.servingOptions && selectedItem.servingOptions.length > 0 && (
-              <div className="space-y-1.5">
-                <span className="font-bold text-slate-200 block">Serving Option:</span>
+              <div className="space-y-2">
+                <span className="font-medium text-white/80 block text-xs">Serving Option</span>
                 <div className="flex flex-wrap gap-2">
                   {selectedItem.servingOptions.map((opt) => (
                     <button
                       key={opt}
                       onClick={() => setSelectedServingOption(opt)}
-                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-mono transition-all ${
                         selectedServingOption === opt
-                          ? 'bg-amber-500 text-slate-950 border-amber-400'
-                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-semibold'
+                          : 'bg-[#12151b] text-white/70 border-white/[0.08] hover:border-white/20'
                       }`}
                     >
                       {opt}
@@ -1200,23 +1118,23 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-between py-2 border-y border-slate-800">
-              <span className="font-bold text-slate-300">Quantity</span>
-              <div className="flex items-center gap-3 bg-slate-800 p-1.5 rounded-xl">
+            <div className="flex items-center justify-between py-2.5 border-y border-white/[0.08]">
+              <span className="font-medium text-white/80 text-xs">Quantity</span>
+              <div className="flex items-center gap-3 bg-[#12151b] border border-white/[0.08] p-1 rounded-lg">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="h-7 w-7 p-0"
+                  className="h-7 w-7 p-0 text-white/60 hover:text-white"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </Button>
-                <span className="font-mono font-bold text-sm text-white">{quantity}</span>
+                <span className="font-mono font-semibold text-xs text-white min-w-[20px] text-center">{quantity}</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setQuantity(quantity + 1)}
-                  className="h-7 w-7 p-0"
+                  className="h-7 w-7 p-0 text-white/60 hover:text-white"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </Button>
@@ -1224,8 +1142,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             </div>
 
             <Input
-              label="Instructions / Notes"
-              placeholder="e.g. Extra ice, lime slice, allergy..."
+              label="Preparation Instructions / Notes"
+              placeholder="e.g. Less spicy, dressing on the side, allergies..."
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
             />
@@ -1233,9 +1151,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <Button
               variant="brand"
               onClick={handleAddToCart}
-              className="w-full py-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="w-full py-3 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md"
             >
-              Add to Cart ({formatPrice(selectedItem.price * quantity)})
+              Add to Order · {formatPrice(selectedItem.price * quantity)}
             </Button>
           </div>
         )}
@@ -1245,39 +1163,59 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       <Modal
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        title="Your Table Order Summary"
+        title="Order Summary"
       >
-        <div className="space-y-4 text-xs">
-          <div className="space-y-2 max-h-60 overflow-y-auto">
+        <div className="space-y-4 text-xs font-sans">
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {cart.map((c, idx) => (
-              <div key={idx} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-white text-sm">{c.quantity}x {c.item.name}</p>
-                  {c.notes && <p className="text-[10px] text-amber-300 italic">{c.notes}</p>}
+              <div key={idx} className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <p className="font-medium text-white text-xs">
+                    <span className="font-mono text-amber-400 font-bold mr-1.5">{c.quantity}×</span>
+                    {c.item.name}
+                  </p>
+                  {c.servingOption && (
+                    <p className="text-[11px] text-white/50 font-mono">Serving: {c.servingOption}</p>
+                  )}
+                  {c.notes && <p className="text-[11px] text-amber-400/80 italic">{c.notes}</p>}
                 </div>
-                <span className="font-mono font-bold text-emerald-400">{formatPrice(c.item.price * c.quantity)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-semibold text-white">{formatPrice(c.item.price * c.quantity)}</span>
+                  <button
+                    onClick={() => {
+                      setCart((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    className="p-1 text-white/40 hover:text-rose-400 transition-colors"
+                    title="Remove item"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1 font-mono">
-            <div className="flex justify-between text-slate-400"><span>Subtotal:</span><span>{formatPrice(subtotal)}</span></div>
-            <div className="flex justify-between text-slate-400">
-              <span>Tax ({currentRestaurant?.taxPercentage ?? 5}%):</span>
+          <div className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
+            <div className="flex justify-between text-white/60">
+              <span>Subtotal</span>
+              <span>{formatPrice(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-white/60">
+              <span>GST ({currentRestaurant?.taxPercentage ?? 5}%)</span>
               <span>{formatPrice(Math.round(subtotal * ((currentRestaurant?.taxPercentage ?? 5) / 100) * 100) / 100)}</span>
             </div>
-            <div className="flex justify-between text-white font-bold text-sm pt-1 border-t border-slate-800">
-              <span>Total:</span>
-              <span>{formatPrice(Math.round((subtotal + subtotal * ((currentRestaurant?.taxPercentage ?? 5) / 100)) * 100) / 100)}</span>
+            <div className="flex justify-between text-white font-semibold text-sm pt-2 border-t border-white/[0.08]">
+              <span>Total</span>
+              <span className="text-amber-400">{formatPrice(Math.round((subtotal + subtotal * ((currentRestaurant?.taxPercentage ?? 5) / 100)) * 100) / 100)}</span>
             </div>
           </div>
 
           <Button
             variant="brand"
             onClick={handleCheckout}
-            className="w-full py-3.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl"
+            className="w-full py-3.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xl"
           >
-            Transmit Order to Kitchen & Bar 🔥
+            Confirm & Send to Kitchen
           </Button>
         </div>
       </Modal>
@@ -1286,10 +1224,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       <Modal
         isOpen={isTableSelectorModalOpen}
         onClose={() => setIsTableSelectorModalOpen(false)}
-        title="Switch Dining Table Floor Plan"
+        title="Switch Dining Table"
       >
-        <div className="space-y-4 text-xs">
-          <div className="grid grid-cols-2 gap-2.5 max-h-64 overflow-y-auto">
+        <div className="space-y-4 text-xs font-sans">
+          <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
             {allRestaurantTables.map((t) => (
               <button
                 key={t.id}
@@ -1299,12 +1237,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 }}
                 className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
                   t.tableNumber === selectedTableNum
-                    ? 'bg-rose-600 border-rose-500 text-white font-bold'
-                    : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700'
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 font-semibold'
+                    : 'bg-[#12151b] border-white/[0.08] text-white/80 hover:border-white/20'
                 }`}
               >
-                <span className="font-bold text-xs">{t.tableNumber}</span>
-                <span className="text-[10px] text-slate-400">{t.section || 'Main'}</span>
+                <span className="font-mono text-xs font-semibold">{t.tableNumber}</span>
+                <span className="text-[10px] text-white/40">{t.section || 'Main Area'}</span>
               </button>
             ))}
           </div>
@@ -1315,27 +1253,27 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       <Modal
         isOpen={isAgeModalOpen}
         onClose={() => setIsAgeModalOpen(false)}
-        title="Legal Drinking Age Verification 🍷"
+        title="Age Verification (21+)"
       >
-        <div className="space-y-4 text-xs">
-          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-200 space-y-2">
-            <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
-              <Wine className="w-5 h-5 text-amber-400" />
+        <div className="space-y-4 text-xs font-sans">
+          <div className="p-4 bg-[#12151b] border border-white/[0.08] rounded-xl space-y-2">
+            <div className="flex items-center gap-2 font-semibold text-amber-400 text-xs">
+              <Wine className="w-4 h-4 text-amber-400" />
               <span>Age Verification Required</span>
             </div>
-            <p className="text-xs text-amber-200/90 leading-relaxed">
-              Before viewing or ordering from our craft beverage & cocktail menu, please confirm that you are of legal drinking age in your jurisdiction (21+).
+            <p className="text-xs text-white/60 leading-relaxed">
+              Before viewing or ordering from our craft beverage and cocktail menu, please confirm that you are of legal drinking age in your jurisdiction (21+).
             </p>
           </div>
 
-          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center gap-3">
+          <div className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] flex items-center gap-3">
             <input
               type="checkbox"
               id="ageCheckbox"
-              className="w-4 h-4 rounded border-slate-700 text-amber-500 focus:ring-amber-500"
+              className="w-4 h-4 rounded border-white/20 bg-black/40 text-amber-500 focus:ring-amber-500"
               defaultChecked={true}
             />
-            <label htmlFor="ageCheckbox" className="text-xs text-slate-300 font-semibold cursor-pointer">
+            <label htmlFor="ageCheckbox" className="text-xs text-white/80 font-medium cursor-pointer">
               I confirm I am of legal drinking age (21+).
             </label>
           </div>
@@ -1345,7 +1283,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               variant="outline"
               size="sm"
               onClick={() => setIsAgeModalOpen(false)}
-              className="border-slate-800 text-slate-400"
+              className="border-white/[0.08] text-white/60 hover:text-white"
             >
               Cancel
             </Button>
@@ -1353,10 +1291,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               variant="brand"
               size="sm"
               onClick={handleConfirmAge}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
-              icon={<Sparkles className="w-4 h-4" />}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold"
+              icon={<Wine className="w-4 h-4" />}
             >
-              Enter Bar Lounge 🍸
+              Confirm & Enter Bar Menu
             </Button>
           </div>
         </div>
@@ -1381,7 +1319,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         onRequestSuccess={(title, note) => {
           addToast(
             'success',
-            `${title} Requested! 🛎️`,
+            `${title} Requested`,
             note
               ? `Note: "${note}" sent to floor waiter for ${selectedTableNum}.`
               : `Assistance requested for ${selectedTableNum}.`
@@ -1393,14 +1331,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       <Modal
         isOpen={isOrderStatusModalOpen}
         onClose={() => setIsOrderStatusModalOpen(false)}
-        title="Live Order Status & Kitchen Tracker 🛵"
+        title="Live Order Status & Progress"
       >
         <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
           {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 0 ? (
-            <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800 text-slate-400 space-y-2">
-              <Clock className="w-10 h-10 text-slate-600 mx-auto" />
-              <h4 className="font-bold text-white text-sm">No Active Orders Yet</h4>
-              <p className="text-xs text-slate-500">Items you order will appear here with live kitchen status & prep countdowns.</p>
+            <div className="p-8 text-center bg-[#12151b] rounded-xl border border-white/[0.08] text-white/40 space-y-2">
+              <Clock className="w-8 h-8 text-white/20 mx-auto" />
+              <h4 className="font-semibold text-white text-xs">No Active Orders Yet</h4>
+              <p className="text-[11px] text-white/40">Items you order will appear here with live kitchen status & prep countdowns.</p>
             </div>
           ) : (
             customerOrders
@@ -1421,34 +1359,34 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* STICKY FLOATING ACTIVE SESSION ORDER STATUS BAR */}
       {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
         <div
-          className={`fixed left-4 right-4 max-w-md mx-auto z-40 animate-in slide-in-from-bottom duration-300 transition-all ${
+          className={`fixed left-4 right-4 max-w-md mx-auto z-40 transition-all duration-300 ${
             totalCartCount > 0 ? 'bottom-20' : 'bottom-4'
           }`}
         >
           <div
             onClick={() => setIsOrderStatusModalOpen(true)}
-            className="bg-slate-900/95 border-2 border-emerald-500/60 p-3.5 rounded-2xl shadow-2xl shadow-slate-950 backdrop-blur-xl flex items-center justify-between gap-3 cursor-pointer group hover:border-emerald-400 transition-all"
+            className="bg-[#0e1117]/95 border border-white/[0.12] p-3 rounded-xl shadow-2xl backdrop-blur-md flex items-center justify-between gap-3 cursor-pointer group hover:border-amber-400/40 transition-all"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
-                <Clock className="w-5 h-5 animate-spin" />
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4" />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black text-white truncate">Live Order Status</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
+                  <span className="text-xs font-semibold text-white truncate">Live Order In Progress</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shrink-0 animate-pulse" />
                 </div>
-                <p className="text-[11px] text-slate-300 font-mono truncate">
-                  {customerOrders.filter((o) => o.status !== 'CANCELLED').length} Active {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} • Total: ₹
+                <p className="text-[11px] text-white/50 font-mono truncate">
+                  {customerOrders.filter((o) => o.status !== 'CANCELLED').length} {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} · Total: ₹
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              <span className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-950/50 group-hover:scale-105 transition-transform flex items-center gap-1 whitespace-nowrap font-sans">
+              <span className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.12] text-white transition-colors flex items-center gap-1 whitespace-nowrap">
                 <span>Track Status</span>
-                <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                <ChevronRight className="w-3.5 h-3.5 shrink-0 text-white/60" />
               </span>
             </div>
           </div>

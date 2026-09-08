@@ -110,15 +110,15 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   // Request Bill Handler (Notifies Waiter Terminal & WebSocket)
   const handleRequestBill = async () => {
     setIsLoading(true);
-    setNotificationToast('Notifying Waiter... 🛎️');
+    setNotificationToast('Notifying floor staff...');
     try {
       const b = await api.requestTableBill(restId, tableNumber, tableSession?.id);
       setBill(b);
-      setNotificationToast('Waiter Notified! 🛎️ Bill request sent to waiter terminal.');
+      setNotificationToast('Bill request transmitted to floor terminal.');
       setTimeout(() => setNotificationToast(null), 4000);
     } catch (err: any) {
       console.warn('Request bill error:', err);
-      setNotificationToast('Waiter Notified! 🛎️');
+      setNotificationToast('Bill request sent.');
       setTimeout(() => setNotificationToast(null), 3000);
     } finally {
       setIsLoading(false);
@@ -128,25 +128,25 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   // Customer Claimed Paid Online -> Alert Waiter
   const handleCustomerClaimedPaid = async () => {
     setIsLoading(true);
-    setNotificationToast('Alerting Waiter... 🛎️');
+    setNotificationToast('Alerting floor staff...');
     try {
       const amountStr = bill ? `₹${bill.grandTotal.toFixed(2)}` : '';
       await api.createCustomerRequest({
         restaurantId: restId,
         tableNumber: standardTable,
         requestType: 'BILL',
-        customTitle: 'UPI Payment Verification ⚡',
+        customTitle: 'UPI Payment Verification',
         message: `Customer at ${standardTable} has paid ${amountStr} via UPI (${activeUpiId || 'UPI QR'}). Please verify & confirm.`,
         customerNotes: `UPI ID: ${activeUpiId || 'Merchant QR'} | Amount: ${amountStr}`,
         priority: 'HIGH',
         tableSessionId: tableSession?.id,
       });
       await api.requestTableBill(restId, tableNumber, tableSession?.id);
-      setNotificationToast('Waiter Alerted! 🛎️ Payment verification sent to billing terminal.');
+      setNotificationToast('Payment notification sent to cashier terminal.');
       setTimeout(() => setNotificationToast(null), 4000);
     } catch (err: any) {
       console.warn('Paid alert error:', err);
-      setNotificationToast('Waiter Alerted! 🛎️');
+      setNotificationToast('Floor staff alerted.');
       setTimeout(() => setNotificationToast(null), 3000);
     } finally {
       setIsLoading(false);
@@ -157,7 +157,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   // Direct Call Waiter Handler
   const handleCallWaiterClick = async () => {
     setIsCallingWaiter(true);
-    setNotificationToast('Summoning Waiter... 🛎️');
+    setNotificationToast('Notifying floor staff...');
     try {
       if (onCallWaiter) {
         onCallWaiter();
@@ -166,16 +166,16 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
         restaurantId: restId,
         tableNumber: standardTable,
         requestType: 'CALL_WAITER',
-        customTitle: 'Waiter Assistance 🛎️',
+        customTitle: 'Waiter Assistance',
         message: `Customer at ${standardTable} is calling for waiter assistance`,
         priority: 'HIGH',
         tableSessionId: tableSession?.id,
       });
-      setNotificationToast('Waiter Summoned! 🛎️ A staff member has been alerted.');
+      setNotificationToast('Floor staff member alerted.');
       setTimeout(() => setNotificationToast(null), 4000);
     } catch (err: any) {
       console.warn('Call waiter error:', err);
-      setNotificationToast('Waiter Summoned! 🛎️');
+      setNotificationToast('Staff alerted.');
       setTimeout(() => setNotificationToast(null), 3000);
     } finally {
       setIsCallingWaiter(false);
@@ -211,7 +211,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
           address: billingConfig?.address || currentRestaurant?.address,
         }
       );
-      setNotificationToast('Receipt Generated! 📄 Check your downloads / photo gallery.');
+      setNotificationToast('Receipt downloaded successfully.');
       setTimeout(() => setNotificationToast(null), 4000);
     }
   };
@@ -222,118 +222,118 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Session Bill & Receipt — ${standardTable} 🧾`}
+      title={`Session Bill • Table ${standardTable.replace(/^Table\s*/i, '')}`}
     >
-      <div className="space-y-5 text-xs text-slate-200 printable-receipt">
+      <div className="space-y-4 text-xs text-white/90">
         {isLoading && !bill ? (
-          <div className="p-8 text-center space-y-3">
-            <Clock className="w-8 h-8 text-rose-500 animate-spin mx-auto" />
-            <p className="text-slate-400 font-medium">Calculating Running Bill...</p>
+          <div className="p-8 text-center space-y-2">
+            <Clock className="w-6 h-6 text-amber-400 animate-spin mx-auto" />
+            <p className="text-white/40 font-mono text-xs">Retrieving bill summary...</p>
           </div>
         ) : !bill || (bill.items || []).length === 0 ? (
-          <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800 text-slate-400 space-y-2">
-            <Receipt className="w-10 h-10 text-slate-600 mx-auto" />
-            <h4 className="font-bold text-white text-sm">No Orders Placed Yet</h4>
-            <p className="text-xs text-slate-500">
-              Items ordered during this table session will appear on your running bill.
+          <div className="p-8 text-center bg-[#0b0d11] rounded-xl border border-white/[0.08] text-white/40 space-y-2">
+            <Receipt className="w-8 h-8 text-white/20 mx-auto" />
+            <h4 className="font-semibold text-white text-sm">No Orders Placed Yet</h4>
+            <p className="text-xs text-white/40">
+              Dishes ordered during this session will appear on your running bill.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
             {/* RECEIPT HEADER CARD */}
-            <div className="p-4 bg-gradient-to-br from-slate-950 to-slate-900 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="p-4 bg-[#0b0d11] rounded-xl border border-white/[0.08] space-y-3">
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center font-bold text-rose-400 shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center font-bold text-amber-400 shrink-0">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-black text-white text-sm">
+                    <h3 className="font-semibold text-white text-sm">
                       {activeMerchantName || currentRestaurant?.name || 'Restaurant'}
                     </h3>
-                    <p className="text-[10px] text-slate-400 font-mono">
-                      {billingConfig?.address || currentRestaurant?.address || 'Floor Table Experience'}
+                    <p className="text-[10px] text-white/40 font-mono">
+                      {billingConfig?.address || currentRestaurant?.address || 'Dining Room'}
                     </p>
                   </div>
                 </div>
 
                 <div className="text-right font-mono">
-                  <span className="text-[10px] font-bold text-rose-400 block">{bill.id}</span>
-                  <span className="text-[10px] text-slate-400 block">
+                  <span className="text-[10px] text-white/70 block">#{bill.id.slice(-6)}</span>
+                  <span className="text-[10px] text-white/40 block">
                     {new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               </div>
 
               {/* Table & Session Metadata */}
-              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-white/[0.02] p-2.5 rounded-lg border border-white/[0.04]">
                 <div>
-                  <span className="text-slate-500 block">TABLE</span>
-                  <span className="font-bold text-white">{formatStandardTableNumber(bill.tableNumber)}</span>
+                  <span className="text-white/40 block text-[10px]">TABLE</span>
+                  <span className="font-medium text-white">{formatStandardTableNumber(bill.tableNumber)}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block">SESSION ID</span>
-                  <span className="font-bold text-emerald-400">#{bill.tableSessionId}</span>
+                  <span className="text-white/40 block text-[10px]">SESSION</span>
+                  <span className="font-medium text-white/70">#{bill.tableSessionId ? bill.tableSessionId.slice(-6) : 'LIVE'}</span>
                 </div>
               </div>
 
               {/* STATUS BANNER */}
               {bill.status === 'BILL_REQUESTED' ? (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-300 flex items-center justify-between animate-pulse">
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 shrink-0 text-amber-400" />
                     <div>
-                      <p className="font-bold text-xs">Bill Requested</p>
-                      <p className="text-[10px] text-amber-400/80">
-                        Your waiter has been notified and is bringing your bill to {formatStandardTableNumber(bill.tableNumber)}.
+                      <p className="font-medium text-xs">Bill Requested</p>
+                      <p className="text-[10px] text-white/50">
+                        Floor staff has been notified and is bringing your receipt to {formatStandardTableNumber(bill.tableNumber)}.
                       </p>
                     </div>
                   </div>
                 </div>
               ) : bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl text-emerald-300 flex items-center gap-2">
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
                   <div>
-                    <p className="font-bold text-xs">Paid & Verified ✨</p>
-                    <p className="text-[10px] text-emerald-400/80">
-                      Payment received via {bill.paymentMethod || 'UPI'}. Thank you for dining with us!
+                    <p className="font-medium text-xs">Paid & Settled</p>
+                    <p className="text-[10px] text-white/50">
+                      Payment received via {bill.paymentMethod || 'UPI'}. Thank you for dining with us.
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 text-slate-400 flex items-center justify-between text-[11px]">
-                  <span>Session Running Total</span>
-                  <Badge variant="outline">OPEN SESSION</Badge>
+                <div className="p-2 bg-white/[0.02] rounded-lg border border-white/[0.04] text-white/40 flex items-center justify-between text-[11px] font-mono">
+                  <span>Current Running Balance</span>
+                  <span className="text-emerald-400 font-medium">OPEN</span>
                 </div>
               )}
             </div>
 
             {/* ITEMIZED BREAKDOWN TABLE */}
-            <div className="bg-slate-950 rounded-2xl border border-slate-800 p-4 space-y-3">
-              <h4 className="font-bold text-white text-xs uppercase tracking-wider text-slate-400">
-                Itemized Session Order Summary
+            <div className="bg-[#0b0d11] rounded-xl border border-white/[0.08] p-4 space-y-3">
+              <h4 className="font-medium text-white/50 text-[11px] uppercase tracking-wider font-mono">
+                Itemized Summary
               </h4>
 
-              <div className="divide-y divide-slate-800/80 space-y-2">
+              <div className="divide-y divide-white/[0.06] space-y-2">
                 {bill.items.map((item, idx) => (
                   <div key={idx} className="pt-2 flex items-center justify-between text-xs">
                     <div className="space-y-0.5">
-                      <p className="font-bold text-white flex items-center gap-1.5">
+                      <p className="font-medium text-white flex items-center gap-1.5">
                         <span>{item.name}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">
+                        <span className="text-[10px] text-white/40 font-mono">
                           × {item.quantity}
                         </span>
                         {item.station === 'BAR' && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.06] text-white/60 font-mono border border-white/[0.08]">
                             BAR
                           </span>
                         )}
                       </p>
-                      <p className="text-[10px] text-slate-500 font-mono">
+                      <p className="text-[10px] text-white/40 font-mono">
                         {formatCurrency(item.unitPrice)} each
                       </p>
                     </div>
-                    <span className="font-mono font-bold text-white">
+                    <span className="font-mono font-medium text-white">
                       {formatCurrency(item.totalPrice)}
                     </span>
                   </div>
@@ -341,21 +341,21 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               </div>
 
               {/* TOTALS & TAX BREAKDOWN */}
-              <div className="border-t-2 border-dashed border-slate-800 pt-3 space-y-1.5 font-mono text-xs">
-                <div className="flex justify-between text-slate-400">
+              <div className="border-t border-dashed border-white/[0.12] pt-3 space-y-1.5 font-mono text-xs">
+                <div className="flex justify-between text-white/50">
                   <span>Subtotal</span>
                   <span>{formatCurrency(bill.subtotal)}</span>
                 </div>
 
                 {bill.taxBreakdown && bill.taxBreakdown.length > 0 ? (
                   bill.taxBreakdown.map((t, idx) => (
-                    <div key={idx} className="flex justify-between text-slate-400">
+                    <div key={idx} className="flex justify-between text-white/40">
                       <span>{t.name || t.taxName || 'Tax'} ({t.rate || t.taxRate || 0}%{t.isInclusive || t.is_inclusive ? ' Included' : ''})</span>
                       <span>{formatCurrency(t.amount || t.taxAmount || 0)}</span>
                     </div>
                   ))
                 ) : (
-                  <div className="flex justify-between text-slate-400">
+                  <div className="flex justify-between text-white/40">
                     <span>Taxes & Charges</span>
                     <span>{formatCurrency(bill.taxAmount)}</span>
                   </div>
@@ -368,42 +368,40 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   </div>
                 )}
 
-                <div className="flex justify-between text-sm font-black text-white pt-2 border-t border-slate-800">
-                  <span>GRAND TOTAL</span>
-                  <span className="text-emerald-400 text-base">{formatCurrency(bill.grandTotal)}</span>
+                <div className="flex justify-between text-sm font-semibold text-white pt-2.5 border-t border-white/[0.08]">
+                  <span>Total Due</span>
+                  <span className="text-amber-400 text-base font-mono">{formatCurrency(bill.grandTotal)}</span>
                 </div>
               </div>
             </div>
 
             {/* LIVE FEEDBACK TOAST */}
             {notificationToast && (
-              <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-emerald-300 flex items-center justify-between text-xs font-bold shadow-lg animate-pulse">
+              <div className="p-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white/80 flex items-center justify-between text-xs font-mono">
                 <span>{notificationToast}</span>
-                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
               </div>
             )}
 
-            {/* ACTION BUTTONS (STRICTLY OPTION 1 & OPTION 2) */}
-            <div className="space-y-3 pt-2 no-print print:hidden">
+            {/* ACTION BUTTONS */}
+            <div className="space-y-2.5 pt-1 no-print print:hidden">
               {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {/* OPTION 1: CALL WAITER FOR BILL */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Button
                     onClick={handleRequestBill}
                     disabled={isLoading}
-                    className="w-full bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold py-3.5 text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-amber-950/40 cursor-pointer"
+                    variant="outline"
+                    className="w-full text-xs font-medium py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/80 hover:text-white"
                   >
-                    <PhoneCall className="w-4 h-4" />
-                    <span>{bill.status === 'BILL_REQUESTED' ? 'Re-notify Waiter 🔔' : 'Call Waiter for Bill 🛎️'}</span>
+                    <PhoneCall className="w-3.5 h-3.5" />
+                    <span>{bill.status === 'BILL_REQUESTED' ? 'Notify Waiter Again' : 'Call Waiter for Bill'}</span>
                   </Button>
 
-                  {/* OPTION 2: PAY VIA UPI QR */}
                   <Button
                     onClick={() => setIsPayOnlineModalOpen(true)}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer"
+                    className="w-full text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 bg-amber-500 text-black hover:bg-amber-400"
                   >
-                    <CreditCard className="w-4 h-4" />
-                    <span>Pay via UPI QR 📲</span>
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Pay via UPI QR</span>
                   </Button>
                 </div>
               )}
@@ -411,10 +409,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               <div className="flex items-center gap-2">
                 <Button
                   onClick={handleDownloadReceipt}
-                  variant="brand"
-                  className="w-full text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-rose-950/30 cursor-pointer"
+                  variant="outline"
+                  className="w-full text-xs font-medium py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/70 hover:text-white"
                 >
-                  <Download className="w-4 h-4 text-white" />
+                  <Download className="w-3.5 h-3.5" />
                   <span>Download Digital Receipt (.png)</span>
                 </Button>
               </div>
@@ -423,32 +421,32 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
         )}
       </div>
 
-      {/* UPI QR PAYMENT MODAL (OPTION 2) */}
+      {/* UPI QR PAYMENT MODAL */}
       <Modal
         isOpen={isPayOnlineModalOpen}
         onClose={() => setIsPayOnlineModalOpen(false)}
-        title="Pay via UPI QR ⚡"
+        title="Pay via UPI QR"
       >
         <div className="space-y-4 text-xs">
-          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Amount Due to Pay</span>
-            <p className="text-3xl font-black text-emerald-400 font-mono">
+          <div className="p-4 bg-[#0b0d11] rounded-xl border border-white/[0.08] text-center space-y-1">
+            <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Amount Due</span>
+            <p className="text-3xl font-bold text-amber-400 font-mono">
               {formatCurrency(bill?.grandTotal || 0)}
             </p>
-            <p className="text-[11px] text-slate-300 font-semibold">
-              {activeMerchantName || currentRestaurant?.name || 'Restaurant'} • {standardTable} (Session #{tableSession?.id})
+            <p className="text-[11px] text-white/60">
+              {activeMerchantName || currentRestaurant?.name || 'Restaurant'} • {standardTable}
             </p>
           </div>
 
           {/* MERCHANT UPI QR DISPLAY */}
           {activeUpiEnabled && (activeQrUrl || activeUpiId) ? (
-            <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 text-center space-y-3">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">
-                Scan & Pay with Any UPI App
+            <div className="bg-[#0b0d11] rounded-xl border border-white/[0.08] p-5 text-center space-y-3">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-white/50">
+                Scan with Any UPI App
               </span>
 
               {activeQrUrl ? (
-                <div className="w-52 h-52 bg-white p-3 rounded-2xl shadow-2xl mx-auto flex items-center justify-center">
+                <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg mx-auto flex items-center justify-center">
                   <img
                     src={activeQrUrl}
                     alt="Merchant UPI QR Code"
@@ -456,60 +454,60 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   />
                 </div>
               ) : activeUpiId ? (
-                <div className="w-52 h-52 bg-white p-3 rounded-2xl shadow-2xl mx-auto flex items-center justify-center">
+                <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg mx-auto flex items-center justify-center">
                   <QRCodeDisplay
                     value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${(bill?.grandTotal || 0).toFixed(2)}&cu=INR`}
-                    size={180}
+                    size={168}
                   />
                 </div>
               ) : null}
 
               {activeUpiId && (
-                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] flex items-center justify-between">
-                  <span className="text-slate-400">UPI ID:</span>
-                  <span className="font-bold text-white select-all">{activeUpiId}</span>
+                <div className="bg-white/[0.02] p-2.5 rounded-lg border border-white/[0.06] font-mono text-[11px] flex items-center justify-between">
+                  <span className="text-white/40">UPI ID:</span>
+                  <span className="font-semibold text-white select-all">{activeUpiId}</span>
                 </div>
               )}
 
-              <p className="text-[10px] text-slate-400">
-                Compatible with Google Pay, PhonePe, Paytm, BHIM & all Indian UPI banking apps.
+              <p className="text-[10px] text-white/40">
+                Supported: Google Pay, PhonePe, Paytm, BHIM & all Indian UPI banking apps.
               </p>
 
               {/* PAYMENT VERIFICATION NOTICE */}
-              <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-300 text-left space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-xs">
-                  <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Payment Verification Required</span>
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300/90 text-left space-y-1">
+                <div className="flex items-center gap-1.5 font-medium text-xs text-amber-300">
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Settlement Verification</span>
                 </div>
-                <p className="text-[10px] text-amber-400/80">
-                  After completing payment on your UPI app, tap below so our floor waiter verifies and settles your table bill.
+                <p className="text-[10px] text-white/50">
+                  After completing the transfer in your payment app, tap below so our floor staff confirms your table settlement.
                 </p>
               </div>
             </div>
           ) : !activeUpiEnabled ? (
-            <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-3">
-              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-              <h4 className="font-bold text-white text-sm">UPI Payment Temporarily Disabled</h4>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                UPI payment is currently turned off by this restaurant. Please tap <strong>Call Waiter for Bill</strong> to pay via cash, card, or physical POS at your table.
+            <div className="p-6 bg-[#0b0d11] rounded-xl border border-white/[0.08] text-center space-y-2">
+              <AlertCircle className="w-6 h-6 text-amber-400 mx-auto" />
+              <h4 className="font-semibold text-white text-sm">UPI Payment Disabled</h4>
+              <p className="text-xs text-white/40 max-w-sm mx-auto">
+                Digital UPI payment is currently paused for this venue. Please tap <strong>Call Waiter for Bill</strong> to settle at your table via cash or card.
               </p>
             </div>
           ) : (
-            <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-3">
-              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-              <h4 className="font-bold text-white text-sm">UPI Payment Not Configured</h4>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                UPI payment is not configured by this restaurant. Please tap <strong>Call Waiter for Bill</strong> to pay via cash, card, or physical POS at your table.
+            <div className="p-6 bg-[#0b0d11] rounded-xl border border-white/[0.08] text-center space-y-2">
+              <AlertCircle className="w-6 h-6 text-amber-400 mx-auto" />
+              <h4 className="font-semibold text-white text-sm">UPI Payment Not Configured</h4>
+              <p className="text-xs text-white/40 max-w-sm mx-auto">
+                Please tap <strong>Call Waiter for Bill</strong> to settle your bill via cash or table POS terminal.
               </p>
             </div>
           )}
 
           <Button
             onClick={handleCustomerClaimedPaid}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+            className="w-full bg-emerald-500 text-black hover:bg-emerald-400 font-semibold py-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />
-            <span>I Have Paid • Alert Waiter 🛎️</span>
+            <span>I Have Paid • Alert Staff</span>
           </Button>
         </div>
       </Modal>

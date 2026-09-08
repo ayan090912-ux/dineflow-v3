@@ -1295,53 +1295,51 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row font-sans">
+    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col md:flex-row font-sans">
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-slate-900 border-r border-slate-800 p-5 flex flex-col justify-between shrink-0">
+      <aside className="w-full md:w-64 bg-[#0e1117] border-r border-[#1e232e] p-4 flex flex-col justify-between shrink-0">
         <div>
-          {/* Platform Branding Badge */}
-          <div className="mb-4 px-1 flex items-center justify-between pb-3 border-b border-slate-800/80">
+          {/* Platform Branding Header */}
+          <div className="mb-4 px-2 flex items-center justify-between pb-3 border-b border-[#1e232e]">
             <DinelyLogo size="sm" />
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">Owner OS</span>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 bg-[#151922] px-2 py-0.5 rounded border border-[#242b3b]">Owner OS</span>
           </div>
 
           {/* Multi-Restaurant Outlet Switcher Button */}
-          <div className="mb-6 px-1">
+          <div className="mb-5 px-1">
             <button
               onClick={() => setIsOutletModalOpen(true)}
-              className="w-full p-2.5 bg-slate-950 border border-slate-800 hover:border-rose-500/50 rounded-2xl flex items-center justify-between gap-2.5 transition-all text-left group cursor-pointer shadow-md hover:shadow-rose-500/10"
+              className="w-full p-2.5 bg-[#141822] border border-[#222838] hover:border-[#353f56] rounded-xl flex items-center justify-between gap-2.5 transition-all text-left group cursor-pointer"
               title="Click to Switch Restaurant Outlet or Register New Branch"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <img
                   src={theme.logo}
                   alt={theme.restaurantName}
-                  className="w-9 h-9 rounded-xl object-cover border border-slate-700 shrink-0"
+                  className="w-8 h-8 rounded-lg object-cover border border-[#2a3245] shrink-0"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h1 className="text-xs font-bold text-white tracking-tight truncate">
-                      {theme.restaurantName}
-                    </h1>
-                  </div>
+                  <h1 className="text-xs font-semibold text-white tracking-tight truncate">
+                    {theme.restaurantName}
+                  </h1>
                   <p className="text-[10px] text-slate-400 truncate flex items-center gap-1 mt-0.5">
-                    <Building2 className="w-3 h-3 text-rose-400 shrink-0" />
+                    <Building2 className="w-3 h-3 text-orange-400 shrink-0" />
                     <span>{currentRestaurant?.branchName || currentRestaurant?.city || 'Main Outlet'}</span>
-                    <span className="text-[9px] bg-slate-800 text-slate-300 px-1 rounded font-mono shrink-0 ml-1">
-                      {allMyRestaurants.length} Outlets
+                    <span className="text-[9px] bg-[#1a202c] text-slate-300 px-1.5 py-0.2 rounded font-mono shrink-0 ml-1">
+                      {allMyRestaurants.length}
                     </span>
                   </p>
                 </div>
               </div>
-              <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-rose-400 shrink-0 transition-colors" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0 transition-colors" />
             </button>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="space-y-1">
+          {/* Categorized Navigation Links */}
+          <nav className="space-y-4">
             {(() => {
               const hasKitchenModule = isModuleEnabled(currentRestaurant, 'kitchen');
               const hasWaiterModule = isModuleEnabled(currentRestaurant, 'waiter');
@@ -1351,93 +1349,125 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               const hasTablesModule = currentRestaurant?.hasTables !== false;
               const isFoodCart = currentRestaurant?.businessType === 'FOOD_CART' || currentRestaurant?.businessType === 'FOOD_TRUCK';
 
-              const links = [
-                { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-                ...(hasWaiterModule
-                  ? [{ id: 'waiter', label: 'Waiter Terminal OS', icon: <PhoneCall className="w-4 h-4 text-amber-400" />, badge: 'LIVE' }]
-                  : []),
+              const sections = [
                 {
-                  id: 'orders',
-                  label: 'POS Orders',
-                  icon: <ShoppingBag className="w-4 h-4" />,
-                  badge: orders.filter((o) => o.status !== 'COMPLETED').length,
+                  title: 'Operations',
+                  items: [
+                    { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+                    ...(hasWaiterModule
+                      ? [{ id: 'waiter', label: 'Waiter Terminal', icon: <PhoneCall className="w-4 h-4 text-amber-400" />, badge: 'LIVE' }]
+                      : []),
+                    {
+                      id: 'orders',
+                      label: 'POS Orders',
+                      icon: <ShoppingBag className="w-4 h-4" />,
+                      badge: orders.filter((o) => o.status !== 'COMPLETED').length || undefined,
+                    },
+                    ...(hasTablesModule
+                      ? [{
+                          id: 'tables',
+                          label: 'Floorplan & QR',
+                          icon: <Grid className="w-4 h-4" />,
+                          badge: tables.filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length > 0 ? 'ALERT' : undefined,
+                        }]
+                      : []),
+                    ...(isFoodCart && !hasTablesModule
+                      ? [{ id: 'qr_pickup', label: 'Counter Pickup QR', icon: <QrCode className="w-4 h-4 text-sky-400" />, badge: 'PICKUP' }]
+                      : []),
+                  ],
                 },
-                ...(hasKitchenModule
-                  ? [{ id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> }]
-                  : []),
-                ...(hasBarModule
-                  ? [{ id: 'bar', label: 'Bar Terminal KDS', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
-                  : []),
-                ...(hasTablesModule
-                  ? [{
-                      id: 'tables',
-                      label: 'Table Floorplan',
-                      icon: <Grid className="w-4 h-4" />,
-                      badge: tables.filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length > 0 ? 'ALERT' : undefined,
-                    }]
-                  : []),
-                ...(isFoodCart && !hasTablesModule
-                  ? [{ id: 'qr_pickup', label: 'QR Ordering / Pickup', icon: <QrCode className="w-4 h-4 text-sky-400" />, badge: 'PICKUP' }]
-                  : []),
-                { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
-                { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
-                ...(hasInventoryModule
-                  ? [{ id: 'inventory', label: 'Inventory', icon: <Package className="w-4 h-4" /> }]
-                  : []),
-                ...(hasBillingModule
-                  ? [{ id: 'billing', label: 'Billing & Receipts', icon: <Receipt className="w-4 h-4 text-emerald-400" /> }]
-                  : []),
                 {
-                  id: 'business_day',
-                  label: 'Business Day & Daily Closing',
-                  icon: <Calendar className="w-4 h-4 text-amber-400" />,
-                  badge: currentBusinessDay?.status === 'OPEN' ? 'OPEN' : 'CLOSED',
+                  title: 'Production',
+                  items: [
+                    ...(hasKitchenModule
+                      ? [{ id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> }]
+                      : []),
+                    ...(hasBarModule
+                      ? [{ id: 'bar', label: 'Bar Terminal', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
+                      : []),
+                    ...(hasInventoryModule
+                      ? [{ id: 'inventory', label: 'Inventory Stock', icon: <Package className="w-4 h-4" /> }]
+                      : []),
+                  ],
                 },
-                { id: 'theme', label: 'Branding & Theme', icon: <Palette className="w-4 h-4" /> },
-                { id: 'workspace_settings', label: 'Workspace & Terminals', icon: <Layers className="w-4 h-4 text-rose-400" /> },
+                {
+                  title: 'Management',
+                  items: [
+                    ...(hasBillingModule
+                      ? [{ id: 'billing', label: 'Billing & Invoices', icon: <Receipt className="w-4 h-4 text-emerald-400" /> }]
+                      : []),
+                    { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
+                    { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
+                    {
+                      id: 'business_day',
+                      label: 'Daily Closing',
+                      icon: <Calendar className="w-4 h-4 text-amber-400" />,
+                      badge: currentBusinessDay?.status === 'OPEN' ? 'OPEN' : 'CLOSED',
+                    },
+                    { id: 'theme', label: 'Branding & Theme', icon: <Palette className="w-4 h-4" /> },
+                    { id: 'workspace_settings', label: 'Terminals & Setup', icon: <Layers className="w-4 h-4 text-rose-400" /> },
+                  ],
+                },
               ];
 
-              return links.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as any)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                    activeTab === item.id
-                      ? 'bg-[var(--brand-primary,#e11d48)]/20 text-white border border-[var(--brand-primary,#e11d48)]/40 shadow-xs'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    {item.icon}
-                    {item.label}
+              return sections.map((sec) => {
+                const validItems = sec.items.filter(Boolean);
+                if (validItems.length === 0) return null;
+                return (
+                  <div key={sec.title} className="space-y-1">
+                    <p className="px-2 text-[10px] font-mono uppercase tracking-wider text-slate-400">{sec.title}</p>
+                    <div className="space-y-0.5">
+                      {validItems.map((item: any) => (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveTab(item.id as any)}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            activeTab === item.id
+                              ? 'bg-[#181d27] text-white border border-[#2d3545]'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            {item.icon}
+                            <span>{item.label}</span>
+                          </div>
+                          {item.badge !== undefined && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-medium ${
+                                item.badge === 'ALERT'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                  : item.badge === 'LIVE'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : item.badge === 'BAR'
+                                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                  : item.badge === 'PICKUP'
+                                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                                  : item.badge === 'OPEN'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                  : item.badge === 'CLOSED'
+                                  ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                                  : 'bg-[#1e232e] text-slate-300 border border-[#2b3242]'
+                              }`}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  {item.badge && (
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        item.badge === 'ALERT'
-                          ? 'bg-amber-500 text-slate-950 animate-pulse'
-                          : item.badge === 'BAR'
-                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                          : item.badge === 'PICKUP'
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                          : 'bg-slate-800 text-slate-200 border border-slate-700'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              ));
+                );
+              });
             })()}
           </nav>
         </div>
 
         {/* Quick Footer */}
-        <div className="pt-4 border-t border-slate-800 space-y-3">
-          <div className="flex items-center gap-2 overflow-hidden">
+        <div className="pt-3 border-t border-[#1e232e] space-y-2.5">
+          <div className="flex items-center gap-2.5 px-1 overflow-hidden">
             <Avatar name={currentUser?.name || 'Restaurant Owner'} size="sm" status="online" />
             <div className="truncate">
-              <p className="text-xs font-bold text-white truncate">{currentUser?.name || 'Restaurant Owner'}</p>
+              <p className="text-xs font-medium text-white truncate">{currentUser?.name || 'Restaurant Owner'}</p>
               <p className="text-[10px] text-slate-400 truncate">{currentUser?.email || 'owner@restaurant.com'}</p>
             </div>
           </div>
@@ -1450,15 +1480,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               if (onLogout) onLogout();
               else window.location.href = '/restaurant/login';
             }}
-            className="w-full text-xs border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center gap-1.5"
+            className="w-full text-xs border-[#1e232e] bg-[#12151b] text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center gap-1.5 h-8"
           >
-            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
           </Button>
-
-          <div className="text-center text-[10px] text-slate-500 pt-1">
-            <span>Dinely Operating System</span>
-          </div>
         </div>
       </aside>
 
@@ -1468,34 +1494,34 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {currentRestaurant && (
           <div className="mb-6">
             {currentRestaurant.lifecycleStatus === 'DRAFT' && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-                    <Sparkles className="w-5 h-5" />
+                  <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+                    <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-sm text-white">Restaurant Setup in Draft Mode</h4>
+                    <h4 className="font-semibold text-xs text-white">Restaurant Setup in Draft Mode</h4>
                     <p className="text-xs text-amber-300/80">
                       Configure your menu items, tables, and branding below. When ready, submit your application for platform approval and live URL activation.
                     </p>
                   </div>
                 </div>
-                <Button variant="brand" size="sm" onClick={handleRequestLaunch} className="shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold">
+                <Button variant="brand" size="sm" onClick={handleRequestLaunch} className="shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs">
                   Request Launch Approval
                 </Button>
               </div>
             )}
 
             {currentRestaurant.lifecycleStatus === 'PENDING_APPROVAL' && (
-              <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-200 flex items-center justify-between shadow-lg">
+              <div className="p-4 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-200 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400">
-                    <Clock className="w-5 h-5 animate-spin" />
+                  <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400">
+                    <Clock className="w-4 h-4 animate-spin" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-sm text-white">Launch Application Pending Review ⏳</h4>
+                    <h4 className="font-semibold text-xs text-white">Launch Application Under Review</h4>
                     <p className="text-xs text-sky-300/80">
-                      Your restaurant submission is currently under review. Live customer ordering will unlock automatically upon approval.
+                      Your restaurant submission is currently under review by the platform team. Live customer ordering will unlock automatically upon verification.
                     </p>
                   </div>
                 </div>
@@ -1504,38 +1530,38 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             )}
 
             {currentRestaurant.lifecycleStatus === 'CHANGES_REQUESTED' && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-                    <AlertTriangle className="w-5 h-5" />
+                  <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+                    <AlertTriangle className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-sm text-white">Action Required: Modification Requested</h4>
+                    <h4 className="font-semibold text-xs text-white">Modification Requested</h4>
                     <p className="text-xs text-amber-300/90 mt-0.5">
-                      Review feedback: "{currentRestaurant.requestedChanges || 'Please check tax number and menu items.'}"
+                      Feedback: "{currentRestaurant.requestedChanges || 'Please check tax number and menu items.'}"
                     </p>
                   </div>
                 </div>
-                <Button variant="brand" size="sm" onClick={handleResubmitLaunch} className="shrink-0">
+                <Button variant="brand" size="sm" onClick={handleResubmitLaunch} className="shrink-0 text-xs">
                   Resubmit Application
                 </Button>
               </div>
             )}
 
             {currentRestaurant.lifecycleStatus === 'REJECTED' && (
-              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/40 text-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400">
-                    <AlertCircle className="w-5 h-5" />
+                  <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400">
+                    <AlertCircle className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-sm text-white">Launch Application Declined</h4>
+                    <h4 className="font-semibold text-xs text-white">Launch Application Declined</h4>
                     <p className="text-xs text-rose-300/90 mt-0.5">
                       Reason: "{currentRestaurant.rejectionReason || 'Details did not meet platform guidelines.'}"
                     </p>
                   </div>
                 </div>
-                <Button variant="brand" size="sm" onClick={handleResubmitLaunch} className="shrink-0 bg-rose-600 hover:bg-rose-500">
+                <Button variant="brand" size="sm" onClick={handleResubmitLaunch} className="shrink-0 bg-rose-600 hover:bg-rose-500 text-xs">
                   Resubmit Application
                 </Button>
               </div>
@@ -1544,28 +1570,37 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         )}
 
         {/* Top Header Bar */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-800/60">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-[#1e232e]">
           <div>
-            <span className="text-xs text-slate-400 font-mono">dashboard.dinely.com</span>
-            <h2 className="text-2xl font-black text-white tracking-tight mt-0.5">
-              {activeTab === 'dashboard' && 'Restaurant Executive Overview'}
-              {activeTab === 'orders' && 'Live POS & Customer QR Orders'}
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+              <span>dinely.food</span>
+              <span>/</span>
+              <span className="text-slate-300">{theme?.restaurantName || currentRestaurant?.name || 'restaurant'}</span>
+            </div>
+            <h2 className="text-xl font-bold text-white tracking-tight mt-1">
+              {activeTab === 'dashboard' && 'Executive Overview'}
+              {activeTab === 'orders' && 'POS & QR Orders Stream'}
               {activeTab === 'kitchen' && 'Kitchen Display System (KDS)'}
-              {activeTab === 'tables' && 'Table Map & QR Codes'}
+              {activeTab === 'bar' && 'Bar Terminal (KDS)'}
+              {activeTab === 'tables' && 'Table Floorplan & QR Codes'}
               {activeTab === 'menu' && 'Menu Engineering & Pricing'}
-              {activeTab === 'staff' && 'Employee Clock-In & Attendance'}
+              {activeTab === 'staff' && 'Employee Clock-In & Shifts'}
               {activeTab === 'inventory' && 'Raw Material Inventory'}
-              {activeTab === 'theme' && 'Live Theme & Branding Engine'}
+              {activeTab === 'billing' && 'Billing, Taxes & Invoices'}
+              {activeTab === 'business_day' && 'Business Day & Daily Closing'}
+              {activeTab === 'theme' && 'Brand Identity & Styling'}
+              {activeTab === 'workspace_settings' && 'Terminals & Settings'}
             </h2>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {activeTab === 'menu' && (
               <Button
                 variant="brand"
                 size="sm"
                 onClick={() => setIsAddItemModalOpen(true)}
                 icon={<Plus className="w-3.5 h-3.5" />}
+                className="text-xs"
               >
                 Add Menu Item
               </Button>
@@ -1577,12 +1612,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 if (onNavigate) onNavigate('/workspace');
                 else window.location.href = '/workspace';
               }}
-              className="text-xs border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800"
-              icon={<Store className="w-3.5 h-3.5 mr-1 text-rose-400" />}
+              className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white hover:bg-[#181d27]"
+              icon={<Store className="w-3.5 h-3.5 mr-1 text-orange-400" />}
             >
               Switch Restaurant
             </Button>
-            <Badge variant="success">Domain: {(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app</Badge>
+            <a
+              href={`https://${currentRestaurant?.domain || `${(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app`}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-lg bg-[#141822] border border-[#222838] text-emerald-400 hover:border-emerald-500/40 transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>{(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app</span>
+            </a>
           </div>
         </header>
 
@@ -1590,48 +1633,49 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             {/* DOMINANT RESTAURANT BRANDING HERO */}
-            <div className="relative rounded-3xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-900">
-              <div className="h-44 sm:h-52 w-full relative">
+            <div className="relative rounded-2xl overflow-hidden border border-[#1e232e] bg-[#12151b]">
+              <div className="h-40 sm:h-48 w-full relative">
                 <img
                   src={theme?.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80'}
                   alt={theme?.restaurantName || 'Restaurant'}
-                  className="w-full h-full object-cover brightness-50"
+                  className="w-full h-full object-cover brightness-40"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#12151b] via-[#12151b]/60 to-transparent" />
               </div>
 
-              <div className="p-6 sm:p-8 -mt-20 relative z-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-6">
-                <div className="flex items-end gap-5">
+              <div className="p-5 sm:p-6 -mt-16 relative z-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-5">
+                <div className="flex items-end gap-4">
                   <img
                     src={theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80'}
                     alt={theme?.restaurantName || 'Restaurant'}
-                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover border-4 border-slate-950 shadow-2xl bg-slate-900 shrink-0"
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-[#1e232e] bg-[#0e1117] shrink-0"
                   />
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> Restaurant Status: Live
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        {currentRestaurant?.lifecycleStatus === 'ACTIVE' || !currentRestaurant?.lifecycleStatus ? 'Live' : currentRestaurant?.lifecycleStatus}
                       </span>
                       <span className="text-xs text-slate-400 font-mono hidden sm:inline">
                         {currentRestaurant?.domain || `${(theme?.restaurantName || currentRestaurant?.name || 'restaurant').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')}.dinely.app`}
                       </span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                      🍽️ {(theme?.restaurantName || currentRestaurant?.name || 'Restaurant').toUpperCase()}
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                      {theme?.restaurantName || currentRestaurant?.name || 'Restaurant'}
                     </h1>
-                    <p className="text-sm text-slate-300 font-semibold">
-                      Welcome Back, {currentUser?.name || 'Restaurant Owner'} 👋
+                    <p className="text-xs text-slate-400">
+                      {currentRestaurant?.branchName || currentRestaurant?.city || 'Main Branch'} • Logged in as {currentUser?.name || 'Owner'}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2.5 shrink-0">
                   <Button
                     variant="brand"
                     size="sm"
                     onClick={() => setActiveTab('waiter')}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2"
-                    icon={<PhoneCall className="w-4 h-4" />}
+                    className="bg-orange-500 hover:bg-orange-600 text-white font-medium text-xs px-3.5 py-2"
+                    icon={<PhoneCall className="w-3.5 h-3.5" />}
                   >
                     Launch Waiter OS
                   </Button>
@@ -1639,8 +1683,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     variant="outline"
                     size="sm"
                     onClick={() => setActiveTab('kitchen')}
-                    className="border-slate-700 text-slate-200 hover:bg-slate-800 px-4 py-2"
-                    icon={<ChefHat className="w-4 h-4" />}
+                    className="border-[#1e232e] bg-[#141822] text-slate-200 hover:bg-[#1c2230] text-xs px-3.5 py-2"
+                    icon={<ChefHat className="w-3.5 h-3.5 text-emerald-400" />}
                   >
                     Kitchen KDS
                   </Button>
@@ -1681,73 +1725,110 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               return (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <StatsCard
-                      title="Today's Total Sales"
-                      value={formatCurrency(totalSales, theme.currency)}
-                      change={{ value: `${dayOrders.length} orders today`, isPositive: true }}
-                      subtitle={currentBusinessDay?.status === 'OPEN' ? `Business Day (${currentBusinessDay.date}) OPEN` : 'Business Day CLOSED'}
-                      icon={<DollarSign className="w-5 h-5 text-emerald-400" />}
-                    />
-                    <StatsCard
-                      title="Active Kitchen Orders"
-                      value={orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length}
-                      change={{ value: 'Live KDS', isPositive: true }}
-                      icon={<ShoppingBag className="w-5 h-5 text-sky-400" />}
-                    />
-                    <StatsCard
-                      title="Occupied Tables"
-                      value={`${tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length} / ${tables.length}`}
-                      change={{ value: `${tables.length > 0 ? Math.round((tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length / tables.length) * 100) : 0}% Occupancy`, isPositive: true }}
-                      icon={<Grid className="w-5 h-5 text-purple-400" />}
-                    />
+                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400 font-medium">Today's Total Sales</span>
+                        <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                          <DollarSign className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                        {formatCurrency(totalSales, theme.currency)}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">{dayOrders.length} orders today</span>
+                        <span className="font-mono text-slate-400">{currentBusinessDay?.status === 'OPEN' ? 'Day Open' : 'Day Closed'}</span>
+                      </div>
+                    </div>
 
-                    <StatsCard
-                      title="Completed Orders Today"
-                      value={completed.length}
-                      change={{ value: `${cancelled.length} cancelled`, isPositive: cancelled.length === 0 }}
-                      icon={<Clock className="w-5 h-5 text-amber-400" />}
-                    />
+                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400 font-medium">Active Kitchen Orders</span>
+                        <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400">
+                          <ShoppingBag className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                        {orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">In Preparation / Ready</span>
+                        <span className="text-sky-400 font-mono">Live KDS</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400 font-medium">Floor Occupancy</span>
+                        <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400">
+                          <Grid className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                        {tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length} <span className="text-sm font-normal text-slate-400">/ {tables.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Active Dining Sessions</span>
+                        <span className="text-purple-400 font-mono">{tables.length > 0 ? Math.round((tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length / tables.length) * 100) : 0}%</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400 font-medium">Fulfilled Today</span>
+                        <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                        {completed.length}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Completed Orders</span>
+                        <span className={`font-mono ${cancelled.length > 0 ? 'text-rose-400' : 'text-slate-400'}`}>{cancelled.length} cancelled</span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Bar Operating Analytics (When Bar Module Enabled) */}
                   {currentRestaurant?.features?.bar !== false && (
-                    <Card className="bg-gradient-to-br from-slate-900 via-purple-950/20 to-slate-900 border-purple-500/30 p-6 space-y-4 shadow-xl rounded-3xl">
+                    <div className="bg-[#12151b] border border-[#222838] p-5 rounded-2xl space-y-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-purple-300 font-bold text-base">
-                          <Wine className="w-5 h-5 text-purple-400 animate-pulse" />
-                          <span>Bar Operating Analytics & Craft Beverage Revenue</span>
+                        <div className="flex items-center gap-2 text-purple-300 font-semibold text-sm">
+                          <Wine className="w-4 h-4 text-purple-400" />
+                          <span>Bar & Beverage Analytics</span>
                         </div>
-                        <Badge variant="brand" className="bg-purple-600/30 text-purple-300 border-purple-500/40 font-mono text-[10px]">
-                          BAR MODULE ACTIVE
-                        </Badge>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/30">
+                          BAR ACTIVE
+                        </span>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Today's Bar Revenue</span>
-                          <p className="text-xl font-black text-amber-400 mt-0.5">{formatCurrency(barSales, theme.currency)}</p>
-                          <span className="text-[10px] text-emerald-400 font-mono">{barOrders.length} Bar Orders</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="p-3 bg-[#0c0e14] rounded-xl border border-[#1e232e]">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono">Bar Sales</span>
+                          <p className="text-lg font-bold font-mono text-amber-400 mt-0.5">{formatCurrency(barSales, theme.currency)}</p>
+                          <span className="text-[10px] text-slate-400">{barOrders.length} drink tickets</span>
                         </div>
 
-                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Food Sales</span>
-                          <p className="text-xl font-black text-white mt-0.5">{formatCurrency(foodSales, theme.currency)}</p>
-                          <span className="text-[10px] text-purple-300 font-mono">{foodOrders.length} Food Orders</span>
+                        <div className="p-3 bg-[#0c0e14] rounded-xl border border-[#1e232e]">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono">Kitchen Food Sales</span>
+                          <p className="text-lg font-bold font-mono text-white mt-0.5">{formatCurrency(foodSales, theme.currency)}</p>
+                          <span className="text-[10px] text-slate-400">{foodOrders.length} food tickets</span>
                         </div>
 
-                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Business Day Status</span>
-                          <p className="text-xl font-black text-emerald-400 mt-0.5">{currentBusinessDay?.status || 'OPEN'}</p>
+                        <div className="p-3 bg-[#0c0e14] rounded-xl border border-[#1e232e]">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono">Day Status</span>
+                          <p className="text-lg font-bold font-mono text-emerald-400 mt-0.5">{currentBusinessDay?.status || 'OPEN'}</p>
                           <span className="text-[10px] text-slate-400 font-mono">{currentBusinessDay?.date || 'Today'}</span>
                         </div>
 
-                        <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Completed Orders</span>
-                          <p className="text-xl font-black text-sky-400 mt-0.5">{completed.length}</p>
-                          <span className="text-[10px] text-slate-400 font-mono">Real database records</span>
+                        <div className="p-3 bg-[#0c0e14] rounded-xl border border-[#1e232e]">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono">Completed</span>
+                          <p className="text-lg font-bold font-mono text-sky-400 mt-0.5">{completed.length}</p>
+                          <span className="text-[10px] text-slate-400">Delivered</span>
                         </div>
                       </div>
-                    </Card>
+                    </div>
                   )}
                 </>
               );
@@ -1755,25 +1836,25 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
             {/* Quick Actions & Live Order Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2 bg-slate-900 border-slate-800 p-6 space-y-4">
+              <div className="lg:col-span-2 bg-[#12151b] border border-[#1e232e] p-5 rounded-2xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base font-bold text-white">Live Customer QR Orders</h3>
-                  <Button variant="ghost" size="sm" onClick={() => setActiveTab('orders')}>
+                  <h3 className="text-sm font-semibold text-white">Recent Customer Orders</h3>
+                  <Button variant="ghost" size="sm" onClick={() => setActiveTab('orders')} className="text-xs text-slate-400 hover:text-white">
                     View All Orders →
                   </Button>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {orders.slice(0, 3).map((order) => (
                     <div
                       key={order.id}
-                      className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between"
+                      className="p-3.5 rounded-xl bg-[#0e1117] border border-[#1e232e] flex items-center justify-between"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-black text-white text-sm">#{order.id}</span>
+                          <span className="font-mono font-semibold text-white text-xs">#{order.id}</span>
                           <Badge variant="brand">{order.tableNumber}</Badge>
-                          <span className="text-xs text-slate-400">{order.customerName || 'Guest'}</span>
+                          <span className="text-xs text-slate-400">{order.customerName || 'Walk-in'}</span>
                         </div>
                         <p className="text-xs text-slate-300 truncate max-w-md">
                           {order.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
@@ -1781,25 +1862,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-white">₹{order.totalAmount.toFixed(2)}</span>
+                        <span className="font-mono font-semibold text-white text-xs">₹{order.totalAmount.toFixed(2)}</span>
                         <Button
                           variant="secondary"
                           size="sm"
                           onClick={() => handleUpdateOrderStatus(order.id, 'IN_KITCHEN')}
+                          className="text-xs h-7 px-2.5"
                         >
                           Send to Kitchen
                         </Button>
                       </div>
                     </div>
                   ))}
+                  {orders.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-6">No incoming orders yet today.</p>
+                  )}
                 </div>
-              </Card>
+              </div>
 
               {/* Table Alert Summary / Counter Pickup Summary */}
               {currentRestaurant?.hasTables !== false ? (
-                <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-                  <h3 className="text-base font-bold text-white">Table Alerts</h3>
-                  <div className="space-y-3">
+                <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-2xl space-y-4">
+                  <h3 className="text-sm font-semibold text-white">Table Alerts</h3>
+                  <div className="space-y-2.5">
                     {(tables || [])
                       .filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED')
                       .map((t) => (
@@ -1809,12 +1894,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         >
                           <div className="flex items-center gap-2">
                             {t.status === 'WAITER_CALLED' ? (
-                              <PhoneCall className="w-4 h-4 text-amber-400 animate-bounce" />
+                              <PhoneCall className="w-4 h-4 text-amber-400" />
                             ) : (
                               <Receipt className="w-4 h-4 text-emerald-400" />
                             )}
                             <div>
-                              <p className="text-xs font-bold text-white">{t.tableNumber}</p>
+                              <p className="text-xs font-semibold text-white">{t.tableNumber}</p>
                               <p className="text-[10px] text-amber-300">
                                 {t.status === 'WAITER_CALLED' ? 'Requested Waiter Assistance' : 'Requested Final Bill'}
                               </p>
@@ -1823,7 +1908,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           <Button
                             variant="outline"
                             size="sm"
-                            className="text-[10px] px-2 py-1"
+                            className="text-[10px] px-2 py-1 h-6"
                             onClick={() => {
                               addToast('success', 'Alert Cleared');
                               loadData();
@@ -1834,30 +1919,30 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         </div>
                       ))}
                     {(tables || []).filter((t) => t.status === 'WAITER_CALLED' || t.status === 'BILL_REQUESTED').length === 0 && (
-                      <p className="text-xs text-slate-500 text-center py-6">No pending waiter calls or bill requests.</p>
+                      <p className="text-xs text-slate-400 text-center py-6">No pending waiter calls or bill requests.</p>
                     )}
                   </div>
-                </Card>
+                </div>
               ) : (
-                <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-                  <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
-                    <Truck className="w-5 h-5 text-sky-400" />
-                    <span>Counter / Pickup Order OS</span>
+                <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2 text-sky-400 font-semibold text-xs">
+                    <Truck className="w-4 h-4 text-sky-400" />
+                    <span>Counter / Pickup Order System</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    This venue operates without tables. Customers scan your counter QR code to place pickup orders (#F1024) directly to your Kitchen KDS.
+                    This venue operates without tables. Customers scan your counter QR code to place pickup orders directly to Kitchen KDS.
                   </p>
-                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-3">
-                    <QrCode className="w-12 h-12 text-sky-400 mx-auto" />
+                  <div className="p-4 bg-[#0c0e14] rounded-xl border border-[#1e232e] text-center space-y-3">
+                    <QrCode className="w-10 h-10 text-sky-400 mx-auto" />
                     <div>
-                      <p className="text-xs font-bold text-white">Food Truck Counter Entry Point</p>
+                      <p className="text-xs font-medium text-white">Counter Entry Point</p>
                       <p className="text-[10px] font-mono text-slate-400 truncate">https://{currentRestaurant?.slug || 'foodtruck'}.dinely.app/order</p>
                     </div>
-                    <Button variant="brand" size="sm" onClick={() => setActiveTab('qr_pickup')} className="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold">
+                    <Button variant="brand" size="sm" onClick={() => setActiveTab('qr_pickup')} className="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs">
                       View Printable Counter QR
                     </Button>
                   </div>
-                </Card>
+                </div>
               )}
             </div>
           </div>

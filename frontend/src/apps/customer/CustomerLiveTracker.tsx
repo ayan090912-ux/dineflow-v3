@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Flame, CheckCircle2, Sparkles, ChefHat, BellRing } from 'lucide-react';
-import { Badge, Card } from '../../packages/ui';
+import { Clock, CheckCircle2, ChefHat, BellRing, Utensils, Wine } from 'lucide-react';
+import { Badge } from '../../packages/ui';
 import { Order } from '../../packages/types';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
 import { formatCurrency } from '../../packages/utils/currency';
@@ -13,7 +13,7 @@ interface CustomerLiveTrackerProps {
 export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order, onUpdateOrder }) => {
   const [currentOrder, setCurrentOrder] = useState<Order>(order);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
-  const [etaMessage, setEtaMessage] = useState<string>('We are preparing your food.');
+  const [etaMessage, setEtaMessage] = useState<string>('Preparing your order with care.');
 
   // Sync prop changes
   useEffect(() => {
@@ -47,12 +47,12 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
     return () => unsubscribe();
   }, [currentOrder.id, onUpdateOrder]);
 
-  // Live Second-by-Second Countdown Timer derived strictly from server state
+  // Live countdown timer derived strictly from server state
   useEffect(() => {
     const calculateSecondsLeft = () => {
       if (currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp) {
         setRemainingSeconds(0);
-        setEtaMessage('Order transmitted — Awaiting Kitchen Confirmation...');
+        setEtaMessage('Order transmitted • Awaiting kitchen confirmation');
         return;
       }
 
@@ -68,17 +68,16 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       const diffSec = Math.max(0, Math.floor((target - now) / 1000));
       setRemainingSeconds(diffSec);
 
-      // Dynamic Status Message based on ETA remaining and status
       if (currentOrder.status === 'READY') {
-        setEtaMessage('Your order is ready! Your waiter is bringing your food.');
+        setEtaMessage('Plated & ready • Floor staff is bringing your order.');
       } else if (currentOrder.status === 'DELIVERED') {
-        setEtaMessage('Order served. Bon appétit!');
+        setEtaMessage('Served at your table. Enjoy your meal!');
       } else if (diffSec <= 180 && diffSec > 0) {
-        setEtaMessage('Almost ready! Plating final garnishes.');
+        setEtaMessage('Final plating & garnishes in progress.');
       } else if (diffSec === 0 && (currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING')) {
-        setEtaMessage('Chef is adding final finishing touches...');
+        setEtaMessage('Chef is adding final touches...');
       } else {
-        setEtaMessage("We're preparing your food with care.");
+        setEtaMessage('Active preparation in progress.');
       }
     };
 
@@ -87,7 +86,6 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
     return () => clearInterval(interval);
   }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus]);
 
-  // Format seconds to mm:ss
   const formatCountdown = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
@@ -96,8 +94,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
 
   const minutesRemaining = Math.ceil(remainingSeconds / 60);
 
-  // Stepper state determination
-  const isReceived = true; // Always true if order exists
+  const isReceived = true;
   const isCooking = currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING' || currentOrder.status === 'READY' || currentOrder.status === 'DELIVERED';
   const isPreparing = (currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING') && remainingSeconds <= 300;
   const isReady = currentOrder.status === 'READY' || currentOrder.status === 'DELIVERED';
@@ -106,150 +103,136 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
   const isPendingServerAcceptance = currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp;
 
   return (
-    <Card className="p-5 m-4 bg-gradient-to-br from-slate-950 via-slate-900 to-rose-950/60 border border-rose-500/40 shadow-2xl rounded-3xl space-y-5 relative overflow-hidden">
-      {/* Background Decorative Glow */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 blur-3xl rounded-full pointer-events-none" />
-
+    <div className="p-5 m-4 bg-[#12151b] border border-white/[0.08] rounded-2xl space-y-4 shadow-sm">
       {/* Header Info */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
-          </span>
+        <div className="flex items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
           <div>
-            <h3 className="text-sm font-black text-white flex items-center gap-1.5">
-              Order {currentOrder.id.length > 10 ? `#ORD-${currentOrder.id.slice(-4)}` : `#${currentOrder.id}`} <span className="text-xs text-rose-400 font-normal">({currentOrder.tableNumber?.startsWith('Table') ? currentOrder.tableNumber : `Table ${currentOrder.tableNumber}`})</span>
+            <h3 className="text-xs font-semibold text-white font-mono flex items-center gap-1.5">
+              <span>Order #{currentOrder.id.slice(-4)}</span>
+              <span className="text-white/40 font-normal">
+                ({currentOrder.tableNumber?.startsWith('Table') ? currentOrder.tableNumber : `Table ${currentOrder.tableNumber}`})
+              </span>
             </h3>
-            <p className="text-[11px] text-slate-400">Live Kitchen Synchronization</p>
+            <p className="text-[10px] text-white/40 font-mono">Live kitchen synchronization</p>
           </div>
         </div>
 
-        <Badge
-          variant={
-            currentOrder.status === 'DELIVERED'
-              ? 'success'
-              : currentOrder.status === 'READY'
-              ? 'brand'
-              : currentOrder.status === 'IN_KITCHEN'
-              ? 'warning'
-              : 'info'
-          }
-          className="px-3 py-1 text-xs font-bold uppercase tracking-wider"
-        >
-          {currentOrder.status.replace('_', ' ')}
-        </Badge>
+        <span className="text-[10px] uppercase font-mono font-medium px-2 py-0.5 rounded bg-white/[0.04] text-white/70 border border-white/[0.08]">
+          {currentOrder.status.replace(/_/g, ' ')}
+        </span>
       </div>
 
       {/* Main Countdown Timer Display */}
       {currentOrder.status !== 'DELIVERED' && (
-        <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-center space-y-1 relative">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-rose-400" /> {isPendingServerAcceptance ? 'Order Status' : 'Estimated Time Remaining'}
+        <div className="p-4 bg-[#0b0d11] rounded-xl border border-white/[0.06] flex flex-col items-center justify-center text-center space-y-1">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-white/40 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <span>{isPendingServerAcceptance ? 'Status' : 'Estimated Time'}</span>
           </span>
 
           {isPendingServerAcceptance ? (
             <div className="py-2 text-center space-y-1">
-              <span className="text-base font-bold text-amber-400 animate-pulse block">
-                ⏳ Order Received — Awaiting Kitchen Confirmation
+              <span className="text-sm font-medium text-amber-300 block">
+                Order Received • Awaiting Kitchen Acceptance
               </span>
-              <span className="text-xs text-slate-400 font-normal block">
-                Prep timer will start as soon as Chef accepts your ticket.
+              <span className="text-[11px] text-white/40 font-mono block">
+                Countdown timer begins upon ticket confirmation
               </span>
             </div>
           ) : (
-            <div className="font-mono text-4xl font-black text-white tracking-widest my-1 flex items-baseline justify-center gap-2">
-              <span className="text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+            <div className="font-mono text-3xl font-semibold text-white tracking-widest my-1 flex items-baseline justify-center gap-2">
+              <span className="text-amber-400">
                 {formatCountdown(remainingSeconds)}
               </span>
-              <span className="text-xs text-slate-400 font-sans font-normal">
+              <span className="text-xs text-white/40 font-sans font-normal">
                 (~{minutesRemaining} {minutesRemaining === 1 ? 'min' : 'mins'})
               </span>
             </div>
           )}
 
-          <p className="text-xs text-slate-300 font-medium italic animate-pulse">
-            "{etaMessage}"
+          <p className="text-xs text-white/60 font-medium">
+            {etaMessage}
           </p>
 
           {currentOrder.isTimerPaused && (
-            <Badge variant="warning" className="mt-2 text-[10px]">
-              ⏸️ Timer Paused by Kitchen
-            </Badge>
+            <span className="mt-1 text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+              Timer Paused by Station
+            </span>
           )}
         </div>
       )}
 
       {/* Dual Station Badges */}
       {(currentOrder.kitchenStatus || currentOrder.barStatus) && (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2">
           {currentOrder.kitchenStatus && (
-            <span className="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 shadow-sm">
-              <span>🍳 Kitchen:</span>
-              <strong className="text-white font-mono uppercase">{currentOrder.kitchenStatus.replace('_', ' ')}</strong>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/[0.03] text-white/70 border border-white/[0.06] flex items-center gap-1.5">
+              <ChefHat className="w-3.5 h-3.5 text-amber-400" />
+              <span>Kitchen: <strong className="text-white uppercase font-normal">{currentOrder.kitchenStatus.replace(/_/g, ' ')}</strong></span>
             </span>
           )}
           {currentOrder.barStatus && (
-            <span className="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1.5 shadow-sm">
-              <span>🍸 Bar:</span>
-              <strong className="text-white font-mono uppercase">{currentOrder.barStatus.replace('_', ' ')}</strong>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/[0.03] text-white/70 border border-white/[0.06] flex items-center gap-1.5">
+              <Wine className="w-3.5 h-3.5 text-sky-400" />
+              <span>Bar: <strong className="text-white uppercase font-normal">{currentOrder.barStatus.replace(/_/g, ' ')}</strong></span>
             </span>
           )}
         </div>
       )}
 
       {/* Progress Stepper Bar */}
-      <div className="space-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Order Progress</p>
-        <div className="grid grid-cols-4 gap-1.5 text-center">
+      <div className="space-y-2 pt-1">
+        <div className="grid grid-cols-4 gap-2 text-center">
           {/* Step 1: Order Received */}
           <div className="space-y-1">
-            <div className={`h-2 rounded-full transition-all ${isReceived ? 'bg-emerald-500 shadow-md shadow-emerald-500/30' : 'bg-slate-800'}`} />
-            <span className={`text-[10px] font-bold block ${isReceived ? 'text-emerald-400' : 'text-slate-500'}`}>
-              Received {isReceived && '✓'}
+            <div className={`h-1.5 rounded-full transition-all ${isReceived ? 'bg-amber-400' : 'bg-white/[0.06]'}`} />
+            <span className={`text-[10px] font-mono block ${isReceived ? 'text-white' : 'text-white/30'}`}>
+              Received
             </span>
           </div>
 
           {/* Step 2: Cooking */}
           <div className="space-y-1">
-            <div className={`h-2 rounded-full transition-all ${isCooking ? 'bg-amber-500 shadow-md shadow-amber-500/30' : 'bg-slate-800'}`} />
-            <span className={`text-[10px] font-bold block ${isCooking ? 'text-amber-400' : 'text-slate-500'}`}>
-              Cooking {isCooking && '✓'}
+            <div className={`h-1.5 rounded-full transition-all ${isCooking ? 'bg-amber-400' : 'bg-white/[0.06]'}`} />
+            <span className={`text-[10px] font-mono block ${isCooking ? 'text-white' : 'text-white/30'}`}>
+              Preparing
             </span>
           </div>
 
           {/* Step 3: Preparing / Plating */}
           <div className="space-y-1">
-            <div className={`h-2 rounded-full transition-all ${isReady ? 'bg-rose-500 shadow-md shadow-rose-500/30' : isPreparing ? 'bg-rose-500/60 animate-pulse' : 'bg-slate-800'}`} />
-            <span className={`text-[10px] font-bold block ${isReady ? 'text-rose-400' : isPreparing ? 'text-rose-300' : 'text-slate-500'}`}>
-              Ready {isReady && '✓'}
+            <div className={`h-1.5 rounded-full transition-all ${isReady ? 'bg-emerald-400' : isPreparing ? 'bg-amber-400/60 animate-pulse' : 'bg-white/[0.06]'}`} />
+            <span className={`text-[10px] font-mono block ${isReady ? 'text-emerald-400' : isPreparing ? 'text-amber-300' : 'text-white/30'}`}>
+              Ready
             </span>
           </div>
 
           {/* Step 4: Delivered */}
           <div className="space-y-1">
-            <div className={`h-2 rounded-full transition-all ${isDelivered ? 'bg-emerald-400 shadow-md shadow-emerald-400/30' : 'bg-slate-800'}`} />
-            <span className={`text-[10px] font-bold block ${isDelivered ? 'text-emerald-400' : 'text-slate-500'}`}>
-              Delivered {isDelivered && '✓'}
+            <div className={`h-1.5 rounded-full transition-all ${isDelivered ? 'bg-emerald-400' : 'bg-white/[0.06]'}`} />
+            <span className={`text-[10px] font-mono block ${isDelivered ? 'text-emerald-400' : 'text-white/30'}`}>
+              Delivered
             </span>
           </div>
         </div>
       </div>
 
       {/* Items Summary in Tracker */}
-      <div className="border-t border-slate-800/80 pt-3 space-y-1.5">
-        <div className="flex justify-between items-center text-xs text-slate-400">
-          <span>Items Ordered ({currentOrder.items.length})</span>
-          <span className="font-mono font-bold text-slate-200">{formatCurrency(currentOrder.totalAmount)}</span>
+      <div className="border-t border-white/[0.06] pt-3 space-y-1.5">
+        <div className="flex justify-between items-center text-xs text-white/50">
+          <span>Items ({currentOrder.items.length})</span>
+          <span className="font-mono text-white/80">{formatCurrency(currentOrder.totalAmount)}</span>
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5">
           {currentOrder.items.map((i) => (
-            <Badge key={i.id} variant="outline" className="text-[10px] py-0.5 px-2 bg-slate-900 border-slate-800 text-slate-300">
-              {i.quantity}x {i.name}
-            </Badge>
+            <span key={i.id} className="text-[11px] py-0.5 px-2 rounded bg-white/[0.03] border border-white/[0.06] text-white/70 font-mono">
+              {i.quantity}× {i.name}
+            </span>
           ))}
         </div>
       </div>
-    </Card>
+    </div>
   );
 };

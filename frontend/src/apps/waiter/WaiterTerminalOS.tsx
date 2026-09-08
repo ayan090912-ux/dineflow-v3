@@ -537,88 +537,83 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-rose-500 selection:text-white">
-      {/* Toast Feedback Overlay */}
+    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans antialiased">
+      {/* TOAST NOTIFICATION POPUP */}
       {toastMessage && (
-        <div className="fixed top-20 right-6 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
           <div
-            className={`p-4 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 min-w-[320px] ${
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium ${
               toastMessage.type === 'success'
-                ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-100'
+                ? 'bg-[#12151b] border-emerald-500/40 text-emerald-300'
                 : toastMessage.type === 'warning'
-                ? 'bg-rose-950/90 border-rose-500/50 text-rose-100'
-                : 'bg-slate-900/90 border-sky-500/50 text-sky-100'
+                ? 'bg-[#12151b] border-amber-500/40 text-amber-300'
+                : 'bg-[#12151b] border-[#222838] text-slate-200'
             }`}
           >
-            <Sparkles className="w-5 h-5 text-amber-400 animate-spin" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <div>
-              <p className="text-sm font-bold">{toastMessage.title}</p>
-              <p className="text-xs opacity-90">{toastMessage.desc}</p>
+              <p className="font-semibold text-white">{toastMessage.title}</p>
+              <p className="text-slate-400 text-[11px]">{toastMessage.desc}</p>
             </div>
           </div>
         </div>
       )}
 
       {/* HEADER BAR */}
-      <header className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40 px-4 lg:px-6 py-3 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
+      <header className="bg-[#0e1117] border-b border-[#1e232e] sticky top-0 z-40 px-4 lg:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
         {/* Brand Header */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-amber-500 p-0.5 shadow-lg shadow-emerald-950/50 flex items-center justify-center">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <PhoneCall className="w-5 h-5 text-emerald-400" />
-            </div>
+          <div className="w-9 h-9 rounded-xl bg-[#141822] border border-[#222838] flex items-center justify-center font-bold text-orange-400 shrink-0">
+            <PhoneCall className="w-4.5 h-4.5 text-orange-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <DinelyLogo size="sm" />
-              <h1 className="text-base font-black text-white tracking-tight">Waiter Terminal OS</h1>
-              <Badge variant="success" className="text-[10px] py-0 px-1.5 font-mono">MVP</Badge>
+              <h1 className="text-base font-bold text-white tracking-tight">Waiter Terminal OS</h1>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#161b24] text-slate-400 border border-[#242c3d]">STAFF</span>
             </div>
             {wsStatus === 'CONNECTED' ? (
-              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                <span className="text-emerald-400 font-semibold font-mono">LIVE • SYNCHRONIZED</span>
+              <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                <span className="text-emerald-400 font-mono text-[11px]">Live Sync Active</span>
               </p>
             ) : wsStatus === 'RECONNECTING' ? (
-              <p className="text-xs text-amber-400 flex items-center gap-1.5 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block animate-spin" />
-                <span className="font-semibold font-mono">RECONNECTING...</span>
+              <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-0.5 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                <span className="font-mono text-[11px]">Reconnecting...</span>
               </p>
             ) : (
-              <p className="text-xs text-rose-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-                <span className="font-semibold font-mono">OFFLINE (RETRYING)</span>
+              <p className="text-xs text-rose-400 flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                <span className="font-mono text-[11px]">Offline</span>
               </p>
             )}
           </div>
         </div>
 
         {/* Authenticated Staff Info & Actions */}
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
-          <div className="flex items-center gap-3 bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-300">
+          <div className="flex items-center gap-2 bg-[#12151b] px-3 py-1.5 rounded-lg border border-[#1e232e]">
             <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" name={waiterName} size="sm" />
             <div>
-              <p className="font-bold text-white flex items-center gap-1">
-                <span>{waiterName}</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-400" title="Online Status: ON_CLOCK" />
-              </p>
-              <p className="text-[10px] text-emerald-400 font-mono">🟢 ONLINE</p>
+              <p className="font-semibold text-white text-xs">{waiterName}</p>
+              <p className="text-[10px] text-emerald-400 font-mono">ON SHIFT</p>
             </div>
           </div>
 
           {/* Clock */}
-          <div className="bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800 flex items-center gap-2 font-mono text-amber-400 font-bold">
-            <Clock className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+          <div className="bg-[#12151b] px-2.5 py-1.5 rounded-lg border border-[#1e232e] flex items-center gap-1.5 font-mono text-slate-300 text-xs">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span>{currentTime || '08:42 PM'}</span>
           </div>
 
           {/* Audio Chime Toggle */}
           <button
             onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white transition-all border border-slate-700/50"
+            className="p-2 rounded-lg bg-[#12151b] hover:bg-[#181d27] text-slate-400 hover:text-white transition-colors border border-[#1e232e] h-8 w-8 flex items-center justify-center"
             title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
           >
-            {isAudioMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+            {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
           </button>
 
           <Button
@@ -629,119 +624,119 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               if (onLogout) onLogout();
               else window.location.href = '/waiter/login';
             }}
-            className="text-xs bg-slate-900 border-slate-700 hover:bg-rose-500/10 text-slate-300 hover:text-rose-400 flex items-center gap-1.5"
+            className="text-xs bg-[#12151b] border-[#1e232e] hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 flex items-center gap-1.5 h-8"
           >
-            <LogOut className="w-3.5 h-3.5 text-rose-400" />
-            <span>Logout</span>
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
           </Button>
         </div>
       </header>
 
       {/* ERROR / RECONNECT BANNER */}
       {isErrorState && (
-        <div className="bg-rose-950/90 border-b border-rose-800 px-4 py-3 text-xs text-rose-200 flex items-center justify-between gap-3 animate-in fade-in">
+        <div className="bg-rose-950/80 border-b border-rose-800 px-4 py-2.5 text-xs text-rose-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             <span>Unable to connect to restaurant server. Realtime events may be paused.</span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => loadData()} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={() => loadData()} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1 h-7">
             <RefreshCw className="w-3 h-3" />
-            <span>RETRY</span>
+            <span>Retry</span>
           </Button>
         </div>
       )}
 
       {/* MAIN LAYOUT */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* SIDEBAR NAVIGATION - CONTAINS ONLY REQUIRED 4 MODULES */}
-        <aside className="w-full lg:w-64 bg-slate-900/60 border-r border-slate-800/80 p-3 flex lg:flex-col justify-between shrink-0 overflow-x-auto lg:overflow-y-auto scrollbar-none">
-          <div className="flex lg:flex-col gap-1.5 w-full min-w-[500px] lg:min-w-0">
-            <div className="px-3 py-2 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider hidden lg:block">
-              Waiter Terminal Navigation
+        {/* SIDEBAR NAVIGATION */}
+        <aside className="w-full lg:w-60 bg-[#0e1117] border-r border-[#1e232e] p-3 flex lg:flex-col justify-between shrink-0 overflow-x-auto lg:overflow-y-auto scrollbar-none">
+          <div className="flex lg:flex-col gap-1 w-full min-w-[500px] lg:min-w-0">
+            <div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-500 hidden lg:block">
+              Floor Terminal
             </div>
 
             {/* Tab 1: Dashboard Overview */}
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
                 activeTab === 'dashboard'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  ? 'bg-[#181d27] text-white border border-[#2d3545]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
               }`}
             >
-              <Activity className="w-4.5 h-4.5 text-emerald-300" />
-              <span>Dashboard Overview</span>
+              <Activity className="w-4 h-4 text-emerald-400" />
+              <span>Overview</span>
             </button>
 
             {/* Tab 2: Active Tables */}
             <button
               onClick={() => setActiveTab('active-tables')}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
                 activeTab === 'active-tables'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  ? 'bg-[#181d27] text-white border border-[#2d3545]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <Utensils className="w-4.5 h-4.5 text-sky-400" />
+              <div className="flex items-center gap-2.5">
+                <Utensils className="w-4 h-4 text-sky-400" />
                 <span>Active Tables</span>
               </div>
-              <Badge variant="outline" className="text-[10px] py-0.5 px-2 border-sky-500/40 text-sky-300">
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#141822] text-slate-300 border border-[#222838]">
                 {activeTablesList.length}
-              </Badge>
+              </span>
             </button>
 
             {/* Tab 3: Pending Calls */}
             <button
               onClick={() => setActiveTab('pending-calls')}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
                 activeTab === 'pending-calls'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  ? 'bg-[#181d27] text-white border border-[#2d3545]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <PhoneCall className="w-4.5 h-4.5 text-amber-400" />
+              <div className="flex items-center gap-2.5">
+                <PhoneCall className="w-4 h-4 text-amber-400" />
                 <span>Pending Calls</span>
               </div>
               {pendingCallsList.length > 0 && (
-                <Badge variant="warning" className="text-[10px] py-0.5 px-2 animate-pulse">
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
                   {pendingCallsList.length}
-                </Badge>
+                </span>
               )}
             </button>
 
             {/* Tab 4: Ready Plates */}
             <button
               onClick={() => setActiveTab('ready-plates')}
-              className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left w-full ${
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
                 activeTab === 'ready-plates'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  ? 'bg-[#181d27] text-white border border-[#2d3545]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <Flame className="w-4.5 h-4.5 text-rose-400" />
+              <div className="flex items-center gap-2.5">
+                <Flame className="w-4 h-4 text-orange-400" />
                 <span>Ready Plates</span>
               </div>
               {readyPlatesList.length > 0 && (
-                <Badge variant="success" className="text-[10px] py-0.5 px-2">
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
                   {readyPlatesList.length}
-                </Badge>
+                </span>
               )}
             </button>
           </div>
         </aside>
 
         {/* MAIN DISPLAY AREA */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 bg-slate-950/80">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-5 bg-[#0b0d11]">
           {/* SEARCH & REFRESH BAR */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0e1117] p-2.5 rounded-xl border border-[#1e232e]">
             <div className="flex-1 min-w-[240px]">
               <SearchInput
                 value={searchQuery}
                 onChange={(val) => setSearchQuery(typeof val === 'string' ? val : (val as any).target.value)}
-                placeholder="Search table #, order #, or customer request..."
+                placeholder="Search table, order #, or customer request..."
               />
             </div>
             <Button
@@ -749,7 +744,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               size="sm"
               onClick={() => loadData()}
               disabled={isLoading}
-              className="text-xs bg-slate-950 border-slate-800 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5"
+              className="text-xs bg-[#12151b] border-[#1e232e] hover:bg-[#181d27] text-slate-300 flex items-center gap-1.5 h-8"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
@@ -758,70 +753,70 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
           {/* COUNTERS HEADER */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card
+            <div
               onClick={() => setActiveTab('active-tables')}
-              className="bg-slate-900/90 border-slate-800 p-4 space-y-1.5 cursor-pointer hover:border-sky-500/50 transition-all shadow-xl group"
+              className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1 cursor-pointer hover:border-sky-500/40 transition-colors"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-sky-400 uppercase tracking-wider">Active Tables</span>
-                <Utensils className="w-5 h-5 text-sky-400 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-mono uppercase text-sky-400 font-medium">Active Tables</span>
+                <Utensils className="w-4 h-4 text-sky-400" />
               </div>
-              <p className="text-2xl font-black text-white font-mono">{activeTablesList.length}</p>
-              <p className="text-xs text-slate-400">Currently occupied or requiring service</p>
-            </Card>
+              <p className="text-2xl font-bold text-white font-mono">{activeTablesList.length}</p>
+              <p className="text-[11px] text-slate-400">Occupied tables on floor</p>
+            </div>
 
-            <Card
+            <div
               onClick={() => setActiveTab('pending-calls')}
-              className="bg-slate-900/90 border-slate-800 p-4 space-y-1.5 cursor-pointer hover:border-amber-500/50 transition-all shadow-xl group"
+              className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1 cursor-pointer hover:border-amber-500/40 transition-colors"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">Pending Calls</span>
-                <PhoneCall className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-mono uppercase text-amber-400 font-medium">Pending Calls</span>
+                <PhoneCall className="w-4 h-4 text-amber-400" />
               </div>
-              <p className="text-2xl font-black text-amber-400 font-mono">{pendingCallsList.length}</p>
-              <p className="text-xs text-slate-400">Customer requests waiting for service</p>
-            </Card>
+              <p className="text-2xl font-bold text-amber-400 font-mono">{pendingCallsList.length}</p>
+              <p className="text-[11px] text-slate-400">Customer requests waiting</p>
+            </div>
 
-            <Card
+            <div
               onClick={() => setActiveTab('ready-plates')}
-              className="bg-slate-900/90 border-slate-800 p-4 space-y-1.5 cursor-pointer hover:border-emerald-500/50 transition-all shadow-xl group"
+              className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1 cursor-pointer hover:border-emerald-500/40 transition-colors"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">Ready Plates</span>
-                <Flame className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-mono uppercase text-emerald-400 font-medium">Ready Plates</span>
+                <Flame className="w-4 h-4 text-emerald-400" />
               </div>
-              <p className="text-2xl font-black text-emerald-400 font-mono">{readyPlatesList.length}</p>
-              <p className="text-xs text-slate-400">Plated orders ready at kitchen pass</p>
-            </Card>
+              <p className="text-2xl font-bold text-emerald-400 font-mono">{readyPlatesList.length}</p>
+              <p className="text-[11px] text-slate-400">Plated orders at kitchen pass</p>
+            </div>
           </div>
 
           {/* TAB 1: DASHBOARD OVERVIEW */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
               {/* Quick Section 1: Active Tables Preview */}
-              <Card className="bg-slate-900/90 border-slate-800 p-5 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="bg-[#12151b] border border-[#1e232e] p-5 space-y-4 rounded-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
                   <div className="flex items-center gap-2">
-                    <Utensils className="w-5 h-5 text-sky-400" />
-                    <h2 className="text-base font-bold text-white">Active Floor Tables</h2>
-                    <Badge variant="outline" className="border-sky-500/40 text-sky-300">
+                    <Utensils className="w-4 h-4 text-sky-400" />
+                    <h2 className="text-sm font-semibold text-white">Active Floor Tables</h2>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#161b24] text-sky-300 border border-[#222838]">
                       {activeTablesList.length} Active
-                    </Badge>
+                    </span>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setActiveTab('active-tables')} className="text-xs">
-                    <span>View Active Tables</span>
+                  <Button variant="outline" size="sm" onClick={() => setActiveTab('active-tables')} className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-7">
+                    <span>View Floorplan</span>
                     <ChevronRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </div>
 
                 {activeTablesList.length === 0 ? (
-                  <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
-                    <Utensils className="w-8 h-8 text-slate-600 mx-auto" />
-                    <p className="text-sm font-bold text-slate-300">No active tables right now.</p>
-                    <p className="text-xs text-slate-400">Tables will show up when customer sessions begin or orders are placed.</p>
+                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1.5">
+                    <Utensils className="w-6 h-6 text-slate-600 mx-auto" />
+                    <p className="text-xs font-semibold text-slate-300">No active tables right now.</p>
+                    <p className="text-[11px] text-slate-400">Tables will appear when customer sessions begin or orders are placed.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                     {activeTablesList.slice(0, 6).map((table) => {
                       const activeSession = activeSessions.find(
                         (s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
@@ -838,58 +833,59 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                       return (
                         <div
                           key={table.id}
-                          className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all space-y-3 shadow-lg flex flex-col justify-between"
+                          className="bg-[#12151b] p-4 rounded-xl border border-[#1e232e] hover:border-[#2a3243] transition-colors space-y-3 flex flex-col justify-between"
                         >
-                          <div className="space-y-3">
+                          <div className="space-y-2.5">
                             <div className="flex justify-between items-start">
                               <div>
-                                <h3 className="text-lg font-black text-white font-mono tracking-tight">{table.tableNumber}</h3>
-                                <div className="mt-1">{getTableStatusBadge(table.status)}</div>
+                                <h3 className="text-base font-bold text-white font-mono tracking-tight">{table.tableNumber}</h3>
+                                <div className="mt-0.5">{getTableStatusBadge(table.status)}</div>
                               </div>
-                              <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-lg">
-                                ⏱️ {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
+                              <span className="text-[11px] font-mono text-slate-300 bg-[#0c0e14] border border-[#1e232e] px-2 py-0.5 rounded flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
                               </span>
                             </div>
 
-                            <div className="space-y-1.5 text-xs text-slate-300 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-                              <p className="font-semibold text-white">
+                            <div className="space-y-1 text-xs text-slate-300 bg-[#0c0e14] p-2.5 rounded-lg border border-[#1e232e]">
+                              <p className="font-medium text-white text-xs">
                                 {tableOrders.length > 1
-                                  ? `${tableOrders.length} Active Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
+                                  ? `${tableOrders.length} Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
                                   : latestOrder
                                   ? `Order #${latestOrder.id}`
                                   : 'No active order'}
                               </p>
-                              <p className="text-slate-400 flex items-center justify-between">
+                              <div className="flex items-center justify-between text-[11px] text-slate-400">
                                 <span>Item count:</span>
-                                <span className="font-bold text-slate-200">{itemCount} items</span>
-                              </p>
-                              <p className="text-slate-400 flex items-center justify-between">
-                                <span>Total Bill:</span>
-                                <span className="font-bold text-emerald-400">₹{sessionTotal.toFixed(2)}</span>
-                              </p>
-                              <p className="text-slate-400 flex items-center justify-between">
-                                <span>Assigned waiter:</span>
-                                <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
-                              </p>
+                                <span className="font-mono text-slate-200">{itemCount} items</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                <span>Session Total:</span>
+                                <span className="font-mono font-semibold text-emerald-400">₹{sessionTotal.toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                <span>Assigned Waiter:</span>
+                                <span className="text-slate-200">{table.assignedWaiterName || waiterName}</span>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1e232e]">
                             <Button
                               variant="outline"
                               size="sm"
-                              className="w-full text-[11px] font-bold py-2 bg-slate-900 border-slate-800 hover:bg-slate-800 text-sky-300"
+                              className="w-full text-xs py-1.5 bg-[#141822] border-[#222838] hover:bg-[#1a202c] text-slate-200 h-8"
                               onClick={() => setSelectedTableForView(table)}
                             >
-                              <span>VIEW DETAILS</span>
+                              View Details
                             </Button>
                             <Button
                               variant="danger"
                               size="sm"
-                              className="w-full text-[11px] font-bold py-2 bg-rose-600 hover:bg-rose-500 text-white shadow-lg"
+                              className="w-full text-xs py-1.5 bg-rose-600 hover:bg-rose-500 text-white h-8"
                               onClick={() => setSelectedTableForClose(table)}
                             >
-                              <span>CLOSE TABLE 🧹</span>
+                              Close Table
                             </Button>
                           </div>
                         </div>
@@ -897,47 +893,49 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                     })}
                   </div>
                 )}
-              </Card>
+              </div>
 
               {/* Quick Section 2: Pending Calls Preview */}
-              <Card className="bg-slate-900/90 border-slate-800 p-5 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="bg-[#12151b] border border-[#1e232e] p-5 space-y-4 rounded-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
                   <div className="flex items-center gap-2">
-                    <PhoneCall className="w-5 h-5 text-amber-400 animate-bounce" />
-                    <h2 className="text-base font-bold text-white">Pending Customer Requests</h2>
-                    <Badge variant="warning">{pendingCallsList.length} Pending</Badge>
+                    <PhoneCall className="w-4 h-4 text-amber-400" />
+                    <h2 className="text-sm font-semibold text-white">Pending Customer Requests</h2>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                      {pendingCallsList.length} Pending
+                    </span>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setActiveTab('pending-calls')} className="text-xs">
+                  <Button variant="outline" size="sm" onClick={() => setActiveTab('pending-calls')} className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-7">
                     <span>View Pending Calls</span>
                     <ChevronRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </div>
 
                 {pendingCallsList.length === 0 ? (
-                  <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                    <p className="text-sm font-bold text-slate-300">No pending customer requests.</p>
-                    <p className="text-xs text-slate-400">All table requests have been handled.</p>
+                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1.5">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
+                    <p className="text-xs font-semibold text-slate-300">No pending customer requests.</p>
+                    <p className="text-[11px] text-slate-400">All table requests have been handled.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {pendingCallsList.slice(0, 4).map((req) => (
                       <div
                         key={req.id}
-                        className="bg-slate-950 p-4 rounded-2xl border border-amber-500/30 hover:border-amber-500/60 transition-all space-y-3 shadow-lg"
+                        className="bg-[#0e1117] p-3.5 rounded-xl border border-amber-500/30 hover:border-amber-500/50 transition-colors space-y-2.5"
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-lg font-black text-white font-mono">{req.tableNumber}</span>
-                            <div className="mt-1">{getRequestBadge(req.requestType, req.customTitle)}</div>
+                            <span className="text-base font-bold text-white font-mono">{req.tableNumber}</span>
+                            <div className="mt-0.5">{getRequestBadge(req.requestType, req.customTitle)}</div>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded-md">
+                          <span className="text-[10px] font-mono text-slate-400 bg-[#141822] px-2 py-0.5 rounded border border-[#1e232e]">
                             {getTimeElapsed(req.requestedAt)}
                           </span>
                         </div>
 
                         {req.customerNotes && (
-                          <p className="text-xs text-slate-300 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 italic">
+                          <p className="text-xs text-slate-300 bg-[#12151b] p-2 rounded-lg border border-[#1e232e] italic">
                             "{req.customerNotes}"
                           </p>
                         )}
@@ -947,19 +945,19 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                             <Button
                               variant="brand"
                               size="sm"
-                              className="w-full text-xs font-bold"
+                              className="w-full text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-7"
                               onClick={() => handleAcceptRequest(req.id)}
                             >
-                              ACCEPT
+                              Accept Call
                             </Button>
                           ) : (
                             <Button
                               variant="success"
                               size="sm"
-                              className="w-full text-xs font-bold"
+                              className="w-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
                               onClick={() => handleCompleteRequest(req.id)}
                             >
-                              COMPLETE
+                              Mark Completed
                             </Button>
                           )}
                         </div>
@@ -967,48 +965,52 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                     ))}
                   </div>
                 )}
-              </Card>
+              </div>
 
               {/* Quick Section 3: Ready Plates Preview */}
-              <Card className="bg-slate-900/90 border-slate-800 p-5 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="bg-[#12151b] border border-[#1e232e] p-5 space-y-4 rounded-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
                   <div className="flex items-center gap-2">
-                    <Flame className="w-5 h-5 text-emerald-400 animate-pulse" />
-                    <h2 className="text-base font-bold text-white">Kitchen Ready Plates Pass</h2>
-                    <Badge variant="success">{readyPlatesList.length} Ready</Badge>
+                    <Flame className="w-4 h-4 text-emerald-400" />
+                    <h2 className="text-sm font-semibold text-white">Kitchen Ready Plates Pass</h2>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                      {readyPlatesList.length} Ready
+                    </span>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setActiveTab('ready-plates')} className="text-xs">
+                  <Button variant="outline" size="sm" onClick={() => setActiveTab('ready-plates')} className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-7">
                     <span>View Ready Plates</span>
                     <ChevronRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </div>
 
                 {readyPlatesList.length === 0 ? (
-                  <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-2">
-                    <Coffee className="w-8 h-8 text-slate-500 mx-auto" />
-                    <p className="text-sm font-bold text-slate-300">No ready plates right now.</p>
-                    <p className="text-xs text-slate-400">Kitchen staff will mark orders READY when prep completes.</p>
+                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1.5">
+                    <Coffee className="w-6 h-6 text-slate-500 mx-auto" />
+                    <p className="text-xs font-semibold text-slate-300">No ready plates right now.</p>
+                    <p className="text-[11px] text-slate-400">Kitchen staff will mark orders READY when prep completes.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {readyPlatesList.slice(0, 4).map((order) => (
                       <div
                         key={order.id}
-                        className="bg-slate-950 p-4 rounded-2xl border border-emerald-500/40 hover:border-emerald-500/70 transition-all space-y-3 shadow-lg"
+                        className="bg-[#0e1117] p-3.5 rounded-xl border border-emerald-500/30 hover:border-emerald-500/50 transition-colors space-y-2.5"
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-xs font-mono text-emerald-400 font-bold block">ORDER #{order.id}</span>
-                            <h3 className="text-lg font-black text-white font-mono">{order.tableNumber}</h3>
+                            <span className="text-xs font-mono text-emerald-400 font-semibold block">ORDER #{order.id}</span>
+                            <h3 className="text-base font-bold text-white font-mono">{order.tableNumber}</h3>
                           </div>
-                          <Badge variant="success">READY</Badge>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                            READY
+                          </span>
                         </div>
 
-                        <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                        <div className="bg-[#12151b] p-2.5 rounded-lg border border-[#1e232e] space-y-1">
                           {order.items.map((item) => (
                             <div key={item.id} className="flex justify-between items-center text-xs text-slate-200">
-                              <span className="font-semibold">{item.name}</span>
-                              <span className="font-mono text-emerald-400 font-bold">×{item.quantity}</span>
+                              <span>{item.name}</span>
+                              <span className="font-mono text-emerald-400 font-semibold">x{item.quantity}</span>
                             </div>
                           ))}
                         </div>
@@ -1016,16 +1018,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                         <Button
                           variant="success"
                           size="sm"
-                          className="w-full text-xs font-bold py-2.5 shadow-lg"
+                          className="w-full text-xs font-medium py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-8"
                           onClick={() => handleDeliverOrder(order.id)}
                         >
-                          DELIVER
+                          Deliver to Table
                         </Button>
                       </div>
                     ))}
                   </div>
                 )}
-              </Card>
+              </div>
             </div>
           )}
 
@@ -1034,22 +1036,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             <div className="space-y-4 font-sans">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-white tracking-tight">Active Tables Floor View</h2>
+                  <h2 className="text-base font-bold text-white tracking-tight">Active Tables Floor View</h2>
                   <p className="text-xs text-slate-400">Tables currently occupied with live customer sessions</p>
                 </div>
-                <Badge variant="outline" className="border-sky-500/40 text-sky-300 font-mono text-xs px-3 py-1">
+                <span className="text-xs font-mono px-2.5 py-1 rounded bg-[#141822] text-slate-300 border border-[#222838]">
                   {activeTablesList.length} Active Tables
-                </Badge>
+                </span>
               </div>
 
               {activeTablesList.length === 0 ? (
-                <Card className="bg-slate-900 border-slate-800 p-12 text-center space-y-3 rounded-3xl">
-                  <Utensils className="w-12 h-12 text-slate-600 mx-auto" />
-                  <h3 className="text-base font-bold text-white">No active tables right now.</h3>
+                <div className="bg-[#0e1117] border border-[#1e232e] p-10 text-center space-y-2 rounded-xl">
+                  <Utensils className="w-8 h-8 text-slate-600 mx-auto" />
+                  <h3 className="text-sm font-semibold text-white">No active tables right now.</h3>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
                     All tables are clear and available. When guests scan table QR codes or open sessions, occupied tables will automatically appear here in real-time.
                   </p>
-                </Card>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {activeTablesList.map((table) => {
@@ -1062,101 +1064,102 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                     const latestOrder = tableOrders[0];
 
                     return (
-                      <Card
+                      <div
                         key={table.id}
-                        className="bg-slate-900/90 border-rose-500/30 p-5 space-y-4 rounded-3xl shadow-xl hover:border-rose-500/60 transition-all flex flex-col justify-between"
+                        className="bg-[#12151b] border border-[#1e232e] p-4 space-y-3 rounded-xl hover:border-[#2a3243] transition-colors flex flex-col justify-between"
                       >
                         <div className="space-y-3">
                           <div className="flex items-start justify-between">
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="text-2xl font-black text-white font-mono tracking-tight">
+                                <span className="text-xl font-bold text-white font-mono tracking-tight">
                                   {table.tableNumber}
                                 </span>
-                                <Badge variant="danger" className="text-[10px] font-mono font-bold">
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30">
                                   OCCUPIED
-                                </Badge>
+                                </span>
                               </div>
                               <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                                {activeSession ? `Session #${activeSession.id}` : 'Active Session'}
+                                {activeSession ? `Session #${activeSession.id.slice(-6)}` : 'Active Session'}
                               </p>
                             </div>
-                            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-xl">
-                              ⏱️ {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
+                            <span className="text-[11px] font-mono text-slate-300 bg-[#0c0e14] border border-[#1e232e] px-2 py-0.5 rounded flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
                             </span>
                           </div>
 
-                          <div className="space-y-2 bg-slate-950/90 p-4 rounded-2xl border border-slate-800 text-xs font-mono">
-                            <div className="flex justify-between items-center pb-1.5 border-b border-slate-800/80">
-                              <span className="text-slate-400">Total Active Orders:</span>
-                              <span className="font-bold text-white">{tableOrders.length} Orders</span>
+                          <div className="space-y-1.5 bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] text-xs font-mono">
+                            <div className="flex justify-between items-center pb-1 border-b border-[#1e232e]">
+                              <span className="text-slate-400">Active Orders:</span>
+                              <span className="font-semibold text-white">{tableOrders.length}</span>
                             </div>
 
-                            <div className="flex justify-between items-center py-1">
+                            <div className="flex justify-between items-center py-0.5">
                               <span className="text-slate-400">Total Items:</span>
-                              <span className="font-bold text-slate-200">{itemCount} items</span>
+                              <span className="text-slate-200">{itemCount}</span>
                             </div>
 
-                            <div className="flex justify-between items-center py-1">
-                              <span className="text-slate-400">Current Session Bill:</span>
-                              <span className="font-black text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</span>
+                            <div className="flex justify-between items-center py-0.5">
+                              <span className="text-slate-400">Current Bill:</span>
+                              <span className="font-bold text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</span>
                             </div>
 
                             {latestOrder && (
-                              <div className="flex flex-col gap-1.5 py-2 border-t border-b border-slate-800/80 text-[11px]">
+                              <div className="flex flex-col gap-1 py-1.5 border-t border-b border-[#1e232e] text-[11px]">
                                 {latestOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN') && (
                                   <div className="flex justify-between items-center">
                                     <span className="text-slate-400">Kitchen:</span>
-                                    <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
                                       latestOrder.kitchenStatus === 'READY' || (!latestOrder.kitchenStatus && latestOrder.status === 'READY')
                                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                         : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                                     }`}>
-                                      {latestOrder.kitchenStatus === 'READY' ? '✓ READY' : latestOrder.kitchenStatus || 'PREPARING'}
+                                      {latestOrder.kitchenStatus === 'READY' ? 'READY' : latestOrder.kitchenStatus || 'COOKING'}
                                     </span>
                                   </div>
                                 )}
                                 {latestOrder.items.some((i) => getFulfillmentStation(i) === 'BAR') && (
                                   <div className="flex justify-between items-center">
                                     <span className="text-slate-400">Bar:</span>
-                                    <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
                                       latestOrder.barStatus === 'READY' || (!latestOrder.barStatus && latestOrder.status === 'READY')
                                         ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                                         : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                                     }`}>
-                                      {latestOrder.barStatus === 'READY' ? '✓ READY' : latestOrder.barStatus || 'PREPARING'}
+                                      {latestOrder.barStatus === 'READY' ? 'READY' : latestOrder.barStatus || 'PREPARING'}
                                     </span>
                                   </div>
                                 )}
                               </div>
                             )}
 
-                            <div className="flex justify-between items-center pt-1 border-t border-slate-800/80 text-[11px]">
-                              <span className="text-slate-400">Assigned Waiter:</span>
-                              <span className="font-bold text-emerald-400">{table.assignedWaiterName || waiterName}</span>
+                            <div className="flex justify-between items-center pt-1 border-t border-[#1e232e] text-[11px]">
+                              <span className="text-slate-400">Waiter:</span>
+                              <span className="text-slate-200">{table.assignedWaiterName || waiterName}</span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1e232e]">
                           <Button
                             variant="outline"
                             size="sm"
-                            className="w-full text-xs font-bold py-2.5 bg-slate-900 border-slate-800 hover:bg-slate-800 text-sky-300"
+                            className="w-full text-xs py-1.5 bg-[#141822] border-[#222838] hover:bg-[#1a202c] text-slate-200 h-8"
                             onClick={() => setSelectedTableForView(table)}
                           >
-                            <span>VIEW DETAILS</span>
+                            View Details
                           </Button>
                           <Button
                             variant="danger"
                             size="sm"
-                            className="w-full text-xs font-bold py-2.5 bg-rose-600 hover:bg-rose-500 text-white shadow-lg"
+                            className="w-full text-xs py-1.5 bg-rose-600 hover:bg-rose-500 text-white h-8"
                             onClick={() => setSelectedTableForClose(table)}
                           >
-                            <span>CLOSE TABLE 🧹</span>
+                            Close Table
                           </Button>
                         </div>
-                      </Card>
+                      </div>
                     );
                   })}
                 </div>
@@ -1169,60 +1172,57 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-white tracking-tight">Pending Customer Requests</h2>
+                  <h2 className="text-base font-bold text-white tracking-tight">Pending Customer Requests</h2>
                   <p className="text-xs text-slate-400">Floor assistance, cutlery, water calls and bill check requests</p>
                 </div>
-                <Badge variant="warning" className="font-mono">
+                <span className="text-xs font-mono px-2.5 py-1 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
                   {pendingCallsList.length} Pending
-                </Badge>
+                </span>
               </div>
 
               {pendingCallsList.length === 0 ? (
-                <Card className="bg-slate-900 border-slate-800 p-12 text-center space-y-3 rounded-3xl">
-                  <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-                  <h3 className="text-base font-bold text-white">No pending customer requests.</h3>
+                <div className="bg-[#0e1117] border border-[#1e232e] p-10 text-center space-y-2 rounded-xl">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                  <h3 className="text-sm font-semibold text-white">No pending customer requests.</h3>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
                     There are no pending assistance calls right now. New customer requests will pop up in real-time.
                   </p>
-                </Card>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {pendingCallsList.map((req) => (
-                    <Card
+                    <div
                       key={req.id}
-                      className="bg-slate-900/90 border-amber-500/30 p-5 space-y-4 rounded-3xl shadow-xl hover:border-amber-500/60 transition-all"
+                      className="bg-[#12151b] border border-amber-500/30 p-4 space-y-3 rounded-xl hover:border-amber-500/50 transition-colors"
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="text-2xl font-black text-white font-mono tracking-tight">{req.tableNumber}</span>
+                          <span className="text-xl font-bold text-white font-mono tracking-tight">{req.tableNumber}</span>
                           <div className="mt-1">{getRequestBadge(req.requestType, req.customTitle)}</div>
                         </div>
-                        <span className="text-xs font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800">
+                        <span className="text-xs font-mono text-slate-400 bg-[#0c0e14] px-2 py-0.5 rounded border border-[#1e232e]">
                           {getTimeElapsed(req.requestedAt)}
                         </span>
                       </div>
 
-                      <div className="space-y-2 bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 text-xs">
+                      <div className="space-y-1.5 bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] text-xs font-mono">
                         <div className="flex justify-between items-center">
                           <span className="text-slate-400">Status</span>
-                          <Badge
-                            variant={req.status === 'ACCEPTED' || req.status === 'IN_PROGRESS' ? 'info' : 'warning'}
-                            className="font-mono"
-                          >
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/30">
                             {req.status}
-                          </Badge>
+                          </span>
                         </div>
 
-                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                        <div className="flex justify-between items-center pt-1 border-t border-[#1e232e]">
                           <span className="text-slate-400">Assigned Waiter</span>
-                          <span className="font-bold text-emerald-400">
+                          <span className="text-slate-200">
                             {req.assignedWaiterName || waiterName}
                           </span>
                         </div>
                       </div>
 
                       {req.customerNotes && (
-                        <p className="text-xs text-slate-300 bg-slate-950 p-3 rounded-2xl border border-slate-800 italic">
+                        <p className="text-xs text-slate-300 bg-[#0c0e14] p-2.5 rounded-lg border border-[#1e232e] italic">
                           "{req.customerNotes}"
                         </p>
                       )}
@@ -1232,23 +1232,23 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                           <Button
                             variant="brand"
                             size="sm"
-                            className="w-full text-xs font-bold py-2.5 shadow-lg"
+                            className="w-full text-xs font-medium py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 h-8"
                             onClick={() => handleAcceptRequest(req.id)}
                           >
-                            ACCEPT
+                            Accept Call
                           </Button>
                         ) : (
                           <Button
                             variant="success"
                             size="sm"
-                            className="w-full text-xs font-bold py-2.5 shadow-lg"
+                            className="w-full text-xs font-medium py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-8"
                             onClick={() => handleCompleteRequest(req.id)}
                           >
-                            COMPLETE
+                            Mark Completed
                           </Button>
                         )}
                       </div>
-                    </Card>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1260,36 +1260,38 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-white tracking-tight">Ready Kitchen Plates Pass</h2>
+                  <h2 className="text-base font-bold text-white tracking-tight">Ready Kitchen Plates Pass</h2>
                   <p className="text-xs text-slate-400">Orders marked READY by Kitchen waiting for floor delivery</p>
                 </div>
-                <Badge variant="success" className="font-mono">
+                <span className="text-xs font-mono px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
                   {readyPlatesList.length} Ready
-                </Badge>
+                </span>
               </div>
 
               {readyPlatesList.length === 0 ? (
-                <Card className="bg-slate-900 border-slate-800 p-12 text-center space-y-3 rounded-3xl">
-                  <Coffee className="w-12 h-12 text-slate-500 mx-auto" />
-                  <h3 className="text-base font-bold text-white">No ready plates right now.</h3>
+                <div className="bg-[#0e1117] border border-[#1e232e] p-10 text-center space-y-2 rounded-xl">
+                  <Coffee className="w-8 h-8 text-slate-500 mx-auto" />
+                  <h3 className="text-sm font-semibold text-white">No ready plates right now.</h3>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
                     The kitchen pass is clear. Plated dishes marked READY by chefs will appear here immediately for delivery.
                   </p>
-                </Card>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {readyPlatesList.map((order) => (
-                    <Card
+                    <div
                       key={order.id}
-                      className="bg-slate-900/90 border-emerald-500/40 p-5 space-y-4 rounded-3xl shadow-xl hover:border-emerald-500/70 transition-all"
+                      className="bg-[#12151b] border border-emerald-500/30 p-4 space-y-3 rounded-xl hover:border-emerald-500/60 transition-colors"
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="text-xs font-mono font-bold text-emerald-400 block">ORDER #{order.id}</span>
-                          <h3 className="text-2xl font-black text-white font-mono tracking-tight">{order.tableNumber}</h3>
+                          <span className="text-xs font-mono text-emerald-400 font-semibold block">ORDER #{order.id}</span>
+                          <h3 className="text-xl font-bold text-white font-mono tracking-tight">{order.tableNumber}</h3>
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                          <Badge variant="success" className="font-mono">READY</Badge>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                            READY
+                          </span>
                           <span className="text-[10px] font-mono text-slate-400">
                             {getTimeElapsed(order.readyAt || order.updatedAt)}
                           </span>
@@ -1297,16 +1299,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                       </div>
 
                       {/* Food Items & Quantity */}
-                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block border-b border-slate-800 pb-1">
-                          Food Items & Quantities
+                      <div className="bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] space-y-1.5">
+                        <span className="text-[10px] font-mono uppercase text-slate-400 block border-b border-[#1e232e] pb-1">
+                          Items to Deliver
                         </span>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                           {order.items.map((item) => (
                             <div key={item.id} className="flex justify-between items-center text-xs text-slate-200">
-                              <span className="font-semibold">{item.name}</span>
-                              <span className="font-mono text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-lg">
-                                ×{item.quantity}
+                              <span>{item.name}</span>
+                              <span className="font-mono text-emerald-400 font-semibold">
+                                x{item.quantity}
                               </span>
                             </div>
                           ))}
@@ -1317,13 +1319,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                       <Button
                         variant="success"
                         size="sm"
-                        className="w-full text-xs font-bold py-3 shadow-lg flex items-center justify-center gap-2"
+                        className="w-full text-xs font-medium py-2 bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 h-8"
                         onClick={() => handleDeliverOrder(order.id)}
                       >
-                        <CheckSquare className="w-4 h-4" />
-                        <span>DELIVER</span>
+                        <CheckSquare className="w-3.5 h-3.5" />
+                        <span>Deliver to Table</span>
                       </Button>
-                    </Card>
+                    </div>
                   ))}
                 </div>
               )}

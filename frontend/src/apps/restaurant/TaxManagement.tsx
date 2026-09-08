@@ -285,11 +285,12 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-black text-white flex items-center gap-2">
-            <Tag className="w-6 h-6 text-rose-500" /> Taxes
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <Tag className="w-4 h-4 text-amber-400" />
+            <span>Tax & Surcharge Management</span>
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Manage taxes and charges applied to your restaurant orders and invoices.
+          <p className="text-xs text-white/50 mt-0.5">
+            Define sales tax, GST slabs, and service surcharges applied to orders and item categories.
           </p>
         </div>
 
@@ -297,45 +298,45 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
           onClick={handleOpenCreateModal}
           variant="brand"
           size="sm"
-          className="shadow-lg shadow-rose-950/40"
-          icon={<Plus className="w-4 h-4" />}
+          className="bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs px-4 py-2 rounded-lg"
+          icon={<Plus className="w-3.5 h-3.5" />}
         >
-          + Add Tax
+          Add Tax Rule
         </Button>
       </div>
 
       {/* KPI STAT CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-          <span className="text-[11px] text-slate-400 font-semibold uppercase">Configured Taxes</span>
-          <p className="text-2xl font-black text-white">{taxes.length}</p>
-          <span className="text-[10px] text-slate-500">Multi-tenant PostgreSQL store</span>
-        </Card>
+        <div className="bg-[#12151b] border border-white/[0.08] p-4 rounded-xl space-y-1">
+          <span className="text-[10px] text-white/50 font-medium uppercase font-mono tracking-wider">Total Rules</span>
+          <p className="text-2xl font-semibold text-white font-mono">{taxes.length}</p>
+          <span className="text-[11px] text-white/40">Configured tax rules</span>
+        </div>
 
-        <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-          <span className="text-[11px] text-emerald-400 font-semibold uppercase">Active Taxes</span>
-          <p className="text-2xl font-black text-emerald-400">
+        <div className="bg-[#12151b] border border-white/[0.08] p-4 rounded-xl space-y-1">
+          <span className="text-[10px] text-emerald-400 font-medium uppercase font-mono tracking-wider">Active Taxes</span>
+          <p className="text-2xl font-semibold text-emerald-400 font-mono">
             {taxes.filter((t) => t.status === 'ACTIVE').length}
           </p>
-          <span className="text-[10px] text-slate-500">Currently calculated on new orders</span>
-        </Card>
+          <span className="text-[11px] text-white/40">Applied to live customer orders</span>
+        </div>
 
-        <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
-          <span className="text-[11px] text-amber-400 font-semibold uppercase">Inactive / Historical Taxes</span>
-          <p className="text-2xl font-black text-amber-400">
+        <div className="bg-[#12151b] border border-white/[0.08] p-4 rounded-xl space-y-1">
+          <span className="text-[10px] text-amber-400 font-medium uppercase font-mono tracking-wider">Inactive Rates</span>
+          <p className="text-2xl font-semibold text-white/60 font-mono">
             {taxes.filter((t) => t.status === 'INACTIVE').length}
           </p>
-          <span className="text-[10px] text-slate-500">Preserved for billing audit history</span>
-        </Card>
+          <span className="text-[11px] text-white/40">Archived for audit history</span>
+        </div>
       </div>
 
       {/* FILTER & SEARCH BAR */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#12151b] p-3 rounded-xl border border-white/[0.08]">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <select
             value={statusFilter}
             onChange={(e: any) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-rose-500"
+            className="px-3 py-1.5 bg-[#0b0d11] border border-white/[0.08] rounded-lg text-xs font-medium text-white/80 focus:outline-none focus:border-amber-400/60"
           >
             <option value="ALL">All Statuses</option>
             <option value="ACTIVE">Active Only</option>
@@ -344,42 +345,41 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-white/40" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search tax name, type, scope..."
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-rose-500"
+            placeholder="Search tax rules..."
+            className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#0b0d11] border border-white/[0.08] rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:border-amber-400/60"
           />
         </div>
       </div>
 
       {/* TAXES TABLE / CARDS */}
       {isLoading ? (
-        <div className="p-12 text-center bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
-          <Sparkles className="w-8 h-8 text-rose-500 animate-spin mx-auto" />
-          <p className="text-xs text-slate-400 font-medium">Loading restaurant taxes...</p>
+        <div className="p-12 text-center bg-[#12151b] border border-white/[0.08] rounded-xl space-y-2">
+          <p className="text-xs text-white/40 font-mono">Loading tax rules...</p>
         </div>
       ) : filteredTaxes.length === 0 ? (
-        <div className="p-12 text-center bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
-          <Receipt className="w-12 h-12 text-slate-600 mx-auto" />
-          <h4 className="font-bold text-white text-sm">No taxes configured</h4>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Create your first tax to start calculating taxes on restaurant orders.
+        <div className="p-12 text-center bg-[#12151b] rounded-xl border border-white/[0.08] space-y-3">
+          <Receipt className="w-8 h-8 text-white/20 mx-auto" />
+          <h4 className="font-semibold text-white text-sm">No tax rules configured</h4>
+          <p className="text-xs text-white/40 max-w-sm mx-auto">
+            Create your first tax slab (e.g. 5% GST) to calculate taxes on customer orders.
           </p>
           <Button
             onClick={handleOpenCreateModal}
             variant="brand"
             size="sm"
-            className="mt-2"
+            className="mt-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs"
             icon={<Plus className="w-3.5 h-3.5" />}
           >
-            + Add Tax
+            Add Tax Rule
           </Button>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-[#12151b] border border-white/[0.08] rounded-xl overflow-hidden shadow-sm">
           <DataTable<Tax>
             data={filteredTaxes}
             keyExtractor={(t) => t.id}

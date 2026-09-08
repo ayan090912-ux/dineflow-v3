@@ -20,10 +20,10 @@ export const Card: React.FC<CardProps> = ({
     <div
       className={twMerge(
         clsx(
-          'bg-slate-900/90 rounded-2xl transition-all duration-200',
-          bordered && 'border border-slate-800/80',
-          hoverEffect && 'hover:border-slate-700/80 hover:bg-slate-900',
-          glass && 'bg-slate-900/80 backdrop-blur-md',
+          'bg-[#0e1117] rounded-xl transition-all duration-200',
+          bordered && 'border border-white/[0.08]',
+          hoverEffect && 'hover:border-white/20 hover:bg-[#12151b]',
+          glass && 'bg-[#0e1117]/80 backdrop-blur-md',
           'p-5 shadow-xs',
           className
         )

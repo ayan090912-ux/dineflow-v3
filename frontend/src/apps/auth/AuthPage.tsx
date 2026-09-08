@@ -1,14 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Button,
-  Card,
-  Input,
-  Badge,
-  DinelyLogo,
-} from '../../packages/ui';
-import {
-  Utensils,
-  Sparkles,
+  UtensilsCrossed,
   Lock,
   Mail,
   User as UserIcon,
@@ -17,19 +9,21 @@ import {
   ArrowRight,
   CheckCircle2,
   ShieldCheck,
-  Zap,
   Globe,
-  KeyRound,
   Eye,
   EyeOff,
   RefreshCw,
   Clock,
   ChevronRight,
-  FileText,
-  MapPin,
-  CreditCard,
   Check,
 } from 'lucide-react';
+import {
+  Button,
+  Card,
+  Input,
+  Badge,
+  DinelyLogo,
+} from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { User, AuthTokens, Organization } from '../../packages/types';
 import { signInWithGooglePopup } from '../../packages/auth/firebase';
@@ -47,7 +41,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   onContinueFreeTrial,
   onNavigate,
 }) => {
-  const [mode, setMode] = useState<'landing' | 'login' | 'register' | 'verify' | 'create_org' | 'forgot'>('landing');
+  const [mode, setMode] = useState<'login' | 'register' | 'verify' | 'create_org' | 'forgot'>('login');
 
   // Login Form state
   const [loginEmail, setLoginEmail] = useState('owner@lumiere.com');
@@ -58,7 +52,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Step 1: Registration Form state
+  // Registration Form state
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -72,7 +66,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [verifiedUser, setVerifiedUser] = useState<User | null>(null);
   const [jwtTokens, setJwtTokens] = useState<AuthTokens | null>(null);
 
-  // Step 2: Create Organization state
+  // Create Organization state
   const [orgName, setOrgName] = useState('');
   const [legalName, setLegalName] = useState('');
   const [gstVatNumber, setGstVatNumber] = useState('');
@@ -103,12 +97,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     try {
       const res = await api.loginOwner(loginEmail, loginPassword);
       const restName = (res as any).restaurant?.name || 'Dashboard';
-      setSuccessMessage(`Welcome back, ${res.user.name}! Directing to ${restName}...`);
+      setSuccessMessage(`Welcome back, ${res.user.name}! Loading ${restName}...`);
       setTimeout(() => {
         if (onLoginSuccess) {
           onLoginSuccess(res);
+        } else if (onNavigate) {
+          onNavigate('/workspace');
+        } else {
+          window.location.href = '/workspace';
         }
-      }, 600);
+      }, 500);
     } catch (err: any) {
       setErrorMessage(err.message || 'Authentication failed. Please check your credentials.');
     } finally {
@@ -116,21 +114,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
-  // Handle Real Firebase Google Auth
+  // Handle Google OAuth Popup
   const handleGoogleAuth = async () => {
     setErrorMessage('');
     setSuccessMessage('');
     setIsLoading(true);
     try {
-      // 1. Trigger real Firebase popup auth
       const googleUser = await signInWithGooglePopup();
-
-      // 2. Authenticate / register owner in Dinely API engine
       const res = await api.authenticateWithGoogle({
         googleUid: googleUser.uid,
-        email: googleUser.email,
-        name: googleUser.displayName,
-        photoURL: googleUser.photoURL,
+        email: googleUser.email || '',
+        name: googleUser.displayName || 'Owner',
+        photoURL: googleUser.photoURL || undefined,
       });
 
       setSuccessMessage(`Authenticated with Google! Welcome, ${res.user.name}.`);
@@ -140,32 +135,40 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         if (res.hasRestaurant) {
           if (onLoginSuccess) {
             onLoginSuccess(res);
+          } else if (onNavigate) {
+            onNavigate('/workspace');
+          } else {
+            window.location.href = '/workspace';
           }
         } else {
-          // New owner without restaurant setup -> navigate to 5-step Setup Wizard
           if (onContinueFreeTrial) {
             onContinueFreeTrial();
           } else if (onRegisterSuccess) {
             onRegisterSuccess(res);
           } else if (onLoginSuccess) {
             onLoginSuccess(res);
+          } else if (onNavigate) {
+            onNavigate('/wizard?mode=create');
+          } else {
+            window.location.href = '/wizard?mode=create';
           }
         }
       }, 400);
     } catch (err: any) {
       setIsLoading(false);
-      setErrorMessage(err.message || 'Google Authentication failed. Please try again.');
+      console.error('Google Sign-in failed:', err);
+      setErrorMessage(err.message || 'Google Sign-In failed. Please try email login.');
     }
   };
 
-  // Step 1: Handle Register Owner Submit
+  // Step 1: Handle Registration Submit
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
     if (!firstName || !lastName || !regEmail || !regPassword) {
-      setErrorMessage('Please fill in all required fields.');
+      setErrorMessage('Please complete all required fields.');
       return;
     }
 
@@ -174,14 +177,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
+    if (regPassword.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.');
+      return;
+    }
+
     if (!acceptTerms) {
-      setErrorMessage('You must accept the terms of service.');
+      setErrorMessage('Please accept the Terms of Service to continue.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const res = await api.registerOwner({
+      await api.registerOwner({
         name: `${firstName} ${lastName}`,
         email: regEmail,
         phone: regPhone,
@@ -189,11 +197,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       });
 
       setIsLoading(false);
-      setSuccessMessage('Owner account registered! Verification code dispatched.');
+      setSuccessMessage(`Verification code sent to ${regEmail}.`);
       setMode('verify');
     } catch (err: any) {
       setIsLoading(false);
-      setErrorMessage(err.message || 'Failed to register account.');
+      setErrorMessage(err.message || 'Registration failed.');
     }
   };
 
@@ -214,13 +222,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setIsLoading(false);
       setVerifiedUser(res.user);
       setJwtTokens(res.tokens);
-      setSuccessMessage('Email address verified successfully! JWT access token granted.');
 
-      // Auto pre-fill organization contact & support email
       setSupportEmail(regEmail);
       setContactNumber(regPhone);
       setOrgName(`${firstName}'s Hospitality Group`);
       setLegalName(`${firstName} ${lastName} Dining Services LLC`);
+      setMode('create_org');
     } catch (err: any) {
       setIsLoading(false);
       setErrorMessage(err.message || 'Verification failed.');
@@ -256,7 +263,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
       setIsLoading(false);
       setCreatedOrg(newOrg);
-      setSuccessMessage(`Organization "${newOrg.name}" provisioned successfully! Proceeding to setup wizard...`);
+      setSuccessMessage('Organization created successfully. Launching setup wizard...');
 
       setTimeout(() => {
         if (onRegisterSuccess) {
@@ -268,7 +275,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             org: newOrg,
           });
         }
-      }, 1000);
+      }, 700);
     } catch (err: any) {
       setIsLoading(false);
       setErrorMessage(err.message || 'Failed to create organization.');
@@ -286,671 +293,553 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setTimeout(() => {
       setIsLoading(false);
       setForgotSent(true);
-    }, 800);
+    }, 700);
   };
 
   return (
-    <div className="min-h-[calc(100vh-65px)] bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-rose-500 selection:text-white">
-      {/* Background Glows */}
-      <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-rose-600/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-[400px] h-[250px] bg-amber-500/10 blur-[100px] rounded-full pointer-events-none" />
+    <div className="min-h-screen bg-[#0b0d11] text-[#f3f4f6] flex flex-col justify-between font-sans selection:bg-[#f97316] selection:text-[#0b0d11]">
+      {/* Minimal Top Brand Bar */}
+      <div className="w-full border-b border-[#1e232e] bg-[#0b0d11]/80 backdrop-blur-md">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div
+            className="flex items-center gap-2.5 cursor-pointer"
+            onClick={() => {
+              if (onNavigate) onNavigate('/');
+              else window.location.href = '/';
+            }}
+          >
+            <div className="w-7 h-7 rounded-lg bg-[#f97316] flex items-center justify-center text-[#0b0d11] font-bold text-xs shadow-sm">
+              D
+            </div>
+            <span className="text-base font-bold tracking-tight text-white font-display">
+              dinely<span className="text-[#f97316]">.food</span>
+            </span>
+          </div>
 
-      {/* Hero Header Banner */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">
-        <div className="flex flex-col items-center text-center space-y-4 max-w-3xl mx-auto">
-          <DinelyLogo size="lg" />
-          <Badge variant="brand" className="px-3 py-1 text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-rose-900/20">
-            <Sparkles className="w-3.5 h-3.5 text-rose-300" /> Dinely Cloud Self-Service Platform
-          </Badge>
-          <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-tight">
-            Next-Gen Restaurant <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-amber-400 to-rose-400">Onboarding Engine</span>
-          </h1>
-          <p className="text-slate-400 text-sm sm:text-base max-w-2xl leading-relaxed">
-            Multi-Tenant SaaS architecture for restaurant owners, hospitality groups, and multi-branch chains.
-          </p>
-
-          {/* Tab Navigation Pill Bar */}
-          <div className="flex items-center gap-1 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800/80 shadow-2xl backdrop-blur-md mt-4">
-            <button
-              onClick={() => { setMode('landing'); setErrorMessage(''); }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                mode === 'landing' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5" /> Platform Overview
-            </button>
-            <button
-              onClick={() => { setMode('login'); setErrorMessage(''); }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                mode === 'login' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Lock className="w-3.5 h-3.5" /> Sign In
-            </button>
-            <button
-              onClick={() => { setMode('register'); setErrorMessage(''); }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                mode === 'register' || mode === 'verify' || mode === 'create_org' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <UserIcon className="w-3.5 h-3.5" /> Start Free Trial
-            </button>
+          <div className="flex items-center gap-3">
+            {mode === 'login' ? (
+              <button
+                onClick={() => { setMode('register'); setErrorMessage(''); setSuccessMessage(''); }}
+                className="text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                Create Account →
+              </button>
+            ) : (
+              <button
+                onClick={() => { setMode('login'); setErrorMessage(''); setSuccessMessage(''); }}
+                className="text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                Sign In →
+              </button>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* Dynamic Section Content */}
-        <div className="mt-10 max-w-5xl mx-auto">
-          {/* LANDING / HERO OVERVIEW */}
-          {mode === 'landing' && (
-            <div className="space-y-12">
-              {/* Feature Highlight Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-slate-900/80 border-slate-800 p-6 space-y-3 hover:border-rose-500/40 transition-all group">
-                  <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 group-hover:bg-rose-600 group-hover:text-white transition-all">
-                    <Utensils className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold text-white">1. Owner Registration</h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Instant owner account creation with email verification and secure JWT session issuance.
-                  </p>
-                </Card>
-
-                <Card className="bg-slate-900/80 border-slate-800 p-6 space-y-3 hover:border-amber-500/40 transition-all group">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-white transition-all">
-                    <Building className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold text-white">2. Organization Creation</h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Establish your parent hospitality entity, legal GST/tax identifier, address, and base currency.
-                  </p>
-                </Card>
-
-                <Card className="bg-slate-900/80 border-slate-800 p-6 space-y-3 hover:border-emerald-500/40 transition-all group">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-all">
-                    <Zap className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold text-white">3. Auto Provisioning</h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Zero-developer provisioning of custom branch subdomains, QR codes, KDS screens, and POS terminals.
-                  </p>
-                </Card>
-              </div>
-
-              {/* Call to Action Banner */}
-              <div className="p-8 rounded-3xl bg-gradient-to-r from-slate-900 via-rose-950/60 to-slate-900 border border-rose-500/30 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
-                <div className="space-y-2 text-center md:text-left">
-                  <h3 className="text-xl font-bold text-white">Ready to register your restaurant organization?</h3>
-                  <p className="text-xs text-slate-300">
-                    Get started in 3 steps: Create Owner Account → Verify Email → Create Organization.
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                  <Button
-                    variant="brand"
-                    className="w-full md:w-auto px-6 py-3 font-bold text-sm shadow-xl shadow-rose-900/40"
-                    onClick={() => setMode('register')}
-                  >
-                    Start Free Trial <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full md:w-auto px-6 py-3 font-bold text-sm"
-                    onClick={() => setMode('login')}
-                  >
-                    Sign In
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
+      {/* Main Authentication Card Container */}
+      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-12">
+        <div className="w-full max-w-md space-y-6">
           {/* LOGIN FORM */}
           {mode === 'login' && (
-            <Card className="bg-slate-900/90 border-slate-800 p-8 max-w-md mx-auto shadow-2xl backdrop-blur-xl relative overflow-hidden">
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-black text-white tracking-tight">Restaurant Owner Sign In</h2>
-                  <p className="text-xs text-slate-400 mt-1">Access your POS dashboard, KDS orders, and revenue insights.</p>
+            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
+              <div className="space-y-1.5">
+                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
+                  Sign in to your restaurant
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Manage your venues, live orders, kitchen stations, and billing.
+                </p>
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+                  {errorMessage}
                 </div>
+              )}
 
-                {errorMessage && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium flex items-start gap-2">
-                    <span className="font-bold">Error:</span> {errorMessage}
-                  </div>
-                )}
+              {successMessage && (
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{successMessage}</span>
+                </div>
+              )}
 
-                {successMessage && (
-                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    {successMessage}
-                  </div>
-                )}
+              {/* Single-Click Google Authentication */}
+              <button
+                type="button"
+                onClick={handleGoogleAuth}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border border-[#2d3545] bg-[#1a1e27] hover:bg-[#222734] hover:border-slate-500 text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>Continue with Google</span>
+              </button>
 
-                <form onSubmit={handleLoginSubmit} className="space-y-4">
-                  <Input
-                    label="Business Email"
+              <div className="relative flex items-center justify-center my-2">
+                <div className="w-full border-t border-[#1e232e]" />
+                <span className="absolute bg-[#12151b] px-2.5 text-[10px] uppercase font-mono text-slate-500">
+                  or email
+                </span>
+              </div>
+
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300">Work Email</label>
+                  <input
                     type="email"
                     placeholder="owner@restaurant.com"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-[#f97316] transition-colors"
                     required
                   />
+                </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-300">Password</label>
-                      <button
-                        type="button"
-                        onClick={() => setMode('forgot')}
-                        className="text-xs text-rose-400 hover:text-rose-300 font-medium"
-                      >
-                        Forgot password?
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="••••••••••••"
-                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-rose-500 transition-colors pr-10"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-300">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => setMode('forgot')}
+                      className="text-xs text-[#f97316] hover:underline"
+                    >
+                      Forgot?
+                    </button>
                   </div>
-
-                  <div className="flex items-center justify-between py-1">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="w-4 h-4 rounded bg-slate-950 border-slate-800 text-rose-600 focus:ring-rose-500"
-                      />
-                      Remember me for 30 days
-                    </label>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    variant="brand"
-                    className="w-full py-3 font-bold text-sm shadow-lg shadow-rose-950/50"
-                    isLoading={isLoading}
-                  >
-                    Sign In to POS Dashboard <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </form>
-
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-800" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-slate-900 px-3 text-slate-500 font-mono">Or continue with</span>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      className="w-full px-3.5 py-2.5 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-[#f97316] transition-colors pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 
                 <button
-                  type="button"
-                  onClick={handleGoogleAuth}
+                  type="submit"
                   disabled={isLoading}
-                  className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl border border-slate-700/80 bg-slate-950 hover:bg-slate-800 text-xs font-bold text-slate-100 shadow-md hover:border-slate-600 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-2"
                 >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Continue with Google</span>
+                  <span>{isLoading ? 'Signing in...' : 'Sign In'}</span>
+                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
                 </button>
+              </form>
 
-                <p className="text-center text-xs text-slate-500 pt-2">
-                  Don't have an account yet?{' '}
-                  <button onClick={() => setMode('register')} className="text-rose-400 font-bold hover:underline">
-                    Create a free trial
-                  </button>
-                </p>
+              <div className="text-center text-xs text-slate-400 pt-2 border-t border-[#1e232e]">
+                New to Dinely?{' '}
+                <button
+                  onClick={() => setMode('register')}
+                  className="text-[#f97316] font-semibold hover:underline cursor-pointer"
+                >
+                  Create a free restaurant account
+                </button>
               </div>
-            </Card>
+            </div>
           )}
 
-          {/* STEP 1: REGISTER OWNER ACCOUNT FORM */}
+          {/* REGISTER FORM */}
           {mode === 'register' && (
-            <Card className="bg-slate-900/90 border-slate-800 p-8 max-w-lg mx-auto shadow-2xl backdrop-blur-xl">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Badge variant="brand" className="mb-2">Sprint 1 • Step 1</Badge>
-                    <h2 className="text-2xl font-black text-white tracking-tight">Create Owner Account</h2>
-                    <p className="text-xs text-slate-400 mt-1">Register as a Restaurant Owner on Dinely Cloud.</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-sm">
-                    1/3
-                  </div>
+            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
+              <div className="space-y-1.5">
+                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
+                  Create your owner account
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Step 1 of 3: Set up your profile to manage multi-tenant venues.
+                </p>
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+                  {errorMessage}
                 </div>
+              )}
 
-                {errorMessage && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
-                    <span className="font-bold">Error:</span> {errorMessage}
-                  </div>
-                )}
+              <button
+                type="button"
+                onClick={handleGoogleAuth}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border border-[#2d3545] bg-[#1a1e27] hover:bg-[#222734] text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Continue with Google</span>
+              </button>
 
-                {successMessage && (
-                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    {successMessage}
-                  </div>
-                )}
+              <div className="relative flex items-center justify-center my-2">
+                <div className="w-full border-t border-[#1e232e]" />
+                <span className="absolute bg-[#12151b] px-2.5 text-[10px] uppercase font-mono text-slate-500">
+                  or register with email
+                </span>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  disabled={isLoading}
-                  className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl border border-slate-700/80 bg-slate-950 hover:bg-slate-800 text-xs font-bold text-slate-100 shadow-md hover:border-slate-600 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-2"
-                >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Continue with Google</span>
-                </button>
-
-                <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-800" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-slate-900 px-3 text-slate-500 font-mono">Or register with email</span>
-                  </div>
-                </div>
-
-                <form onSubmit={handleRegisterSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="First Name *"
-                      placeholder="e.g. Elena"
+              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">First Name</label>
+                    <input
+                      type="text"
+                      placeholder="Elena"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
                       required
                     />
-                    <Input
-                      label="Last Name *"
-                      placeholder="e.g. Rostova"
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Last Name</label>
+                    <input
+                      type="text"
+                      placeholder="Rostova"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
                       required
                     />
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Business Email *"
-                      type="email"
-                      placeholder="elena@gourmethg.com"
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      required
-                    />
-                    <Input
-                      label="Phone Number"
-                      placeholder="+91 98765 43210"
-                      value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Business Email</label>
+                  <input
+                    type="email"
+                    placeholder="elena@hospitality.com"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    required
+                  />
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Password *"
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Phone</label>
+                  <input
+                    type="tel"
+                    placeholder="+91 98765 43210"
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Password</label>
+                    <input
                       type="password"
                       placeholder="••••••••••••"
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
                       required
                     />
-                    <Input
-                      label="Confirm Password *"
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Confirm Password</label>
+                    <input
                       type="password"
                       placeholder="••••••••••••"
                       value={regConfirmPassword}
                       onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
                       required
                     />
                   </div>
+                </div>
 
-                  <div className="pt-2">
-                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={acceptTerms}
-                        onChange={(e) => setAcceptTerms(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 rounded bg-slate-950 border-slate-800 text-rose-600 focus:ring-rose-500"
-                      />
-                      <span>
-                        I agree to the <a href="#" className="text-rose-400 underline">Terms of Service</a>, <a href="#" className="text-rose-400 underline">Privacy Policy</a>, and consent to account verification.
-                      </span>
-                    </label>
-                  </div>
+                <label className="flex items-start gap-2 pt-1 cursor-pointer text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={acceptTerms}
+                    onChange={(e) => setAcceptTerms(e.target.checked)}
+                    className="mt-0.5 rounded border-[#2d3545] bg-[#0b0d11]"
+                  />
+                  <span>I agree to the Terms of Service & Privacy Policy.</span>
+                </label>
 
-                  <Button
-                    type="submit"
-                    variant="brand"
-                    className="w-full py-3.5 font-bold text-sm shadow-xl shadow-rose-950/50 mt-4"
-                    isLoading={isLoading}
-                  >
-                    Register & Send Verification Code <ChevronRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </form>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-2"
+                >
+                  <span>{isLoading ? 'Creating account...' : 'Continue to Verification'}</span>
+                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              </form>
 
-                <p className="text-center text-xs text-slate-500 pt-2">
-                  Already registered?{' '}
-                  <button onClick={() => setMode('login')} className="text-rose-400 font-bold hover:underline">
-                    Sign In
-                  </button>
-                </p>
+              <div className="text-center text-xs text-slate-400 pt-2 border-t border-[#1e232e]">
+                Already registered?{' '}
+                <button
+                  onClick={() => setMode('login')}
+                  className="text-[#f97316] font-semibold hover:underline cursor-pointer"
+                >
+                  Sign in
+                </button>
               </div>
-            </Card>
+            </div>
           )}
 
-          {/* STEP 1.5: EMAIL VERIFICATION & JWT DISPLAY */}
+          {/* VERIFY EMAIL FORM */}
           {mode === 'verify' && (
-            <Card className="bg-slate-900/90 border-slate-800 p-8 max-w-lg mx-auto shadow-2xl backdrop-blur-xl space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Badge variant="brand" className="mb-2">Sprint 1 • Email Verification</Badge>
-                  <h2 className="text-2xl font-black text-white tracking-tight">Verify Email Address</h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Enter the 6-digit verification code dispatched to <strong className="text-slate-200">{regEmail}</strong>.
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-sm">
-                  1.5
-                </div>
+            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
+              <div className="space-y-1.5">
+                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
+                  Verify your email
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Step 2 of 3: Enter the 6-digit code sent to <span className="text-slate-200">{regEmail}</span>.
+                </p>
               </div>
 
               {errorMessage && (
-                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
-                  <span className="font-bold">Error:</span> {errorMessage}
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+                  {errorMessage}
                 </div>
               )}
 
-              {jwtTokens ? (
-                /* Verification Successful Card with JWT Tokens Display */
-                <div className="p-5 rounded-2xl bg-slate-950 border border-emerald-500/40 space-y-4">
-                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                    Email Verified! JWT Auth Tokens Issued
-                  </div>
-
-                  <div className="space-y-2 text-xs font-mono">
-                    <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <span className="text-slate-400 font-bold text-[10px] uppercase block">Access Token (Bearer 3600s)</span>
-                      <p className="text-rose-400 truncate text-[11px]">{jwtTokens.accessToken}</p>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <span className="text-slate-400 font-bold text-[10px] uppercase block">Refresh Token</span>
-                      <p className="text-amber-400 truncate text-[11px]">{jwtTokens.refreshToken}</p>
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="brand"
-                    onClick={() => {
-                      setSuccessMessage('');
-                      setMode('create_org');
-                    }}
-                    className="w-full py-3.5 font-bold text-sm shadow-xl shadow-rose-950/50"
-                  >
-                    Proceed to Step 2: Create Organization <ChevronRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </div>
-              ) : (
-                /* 6-Digit Code Verification Form */
-                <form onSubmit={handleVerifyEmailSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Enter 6-Digit Verification Code</label>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value)}
-                      placeholder="123456"
-                      className="w-full text-center tracking-[1em] font-mono text-2xl px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-rose-400 focus:outline-none focus:border-rose-500 font-bold"
-                      required
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Didn't receive the code?</span>
-                    <button
-                      type="button"
-                      onClick={() => setSuccessMessage('Verification code re-dispatched to email!')}
-                      className="text-rose-400 font-bold hover:underline flex items-center gap-1"
-                    >
-                      <RefreshCw className="w-3 h-3" /> Resend Code
-                    </button>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    variant="brand"
-                    className="w-full py-3.5 font-bold text-sm shadow-xl shadow-rose-950/50"
-                    isLoading={isLoading}
-                  >
-                    Verify Email & Generate JWT Token <ShieldCheck className="w-4 h-4 ml-2" />
-                  </Button>
-                </form>
-              )}
-            </Card>
-          )}
-
-          {/* STEP 2: CREATE ORGANIZATION FORM */}
-          {mode === 'create_org' && (
-            <Card className="bg-slate-900/90 border-slate-800 p-8 max-w-2xl mx-auto shadow-2xl backdrop-blur-xl">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Badge variant="brand" className="mb-2">Sprint 1 • Step 2</Badge>
-                    <h2 className="text-2xl font-black text-white tracking-tight">Create Organization</h2>
-                    <p className="text-xs text-slate-400 mt-1">Set up your top-level parent hospitality entity and legal details.</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-sm">
-                    2/3
-                  </div>
-                </div>
-
-                {errorMessage && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
-                    <span className="font-bold">Error:</span> {errorMessage}
-                  </div>
-                )}
-
-                {successMessage && (
-                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    {successMessage}
-                  </div>
-                )}
-
-                <form onSubmit={handleCreateOrgSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Organization Display Name *"
-                      placeholder="e.g. Gourmet Hospitality Group"
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      required
-                    />
-                    <Input
-                      label="Legal Business Name *"
-                      placeholder="e.g. Gourmet Hospitality Group LLC"
-                      value={legalName}
-                      onChange={(e) => setLegalName(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="GST / VAT / Tax Identifier"
-                      placeholder="e.g. 27AABCU9603R1ZN"
-                      value={gstVatNumber}
-                      onChange={(e) => setGstVatNumber(e.target.value)}
-                    />
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Country *</label>
-                      <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
-                        <span>🇮🇳 India</span>
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">Fixed</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Base Currency *</label>
-                      <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
-                        <span>INR (₹) - Indian Rupee</span>
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">₹ Symbol</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Operational Timezone *</label>
-                      <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-sm font-semibold flex items-center justify-between">
-                        <span>Asia/Kolkata (IST)</span>
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">+05:30</span>
-                      </div>
-                    </div>
-                  </div>
-
-
-                  <Input
-                    label="Business Address *"
-                    placeholder="e.g. 101 MG Road, Bengaluru, Karnataka 560001"
-                    value={businessAddress}
-                    onChange={(e) => setBusinessAddress(e.target.value)}
+              <form onSubmit={handleVerifyEmailSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300">6-Digit Code</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    placeholder="123456"
+                    className="w-full text-center tracking-[0.5em] font-mono text-xl px-3.5 py-3 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-[#f97316] font-bold focus:outline-none focus:border-[#f97316]"
                     required
                   />
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Contact Number *"
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>{isLoading ? 'Verifying...' : 'Verify Email'}</span>
+                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              </form>
+
+              <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-[#1e232e]">
+                <span>Didn't receive code?</span>
+                <button
+                  type="button"
+                  onClick={() => setSuccessMessage('New verification code sent!')}
+                  className="text-[#f97316] hover:underline cursor-pointer font-semibold"
+                >
+                  Resend Code
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* CREATE ORGANIZATION FORM */}
+          {mode === 'create_org' && (
+            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
+              <div className="space-y-1.5">
+                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
+                  Set up your organization
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Step 3 of 3: Primary legal business entity and address.
+                </p>
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+                  {errorMessage}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateOrgSubmit} className="space-y-3.5">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Organization Name *</label>
+                  <input
+                    type="text"
+                    placeholder="Gourmet Hospitality Group"
+                    value={orgName}
+                    onChange={(e) => setOrgName(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Legal Entity Name *</label>
+                  <input
+                    type="text"
+                    placeholder="Gourmet Hospitality Group LLC"
+                    value={legalName}
+                    onChange={(e) => setLegalName(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">GST / Tax ID</label>
+                    <input
+                      type="text"
+                      placeholder="27AABCU9603R1ZN"
+                      value={gstVatNumber}
+                      onChange={(e) => setGstVatNumber(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Currency</label>
+                    <div className="px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-slate-300">
+                      INR (₹) - Rupee
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Business Address *</label>
+                  <input
+                    type="text"
+                    placeholder="101 MG Road, Bengaluru, Karnataka 560001"
+                    value={businessAddress}
+                    onChange={(e) => setBusinessAddress(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Support Phone *</label>
+                    <input
+                      type="tel"
                       placeholder="+91 98765 43210"
                       value={contactNumber}
                       onChange={(e) => setContactNumber(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
                       required
                     />
-                    <Input
-                      label="Support Email *"
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Support Email *</label>
+                    <input
                       type="email"
-                      placeholder="support@gourmethg.com"
+                      placeholder="support@hospitality.com"
                       value={supportEmail}
                       onChange={(e) => setSupportEmail(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
                       required
                     />
                   </div>
-
-                  <Button
-                    type="submit"
-                    variant="brand"
-                    className="w-full py-3.5 font-bold text-sm shadow-xl shadow-rose-950/50 mt-4"
-                    isLoading={isLoading}
-                  >
-                    Provision Organization & Launch Setup Wizard <Building className="w-4 h-4 ml-2" />
-                  </Button>
-                </form>
-              </div>
-            </Card>
-          )}
-
-          {/* FORGOT PASSWORD */}
-          {mode === 'forgot' && (
-            <Card className="bg-slate-900/90 border-slate-800 p-8 max-w-md mx-auto shadow-2xl backdrop-blur-xl">
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-black text-white tracking-tight">Reset Password</h2>
-                  <p className="text-xs text-slate-400 mt-1">Enter your business email to receive reset instructions.</p>
                 </div>
 
-                {forgotSent ? (
-                  <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-3">
-                    <div className="flex items-center gap-2 font-bold text-emerald-400">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Reset email dispatched!
-                    </div>
-                    <p>We sent a secure password reset link to <strong className="text-white">{forgotEmail}</strong>.</p>
-                    <Button variant="outline" className="w-full text-xs" onClick={() => setMode('login')}>
-                      Back to Sign In
-                    </Button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleForgotSubmit} className="space-y-4">
-                    <Input
-                      label="Business Email"
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-2"
+                >
+                  <span>{isLoading ? 'Setting up...' : 'Create Organization & Open Setup'}</span>
+                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* FORGOT PASSWORD FORM */}
+          {mode === 'forgot' && (
+            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
+              <div className="space-y-1.5">
+                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
+                  Reset your password
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Enter your email address to receive reset instructions.
+                </p>
+              </div>
+
+              {forgotSent ? (
+                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 space-y-3">
+                  <p>A recovery link has been dispatched to {forgotEmail}.</p>
+                  <button
+                    onClick={() => setMode('login')}
+                    className="w-full py-2 rounded-lg bg-[#1a1e27] border border-[#2d3545] text-white font-semibold"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotSubmit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-300">Account Email</label>
+                    <input
                       type="email"
                       placeholder="owner@restaurant.com"
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
                       required
                     />
+                  </div>
 
-                    <Button type="submit" variant="brand" className="w-full py-3 font-bold text-sm" isLoading={isLoading}>
-                      Send Recovery Link
-                    </Button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>{isLoading ? 'Sending...' : 'Send Recovery Link'}</span>
+                    {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
+                  </button>
 
+                  <div className="text-center pt-2">
                     <button
                       type="button"
                       onClick={() => setMode('login')}
-                      className="w-full text-center text-xs text-slate-400 hover:text-white font-medium"
+                      className="text-xs text-slate-400 hover:text-white"
                     >
-                      ← Return to Login
+                      ← Return to sign in
                     </button>
-                  </form>
-                )}
-              </div>
-            </Card>
+                  </div>
+                </form>
+              )}
+            </div>
           )}
         </div>
-      </div>
+      </main>
 
-      {/* Footer Branding */}
-      <footer className="border-t border-slate-900 py-6 px-4 text-center text-xs text-slate-600">
-        Dinely Cloud Platform &copy; 2026. Self-Service Architecture & Tenant Isolation Engine.
+      {/* Minimal Footer */}
+      <footer className="border-t border-[#1e232e] py-6 px-4 text-center text-xs text-slate-500">
+        Dinely Restaurant Operating System • Enterprise Multi-Tenant Architecture
       </footer>
     </div>
   );

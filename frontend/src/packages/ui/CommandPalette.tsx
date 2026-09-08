@@ -49,33 +49,33 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
           />
 
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -10 }}
-            className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-10"
+            className="relative w-full max-w-xl bg-[#0e1117] rounded-xl border border-white/[0.08] shadow-2xl overflow-hidden z-10 font-sans"
           >
-            <div className="flex items-center px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-              <Search className="w-5 h-5 text-slate-400 mr-3" />
+            <div className="flex items-center px-4 py-3 border-b border-white/[0.08]">
+              <Search className="w-4 h-4 text-white/40 mr-3 shrink-0" />
               <input
                 autoFocus
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Type a command or search..."
-                className="w-full bg-transparent text-slate-900 dark:text-slate-100 text-sm focus:outline-none placeholder:text-slate-400"
+                className="w-full bg-transparent text-white text-xs focus:outline-none placeholder:text-white/30"
               />
-              <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+              <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-white/40 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.08]">
                 ESC
               </kbd>
             </div>
 
-            <div className="max-h-80 overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/40">
+            <div className="max-h-80 overflow-y-auto p-2 divide-y divide-white/[0.04]">
               {filtered.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400">No matching commands found.</div>
+                <div className="p-8 text-center text-xs text-white/40">No matching commands found.</div>
               ) : (
                 filtered.map((opt) => (
                   <button
@@ -84,18 +84,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       opt.action();
                       onClose();
                     }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors group"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/[0.04] text-left transition-colors group"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-slate-200 dark:group-hover:bg-slate-700 transition-colors">
+                      <div className="p-1.5 rounded-lg bg-[#12151b] border border-white/[0.08] text-white/60 group-hover:text-amber-400 transition-colors">
                         {opt.icon}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{opt.label}</p>
-                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{opt.category}</span>
+                        <p className="text-xs font-medium text-white">{opt.label}</p>
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-white/40">{opt.category}</span>
                       </div>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ArrowRight className="w-3.5 h-3.5 text-white/40 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </button>
                 ))
               )}

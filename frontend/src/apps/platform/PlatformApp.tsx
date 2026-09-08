@@ -197,7 +197,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           r.id === id ? { ...r, isApproved: true, lifecycleStatus: 'LIVE', status: 'OPEN' } : r
         )
       );
-      showSuccess('Restaurant Approved & Activated Live! 🚀');
+      showSuccess('Restaurant Approved & Activated Live.');
       closeModals();
     } catch (err: any) {
       setApprovalError(err.message || 'Failed to approve restaurant. Please retry.');
@@ -390,14 +390,14 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     );
   });
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col sm:flex-row font-sans">
+    <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col sm:flex-row font-sans">
       {/* Platform Admin Sidebar */}
-      <aside className="w-full sm:w-64 bg-slate-900 border-r border-slate-800 p-5 flex flex-col justify-between shrink-0">
+      <aside className="w-full sm:w-64 bg-[#0e1117] border-r border-white/[0.08] p-5 flex flex-col justify-between shrink-0">
         <div>
           {/* Admin Branding */}
           <div className="mb-8 px-2 space-y-1">
             <DinelyLogo size="md" />
-            <p className="text-[11px] text-slate-400 font-mono">admin.dinely.com</p>
+            <p className="text-[11px] text-white/40 font-mono">admin.dinely.com</p>
           </div>
 
           {/* Navigation Links */}
@@ -407,7 +407,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               {
                 id: 'pending',
                 label: 'Pending Approvals',
-                icon: <ClockIcon className="w-4 h-4 text-amber-400 animate-pulse" />,
+                icon: <ClockIcon className="w-4 h-4 text-amber-400" />,
                 badge: pendingRestaurants.length > 0 ? pendingRestaurants.length : undefined,
               },
               { id: 'restaurants', label: 'All Restaurants', icon: <Utensils className="w-4 h-4" /> },
@@ -418,10 +418,10 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id as any)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
                   activeTab === item.id
-                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-xs'
+                    : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
@@ -429,7 +429,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   {item.label}
                 </div>
                 {item.badge !== undefined && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
                     {item.badge}
                   </span>
                 )}
@@ -439,13 +439,13 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         </div>
 
         {/* User Profile & Logout */}
-        <div className="pt-4 border-t border-slate-800/80 space-y-3">
+        <div className="pt-4 border-t border-white/[0.08] space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Avatar name="Platform Admin" size="sm" status="online" />
               <div>
-                <p className="text-xs font-bold text-white">Chief Admin</p>
-                <p className="text-[10px] text-slate-400">admin@dinely.com</p>
+                <p className="text-xs font-semibold text-white">Chief Admin</p>
+                <p className="text-[10px] text-white/40 font-mono">admin@dinely.com</p>
               </div>
             </div>
           </div>
@@ -454,7 +454,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               variant="outline"
               size="sm"
               onClick={onLogout}
-              className="w-full text-xs border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
+              className="w-full text-xs border-white/[0.08] text-white/60 hover:text-rose-400 hover:bg-rose-500/10"
               icon={<LogOut className="w-3.5 h-3.5" />}
             >
               Sign Out
@@ -464,20 +464,20 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-6 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-6 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full bg-[#0b0d11]">
         {/* Realtime Incoming Application Alert */}
         {incomingAlert && (
-          <div className="mb-6 p-4 rounded-2xl bg-rose-500/20 border-2 border-rose-500/50 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xl animate-pulse">
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-rose-500/30 text-rose-300">
-                <Bell className="w-6 h-6 animate-bounce text-rose-400" />
+              <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400">
+                <Bell className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h4 className="font-black text-sm text-white flex items-center gap-2">
-                  ⚡ Realtime Application Received: <span className="text-rose-400 font-mono">{incomingAlert.name}</span>
+                <h4 className="font-semibold text-xs text-white flex items-center gap-2">
+                  Realtime Application Received: <span className="text-amber-400 font-mono">{incomingAlert.name}</span>
                 </h4>
-                <p className="text-xs text-slate-300">
-                  {incomingAlert.ownerEmail ? `Owner: ${incomingAlert.ownerEmail}` : 'A new restaurant owner'} submitted an application for launch approval. Review details now.
+                <p className="text-xs text-white/60">
+                  {incomingAlert.ownerEmail ? `Owner: ${incomingAlert.ownerEmail}` : 'A new restaurant owner'} submitted an application for launch approval.
                 </p>
               </div>
             </div>
@@ -489,7 +489,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   setActiveTab('pending');
                   setIncomingAlert(null);
                 }}
-                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md"
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs shadow-md"
               >
                 Review Application
               </Button>
@@ -497,7 +497,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 variant="outline"
                 size="sm"
                 onClick={() => setIncomingAlert(null)}
-                className="text-xs border-slate-700 text-slate-300 hover:bg-slate-800"
+                className="text-xs border-white/[0.08] text-white/60 hover:text-white"
               >
                 Dismiss
               </Button>
@@ -507,24 +507,24 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
         {/* Notification Alert Banner */}
         {actionSuccessMsg && (
-          <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2 shadow-lg animate-fadeIn">
+          <div className="mb-6 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono flex items-center gap-2 shadow-lg">
             <CheckCircle className="w-4 h-4 shrink-0" />
             <span>{actionSuccessMsg}</span>
           </div>
         )}
 
         {pendingRestaurants.length > 0 && !incomingAlert && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex items-center justify-between shadow-xl">
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex items-center justify-between shadow-xl">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400">
-                <Bell className="w-5 h-5 animate-bounce" />
+              <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+                <Bell className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                  🔔 New Restaurant Waiting For Approval ({pendingRestaurants.length})
+                <h4 className="font-semibold text-xs text-white flex items-center gap-2">
+                  New Application Pending Review ({pendingRestaurants.length})
                 </h4>
                 <p className="text-xs text-amber-300/80">
-                  {pendingRestaurants[0].name} ({pendingRestaurants[0].ownerName}) requested launch approval. Review application details.
+                  {pendingRestaurants[0].name} ({pendingRestaurants[0].ownerName}) requested launch verification.
                 </p>
               </div>
             </div>
@@ -532,21 +532,21 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               variant="brand"
               size="sm"
               onClick={() => setActiveTab('pending')}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shrink-0"
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs shrink-0"
             >
-              Review Pending ({pendingRestaurants.length})
+              Review Queue ({pendingRestaurants.length})
             </Button>
           </div>
         )}
 
         {/* Top Header */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-800/60">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-white/[0.08]">
           <div>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <p className="text-xs font-mono text-emerald-400 font-bold uppercase tracking-wider">Platform Control Plane</p>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <p className="text-[10px] font-mono text-white/50 uppercase tracking-wider">Platform Control Plane</p>
             </div>
-            <h2 className="text-2xl font-black text-white tracking-tight mt-1">
+            <h2 className="text-xl font-semibold text-white tracking-tight mt-1">
               {activeTab === 'dashboard' && 'Platform Metrics & Overview'}
               {activeTab === 'pending' && 'Pending Approvals Queue'}
               {activeTab === 'restaurants' && 'Restaurant Outlet Directory'}
@@ -556,14 +556,14 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             </h2>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <Button
               variant="outline"
               size="sm"
               onClick={handlePurgeDemoData}
               disabled={isPurging}
               isLoading={isPurging}
-              className="border-slate-800 text-slate-400 hover:text-amber-400 hover:bg-slate-800 text-xs"
+              className="border-white/[0.08] text-white/60 hover:text-amber-400 hover:bg-white/[0.04] text-xs"
               icon={<Trash2 className="w-3.5 h-3.5" />}
             >
               Purge Demo Records
@@ -572,7 +572,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               variant="outline"
               size="sm"
               onClick={loadData}
-              className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs"
+              className="border-white/[0.08] text-white/70 hover:text-white hover:bg-white/[0.04] text-xs"
               icon={<RefreshCw className="w-3.5 h-3.5" />}
             >
               Refresh Data
@@ -585,7 +585,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 if (onLogout) onLogout();
                 else window.location.href = '/admin/login';
               }}
-              className="border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 text-xs"
+              className="border-white/[0.08] text-white/60 hover:text-rose-400 hover:bg-rose-500/10 text-xs"
               icon={<LogOut className="w-3.5 h-3.5" />}
             >
               Sign Out
@@ -602,7 +602,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 value={allRestaurants.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'LIVE' || r.isApproved)).length}
                 change={{ value: 'Online', isPositive: true }}
                 subtitle="operating cloud POS"
-                icon={<BarChart3 className="w-5 h-5 text-rose-500" />}
+                icon={<BarChart3 className="w-5 h-5 text-amber-400" />}
               />
               <StatsCard
                 title="Pending Approvals"
@@ -616,23 +616,23 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 value={organizations.length}
                 change={{ value: 'Verified', isPositive: true }}
                 subtitle="enterprise groups"
-                icon={<Building2 className="w-5 h-5 text-emerald-500" />}
+                icon={<Building2 className="w-5 h-5 text-emerald-400" />}
               />
               <StatsCard
                 title="Global Orders Processed"
                 value={(stats?.totalOrdersProcessed ?? 0).toLocaleString()}
                 change={{ value: 'Live System', isPositive: true }}
                 subtitle="Database Total"
-                icon={<Zap className="w-5 h-5 text-sky-500" />}
+                icon={<Zap className="w-5 h-5 text-sky-400" />}
               />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2 bg-slate-900 border-slate-800 p-6">
+              <Card className="lg:col-span-2 bg-[#0e1117] border-white/[0.08] p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h3 className="text-base font-bold text-white">Platform Order Volume Growth</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Aggregated monthly orders processed across all live outlets</p>
+                    <h3 className="text-base font-semibold text-white">Platform Order Volume Growth</h3>
+                    <p className="text-xs text-white/50 mt-0.5">Aggregated monthly orders processed across all live outlets</p>
                   </div>
                   <Badge variant="brand">Real-time Activity</Badge>
                 </div>
@@ -641,41 +641,41 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                     <AreaChart data={platformChartData}>
                       <defs>
                         <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#e11d48" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#e11d48" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="month" stroke="#64748b" fontSize={12} tickLine={false} />
                       <YAxis stroke="#64748b" fontSize={12} tickLine={false} />
-                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
-                      <Area type="monotone" dataKey="orders" stroke="#e11d48" strokeWidth={3} fillOpacity={1} fill="url(#colorOrders)" />
+                      <Tooltip contentStyle={{ backgroundColor: '#0e1117', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }} />
+                      <Area type="monotone" dataKey="orders" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorOrders)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </Card>
 
               {/* Pending Approvals Widget */}
-              <Card className="bg-slate-900 border-slate-800 p-6 flex flex-col justify-between">
+              <Card className="bg-[#0e1117] border-white/[0.08] p-6 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-bold text-white">Approval Queue</h3>
+                    <h3 className="text-base font-semibold text-white">Approval Queue</h3>
                     <Badge variant="warning">{pendingRestaurants.length} Pending</Badge>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     {pendingRestaurants.map((rest) => (
                       <div
                         key={rest.id}
-                        className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-between gap-2"
+                        className="p-3 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between gap-2"
                       >
                         <div className="flex items-center gap-3">
                           <img
                             src={rest.theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80'}
                             alt={rest.name}
-                            className="w-9 h-9 rounded-xl object-cover border border-slate-700"
+                            className="w-9 h-9 rounded-lg object-cover border border-white/[0.08]"
                           />
                           <div>
-                            <p className="text-xs font-bold text-white">{rest.name}</p>
-                            <p className="text-[10px] text-slate-400">{rest.ownerName || 'Owner'} • {rest.cuisine}</p>
+                            <p className="text-xs font-semibold text-white">{rest.name}</p>
+                            <p className="text-[10px] text-white/40">{rest.ownerName || 'Owner'} • {rest.cuisine}</p>
                           </div>
                         </div>
                         <Button
@@ -685,16 +685,16 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                             setSelectedRestaurant(rest);
                             setViewDetailModal(true);
                           }}
-                          className="text-[11px] px-2.5 py-1"
+                          className="text-[11px] px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold"
                         >
                           Review
                         </Button>
                       </div>
                     ))}
                     {pendingRestaurants.length === 0 && (
-                      <div className="text-center py-12 text-slate-500 text-xs">
-                        <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-60" />
-                        <p>All restaurant applications reviewed!</p>
+                      <div className="text-center py-12 text-white/40 text-xs">
+                        <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-60" />
+                        <p>All restaurant applications reviewed.</p>
                       </div>
                     )}
                   </div>
@@ -709,55 +709,55 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-white">Pending Approval Queue</h3>
-                <p className="text-xs text-slate-400">Review business licenses, menu configurations, and launch applications</p>
+                <h3 className="text-base font-semibold text-white">Pending Approval Queue</h3>
+                <p className="text-xs text-white/50">Review business licenses, menu configurations, and launch applications</p>
               </div>
               <Badge variant="warning">{pendingRestaurants.length} Awaiting Verification</Badge>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {pendingRestaurants.map((rest) => (
-                <Card key={rest.id} className="bg-slate-900 border-slate-800 p-5 space-y-4 shadow-lg">
+                <Card key={rest.id} className="bg-[#0e1117] border-white/[0.08] p-5 space-y-4 shadow-lg rounded-xl">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <img
                         src={rest.theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80'}
                         alt={rest.name}
-                        className="w-12 h-12 rounded-2xl object-cover border border-slate-700 shadow-sm"
+                        className="w-12 h-12 rounded-xl object-cover border border-white/[0.08] shadow-xs"
                       />
                       <div>
-                        <h4 className="font-bold text-white text-base">{rest.name}</h4>
-                        <p className="text-xs text-rose-400 font-semibold">{rest.cuisine} ({rest.restaurantType || 'Casual Dining'})</p>
+                        <h4 className="font-semibold text-white text-sm">{rest.name}</h4>
+                        <p className="text-xs text-amber-400 font-mono">{rest.cuisine} · {rest.restaurantType || 'Casual Dining'}</p>
                       </div>
                     </div>
                     <Badge variant="warning">Pending Approval</Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-950 p-3 rounded-xl border border-slate-800 text-slate-300">
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-[#12151b] p-3 rounded-xl border border-white/[0.08] text-white/70 font-sans">
                     <div>
-                      <p className="text-[10px] text-slate-500 font-semibold">OWNER NAME</p>
-                      <p className="font-bold text-white">{rest.ownerName || 'Restaurant Owner'}</p>
+                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">OWNER NAME</p>
+                      <p className="font-medium text-white">{rest.ownerName || 'Restaurant Owner'}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-500 font-semibold">OWNER EMAIL</p>
-                      <p className="text-slate-200 truncate">{rest.ownerEmail || rest.email}</p>
+                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">OWNER EMAIL</p>
+                      <p className="text-white/80 truncate font-mono text-[11px]">{rest.ownerEmail || rest.email}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-500 font-semibold">PHONE</p>
-                      <p className="text-slate-200">{rest.phone}</p>
+                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">PHONE</p>
+                      <p className="text-white/80 font-mono text-[11px]">{rest.phone}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-500 font-semibold">SUBMITTED DATE</p>
-                      <p className="text-slate-200">{rest.submittedAt || 'Today'}</p>
+                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">SUBMITTED DATE</p>
+                      <p className="text-white/80 font-mono text-[11px]">{rest.submittedAt || 'Today'}</p>
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                  <div className="flex items-center gap-2 pt-2 border-t border-white/[0.08]">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1 text-xs border-slate-700 text-slate-200 hover:bg-slate-800"
+                      className="flex-1 text-xs border-white/[0.08] text-white/70 hover:bg-white/[0.04]"
                       icon={<Eye className="w-3.5 h-3.5" />}
                       onClick={() => {
                         setSelectedRestaurant(rest);
@@ -769,7 +769,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                     <Button
                       variant="brand"
                       size="sm"
-                      className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-500 font-bold"
+                      className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-500 font-semibold text-white"
                       icon={<Check className="w-3.5 h-3.5" />}
                       onClick={() => {
                         setSelectedRestaurant(rest);
@@ -781,7 +781,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+                      className="text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
                       onClick={() => {
                         setSelectedRestaurant(rest);
                         setActionModal('REQUEST_CHANGES');
@@ -803,7 +803,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-xs border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                      className="text-xs border-white/[0.08] text-white/40 hover:bg-white/[0.04] hover:text-white"
                       title="Archive/Dismiss test or duplicate record"
                       icon={<Archive className="w-3.5 h-3.5" />}
                       onClick={() => {
@@ -818,10 +818,10 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               ))}
 
               {pendingRestaurants.length === 0 && (
-                <div className="col-span-2 text-center py-16 bg-slate-900 rounded-2xl border border-slate-800 text-slate-500">
-                  <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3 opacity-60" />
-                  <p className="text-sm font-bold text-slate-300">No Pending Applications</p>
-                  <p className="text-xs text-slate-500 mt-1">All onboarding launch applications have been processed.</p>
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-white/[0.08] text-white/40">
+                  <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3 opacity-60" />
+                  <p className="text-sm font-semibold text-white">No Pending Applications</p>
+                  <p className="text-xs text-white/40 mt-1">All onboarding launch applications have been processed.</p>
                 </div>
               )}
             </div>
@@ -833,14 +833,14 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold text-white">Restaurant Directory</h3>
-                <p className="text-xs text-slate-400">Manage status, activate, deactivate, suspend or soft-delete merchant accounts</p>
+                <h3 className="text-base font-semibold text-white">Restaurant Directory</h3>
+                <p className="text-xs text-white/50">Manage status, activate, deactivate, suspend or soft-delete merchant accounts</p>
               </div>
               <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, owner, or cuisine..." className="w-full sm:w-72" />
             </div>
 
             {/* Filter Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-800">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-white/[0.08]">
               {[
                 { id: 'ALL', label: 'All Outlets' },
                 { id: 'LIVE', label: 'Live' },
@@ -852,10 +852,10 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 <button
                   key={tab.id}
                   onClick={() => setStatusFilter(tab.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all whitespace-nowrap ${
                     statusFilter === tab.id
-                      ? 'bg-rose-600 text-white shadow-sm'
-                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      ? 'bg-amber-500 text-slate-950 font-semibold shadow-xs'
+                      : 'bg-[#0e1117] text-white/60 hover:text-white border border-white/[0.08]'
                   }`}
                 >
                   {tab.label}
@@ -866,18 +866,18 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             {/* Restaurant Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredRestaurants.map((rest) => (
-                <Card key={rest.id} className="bg-slate-900 border-slate-800 p-5 space-y-4 relative flex flex-col justify-between">
+                <Card key={rest.id} className="bg-[#0e1117] border-white/[0.08] hover:border-white/20 p-5 space-y-4 relative flex flex-col justify-between rounded-xl transition-all">
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div className="flex items-center gap-3">
                         <img
                           src={rest.theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80'}
                           alt={rest.name}
-                          className="w-10 h-10 rounded-xl object-cover border border-slate-700"
+                          className="w-10 h-10 rounded-lg object-cover border border-white/[0.08]"
                         />
                         <div>
-                          <h4 className="font-bold text-white text-base truncate max-w-[160px]">{rest.name}</h4>
-                          <p className="text-[11px] text-slate-400">{rest.cuisine}</p>
+                          <h4 className="font-semibold text-white text-sm truncate max-w-[160px]">{rest.name}</h4>
+                          <p className="text-[11px] text-white/50">{rest.cuisine}</p>
                         </div>
                       </div>
 
@@ -893,21 +893,21 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       </Badge>
                     </div>
 
-                    <div className="text-xs space-y-1.5 text-slate-300 bg-slate-950 p-3 rounded-xl border border-slate-800/80">
-                      <p className="truncate"><span className="text-slate-500 font-semibold">Owner:</span> {rest.ownerName || 'Owner'} ({rest.ownerEmail || rest.email})</p>
-                      <p><span className="text-slate-500 font-semibold">Type & Flags:</span> <strong className="text-rose-400 font-bold">{rest.businessType || (rest.features?.bar ? 'BAR' : 'RESTAURANT')}</strong> • Bar: <strong className={rest.hasBar ? "text-purple-400" : "text-slate-400"}>{rest.hasBar ? 'YES' : 'NO'}</strong> • Tables: <strong className={rest.hasTables !== false ? "text-emerald-400" : "text-slate-400"}>{rest.hasTables !== false ? 'YES' : 'NO'}</strong></p>
-                      <p><span className="text-slate-500 font-semibold">Phone:</span> {rest.phone}</p>
-                      <p className="truncate"><span className="text-slate-500 font-semibold">Domain:</span> {rest.domain || `${rest.slug}.dinely.app`}</p>
+                    <div className="text-xs space-y-1.5 text-white/70 bg-[#12151b] p-3 rounded-xl border border-white/[0.08]">
+                      <p className="truncate"><span className="text-white/40">Owner:</span> {rest.ownerName || 'Owner'} ({rest.ownerEmail || rest.email})</p>
+                      <p className="font-mono text-[11px]"><span className="text-white/40">Type:</span> <span className="text-amber-400 font-semibold">{rest.businessType || (rest.features?.bar ? 'BAR' : 'RESTAURANT')}</span> · Bar: <span className={rest.hasBar ? "text-purple-400" : "text-white/40"}>{rest.hasBar ? 'YES' : 'NO'}</span> · Tables: <span className={rest.hasTables !== false ? "text-emerald-400" : "text-white/40"}>{rest.hasTables !== false ? 'YES' : 'NO'}</span></p>
+                      <p className="font-mono text-[11px]"><span className="text-white/40">Phone:</span> {rest.phone}</p>
+                      <p className="truncate font-mono text-[11px]"><span className="text-white/40">Domain:</span> {rest.domain || `${rest.slug}.dinely.app`}</p>
                     </div>
                   </div>
 
                   {/* Actions Bar */}
-                  <div className="pt-3 border-t border-slate-800 space-y-2">
+                  <div className="pt-3 border-t border-white/[0.08] space-y-2">
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="flex-1 text-xs border-slate-800 text-slate-200 hover:bg-slate-800"
+                        className="flex-1 text-xs border-white/[0.08] text-white/70 hover:text-white hover:bg-white/[0.04]"
                         icon={<Eye className="w-3.5 h-3.5" />}
                         onClick={() => {
                           setSelectedRestaurant(rest);
@@ -920,7 +920,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10"
+                        className="text-xs border-white/[0.08] text-white/60 hover:text-amber-400 hover:bg-white/[0.04]"
                         icon={<Send className="w-3 h-3" />}
                         onClick={() => {
                           setSelectedRestaurant(rest);
@@ -938,7 +938,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         <Button
                           variant="brand"
                           size="sm"
-                          className="text-[11px] px-2 py-1 bg-emerald-600 hover:bg-emerald-500"
+                          className="text-[11px] px-2 py-1 bg-emerald-600 hover:bg-emerald-500 font-semibold text-white"
                           onClick={() => {
                             setSelectedRestaurant(rest);
                             setActionModal('APPROVE');
@@ -952,7 +952,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         <Button
                           variant="brand"
                           size="sm"
-                          className="text-[11px] px-2 py-1 bg-emerald-600 hover:bg-emerald-500"
+                          className="text-[11px] px-2 py-1 bg-emerald-600 hover:bg-emerald-500 font-semibold text-white"
                           onClick={() => handleActivate(rest.id)}
                         >
                           Activate
@@ -991,7 +991,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         <Button
                           variant="brand"
                           size="sm"
-                          className="text-[11px] px-2 py-1 bg-emerald-600"
+                          className="text-[11px] px-2 py-1 bg-emerald-600 font-semibold text-white"
                           onClick={() => handleActivate(rest.id)}
                         >
                           Unsuspend
@@ -1017,7 +1017,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               ))}
 
               {filteredRestaurants.length === 0 && (
-                <div className="col-span-3 text-center py-12 text-slate-500 text-xs">
+                <div className="col-span-3 text-center py-12 text-white/40 text-xs">
                   No restaurant records match current filter.
                 </div>
               )}
@@ -1030,8 +1030,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-white">Tenant Organizations</h3>
-                <p className="text-xs text-slate-400">Multi-restaurant enterprise groups and franchise operators</p>
+                <h3 className="text-base font-semibold text-white">Tenant Organizations</h3>
+                <p className="text-xs text-white/50">Multi-restaurant enterprise groups and franchise operators</p>
               </div>
             </div>
 
@@ -1044,8 +1044,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   header: 'Organization',
                   render: (o) => (
                     <div>
-                      <p className="font-bold text-white">{o.name}</p>
-                      <p className="text-xs text-slate-400">{o.slug}.dinely.app</p>
+                      <p className="font-semibold text-white text-xs">{o.name}</p>
+                      <p className="text-[11px] text-white/40 font-mono">{o.slug}.dinely.app</p>
                     </div>
                   ),
                 },
@@ -1054,15 +1054,15 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   header: 'Primary Owner',
                   render: (o) => (
                     <div>
-                      <p className="text-xs text-slate-200">{o.ownerName}</p>
-                      <p className="text-[10px] text-slate-400">{o.ownerEmail}</p>
+                      <p className="text-xs text-white/80">{o.ownerName}</p>
+                      <p className="text-[10px] text-white/40 font-mono">{o.ownerEmail}</p>
                     </div>
                   ),
                 },
                 {
                   key: 'restaurantsCount',
                   header: 'Locations',
-                  render: (o) => <span className="font-mono text-xs text-slate-300">{o.restaurantsCount} Venues</span>,
+                  render: (o) => <span className="font-mono text-xs text-white/70">{o.restaurantsCount} Venues</span>,
                 },
                 {
                   key: 'status',
@@ -1078,15 +1078,15 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         {activeTab === 'tickets' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-bold text-white">Support Tickets & Merchant Inquiries</h3>
-              <p className="text-xs text-slate-400">Assistance requests from restaurant owners and staff</p>
+              <h3 className="text-base font-semibold text-white">Support Tickets & Inquiries</h3>
+              <p className="text-xs text-white/50">Assistance requests from restaurant owners and staff</p>
             </div>
 
             <div className="space-y-3">
               <EmptyState
-                icon={<LifeBuoy className="w-6 h-6 text-slate-400" />}
+                icon={<LifeBuoy className="w-6 h-6 text-white/30" />}
                 title="No Open Support Tickets"
-                description="All merchant inquiry tickets and platform support channels are clean with zero unresolved issues."
+                description="All merchant inquiry tickets and platform support channels are resolved with zero pending issues."
               />
             </div>
           </div>
@@ -1095,23 +1095,26 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         {/* TAB 6: AUDIT LOGS */}
         {activeTab === 'audit' && (
           <div className="space-y-6">
-            <h3 className="text-lg font-bold text-white">System Security Audit Logs</h3>
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div>
+              <h3 className="text-base font-semibold text-white">System Security Audit Logs</h3>
+              <p className="text-xs text-white/50">Immutable event log of administrative actions and tenant lifecycle changes</p>
+            </div>
+            <div className="bg-[#0e1117] border border-white/[0.08] rounded-xl p-6">
               <div className="space-y-4">
                 {auditLogs.map((log) => (
-                  <div key={log.id} className="flex items-center justify-between py-3 border-b border-slate-800/80 last:border-0">
+                  <div key={log.id} className="flex items-center justify-between py-3 border-b border-white/[0.06] last:border-0">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-slate-800 text-slate-300 font-mono text-xs">
+                      <div className="p-1.5 rounded-lg bg-[#12151b] border border-white/[0.08] text-white/70 font-mono text-xs">
                         {log.ipAddress}
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-white">{log.actor} — {log.action}</p>
-                        <p className="text-[10px] text-slate-400">Target: {log.target}</p>
+                        <p className="text-xs font-medium text-white">{log.actor} — {log.action}</p>
+                        <p className="text-[10px] text-white/40 font-mono">Target: {log.target}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <Badge variant={log.status === 'SUCCESS' ? 'success' : 'warning'}>{log.status}</Badge>
-                      <p className="text-[10px] text-slate-500 mt-1">{log.timestamp}</p>
+                      <p className="text-[10px] text-white/40 font-mono mt-1">{log.timestamp}</p>
                     </div>
                   </div>
                 ))}
@@ -1129,19 +1132,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         description="Review complete business, branding, menu, and operational configuration."
       >
         {selectedRestaurant && (
-          <div className="space-y-5 text-xs">
+          <div className="space-y-4 text-xs font-sans">
             {/* Header branding */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-700 flex items-center justify-between gap-3">
+            <div className="p-4 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <img
                   src={selectedRestaurant.theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80'}
                   alt={selectedRestaurant.name}
-                  className="w-14 h-14 rounded-2xl object-cover border border-slate-600 shadow-md"
+                  className="w-12 h-12 rounded-xl object-cover border border-white/[0.08]"
                 />
                 <div>
-                  <h3 className="text-lg font-black text-white">{selectedRestaurant.name}</h3>
-                  <p className="text-slate-300 font-semibold">{selectedRestaurant.cuisine} ({selectedRestaurant.restaurantType || 'Casual Dining'})</p>
-                  <p className="text-slate-400 text-[11px]">{selectedRestaurant.domain || `${selectedRestaurant.slug}.dinely.app`}</p>
+                  <h3 className="text-base font-semibold text-white">{selectedRestaurant.name}</h3>
+                  <p className="text-white/60 text-xs">{selectedRestaurant.cuisine} ({selectedRestaurant.restaurantType || 'Casual Dining'})</p>
+                  <p className="text-white/40 font-mono text-[11px]">{selectedRestaurant.domain || `${selectedRestaurant.slug}.dinely.app`}</p>
                 </div>
               </div>
               <Badge variant={selectedRestaurant.lifecycleStatus === 'LIVE' || selectedRestaurant.isApproved ? 'success' : 'warning'}>
@@ -1151,56 +1154,56 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
             {/* Sections */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Card className="bg-slate-950 border-slate-800 p-3.5 space-y-1.5">
-                <h5 className="font-bold text-rose-400 flex items-center gap-1">
+              <Card className="bg-[#12151b] border-white/[0.08] p-3.5 space-y-1.5 rounded-xl">
+                <h5 className="font-semibold text-amber-400 font-mono text-xs flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5" /> Business & Location
                 </h5>
-                <p><span className="text-slate-500">Address:</span> {selectedRestaurant.address}</p>
-                <p><span className="text-slate-500">Phone:</span> {selectedRestaurant.phone}</p>
-                <p><span className="text-slate-500">GST/Tax:</span> {selectedRestaurant.gstNumber || 'GST-1029384'} ({selectedRestaurant.taxPercentage || 8.5}%)</p>
-                <p><span className="text-slate-500">Hours:</span> {selectedRestaurant.openingHours || '09:00 AM'} - {selectedRestaurant.closingHours || '10:00 PM'}</p>
+                <p><span className="text-white/40">Address:</span> {selectedRestaurant.address}</p>
+                <p><span className="text-white/40">Phone:</span> {selectedRestaurant.phone}</p>
+                <p><span className="text-white/40">GST/Tax:</span> {selectedRestaurant.gstNumber || 'GST-1029384'} ({selectedRestaurant.taxPercentage || 8.5}%)</p>
+                <p><span className="text-white/40">Hours:</span> {selectedRestaurant.openingHours || '09:00 AM'} - {selectedRestaurant.closingHours || '10:00 PM'}</p>
               </Card>
 
-              <Card className="bg-slate-950 border-slate-800 p-3.5 space-y-1.5">
-                <h5 className="font-bold text-amber-400 flex items-center gap-1">
+              <Card className="bg-[#12151b] border-white/[0.08] p-3.5 space-y-1.5 rounded-xl">
+                <h5 className="font-semibold text-amber-400 font-mono text-xs flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" /> Owner Account
                 </h5>
-                <p><span className="text-slate-500">Owner Name:</span> {selectedRestaurant.ownerName || 'Restaurant Owner'}</p>
-                <p><span className="text-slate-500">Owner Email:</span> {selectedRestaurant.ownerEmail || selectedRestaurant.email}</p>
-                <p><span className="text-slate-500">Submitted Date:</span> {selectedRestaurant.submittedAt || 'Today'}</p>
+                <p><span className="text-white/40">Owner Name:</span> {selectedRestaurant.ownerName || 'Restaurant Owner'}</p>
+                <p><span className="text-white/40">Owner Email:</span> {selectedRestaurant.ownerEmail || selectedRestaurant.email}</p>
+                <p><span className="text-white/40">Submitted Date:</span> {selectedRestaurant.submittedAt || 'Today'}</p>
               </Card>
 
-              <Card className="bg-slate-950 border-slate-800 p-3.5 space-y-1.5">
-                <h5 className="font-bold text-indigo-400 flex items-center gap-1">
+              <Card className="bg-[#12151b] border-white/[0.08] p-3.5 space-y-1.5 rounded-xl">
+                <h5 className="font-semibold text-amber-400 font-mono text-xs flex items-center gap-1.5">
                   <QrCode className="w-3.5 h-3.5" /> Floorplan & Tables
                 </h5>
-                <p><span className="text-slate-500">Total Tables:</span> {selectedRestaurant.tablesCount || 16}</p>
-                <p><span className="text-slate-500">Indoor:</span> {selectedRestaurant.indoorTablesCount || 10} | <span className="text-slate-500">Outdoor:</span> {selectedRestaurant.outdoorTablesCount || 4} | <span className="text-slate-500">VIP:</span> {selectedRestaurant.vipTablesCount || 2}</p>
-                <p className="text-emerald-400 font-mono text-[11px]">Dynamic QR Codes Ready</p>
+                <p><span className="text-white/40">Total Tables:</span> {selectedRestaurant.tablesCount || 16}</p>
+                <p><span className="text-white/40">Indoor:</span> {selectedRestaurant.indoorTablesCount || 10} | <span className="text-white/40">Outdoor:</span> {selectedRestaurant.outdoorTablesCount || 4} | <span className="text-white/40">VIP:</span> {selectedRestaurant.vipTablesCount || 2}</p>
+                <p className="text-emerald-400 font-mono text-[11px]">Dynamic QR Codes Active</p>
               </Card>
 
-              <Card className="bg-slate-950 border-slate-800 p-3.5 space-y-1.5">
-                <h5 className="font-bold text-emerald-400 flex items-center gap-1">
+              <Card className="bg-[#12151b] border-white/[0.08] p-3.5 space-y-1.5 rounded-xl">
+                <h5 className="font-semibold text-amber-400 font-mono text-xs flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5" /> Branding & Theme
                 </h5>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="w-4 h-4 rounded-full border border-slate-600" style={{ backgroundColor: selectedRestaurant.theme?.primaryColor || '#e11d48' }} />
-                  <span className="text-[11px] text-slate-300">Primary Color: {selectedRestaurant.theme?.primaryColor || '#e11d48'}</span>
+                  <span className="w-3.5 h-3.5 rounded-full border border-white/20" style={{ backgroundColor: selectedRestaurant.theme?.primaryColor || '#f59e0b' }} />
+                  <span className="text-[11px] text-white/60 font-mono">Accent: {selectedRestaurant.theme?.primaryColor || '#f59e0b'}</span>
                 </div>
-                <p className="text-[10px] text-slate-500 truncate">Banner URL: {selectedRestaurant.theme?.bannerUrl}</p>
+                <p className="text-[10px] text-white/40 truncate font-mono">Banner URL: {selectedRestaurant.theme?.bannerUrl}</p>
               </Card>
             </div>
 
             {/* Quick decision footer */}
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-              <Button variant="outline" size="sm" onClick={closeModals}>
+            <div className="flex justify-end gap-2 pt-3 border-t border-white/[0.08]">
+              <Button variant="outline" size="sm" onClick={closeModals} className="border-white/[0.08] text-white/60 hover:text-white">
                 Close Audit
               </Button>
               {(!selectedRestaurant.isApproved || selectedRestaurant.lifecycleStatus === 'PENDING_APPROVAL') && (
                 <Button
                   variant="brand"
                   size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-500 font-bold"
+                  className="bg-emerald-600 hover:bg-emerald-500 font-semibold text-white text-xs"
                   onClick={() => {
                     setActionModal('APPROVE');
                   }}
@@ -1229,26 +1232,26 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         description={`Target Restaurant: ${selectedRestaurant?.name}`}
       >
         {selectedRestaurant && (
-          <div className="space-y-4 text-xs">
+          <div className="space-y-4 text-xs font-sans">
             {actionModal === 'APPROVE' && (
-              <p className="text-slate-300">
-                Approving <strong>{selectedRestaurant.name}</strong> will activate its live status, enable the Restaurant Dashboard, Kitchen KDS, Waiter Terminal OS, and Customer QR Ordering.
+              <p className="text-white/70 leading-relaxed">
+                Approving <strong className="text-white">{selectedRestaurant.name}</strong> will activate its live status, enable the Restaurant Dashboard, Kitchen KDS, Waiter Terminal OS, and Customer QR Ordering.
               </p>
             )}
 
             {actionModal === 'DISMISS' && (
               <div className="space-y-3">
-                <p className="text-slate-300">
-                  Archiving <strong>{selectedRestaurant.name}</strong> removes it from the operational pending approval queue without pretending it was approved or rejected.
+                <p className="text-white/70 leading-relaxed">
+                  Archiving <strong className="text-white">{selectedRestaurant.name}</strong> removes it from the operational pending approval queue without pretending it was approved or rejected.
                 </p>
                 <div>
-                  <label className="text-slate-200 font-semibold mb-1 block">Archive Note / Reason:</label>
+                  <label className="text-white/70 font-semibold mb-1 block">Archive Note / Reason:</label>
                   <input
                     type="text"
                     value={actionReason}
                     onChange={(e) => setActionReason(e.target.value)}
                     placeholder="e.g. Test fixture, duplicate application, or demo record"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+                    className="w-full bg-[#12151b] border border-white/[0.08] rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-400/50"
                   />
                 </div>
               </div>
@@ -1256,7 +1259,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
             {(actionModal === 'REJECT' || actionModal === 'REQUEST_CHANGES' || actionModal === 'DEACTIVATE' || actionModal === 'SUSPEND') && (
               <div className="space-y-2">
-                <label className="text-slate-200 font-semibold">
+                <label className="text-white/70 font-semibold">
                   {actionModal === 'REJECT' ? 'Reason for Rejection:' :
                    actionModal === 'REQUEST_CHANGES' ? 'Required Modifications Comments:' :
                    actionModal === 'DEACTIVATE' ? 'Deactivation Reason:' : 'Suspension Reason:'}
@@ -1266,25 +1269,25 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   value={actionReason}
                   onChange={(e) => setActionReason(e.target.value)}
                   placeholder="Enter detailed message for the restaurant owner..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+                  className="w-full bg-[#12151b] border border-white/[0.08] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-400/50"
                 />
               </div>
             )}
 
             {actionModal === 'DELETE' && (
-              <p className="text-rose-300 bg-rose-500/10 p-3 rounded-xl border border-rose-500/30">
-                ⚠️ Soft-deleting <strong>{selectedRestaurant.name}</strong> will set its status to DELETED and hide it from customer access. The data remains securely stored in the database.
+              <p className="text-rose-400 bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 leading-relaxed">
+                Soft-deleting <strong className="text-white">{selectedRestaurant.name}</strong> will set its status to DELETED and hide it from customer access. The data remains securely stored in the database.
               </p>
             )}
 
             {actionModal === 'REMINDER' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-slate-200 font-semibold mb-1 block">Select Reminder Category:</label>
+                  <label className="text-white/70 font-semibold mb-1 block">Select Reminder Category:</label>
                   <select
                     value={reminderType}
                     onChange={(e) => setReminderType(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100"
+                    className="w-full bg-[#12151b] border border-white/[0.08] rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-400/50"
                   >
                     <option value="PAYMENT">Payment Reminder</option>
                     <option value="PROFILE">Restaurant Profile Incomplete</option>
@@ -1295,36 +1298,36 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-200 font-semibold mb-1 block">Custom Message (Optional):</label>
+                  <label className="text-white/70 font-semibold mb-1 block">Custom Message (Optional):</label>
                   <textarea
                     rows={2}
                     value={reminderMessage}
                     onChange={(e) => setReminderMessage(e.target.value)}
                     placeholder="e.g. Please update your weekend menu offerings and tax configuration."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100"
+                    className="w-full bg-[#12151b] border border-white/[0.08] rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-400/50"
                   />
                 </div>
               </div>
             )}
 
             {actionModal === 'APPROVE' && approvalError && (
-              <div className="mb-3 p-3 bg-rose-950/60 border border-rose-500/40 rounded-xl text-xs text-rose-300 flex items-center justify-between">
+              <div className="mb-3 p-3 bg-rose-950/40 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 font-mono text-[11px]">
-                  ⚠️ {approvalError}
+                  {approvalError}
                 </span>
                 <button
                   type="button"
                   onClick={() => handleApprove(selectedRestaurant.id)}
                   disabled={isApproving}
-                  className="px-2.5 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow transition"
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow transition"
                 >
                   Retry
                 </button>
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-              <Button variant="outline" size="sm" onClick={closeModals}>
+            <div className="flex justify-end gap-2 pt-3 border-t border-white/[0.08]">
+              <Button variant="outline" size="sm" onClick={closeModals} className="border-white/[0.08] text-white/60 hover:text-white">
                 Cancel
               </Button>
 
@@ -1335,7 +1338,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   onClick={() => handleApprove(selectedRestaurant.id)}
                   disabled={isApproving}
                   isLoading={isApproving}
-                  className="bg-emerald-600 hover:bg-emerald-500 font-bold min-w-[200px]"
+                  className="bg-emerald-600 hover:bg-emerald-500 font-semibold text-white min-w-[200px]"
                 >
                   {isApproving ? 'Approving & Launching...' : (approvalError ? 'Retry Approval & Launch' : 'Confirm Approval & Launch')}
                 </Button>
@@ -1360,20 +1363,20 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   disabled={Boolean(isActionInProgress)}
                   isLoading={isActionInProgress === selectedRestaurant.id}
                   onClick={() => handleDismiss(selectedRestaurant.id)}
-                  className="border-slate-700 text-slate-200 hover:bg-slate-800"
+                  className="border-white/[0.08] text-white/70 hover:bg-white/[0.04] hover:text-white"
                 >
                   {isActionInProgress === selectedRestaurant.id ? 'Archiving...' : 'Confirm Archive'}
                 </Button>
               )}
 
               {actionModal === 'REQUEST_CHANGES' && (
-                <Button variant="outline" size="sm" onClick={() => handleRequestChanges(selectedRestaurant.id)} className="border-amber-500 text-amber-400 hover:bg-amber-500/10">
+                <Button variant="outline" size="sm" onClick={() => handleRequestChanges(selectedRestaurant.id)} className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10">
                   Send Change Request
                 </Button>
               )}
 
               {actionModal === 'DEACTIVATE' && (
-                <Button variant="outline" size="sm" onClick={() => handleDeactivate(selectedRestaurant.id)} className="border-amber-500 text-amber-400 hover:bg-amber-500/10">
+                <Button variant="outline" size="sm" onClick={() => handleDeactivate(selectedRestaurant.id)} className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10">
                   Confirm Deactivation
                 </Button>
               )}
@@ -1391,7 +1394,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               )}
 
               {actionModal === 'REMINDER' && (
-                <Button variant="brand" size="sm" onClick={() => handleSendReminder(selectedRestaurant.id)}>
+                <Button variant="brand" size="sm" onClick={() => handleSendReminder(selectedRestaurant.id)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold">
                   Dispatch Reminder
                 </Button>
               )}
