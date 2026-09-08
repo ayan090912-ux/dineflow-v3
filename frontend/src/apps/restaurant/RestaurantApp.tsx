@@ -578,7 +578,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           prev.map((emp) => (emp.id === event.employeeId || emp.name === event.name ? { ...emp, isClockedIn: event.status === 'ON_CLOCK' } : emp))
         );
       } else if (event.type === 'RESTAURANT_APPROVED' || event.type === 'RestaurantStatusUpdated') {
-        const evtRestId = event.restaurantId || event.restaurant_id;
+        const evtRestId = event.restaurantId || (event as any).restaurant_id;
         if (!restId || !evtRestId || evtRestId === restId) {
           api.getRestaurantDetails(restId).then((updatedRest) => {
             if (updatedRest) {

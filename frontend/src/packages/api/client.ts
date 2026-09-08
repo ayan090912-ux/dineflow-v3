@@ -1313,13 +1313,19 @@ export class DinelyApiClient {
   async logout(scope?: PortalScope) {
     const targetScope = scope || getPortalScopeFromPath();
     if (scope) {
-      delete this.currentUsersByScope[scope];
-      delete this.currentTokensByScope[scope];
-      delete this.currentRestaurantIdsByScope[scope];
+      this.currentUsersByScope[scope] = null;
+      this.currentTokensByScope[scope] = null;
+      this.currentRestaurantIdsByScope[scope] = null;
     } else {
-      this.currentUsersByScope = {};
-      this.currentTokensByScope = {};
-      this.currentRestaurantIdsByScope = {};
+      this.currentUsersByScope = {
+        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
+      };
+      this.currentTokensByScope = {
+        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
+      };
+      this.currentRestaurantIdsByScope = {
+        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
+      };
     }
     this._currentRestaurantId = null;
     this.restaurants = [];
@@ -1545,7 +1551,9 @@ export class DinelyApiClient {
     if (!existing && activeRestId) {
       try {
         const apiBase = getApiBaseUrl();
-        const fetchRes = await fetch(`${apiBase}/restaurants/${encodeURIComponent(activeRestId)}`);
+        const fetchRes = await fetch(`${apiBase}/restaurants/${encodeURIComponent(activeRestId)}`, {
+          headers: this.getAuthHeader('OWNER'),
+        });
         if (fetchRes.ok) {
           const rawData = await fetchRes.json();
           if (rawData && rawData.id) {
@@ -1592,7 +1600,10 @@ export class DinelyApiClient {
         const apiBase = getApiBaseUrl();
         const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(existing.id)}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.getAuthHeader('OWNER'),
+          },
           body: JSON.stringify({
             name: existing.name,
             cuisine: existing.cuisine,
@@ -1622,9 +1633,14 @@ export class DinelyApiClient {
             existing.rejectionReason = updated.rejection_reason || undefined;
             existing.requestedChanges = updated.requested_changes || undefined;
           }
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error('submitRestaurantLaunch failed on backend:', res.status, errData);
+          throw new Error(errData.detail || `Failed to submit application (${res.status})`);
         }
-      } catch (e) {
+      } catch (e: any) {
         console.warn('submitRestaurantLaunch backend sync notice:', e);
+        throw e;
       }
 
       realtimeBus.emit('RestaurantRegistrationSubmitted' as any, {
@@ -2672,8 +2688,47 @@ export class DinelyApiClient {
   }
 
   async updateRestaurantDetails(restaurantId: string, updates: Partial<Restaurant>) {
-    await delay(200);
     const targetId = this.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) return null;
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getAuthHeader('OWNER'),
+        },
+        body: JSON.stringify({
+          name: updates.name,
+          cuisine: updates.cuisine,
+          businessType: updates.businessType,
+          hasKitchen: updates.hasKitchen,
+          hasWaiter: updates.hasWaiter,
+          hasBar: updates.hasBar,
+          hasTables: updates.hasTables,
+          enabledModules: updates.enabledModules,
+          address: updates.address,
+          phone: updates.phone,
+          email: updates.email,
+          taxPercentage: updates.taxPercentage,
+          theme: updates.theme,
+          currency: updates.currency,
+          lifecycleStatus: updates.lifecycleStatus,
+        }),
+      });
+
+      if (res.ok) {
+        const raw = await res.json();
+        const updated = this.mapBackendRestaurant(raw);
+        this.restaurants = this.restaurants.filter((r) => r.id !== targetId).concat(updated);
+        this.saveDatabase();
+        return updated;
+      }
+    } catch (e) {
+      console.warn('Backend updateRestaurantDetails failed:', e);
+    }
+
     const rest = this.restaurants.find((r) => r.id === targetId && !r.isDeleted);
     if (rest) {
       Object.assign(rest, updates);
