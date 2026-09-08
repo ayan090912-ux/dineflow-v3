@@ -47,6 +47,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
   const [resubmitError, setResubmitError] = useState('');
 
   useEffect(() => {
+    realtimeBus.connect(restaurantId || 'global', 'OWNER');
     loadRestaurantData();
     const interval = setInterval(() => {
       loadRestaurantDataSilent();

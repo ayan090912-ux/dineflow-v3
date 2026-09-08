@@ -1,11 +1,12 @@
 from typing import Optional, List, Any, Dict
-from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
+from app.core.security.tenant_auth import get_caller_context, CallerContext
 from app.modules.orders.models import Order, OrderItem, Bill
 from app.modules.tables.models import Table, TableSession
 
@@ -59,14 +60,11 @@ def format_order_response(order: Order) -> dict:
         except Exception:
             eta_val = str(order.eta_target_timestamp)
 
-    ord_num = getattr(order, "order_number", None)
-    if not ord_num and getattr(order, "id", None):
-        ord_num = f"#ORD-{str(order.id)[-4:]}"
-
-    sess_id = getattr(order, "table_session_id", None)
     rest_id = getattr(order, "restaurant_id", "")
-    tbl_id = getattr(order, "table_id", None)
-    tbl_num = getattr(order, "table_number", "Table 01")
+    tbl_id = getattr(order, "table_id", "")
+    tbl_num = getattr(order, "table_number", "")
+    sess_id = getattr(order, "table_session_id", "")
+    ord_num = getattr(order, "order_number", "")
     cust_name = getattr(order, "customer_name", "Guest")
     tot_amt = getattr(order, "total_amount", 0.0) or 0.0
 
@@ -105,7 +103,11 @@ def format_order_response(order: Order) -> dict:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(get_db)):
+async def create_order(
+    payload: CreateOrderSchema,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
     try:
         print(f"[ORDER_CREATED_REQUEST] restaurant_id={payload.restaurantId} table_number={payload.tableNumber} items_count={len(payload.items or [])}")
         if not payload.restaurantId:
@@ -113,9 +115,63 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
         if not payload.items or len(payload.items) == 0:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order items cannot be empty")
 
+        # Strict Tenant Verification: Must exist in database and be active
+        query_rest = select(Restaurant).where(
+            Restaurant.deleted_at.is_(None),
+            or_(
+                Restaurant.id == payload.restaurantId,
+                Restaurant.slug == payload.restaurantId.lower(),
+                Restaurant.public_slug == payload.restaurantId.lower()
+            )
+        )
+        res_rest = await db.execute(query_rest)
+        restaurant = res_rest.scalar_one_or_none()
+        if not restaurant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurant '{payload.restaurantId}' was not found"
+            )
+        if restaurant.lifecycle_status in ["SUSPENDED", "ARCHIVED"]:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurant '{payload.restaurantId}' is archived or suspended"
+            )
+
+        # Tenant Authorization Check: If caller provides credentials, verify they belong to this restaurant
+        if caller.is_authenticated and not caller.is_admin:
+            if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+                is_owner = False
+                if caller.uid and restaurant.owner_uid and caller.uid == restaurant.owner_uid:
+                    is_owner = True
+                elif caller.email and restaurant.owner_email and caller.email.lower() == restaurant.owner_email.lower():
+                    is_owner = True
+                if not is_owner:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Forbidden: You do not have permission to order or mutate into another tenant's restaurant."
+                    )
+            elif caller.role in ["WAITER", "CHEF", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+                if caller.restaurant_id and caller.restaurant_id != restaurant.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Forbidden: Staff member does not belong to this restaurant."
+                    )
+
+        now_utc = datetime.now(timezone.utc)
         tbl_num = payload.tableNumber or "Table 01"
         tbl_id = payload.tableId or f"tbl-{payload.restaurantId}-{(tbl_num).lower().replace(' ', '_')}"
-        session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(datetime.utcnow().timestamp())}"
+
+        # If explicit tableId provided, verify it belongs to this restaurant
+        if payload.tableId:
+            res_tbl_check = await db.execute(select(Table).where(Table.id == payload.tableId))
+            existing_tbl = res_tbl_check.scalar_one_or_none()
+            if existing_tbl and existing_tbl.restaurant_id != restaurant.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Table '{payload.tableId}' does not belong to restaurant '{payload.restaurantId}'"
+                )
+
+        session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(now_utc.timestamp())}"
 
         try:
             query_sess = select(TableSession).where(TableSession.id == session_id)
@@ -134,14 +190,14 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
                 if active_sess:
                     session_id = active_sess.id
                 else:
-                    new_sess_id = session_id if not existing_sess else f"sess-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
+                    new_sess_id = session_id if not existing_sess else f"sess-{payload.restaurantId}-{int(now_utc.timestamp() * 1000)}"
                     new_sess = TableSession(
                         id=new_sess_id,
                         restaurant_id=payload.restaurantId,
                         table_id=tbl_id,
                         table_number=tbl_num,
                         status="ACTIVE",
-                        session_started_at=datetime.utcnow()
+                        session_started_at=now_utc
                     )
                     db.add(new_sess)
                     await db.flush()
@@ -185,7 +241,7 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
         except Exception as tax_err:
             print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
 
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         query_count = select(func.count(Order.id)).where(
             (Order.restaurant_id == payload.restaurantId) &
             (Order.created_at >= today_start)
@@ -194,7 +250,8 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
         daily_seq = (res_count.scalar() or 0) + 1
         order_num = f"#ORD-{daily_seq}"
 
-        order_id = f"ord-{payload.restaurantId}-{int(datetime.utcnow().timestamp() * 1000)}"
+        now_utc = datetime.now(timezone.utc)
+        order_id = f"ord-{payload.restaurantId}-{int(now_utc.timestamp() * 1000)}"
 
         print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={payload.restaurantId} table_id={tbl_id} session_id={session_id}")
 
@@ -237,7 +294,7 @@ async def create_order(payload: CreateOrderSchema, db: AsyncSession = Depends(ge
 
         for idx, i in enumerate(payload.items):
             new_item = OrderItem(
-                id=f"oi-{int(datetime.utcnow().timestamp() * 1000)}-{idx}",
+                id=f"oi-{int(now_utc.timestamp() * 1000)}-{idx}",
                 order_id=order_id,
                 menu_item_id=i.menuItemId or i.id or "item-unknown",
                 name=i.name,
@@ -361,12 +418,39 @@ async def get_restaurant_orders(
 
 @router.put("/{order_id}/status")
 @router.patch("/{order_id}/status")
-async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, db: AsyncSession = Depends(get_db)):
+async def update_order_status(
+    order_id: str,
+    payload: UpdateOrderStatusSchema,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
     query = select(Order).where(Order.id == order_id)
     result = await db.execute(query)
     order = result.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to update order status"
+        )
+
+    if not caller.is_admin:
+        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+            # Check owner
+            res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
+            r_obj = res_r.scalar_one_or_none()
+            if not r_obj:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+            is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
+            if not is_owner:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
+        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+            if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update order status")
 
     if payload.status:
         order.status = payload.status
@@ -378,12 +462,12 @@ async def update_order_status(order_id: str, payload: UpdateOrderStatusSchema, d
     if (payload.kitchenStatus == "PREPARING" or payload.status == "PREPARING" or payload.status == "IN_KITCHEN") and not order.eta_target_timestamp:
         prep_mins = payload.estimatedPrepTimeMinutes or order.estimated_prep_time_minutes or 15
         order.estimated_prep_time_minutes = prep_mins
-        order.eta_target_timestamp = datetime.utcnow() + timedelta(minutes=prep_mins)
+        order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=prep_mins)
 
     if payload.estimatedPrepTimeMinutes is not None:
         order.estimated_prep_time_minutes = payload.estimatedPrepTimeMinutes
         if not order.eta_target_timestamp:
-            order.eta_target_timestamp = datetime.utcnow() + timedelta(minutes=payload.estimatedPrepTimeMinutes)
+            order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=payload.estimatedPrepTimeMinutes)
     if payload.etaTargetTimestamp is not None:
         try:
             dt_val = datetime.fromisoformat(payload.etaTargetTimestamp.replace("Z", "+00:00"))

@@ -10,6 +10,8 @@ async def test_billing_and_upi_save_and_customer_fetch_pipeline():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # 1. Seed or ensure CAFE.CO exists
         rest_id = "rest-test-cafeco-101"
+        owner_email = "cafe_owner@test.com"
+        owner_uid = "uid_cafe_owner"
         async with AsyncSessionLocal() as db:
             rest = Restaurant(
                 id=rest_id,
@@ -19,9 +21,13 @@ async def test_billing_and_upi_save_and_customer_fetch_pipeline():
                 status="OPEN",
                 currency="INR (₹)",
                 tax_percentage=5.0,
+                owner_email=owner_email,
+                owner_uid=owner_uid,
             )
             db.add(rest)
             await db.commit()
+
+        owner_headers = {"Authorization": f"Bearer firebase_token_owner::{owner_uid}::{owner_email}"}
 
         # 2. Owner fetches initial billing config
         res_get_init = await ac.get(f"/api/v1/restaurants/{rest_id}/billing/config")
@@ -46,7 +52,7 @@ async def test_billing_and_upi_save_and_customer_fetch_pipeline():
             "upi_qr_url": "https://storage.googleapis.com/dinely-cd6cd.appspot.com/qr/standee.png",
             "upi_enabled": True
         }
-        res_put = await ac.put(f"/api/v1/restaurants/{rest_id}/billing/config", json=payload)
+        res_put = await ac.put(f"/api/v1/restaurants/{rest_id}/billing/config", json=payload, headers=owner_headers)
         assert res_put.status_code == 200, f"PUT failed: {res_put.text}"
         saved_data = res_put.json()
         assert saved_data["status"] == "success"
@@ -76,25 +82,32 @@ async def test_multi_tenant_upi_isolation():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         rest_a = "rest-tenant-a"
         rest_b = "rest-tenant-b"
+        owner_a_email = "owner_a@test.com"
+        owner_a_uid = "uid_owner_a"
+        owner_b_email = "owner_b@test.com"
+        owner_b_uid = "uid_owner_b"
 
         async with AsyncSessionLocal() as db:
-            db.add(Restaurant(id=rest_a, name="Restaurant A", slug="rest-a", is_approved=True, status="OPEN"))
-            db.add(Restaurant(id=rest_b, name="Restaurant B", slug="rest-b", is_approved=True, status="OPEN"))
+            db.add(Restaurant(id=rest_a, name="Restaurant A", slug="rest-a", is_approved=True, status="OPEN", owner_email=owner_a_email, owner_uid=owner_a_uid))
+            db.add(Restaurant(id=rest_b, name="Restaurant B", slug="rest-b", is_approved=True, status="OPEN", owner_email=owner_b_email, owner_uid=owner_b_uid))
             await db.commit()
+
+        headers_a = {"Authorization": f"Bearer firebase_token_owner::{owner_a_uid}::{owner_a_email}"}
+        headers_b = {"Authorization": f"Bearer firebase_token_owner::{owner_b_uid}::{owner_b_email}"}
 
         # Save UPI for Restaurant A
         await ac.put(f"/api/v1/restaurants/{rest_a}/billing/config", json={
             "upi_id": "restaurantA@okhdfc",
             "upi_merchant_name": "Restaurant A",
             "upi_enabled": True
-        })
+        }, headers=headers_a)
 
         # Save UPI for Restaurant B
         await ac.put(f"/api/v1/restaurants/{rest_b}/billing/config", json={
             "upi_id": "restaurantB@icici",
             "upi_merchant_name": "Restaurant B",
             "upi_enabled": True
-        })
+        }, headers=headers_b)
 
         # Verify A gets ONLY A
         res_a = await ac.get(f"/api/v1/restaurants/{rest_a}/billing/config")

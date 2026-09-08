@@ -1,7 +1,7 @@
 import uuid
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import WebSocket
 
@@ -52,14 +52,15 @@ class ConnectionManager:
         payload: dict,
         target_audience: Optional[List[str]] = None
     ):
-        event_id = f"evt-{int(datetime.utcnow().timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
+        now_utc = datetime.now(timezone.utc)
+        event_id = f"evt-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
         event_data = {
             "event_id": event_id,
             "eventId": event_id,
             "type": event_type,
             "restaurant_id": restaurant_id,
             "restaurantId": restaurant_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": now_utc.isoformat(),
             "payload": payload,
         }
 
@@ -68,15 +69,14 @@ class ConnectionManager:
 
         async with self._lock:
             target_rest = str(restaurant_id).lower().strip()
+            # Strict tenant isolation: exact match on restaurant_id ONLY, no substring bleed
             target_conns = [
                 c for c in self.active_connections 
                 if str(c.get("restaurant_id", "")).lower().strip() == target_rest
-                or target_rest in str(c.get("restaurant_id", "")).lower()
-                or str(c.get("restaurant_id", "")).lower() in target_rest
             ]
             if target_audience:
                 allowed_roles = [normalize_role(r) for r in target_audience]
-                # OWNER always receives operational broadcasts
+                # OWNER always receives operational broadcasts for their tenant
                 if "OWNER" not in allowed_roles:
                     allowed_roles.append("OWNER")
                 target_conns = [c for c in target_conns if c["normalized_role"] in allowed_roles or c["role"] in allowed_roles]
@@ -100,12 +100,13 @@ class ConnectionManager:
 
     async def broadcast_global(self, message: dict):
         event_type = message.get("type", "GlobalEvent")
-        event_id = f"evt-{int(datetime.utcnow().timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
+        now_utc = datetime.now(timezone.utc)
+        event_id = f"evt-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
         event_data = {
             "event_id": event_id,
             "eventId": event_id,
             "type": event_type,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": now_utc.isoformat(),
             "payload": message,
             **message
         }

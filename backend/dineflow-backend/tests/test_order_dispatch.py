@@ -88,12 +88,18 @@ async def test_end_to_end_customer_to_kitchen_flow(db_session, setup_cafe_co):
         assert found_ord is not None
         assert found_ord["status"] == "PENDING"
 
+        kitchen_headers = {
+            "X-Staff-Role": "KITCHEN",
+            "X-Staff-Restaurant-Id": "rest-cafe-co",
+            "X-Staff-Id": "staff-chef-1"
+        }
+
         # 4. Kitchen accepts order & sets prep timer to 15 mins
-        res_status = await ac.put(f"/api/v1/orders/{order_id}/status", json={
-            "status": "IN_KITCHEN",
-            "kitchenStatus": "PREPARING",
-            "estimatedPrepTimeMinutes": 15
-        })
+        res_status = await ac.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "IN_KITCHEN", "kitchenStatus": "PREPARING", "estimatedPrepTimeMinutes": 15},
+            headers=kitchen_headers
+        )
         assert res_status.status_code == 200
         assert res_status.json()["kitchen_status"] == "PREPARING"
 
@@ -109,9 +115,10 @@ async def test_end_to_end_customer_to_kitchen_flow(db_session, setup_cafe_co):
         assert cust_orders[0]["kitchen_status"] == "PREPARING"
 
         # 6. Kitchen marks order READY
-        res_ready = await ac.put(f"/api/v1/orders/{order_id}/status", json={
-            "status": "READY",
-            "kitchenStatus": "READY"
-        })
+        res_ready = await ac.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "READY", "kitchenStatus": "READY"},
+            headers=kitchen_headers
+        )
         assert res_ready.status_code == 200
         assert res_ready.json()["status"] == "READY"

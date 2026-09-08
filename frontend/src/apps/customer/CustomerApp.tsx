@@ -309,16 +309,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       r = await api.getRestaurantDetails(urlRestParam);
     }
 
-    // 4. Resolve from table ID lookup
+    // 4. Resolve from table ID if encoded with restaurant ID (tbl-{restaurantId}-table_XX)
     if (!r && urlTableIdParam) {
-      const rests = await api.getRestaurants();
-      for (const restItem of rests) {
-        const tbls = await api.getTables(restItem.id);
-        const matchTbl = tbls.find((t) => t.id === urlTableIdParam);
-        if (matchTbl) {
-          r = restItem;
-          break;
-        }
+      const match = urlTableIdParam.match(/^tbl-(.+?)-(?:table_|tbl_)/);
+      if (match && match[1]) {
+        r = await api.getRestaurantDetails(match[1]);
       }
     }
 

@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
-from app.modules.restaurants.models import Restaurant
+from app.core.security.tenant_auth import require_tenant_owner_or_admin, get_caller_context, CallerContext
+from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog
 from app.modules.tables.models import Table
 from app.modules.websocket.manager import ws_manager
 
@@ -67,6 +68,7 @@ class CreateRestaurantSchema(BaseModel):
     ownerUid: Optional[str] = None
     currency: Optional[str] = "INR (₹)"
     taxPercentage: Optional[float] = 5.0
+    tableCount: Optional[int] = 8
     theme: Optional[Any] = None
 
 class UpdateRestaurantSchema(BaseModel):
@@ -292,19 +294,33 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
 
     # Pre-create tables strictly for this tenant with tenant subdomain QR url
     if has_tables:
-        for i in range(1, 9):
+        num_tables = max(1, min(payload.tableCount or 8, 100))
+        for i in range(1, num_tables + 1):
             t_num = f"Table {str(i).zfill(2)}"
             t_id = f"tbl-{rest_id}-table_{str(i).zfill(2)}"
             db.add(Table(
                 id=t_id,
                 restaurant_id=rest_id,
                 table_number=t_num,
-                section="Main Hall" if i <= 5 else "Terrace",
+                section="Main Hall" if i <= max(1, int(num_tables * 0.7)) else "Terrace",
                 capacity=4,
                 status="AVAILABLE",
                 is_occupied=False,
                 qr_code_url=f"https://{public_slug}.dinely.app/customer?table={t_num}"
             ))
+
+    # Record Initial Application Lifecycle Log
+    initial_log = RestaurantLifecycleLog(
+        id=f"log-{rest_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        restaurant_id=rest_id,
+        event_type="CREATED",
+        previous_status=None,
+        new_status="PENDING_APPROVAL",
+        reason="Initial restaurant onboarding submission",
+        performed_by=new_rest.owner_email or "Owner",
+        performed_at=datetime.now(timezone.utc)
+    )
+    db.add(initial_log)
 
     await db.commit()
     await db.refresh(new_rest)
@@ -348,16 +364,20 @@ async def get_all_restaurants(
 async def get_owner_restaurants(
     owner_email: Optional[str] = Query(None),
     owner_uid: Optional[str] = Query(None),
+    caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
-    if not owner_email and not owner_uid:
+    target_email = (owner_email or (caller.email if caller.is_authenticated else None) or "").strip().lower()
+    target_uid = (owner_uid or (caller.uid if caller.is_authenticated else None) or "").strip()
+
+    if not target_email and not target_uid:
         return []
 
     conditions = []
-    if owner_email:
-        conditions.append(func.lower(Restaurant.owner_email) == owner_email.strip().lower())
-    if owner_uid:
-        conditions.append(Restaurant.owner_uid == owner_uid.strip())
+    if target_email:
+        conditions.append(func.lower(Restaurant.owner_email) == target_email)
+    if target_uid:
+        conditions.append(Restaurant.owner_uid == target_uid)
 
     query = select(Restaurant).where(
         or_(*conditions),
@@ -370,11 +390,19 @@ async def get_owner_restaurants(
 
 @router.get("/{restaurant_id}")
 async def get_restaurant(restaurant_id: str, db: AsyncSession = Depends(get_db)):
-    clean_id = restaurant_id.strip()
+    clean_id = (restaurant_id or "").strip()
+    if not clean_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Restaurant ID cannot be empty"
+        )
     query = select(Restaurant).where(
-        ((Restaurant.id == clean_id) | 
-         (Restaurant.slug == clean_id.lower()) | 
-         (func.lower(Restaurant.name) == clean_id.lower())),
+        or_(
+            Restaurant.id == clean_id,
+            func.lower(Restaurant.id) == clean_id.lower(),
+            Restaurant.public_slug == clean_id.lower(),
+            Restaurant.slug == clean_id.lower()
+        ),
         Restaurant.deleted_at.is_(None)
     )
     result = await db.execute(query)
@@ -387,7 +415,12 @@ async def get_restaurant(restaurant_id: str, db: AsyncSession = Depends(get_db))
     return rest
 
 @router.put("/{restaurant_id}")
-async def update_restaurant(restaurant_id: str, payload: UpdateRestaurantSchema, db: AsyncSession = Depends(get_db)):
+async def update_restaurant(
+    restaurant_id: str,
+    payload: UpdateRestaurantSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
     query = select(Restaurant).where(Restaurant.id == restaurant_id)
     result = await db.execute(query)
     rest = result.scalar_one_or_none()
@@ -421,12 +454,29 @@ async def update_restaurant(restaurant_id: str, payload: UpdateRestaurantSchema,
     if payload.ownerUid:
         rest.owner_uid = payload.ownerUid
     if payload.lifecycleStatus:
-        rest.lifecycle_status = payload.lifecycleStatus.upper()
-        if rest.lifecycle_status == "PENDING_APPROVAL":
-            rest.is_approved = False
-            rest.rejection_reason = None
-            rest.requested_changes = None
-            rest.submitted_at = datetime.now(timezone.utc)
+        prev_status = rest.lifecycle_status
+        new_stat = payload.lifecycleStatus.upper()
+        if prev_status != new_stat:
+            rest.lifecycle_status = new_stat
+            if new_stat == "PENDING_APPROVAL":
+                rest.is_approved = False
+                rest.rejection_reason = None
+                rest.requested_changes = None
+                rest.submitted_at = datetime.now(timezone.utc)
+                event_name = "RESUBMITTED" if prev_status in ["REJECTED", "CHANGES_REQUIRED"] else "SUBMITTED"
+            else:
+                event_name = new_stat
+
+            db.add(RestaurantLifecycleLog(
+                id=f"log-{rest.id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+                restaurant_id=rest.id,
+                event_type=event_name,
+                previous_status=prev_status,
+                new_status=new_stat,
+                reason=rest.rejection_reason,
+                performed_by=payload.ownerEmail or rest.owner_email or "Owner",
+                performed_at=datetime.now(timezone.utc)
+            ))
     if payload.submittedAt is not None and rest.lifecycle_status != "PENDING_APPROVAL":
         rest.submitted_at = datetime.now(timezone.utc)
     if payload.phone:
@@ -496,7 +546,12 @@ async def update_restaurant(restaurant_id: str, payload: UpdateRestaurantSchema,
     return rest
 
 @router.patch("/{restaurant_id}/workspace-modules")
-async def update_workspace_modules(restaurant_id: str, payload: WorkspaceModulesSchema, db: AsyncSession = Depends(get_db)):
+async def update_workspace_modules(
+    restaurant_id: str,
+    payload: WorkspaceModulesSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
     query = select(Restaurant).where(Restaurant.id == restaurant_id)
     result = await db.execute(query)
     rest = result.scalar_one_or_none()

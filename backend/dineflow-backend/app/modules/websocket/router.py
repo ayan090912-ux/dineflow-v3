@@ -7,13 +7,14 @@ router = APIRouter()
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    restaurant_id: str = Query(...),
+    restaurant_id: Optional[str] = Query("global"),
     role: Optional[str] = Query("CUSTOMER"),
     table_session_id: Optional[str] = Query(None)
 ):
+    target_rest_id = (restaurant_id or "global").strip()
     await ws_manager.connect(
         websocket=websocket,
-        restaurant_id=restaurant_id,
+        restaurant_id=target_rest_id,
         role=role or "CUSTOMER",
         table_session_id=table_session_id
     )

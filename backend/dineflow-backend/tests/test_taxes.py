@@ -15,6 +15,8 @@ async def setup_restaurant_and_menu(db_session):
         business_type="RESTAURANT",
         currency="INR (₹)",
         tax_percentage=5.0,
+        owner_email="tax_owner@test.com",
+        owner_uid="uid_tax_owner",
     )
     db_session.add(rest)
 
@@ -51,6 +53,8 @@ async def setup_restaurant_and_menu(db_session):
     await db_session.commit()
     return rest
 
+OWNER_HEADERS = {"Authorization": "Bearer firebase_token_owner::uid_tax_owner::tax_owner@test.com"}
+
 @pytest.mark.asyncio
 async def test_create_and_get_taxes(db_session, setup_restaurant_and_menu):
     transport = ASGITransport(app=app)
@@ -65,7 +69,7 @@ async def test_create_and_get_taxes(db_session, setup_restaurant_and_menu):
             "applicableOrderTypes": ["DINE_IN", "TAKEAWAY", "DELIVERY"],
             "status": "ACTIVE"
         }
-        res = await ac.post("/api/v1/restaurants/rest-test-tax-1/taxes", json=payload)
+        res = await ac.post("/api/v1/restaurants/rest-test-tax-1/taxes", json=payload, headers=OWNER_HEADERS)
         assert res.status_code == 201
         data = res.json()
         assert data["name"] == "GST"
@@ -91,7 +95,7 @@ async def test_multi_tax_and_calculation(db_session, setup_restaurant_and_menu):
             "rate": 5.0,
             "isInclusive": False,
             "appliesTo": "ORDER"
-        })
+        }, headers=OWNER_HEADERS)
         # 2. Create Service Charge 10%
         await ac.post("/api/v1/restaurants/rest-test-tax-1/taxes", json={
             "name": "Service Charge",
@@ -99,7 +103,7 @@ async def test_multi_tax_and_calculation(db_session, setup_restaurant_and_menu):
             "rate": 10.0,
             "isInclusive": False,
             "appliesTo": "ORDER"
-        })
+        }, headers=OWNER_HEADERS)
 
         # Calculate taxes for ₹1,000 subtotal
         calc_payload = {
@@ -125,16 +129,16 @@ async def test_activate_deactivate_tax(db_session, setup_restaurant_and_menu):
             "fixedAmount": 20.0,
             "isInclusive": False,
             "appliesTo": "ORDER"
-        })
+        }, headers=OWNER_HEADERS)
         tax_id = res.json()["id"]
 
         # Deactivate
-        res_deact = await ac.post(f"/api/v1/restaurants/rest-test-tax-1/taxes/{tax_id}/deactivate")
+        res_deact = await ac.post(f"/api/v1/restaurants/rest-test-tax-1/taxes/{tax_id}/deactivate", headers=OWNER_HEADERS)
         assert res_deact.status_code == 200
         assert res_deact.json()["status"] == "INACTIVE"
 
         # Activate
-        res_act = await ac.post(f"/api/v1/restaurants/rest-test-tax-1/taxes/{tax_id}/activate")
+        res_act = await ac.post(f"/api/v1/restaurants/rest-test-tax-1/taxes/{tax_id}/activate", headers=OWNER_HEADERS)
         assert res_act.status_code == 200
         assert res_act.json()["status"] == "ACTIVE"
 
@@ -147,7 +151,7 @@ async def test_multi_tenant_tax_isolation(db_session, setup_restaurant_and_menu)
             "name": "Rest 1 Secret Tax",
             "type": "PERCENTAGE",
             "rate": 5.0
-        })
+        }, headers=OWNER_HEADERS)
         tax_id = res.json()["id"]
 
         # Try to update or fetch tax using another restaurant ID (rest-other)

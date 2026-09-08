@@ -91,6 +91,18 @@ async def ensure_db_schema_columns(conn):
         "CREATE INDEX IF NOT EXISTS idx_restaurants_approved ON restaurants (is_approved);",
         "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_uid ON restaurants (owner_uid);",
         "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_email ON restaurants (owner_email);",
+        # Restaurant Lifecycle History Table & Index
+        """CREATE TABLE IF NOT EXISTS restaurant_lifecycle_logs (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            event_type VARCHAR(50) NOT NULL,
+            previous_status VARCHAR(50),
+            new_status VARCHAR(50) NOT NULL,
+            reason TEXT,
+            performed_by VARCHAR(255),
+            performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );""",
+        "CREATE INDEX IF NOT EXISTS idx_lifecycle_logs_rest_id ON restaurant_lifecycle_logs (restaurant_id, performed_at DESC);",
     ]
     for stmt in alter_statements:
         try:
@@ -133,6 +145,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=86400,
 )
 
 

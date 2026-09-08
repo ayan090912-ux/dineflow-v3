@@ -74,19 +74,47 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Fallback JWT parse failed: {e}")
 
-    # 3. Development synthetic token handling (e.g., test tokens format 'firebase_token_<uid>_<email>')
+    # 3. Development synthetic token handling
     if id_token.startswith("firebase_token_"):
-        parts = id_token.split("_")
-        uid = parts[2] if len(parts) > 2 else "admin_uid_dev"
-        email = parts[3] if len(parts) > 3 else settings.PLATFORM_ADMIN_EMAIL or "admin@dinely.com"
+        token_body = id_token[len("firebase_token_"):]
+        if "::" in token_body:
+            parts = token_body.split("::")
+            token_role_type = parts[0].lower()
+            uid = parts[1] if len(parts) > 1 else "uid_dev"
+            email = parts[2] if len(parts) > 2 else (settings.PLATFORM_ADMIN_EMAIL or "user@dinely.com")
+        elif "__" in token_body:
+            parts = token_body.split("__")
+            token_role_type = parts[0].lower()
+            uid = parts[1] if len(parts) > 1 else "uid_dev"
+            email = parts[2] if len(parts) > 2 else (settings.PLATFORM_ADMIN_EMAIL or "user@dinely.com")
+        elif "_" in token_body:
+            parts = token_body.split("_")
+            token_role_type = parts[0].lower()
+            if len(parts) == 2:
+                uid = parts[1]
+                email = parts[1] if "@" in parts[1] else (settings.PLATFORM_ADMIN_EMAIL or "user@dinely.com")
+            elif len(parts) == 3:
+                uid = parts[1]
+                email = parts[2]
+            else:
+                uid = parts[1]
+                email = "_".join(parts[2:])
+        else:
+            token_role_type = token_body.lower()
+            uid = "uid_dev"
+            email = settings.PLATFORM_ADMIN_EMAIL or "user@dinely.com"
+
+        is_admin_token = token_role_type in ["admin", "platform_admin"]
+        assigned_role = "PLATFORM_ADMIN" if is_admin_token else ("RESTAURANT_OWNER" if token_role_type in ["owner", "restaurant_owner"] else token_role_type.upper())
+
         return {
             "uid": uid,
             "user_id": uid,
             "sub": uid,
             "email": email.lower(),
             "email_verified": True,
-            "admin": True,
-            "role": "PLATFORM_ADMIN",
+            "role": assigned_role,
+            "admin": is_admin_token,
             "firebase": {"sign_in_provider": "google.com"}
         }
 

@@ -15,12 +15,12 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Button, Card, Badge, DinelyLogo } from '../../packages/ui';
-import { api } from '../../packages/api/client';
+import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant, User } from '../../packages/types';
 
 interface WorkspaceSelectorProps {
   user?: User | null;
-  onSelectRestaurant: (restaurant: Restaurant) => void;
+  onSelectRestaurant: (restaurant: Restaurant) => void | Promise<void>;
   onCreateNewRestaurant: () => void;
   onLogout?: () => void;
 }
@@ -34,16 +34,21 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [viewState, setViewState] = useState<'INITIALIZING' | 'LOADING' | 'READY' | 'EMPTY' | 'ERROR'>('INITIALIZING');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [openingRestId, setOpeningRestId] = useState<string | null>(null);
 
   const currentUser = user || api.getCurrentUser();
   const userName = currentUser?.name || currentUser?.firstName || currentUser?.email?.split('@')[0] || 'Owner';
 
   const loadOwnerRestaurants = async (targetEmail?: string, targetUid?: string) => {
+    const email = targetEmail || currentUser?.email;
+    const uid = targetUid || currentUser?.id;
+    if (!email && !uid) {
+      setViewState('INITIALIZING');
+      return;
+    }
     setViewState('LOADING');
     setErrorMessage('');
     try {
-      const email = targetEmail || currentUser?.email;
-      const uid = targetUid || currentUser?.id;
       const list = await api.getOwnerRestaurants(email, uid);
       setRestaurants(list);
       if (list.length === 0) {
@@ -59,8 +64,80 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   };
 
   useEffect(() => {
-    loadOwnerRestaurants();
+    // Connect to global WebSocket channel for realtime lifecycle updates
+    realtimeBus.connect('global', 'OWNER');
+
+    if (currentUser?.email || currentUser?.id) {
+      loadOwnerRestaurants(currentUser?.email, currentUser?.id);
+    } else {
+      setViewState('INITIALIZING');
+    }
+
+    const unsub = realtimeBus.subscribe((event: any) => {
+      const evtRestId = event.restaurantId || event.restaurant_id;
+      if (!evtRestId) return;
+
+      if (event.type === 'RESTAURANT_APPROVED') {
+        setRestaurants((prev) =>
+          prev.map((r) =>
+            r.id === evtRestId
+              ? { ...r, isApproved: true, lifecycleStatus: 'LIVE', status: 'OPEN' }
+              : r
+          )
+        );
+      } else if (event.type === 'RESTAURANT_REJECTED') {
+        setRestaurants((prev) =>
+          prev.map((r) =>
+            r.id === evtRestId
+              ? {
+                  ...r,
+                  isApproved: false,
+                  lifecycleStatus: 'REJECTED',
+                  status: 'CLOSED',
+                  rejectionReason: event.rejectionReason,
+                }
+              : r
+          )
+        );
+      } else if (event.type === 'RESTAURANT_DISMISSED') {
+        setRestaurants((prev) =>
+          prev.map((r) =>
+            r.id === evtRestId
+              ? { ...r, isApproved: false, lifecycleStatus: 'ARCHIVED', status: 'CLOSED' }
+              : r
+          )
+        );
+      } else if (event.type === 'RestaurantStatusUpdated') {
+        const newStatus = event.lifecycleStatus || (event.isApproved ? 'LIVE' : 'PENDING_APPROVAL');
+        setRestaurants((prev) =>
+          prev.map((r) =>
+            r.id === evtRestId
+              ? {
+                  ...r,
+                  isApproved: Boolean(event.isApproved),
+                  lifecycleStatus: newStatus,
+                  rejectionReason: event.rejectionReason ?? r.rejectionReason,
+                }
+              : r
+          )
+        );
+      }
+    });
+
+    return () => {
+      unsub();
+    };
   }, [currentUser?.email, currentUser?.id]);
+
+  const handleSelectRestaurant = async (rest: Restaurant) => {
+    if (openingRestId) return;
+    setOpeningRestId(rest.id);
+    try {
+      await onSelectRestaurant(rest);
+    } finally {
+      setOpeningRestId(null);
+    }
+  };
 
   const handleLogout = async () => {
     await api.logout();
@@ -174,9 +251,24 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Owner's Existing Restaurants */}
             {restaurants.map((rest) => {
-              const isApproved = rest.isApproved || rest.lifecycleStatus === 'APPROVED' || rest.lifecycleStatus === 'LIVE' || rest.lifecycleStatus === 'ACTIVE';
-              const isPending = rest.lifecycleStatus === 'PENDING_APPROVAL' || (!rest.isApproved && rest.lifecycleStatus !== 'REJECTED' && rest.lifecycleStatus !== 'SUSPENDED');
+              const isApproved =
+                rest.lifecycleStatus === 'LIVE' ||
+                rest.lifecycleStatus === 'APPROVED' ||
+                (rest.isApproved === true &&
+                  rest.lifecycleStatus !== 'PENDING_APPROVAL' &&
+                  rest.lifecycleStatus !== 'REJECTED' &&
+                  rest.lifecycleStatus !== 'ARCHIVED' &&
+                  rest.lifecycleStatus !== 'SUSPENDED');
+              const isPending =
+                rest.lifecycleStatus === 'PENDING_APPROVAL' ||
+                (!rest.isApproved &&
+                  rest.lifecycleStatus !== 'LIVE' &&
+                  rest.lifecycleStatus !== 'APPROVED' &&
+                  rest.lifecycleStatus !== 'REJECTED' &&
+                  rest.lifecycleStatus !== 'ARCHIVED' &&
+                  rest.lifecycleStatus !== 'SUSPENDED');
               const isRejected = rest.lifecycleStatus === 'REJECTED';
+              const isArchived = rest.lifecycleStatus === 'ARCHIVED';
               const isSuspended = rest.lifecycleStatus === 'SUSPENDED';
 
               const logo = rest.theme?.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80';
@@ -209,11 +301,12 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
                         variant={
                           isApproved ? 'success' :
                           isPending ? 'warning' :
-                          isRejected ? 'danger' : 'danger'
+                          isRejected ? 'danger' :
+                          isArchived ? 'default' : 'danger'
                         }
                         className="text-[10px] uppercase font-bold shrink-0"
                       >
-                        {isApproved ? 'Active' : isPending ? 'Pending Approval' : isRejected ? 'Rejected' : 'Suspended'}
+                        {isApproved ? 'Active' : isPending ? 'Pending Approval' : isRejected ? 'Rejected' : isArchived ? 'Archived' : 'Suspended'}
                       </Badge>
                     </div>
 
@@ -238,16 +331,24 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
                     {isApproved ? (
                       <Button
                         variant="brand"
-                        onClick={() => onSelectRestaurant(rest)}
+                        disabled={openingRestId === rest.id}
+                        onClick={() => handleSelectRestaurant(rest)}
                         className="w-full text-xs font-bold py-3 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/40"
-                        icon={<ArrowRight className="w-4 h-4 ml-1" />}
+                        icon={
+                          openingRestId === rest.id ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin ml-1" />
+                          ) : (
+                            <ArrowRight className="w-4 h-4 ml-1" />
+                          )
+                        }
                       >
-                        Open Restaurant →
+                        {openingRestId === rest.id ? 'Opening Restaurant...' : 'Open Restaurant →'}
                       </Button>
                     ) : isPending ? (
                       <Button
                         variant="outline"
-                        onClick={() => onSelectRestaurant(rest)}
+                        disabled={openingRestId === rest.id}
+                        onClick={() => handleSelectRestaurant(rest)}
                         className="w-full text-xs font-bold py-3 border-amber-500/50 text-amber-300 hover:bg-amber-500/10"
                         icon={<Clock className="w-4 h-4 mr-1 text-amber-400 animate-pulse" />}
                       >
@@ -256,7 +357,8 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
                     ) : isRejected ? (
                       <Button
                         variant="outline"
-                        onClick={() => onSelectRestaurant(rest)}
+                        disabled={openingRestId === rest.id}
+                        onClick={() => handleSelectRestaurant(rest)}
                         className="w-full text-xs font-bold py-3 border-rose-500/50 text-rose-300 hover:bg-rose-500/10"
                         icon={<XCircle className="w-4 h-4 mr-1 text-rose-400" />}
                       >
@@ -268,7 +370,7 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
                         disabled
                         className="w-full text-xs py-3 border-slate-800 text-slate-500"
                       >
-                        Access Suspended
+                        {isArchived ? 'Archived Outlet' : 'Access Suspended'}
                       </Button>
                     )}
                   </div>

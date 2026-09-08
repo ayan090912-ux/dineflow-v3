@@ -10,9 +10,23 @@ async def test_close_table_session_flow():
         tbl_num = "Table 05"
         tbl_id = f"tbl-{rest_id}-table_05"
 
-        # 1. Create table & active session
-        res_sess = await client.get(f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
-        assert res_sess.status_code == 200
+        # 0. Ensure restaurant exists
+        await client.post("/api/v1/restaurants", json={
+            "id": rest_id,
+            "name": "Session Close Bistro",
+            "ownerEmail": "owner@closebistro.com",
+            "hasTables": True,
+        })
+
+        waiter_headers = {
+            "X-Staff-Role": "WAITER",
+            "X-Staff-Restaurant-Id": rest_id,
+            "X-Staff-Id": "staff-ayaan"
+        }
+
+        # 1. Create table & active session via explicit POST
+        res_sess = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
+        assert res_sess.status_code in [200, 201]
         sess_data = res_sess.json()
         assert sess_data["status"] == "ACTIVE"
         session_id_1 = sess_data["id"]
@@ -24,13 +38,21 @@ async def test_close_table_session_flow():
         assert session_id_1 in act_ids1
 
         # 3. Close table session
-        res_close = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_1}", json={"table_session_id": session_id_1, "waiter_name": "Ayaan"})
+        res_close = await client.post(
+            f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_1}",
+            json={"table_session_id": session_id_1, "waiter_name": "Ayaan"},
+            headers=waiter_headers
+        )
         assert res_close.status_code == 200
         close_data = res_close.json()
         assert close_data["status"] == "success"
 
         # 4. Idempotency test: close already-closed session
-        res_close_again = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_1}", json={"table_session_id": session_id_1, "waiter_name": "Ayaan"})
+        res_close_again = await client.post(
+            f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_1}",
+            json={"table_session_id": session_id_1, "waiter_name": "Ayaan"},
+            headers=waiter_headers
+        )
         assert res_close_again.status_code == 200
 
         # 5. Verify GET /active-sessions EXCLUDES closed session
@@ -67,9 +89,9 @@ async def test_close_table_session_flow():
         active_ids_check = [s["id"] for s in res_act_check.json()]
         assert session_id_1 not in active_ids_check
 
-        # 8. Scan QR again -> Creates NEW active session
-        res_sess_new = await client.get(f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
-        assert res_sess_new.status_code == 200
+        # 8. Scan QR again -> Creates NEW active session via POST
+        res_sess_new = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
+        assert res_sess_new.status_code in [200, 201]
         new_sess_data = res_sess_new.json()
         session_id_2 = new_sess_data["id"]
         assert session_id_2 != session_id_1
@@ -83,7 +105,11 @@ async def test_close_table_session_flow():
         assert session_id_1 not in act_ids3
 
         # 10. Close session_id_2 using POST close-session
-        res_close2 = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_2}", json={"table_session_id": session_id_2, "waiter_name": "Ayaan"})
+        res_close2 = await client.post(
+            f"/api/v1/restaurants/{rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_2}",
+            json={"table_session_id": session_id_2, "waiter_name": "Ayaan"},
+            headers=waiter_headers
+        )
         assert res_close2.status_code == 200
 
         # 11. Final check: GET /active-sessions is empty for this table

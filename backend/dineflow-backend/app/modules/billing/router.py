@@ -1,12 +1,13 @@
 import uuid
 from typing import Optional, List, Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, or_
 
 from app.core.database.connection import get_db
+from app.core.security.tenant_auth import require_tenant_owner_or_admin, require_tenant_staff_or_owner, CallerContext
 from app.modules.restaurants.models import Restaurant
 from app.modules.tables.models import Table, TableSession
 from app.modules.orders.models import Order, Bill
@@ -67,19 +68,18 @@ class QrUploadSchema(BaseModel):
 # ----------------- HELPERS -----------------
 
 async def find_restaurant_by_identifier(restaurant_id: str, db: AsyncSession) -> Optional[Restaurant]:
-    if not restaurant_id:
+    clean_id = (restaurant_id or "").strip()
+    if not clean_id:
         return None
-    
-    clean_id = restaurant_id.strip()
 
-    # Fast single indexed query covering exact ID, lowercased ID, slug, and lowercased name
+    # Strict multi-tenancy: Only resolve by exact restaurant ID or exact slug/public_slug
     stmt = select(Restaurant).where(
         Restaurant.deleted_at.is_(None),
         or_(
             Restaurant.id == clean_id,
             func.lower(Restaurant.id) == clean_id.lower(),
             Restaurant.slug == clean_id.lower(),
-            func.lower(Restaurant.name) == clean_id.lower()
+            Restaurant.public_slug == clean_id.lower()
         )
     ).limit(1)
     res = await db.execute(stmt)
@@ -87,12 +87,7 @@ async def find_restaurant_by_identifier(restaurant_id: str, db: AsyncSession) ->
     if rest:
         return rest
 
-    # Fallback for default identifiers if explicitly requested
-    if clean_id.lower() in ["rest-1", "default", "current", "cafe-co", "cafeco"]:
-        stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None)).order_by(Restaurant.created_at.asc()).limit(1)
-        res = await db.execute(stmt)
-        return res.scalar_one_or_none()
-
+    # Strict zero fallback: NEVER return default, earliest, or first restaurant
     return None
 
 def format_bill_response(bill: Bill) -> dict:
@@ -200,6 +195,7 @@ async def get_restaurant_billing_config(
 async def update_restaurant_billing_config(
     restaurant_id: str,
     config: BillingConfigUpdateSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
     db: AsyncSession = Depends(get_db)
 ):
     rest = await find_restaurant_by_identifier(restaurant_id, db)
@@ -245,7 +241,7 @@ async def update_restaurant_billing_config(
             event_type="BillingConfigUpdated",
             payload={
                 "restaurantId": rest.id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
     except Exception:
@@ -276,6 +272,7 @@ async def update_restaurant_billing_config(
 async def upload_restaurant_upi_qr(
     restaurant_id: str,
     payload: QrUploadSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
     db: AsyncSession = Depends(get_db)
 ):
     rest = await find_restaurant_by_identifier(restaurant_id, db)
@@ -303,7 +300,7 @@ async def upload_restaurant_upi_qr(
             payload={
                 "restaurantId": rest.id,
                 "upiQrUrl": rest.upi_qr_url,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
     except Exception:
@@ -475,7 +472,7 @@ async def generate_table_invoice(
         restaurant_id=rest.id,
         table_id=payload.tableId or f"table-{payload.tableNumber}",
         table_number=payload.tableNumber,
-        table_session_id=payload.tableSessionId or f"sess-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        table_session_id=payload.tableSessionId or f"sess-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         invoice_number=invoice_number,
         subtotal=calc_res["subtotal"],
         discount_amount=calc_res["discountAmount"],
@@ -556,7 +553,9 @@ async def list_restaurant_bills(
     db: AsyncSession = Depends(get_db)
 ):
     rest = await find_restaurant_by_identifier(restaurant_id, db)
-    target_rest_id = rest.id if rest else restaurant_id
+    if not rest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Restaurant '{restaurant_id}' not found")
+    target_rest_id = rest.id
 
     query = select(Bill).where(Bill.restaurant_id == target_rest_id).order_by(Bill.created_at.desc())
     if status_filter:
@@ -577,10 +576,13 @@ async def record_bill_payment(
     restaurant_id: str,
     bill_id: str,
     payload: MarkPaymentSchema,
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
     rest = await find_restaurant_by_identifier(restaurant_id, db)
-    target_rest_id = rest.id if rest else restaurant_id
+    if not rest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Restaurant '{restaurant_id}' not found")
+    target_rest_id = rest.id
 
     stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == target_rest_id)
     res = await db.execute(stmt)
@@ -588,11 +590,12 @@ async def record_bill_payment(
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
 
+    is_gateway = (payload.paymentMethod or "").upper() in ["RAZORPAY", "STRIPE", "GATEWAY", "ONLINE"]
     bill.payment_status = "PAID"
     bill.status = "PAID"
     bill.payment_method = payload.paymentMethod
-    bill.payment_verified_by = payload.verifiedBy or "Staff"
-    bill.payment_reference = payload.paymentReference or f"PAY-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    bill.payment_verified_by = payload.verifiedBy or caller.email or caller.uid or "Staff"
+    bill.payment_reference = payload.paymentReference or f"PAY-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
     # Update TableSession payment status
     if bill.table_session_id:
@@ -663,7 +666,7 @@ async def close_table_settlement(
         sess = sess_res.scalar_one_or_none()
         if sess:
             sess.status = "CLOSED"
-            sess.session_closed_at = datetime.utcnow()
+            sess.session_closed_at = datetime.now(timezone.utc)
             sess.closed_by_waiter_name = closed_by
 
     # Free up table

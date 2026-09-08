@@ -6,6 +6,20 @@ from app.main import app
 async def test_create_and_update_customer_request_flow():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        # 0. Ensure restaurant exists
+        await client.post("/api/v1/restaurants", json={
+            "id": "rest-test-100",
+            "name": "Customer Request Bistro",
+            "ownerEmail": "owner@crtest.com",
+            "hasTables": True,
+        })
+
+        staff_headers = {
+            "X-Staff-Role": "WAITER",
+            "X-Staff-Restaurant-Id": "rest-test-100",
+            "X-Staff-Id": "staff-ayaan"
+        }
+
         # 1. Create Customer Request (Water)
         payload = {
             "restaurantId": "rest-test-100",
@@ -25,19 +39,31 @@ async def test_create_and_update_customer_request_flow():
         assert data["status"] == "PENDING"
 
         # 2. Update status: PENDING -> ACCEPTED (IN_PROGRESS)
-        res_accept = await client.patch(f"/api/v1/customer-requests/{req_id}", json={"status": "ACCEPTED", "waiterName": "Ayaan"})
+        res_accept = await client.patch(
+            f"/api/v1/customer-requests/{req_id}",
+            json={"status": "ACCEPTED", "waiterName": "Ayaan"},
+            headers=staff_headers
+        )
         assert res_accept.status_code == 200
         accept_data = res_accept.json()
         assert accept_data["status"] == "IN_PROGRESS"
         assert accept_data["waiterName"] == "Ayaan"
 
         # 3. Update status: IN_PROGRESS -> COMPLETED
-        res_complete = await client.patch(f"/api/v1/customer-requests/{req_id}", json={"status": "COMPLETED", "waiterName": "Ayaan"})
+        res_complete = await client.patch(
+            f"/api/v1/customer-requests/{req_id}",
+            json={"status": "COMPLETED", "waiterName": "Ayaan"},
+            headers=staff_headers
+        )
         assert res_complete.status_code == 200
         complete_data = res_complete.json()
         assert complete_data["status"] == "COMPLETED"
 
         # 4. Attempt invalid transition: COMPLETED -> PENDING (Must fail with 400)
-        res_invalid = await client.patch(f"/api/v1/customer-requests/{req_id}", json={"status": "PENDING"})
+        res_invalid = await client.patch(
+            f"/api/v1/customer-requests/{req_id}",
+            json={"status": "PENDING"},
+            headers=staff_headers
+        )
         assert res_invalid.status_code == 400
         assert "Invalid state transition" in res_invalid.json()["detail"]

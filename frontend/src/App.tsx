@@ -85,11 +85,14 @@ function AppContent() {
       if (fbUser && fbUser.email) {
         const scope = getPortalScopeFromPath(window.location.pathname);
         let token = '';
+        let isAdmin = scope === 'ADMIN';
         try {
-          token = await fbUser.getIdToken();
+          const tokenResult = await fbUser.getIdTokenResult();
+          token = tokenResult.token;
+          isAdmin = Boolean(tokenResult.claims.admin || tokenResult.claims.role === 'admin' || tokenResult.claims.platform_admin || scope === 'ADMIN');
           if (token) {
             localStorage.setItem('dinely_auth_token', token);
-            if (scope === 'ADMIN' || fbUser.email.toLowerCase() === 'ayan090912@gmail.com') {
+            if (isAdmin) {
               localStorage.setItem('dinely_platform_admin_id_token', token);
               sessionStorage.setItem('dinely_admin_token', token);
             }
@@ -104,7 +107,7 @@ function AppContent() {
             id: fbUser.uid,
             name: fbUser.displayName || fbUser.email.split('@')[0],
             email: fbUser.email.toLowerCase(),
-            role: (scope === 'ADMIN' && fbUser.email.toLowerCase() === 'ayan090912@gmail.com') ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
+            role: isAdmin ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
           };
           api.setCurrentUser(appUser, scope);
         }
@@ -205,6 +208,16 @@ function AppContent() {
     const domainResolution = getTenantFromHostname();
     if (domainResolution.isTenantSubdomain && domainResolution.slug) {
       return <CustomerApp />;
+    }
+
+    // 0.1. Guard protected routes while Firebase Auth initializes session
+    if (isInitializing && !['/', '/landing', '/home', '/about', '/pricing', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
+          <div className="w-12 h-12 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 font-mono">Initializing secure session...</p>
+        </div>
+      );
     }
 
     // 1. Landing Website & Public Marketing Pages
@@ -363,13 +376,15 @@ function AppContent() {
             await api.switchActiveRestaurant(rest.id);
             const updated = (await api.getRestaurantDetails(rest.id)) || rest;
             setCurrentRestaurant(updated);
-            const isAppr =
-              rest.isApproved !== false ||
-              updated?.isApproved !== false ||
-              updated?.lifecycleStatus === 'APPROVED' ||
+            const isLive =
               updated?.lifecycleStatus === 'LIVE' ||
-              updated?.lifecycleStatus === 'ACTIVE';
-            if (isAppr) {
+              updated?.lifecycleStatus === 'APPROVED' ||
+              (updated?.isApproved === true &&
+                updated?.lifecycleStatus !== 'PENDING_APPROVAL' &&
+                updated?.lifecycleStatus !== 'REJECTED' &&
+                updated?.lifecycleStatus !== 'ARCHIVED' &&
+                updated?.lifecycleStatus !== 'SUSPENDED');
+            if (isLive) {
               navigateTo('/restaurant/dashboard');
             } else {
               navigateTo('/restaurant/pending-approval');
@@ -504,6 +519,16 @@ function AppContent() {
       }
 
       if (!currentRestaurant) {
+        const storedRestId = api.getCurrentRestaurantId();
+        if (storedRestId) {
+          return (
+            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
+              <div className="w-10 h-10 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
+              <p className="text-xs text-slate-400 font-mono">Loading restaurant workspace...</p>
+            </div>
+          );
+        }
+
         return (
           <WorkspaceSelector
             user={currentUser}
@@ -511,11 +536,15 @@ function AppContent() {
               await api.switchActiveRestaurant(rest.id);
               const updated = (await api.getRestaurantDetails(rest.id)) || rest;
               setCurrentRestaurant(updated);
-              if (
-                rest.isApproved !== false &&
-                updated?.lifecycleStatus !== 'PENDING_APPROVAL' &&
-                updated?.lifecycleStatus !== 'REJECTED'
-              ) {
+              const isLive =
+                updated?.lifecycleStatus === 'LIVE' ||
+                updated?.lifecycleStatus === 'APPROVED' ||
+                (updated?.isApproved === true &&
+                  updated?.lifecycleStatus !== 'PENDING_APPROVAL' &&
+                  updated?.lifecycleStatus !== 'REJECTED' &&
+                  updated?.lifecycleStatus !== 'ARCHIVED' &&
+                  updated?.lifecycleStatus !== 'SUSPENDED');
+              if (isLive) {
                 navigateTo('/restaurant/dashboard');
               } else {
                 navigateTo('/restaurant/pending-approval');
@@ -527,14 +556,16 @@ function AppContent() {
         );
       }
 
-      if (
-        currentRestaurant &&
-        !currentRestaurant.isApproved &&
-        currentRestaurant.lifecycleStatus !== 'APPROVED' &&
-        currentRestaurant.lifecycleStatus !== 'LIVE' &&
-        currentRestaurant.lifecycleStatus !== 'ACTIVE' &&
-        currentUser?.role !== 'SUPER_ADMIN'
-      ) {
+      const isLiveRestaurant =
+        currentRestaurant.lifecycleStatus === 'LIVE' ||
+        currentRestaurant.lifecycleStatus === 'APPROVED' ||
+        (currentRestaurant.isApproved === true &&
+          currentRestaurant.lifecycleStatus !== 'PENDING_APPROVAL' &&
+          currentRestaurant.lifecycleStatus !== 'REJECTED' &&
+          currentRestaurant.lifecycleStatus !== 'ARCHIVED' &&
+          currentRestaurant.lifecycleStatus !== 'SUSPENDED');
+
+      if (!isLiveRestaurant && currentUser?.role !== 'SUPER_ADMIN') {
         return (
           <PendingApprovalPage
             restaurantId={currentRestaurant.id}
@@ -546,6 +577,7 @@ function AppContent() {
 
       return (
         <RestaurantApp
+          activeRestaurant={currentRestaurant}
           onEditSetup={() => navigateTo('/wizard')}
           onLogout={() => handleLogout('/restaurant/login')}
           onNavigate={navigateTo}

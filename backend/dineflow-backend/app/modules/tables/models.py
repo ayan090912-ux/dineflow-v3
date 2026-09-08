@@ -1,5 +1,4 @@
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import String, Boolean, Integer, Text, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
@@ -27,5 +26,5 @@ class TableSession(Base, TimestampMixin):
     table_id: Mapped[str] = mapped_column(String(255), ForeignKey("tables.id", ondelete="CASCADE"), nullable=False, index=True)
     table_number: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", nullable=False)  # ACTIVE | CLOSED
-    session_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    session_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     session_closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

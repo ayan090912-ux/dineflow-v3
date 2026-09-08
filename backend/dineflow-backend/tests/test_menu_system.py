@@ -8,6 +8,28 @@ async def test_menu_system_end_to_end_scenarios():
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         rest_a = "rest-tenant-menu-a-100"
         rest_b = "rest-tenant-menu-b-200"
+        owner_a_email = "owner_a@menutest.com"
+        owner_a_uid = "uid_menu_a"
+        owner_b_email = "owner_b@menutest.com"
+        owner_b_uid = "uid_menu_b"
+
+        # 0. Seed Restaurants
+        await client.post("/api/v1/restaurants", json={
+            "id": rest_a,
+            "name": "Menu Test Restaurant A",
+            "ownerEmail": owner_a_email,
+            "ownerUid": owner_a_uid,
+            "hasTables": True,
+        })
+        await client.post("/api/v1/restaurants", json={
+            "id": rest_b,
+            "name": "Menu Test Restaurant B",
+            "ownerEmail": owner_b_email,
+            "ownerUid": owner_b_uid,
+            "hasTables": True,
+        })
+
+        headers_a = {"Authorization": f"Bearer firebase_token_owner::{owner_a_uid}::{owner_a_email}"}
 
         # TEST 1: GET Menu for Restaurant A
         res_get_a = await client.get(f"/api/v1/restaurants/{rest_a}/menu")
@@ -22,12 +44,12 @@ async def test_menu_system_end_to_end_scenarios():
             "name": "DEBUG PIZZA",
             "description": "Test pizza with extra cheese",
             "price": 299.0,
-            "categoryId": "cat-mains-slug",  # Non-existent category ID -> triggers auto-resolution
+            "categoryId": "cat-mains-slug",
             "isAvailable": True,
             "isVegetarian": True,
             "targetDestination": "KITCHEN"
         }
-        res_create = await client.post(f"/api/v1/restaurants/{rest_a}/menu", json=pizza_payload)
+        res_create = await client.post(f"/api/v1/restaurants/{rest_a}/menu", json=pizza_payload, headers=headers_a)
         assert res_create.status_code == 201, f"Create menu item failed: {res_create.text}"
         item_pizza = res_create.json()
         item_id = item_pizza["id"]
@@ -44,7 +66,7 @@ async def test_menu_system_end_to_end_scenarios():
         assert float(created_item["price"]) == 299.0
 
         # TEST 4: Edit DEBUG PIZZA price ₹299 -> ₹349
-        res_update_price = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{item_id}", json={"price": 349.0})
+        res_update_price = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{item_id}", json={"price": 349.0}, headers=headers_a)
         assert res_update_price.status_code == 200
         updated_item = res_update_price.json()
         assert float(updated_item["price"]) == 349.0
@@ -56,7 +78,7 @@ async def test_menu_system_end_to_end_scenarios():
         assert float(updated_in_db["price"]) == 349.0
 
         # TEST 6: Toggle availability -> isAvailable = False
-        res_update_avail = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{item_id}", json={"isAvailable": False})
+        res_update_avail = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{item_id}", json={"isAvailable": False}, headers=headers_a)
         assert res_update_avail.status_code == 200
         assert res_update_avail.json()["is_available"] is False
 

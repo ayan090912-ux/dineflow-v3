@@ -82,6 +82,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [reminderMessage, setReminderMessage] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
   const [isApproving, setIsApproving] = useState(false);
+  const [isActionInProgress, setIsActionInProgress] = useState<string | null>(null);
   const [isPurging, setIsPurging] = useState(false);
   const [incomingAlert, setIncomingAlert] = useState<{ id: string; name: string; ownerEmail?: string } | null>(null);
 
@@ -207,11 +208,13 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   };
 
   const handleReject = async (id: string) => {
+    if (isActionInProgress) return;
     if (!actionReason || !actionReason.trim()) {
       alert('A rejection reason is required before declining a restaurant application.');
       return;
     }
     const reason = actionReason.trim();
+    setIsActionInProgress(id);
     const prevRestaurants = [...allRestaurants];
     setAllRestaurants((prev) =>
       prev.map((r) =>
@@ -225,6 +228,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     } catch (err: any) {
       setAllRestaurants(prevRestaurants);
       alert(`Rejection error: ${err.message || 'Failed to reject'}`);
+    } finally {
+      setIsActionInProgress(null);
     }
   };
 
@@ -245,6 +250,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   };
 
   const handleDismiss = async (id: string) => {
+    if (isActionInProgress) return;
+    setIsActionInProgress(id);
     const reason = actionReason.trim() || 'Archived test or duplicate application from approval queue';
     const prevRestaurants = [...allRestaurants];
     setAllRestaurants((prev) =>
@@ -259,6 +266,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     } catch (err: any) {
       setAllRestaurants(prevRestaurants);
       alert(`Dismiss error: ${err.message || 'Failed to dismiss application'}`);
+    } finally {
+      setIsActionInProgress(null);
     }
   };
 
@@ -1315,14 +1324,27 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               )}
 
               {actionModal === 'REJECT' && (
-                <Button variant="danger" size="sm" onClick={() => handleReject(selectedRestaurant.id)}>
-                  Confirm Rejection
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={Boolean(isActionInProgress)}
+                  isLoading={isActionInProgress === selectedRestaurant.id}
+                  onClick={() => handleReject(selectedRestaurant.id)}
+                >
+                  {isActionInProgress === selectedRestaurant.id ? 'Rejecting...' : 'Confirm Rejection'}
                 </Button>
               )}
 
               {actionModal === 'DISMISS' && (
-                <Button variant="outline" size="sm" onClick={() => handleDismiss(selectedRestaurant.id)} className="border-slate-700 text-slate-200 hover:bg-slate-800">
-                  Confirm Archive
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={Boolean(isActionInProgress)}
+                  isLoading={isActionInProgress === selectedRestaurant.id}
+                  onClick={() => handleDismiss(selectedRestaurant.id)}
+                  className="border-slate-700 text-slate-200 hover:bg-slate-800"
+                >
+                  {isActionInProgress === selectedRestaurant.id ? 'Archiving...' : 'Confirm Archive'}
                 </Button>
               )}
 

@@ -169,19 +169,7 @@ export function normalizeOrder(raw: any): Order {
   const normalizedItems: OrderItem[] = Array.isArray(rawItems)
     ? rawItems.map((i: any, idx: number) => {
         const dest = (i.targetDestination || i.target_destination || i.station || '').toUpperCase();
-        let targetDestination: 'KITCHEN' | 'BAR' = 'KITCHEN';
-        if (dest === 'BAR') {
-          targetDestination = 'BAR';
-        } else if (!dest) {
-          const lowerName = (i.name || '').toLowerCase();
-          if (
-            ['mojito', 'cocktail', 'beer', 'wine', 'drink', 'beverage', 'whiskey', 'vodka', 'rum', 'mocktail', 'shake', 'juice'].some((w) =>
-              lowerName.includes(w)
-            )
-          ) {
-            targetDestination = 'BAR';
-          }
-        }
+        const targetDestination: 'KITCHEN' | 'BAR' = dest === 'BAR' ? 'BAR' : 'KITCHEN';
 
         return {
           id: i.id || `oi-${raw.id || 'ord'}-${idx}`,
@@ -777,11 +765,9 @@ export class DinelyApiClient {
       restaurant =
         ownerRestaurants.find((r) => r.isApproved || r.lifecycleStatus === 'APPROVED' || r.lifecycleStatus === 'LIVE' || r.lifecycleStatus === 'ACTIVE') ||
         ownerRestaurants.find((r) => r.lifecycleStatus === 'PENDING_APPROVAL') ||
-        ownerRestaurants[0];
+        (ownerRestaurants.length === 1 ? ownerRestaurants[0] : null);
     } else {
-      restaurant = this.restaurants.find(
-        (r) => !r.isDeleted && (r.id === user?.restaurantId || (r.ownerEmail && r.ownerEmail.toLowerCase() === normalizedEmail))
-      ) || null;
+      restaurant = null;
     }
 
     if (restaurant && restaurant.lifecycleStatus === 'SUSPENDED') {
@@ -840,106 +826,61 @@ export class DinelyApiClient {
         : (idTokenOrEmail.includes('@') ? idTokenOrEmail : '')
     ).trim().toLowerCase();
 
-    const adminEmail = emailCandidate || 'ayan090912@gmail.com';
-
-    if (adminEmail !== 'ayan090912@gmail.com') {
-      throw new Error('Access denied: You do not have permission to access this portal.');
-    }
+    const adminEmail = emailCandidate || 'admin@dinely.food';
 
     if (!firebaseIdToken.startsWith('eyJ') && !firebaseIdToken.startsWith('firebase_token_')) {
       firebaseIdToken = `firebase_token_admin_${encodeURIComponent(adminEmail)}`;
     }
 
-    try {
-      const apiBase = getApiBaseUrl();
-      const response = await fetch(`${apiBase}/admin/verify-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${firebaseIdToken}`,
-        },
-        body: JSON.stringify({ id_token: firebaseIdToken }),
-      });
+    const apiBase = getApiBaseUrl();
+    const response = await fetch(`${apiBase}/admin/verify-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${firebaseIdToken}`,
+      },
+      body: JSON.stringify({ id_token: firebaseIdToken }),
+    });
 
-      if (response.ok) {
-        const verified = await response.json();
-        const effectiveEmail = (verified.email || adminEmail).toLowerCase();
-        if (effectiveEmail !== 'ayan090912@gmail.com') {
-          throw new Error('Access denied: Unauthorized identity verification.');
-        }
-        const adminUid = verified.uid || 'admin_uid';
-
-        let adminUser = this.users.find((u) => u.role === 'PLATFORM_ADMIN' && u.email.toLowerCase() === effectiveEmail);
-        if (!adminUser) {
-          adminUser = {
-            id: `usr-admin-${adminUid}`,
-            firstName: 'Platform',
-            lastName: 'Admin',
-            name: 'Platform Administrator',
-            email: effectiveEmail,
-            phone: '+1 800-DINELY',
-            role: 'PLATFORM_ADMIN',
-            isEmailVerified: true,
-            googleUid: adminUid,
-          };
-          this.users.unshift(adminUser);
-        }
-
-        const tokens: AuthTokens = {
-          accessToken: firebaseIdToken,
-          refreshToken: `df_admin_ref_${Date.now()}`,
-          expiresIn: 86400,
-          tokenType: 'Bearer',
-        };
-
-        adminUser.tokens = tokens;
-        this.saveSession(adminUser, tokens, null, 'ADMIN');
-
-        this.auditLogs.unshift({
-          id: `log-${Date.now()}`,
-          actor: adminUser.name || effectiveEmail,
-          action: 'Authenticated Platform Admin Control Plane',
-          target: 'Dinely Cloud',
-          timestamp: new Date().toISOString(),
-          ipAddress: '127.0.0.1',
-          status: 'SUCCESS',
-        });
-
-        this.saveDatabase();
-        return { user: adminUser, tokens };
-      }
-    } catch (err: any) {
-      console.warn('Backend admin token verification fallback to local admin session:', err);
+    if (!response.ok) {
+      const errDetail = await response.json().catch(() => ({ detail: 'Unauthorized' }));
+      throw new Error(errDetail.detail || 'Access denied: You do not have permission to access the Platform Admin portal.');
     }
 
-    // Direct platform admin authentication
-    let adminUser = this.users.find((u) => u.role === 'PLATFORM_ADMIN' && u.email.toLowerCase() === adminEmail);
+    const verified = await response.json();
+    const effectiveEmail = (verified.email || adminEmail).toLowerCase();
+    const adminUid = verified.uid || 'admin_uid';
+
+    let adminUser = this.users.find((u) => u.role === 'PLATFORM_ADMIN' && u.email.toLowerCase() === effectiveEmail);
     if (!adminUser) {
       adminUser = {
-        id: `usr-admin-${Date.now()}`,
+        id: `usr-admin-${adminUid}`,
         firstName: 'Platform',
         lastName: 'Admin',
         name: 'Platform Administrator',
-        email: adminEmail,
+        email: effectiveEmail,
         phone: '+1 800-DINELY',
         role: 'PLATFORM_ADMIN',
         isEmailVerified: true,
+        googleUid: adminUid,
       };
       this.users.unshift(adminUser);
     }
+
     const tokens: AuthTokens = {
       accessToken: firebaseIdToken,
       refreshToken: `df_admin_ref_${Date.now()}`,
       expiresIn: 86400,
       tokenType: 'Bearer',
     };
+
     adminUser.tokens = tokens;
     this.saveSession(adminUser, tokens, null, 'ADMIN');
 
     this.auditLogs.unshift({
       id: `log-${Date.now()}`,
-      actor: adminUser.name || adminEmail,
-      action: 'Authenticated Platform Admin Session',
+      actor: adminUser.name || effectiveEmail,
+      action: 'Authenticated Platform Admin Control Plane',
       target: 'Dinely Cloud',
       timestamp: new Date().toISOString(),
       ipAddress: '127.0.0.1',
@@ -948,6 +889,29 @@ export class DinelyApiClient {
 
     this.saveDatabase();
     return { user: adminUser, tokens };
+  }
+
+  private async resolveStaffRestaurant(restaurantId?: string): Promise<Restaurant | null> {
+    if (!restaurantId) return null;
+    let rest = this.restaurants.find((r) => r.id === restaurantId && !r.isDeleted);
+    if (!rest) {
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restaurantId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.id) {
+            rest = this.mapBackendRestaurant(data);
+            const idx = this.restaurants.findIndex((r) => r.id === rest!.id);
+            if (idx >= 0) this.restaurants[idx] = rest;
+            else this.restaurants.push(rest);
+          }
+        }
+      } catch (err) {
+        console.warn('Backend restaurant lookup failed during staff login:', err);
+      }
+    }
+    return rest || null;
   }
 
   async loginKitchen(identifier: string, password?: string) {
@@ -970,7 +934,10 @@ export class DinelyApiClient {
       throw new Error('Invalid password. Please check your credentials and try again.');
     }
 
-    const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
+    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
+    if (!rest) {
+      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
+    }
 
     emp.status = 'ON_CLOCK';
     emp.lastLoginAt = new Date().toISOString();
@@ -1030,7 +997,10 @@ export class DinelyApiClient {
       throw new Error('Invalid password. Please check your credentials and try again.');
     }
 
-    const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
+    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
+    if (!rest) {
+      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
+    }
 
     emp.status = 'ON_CLOCK';
     emp.lastLoginAt = new Date().toISOString();
@@ -1097,7 +1067,10 @@ export class DinelyApiClient {
       throw new Error('Invalid password. Please check your credentials and try again.');
     }
 
-    const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
+    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
+    if (!rest) {
+      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
+    }
 
     if (rest && rest.hasBar === false) {
       throw new Error(`Bar module is disabled for ${rest.name}.`);
@@ -1168,7 +1141,10 @@ export class DinelyApiClient {
       throw new Error('Invalid password. Please check your credentials and try again.');
     }
 
-    const rest = this.restaurants.find((r) => r.id === emp.restaurantId && !r.isDeleted) || this.restaurants[0];
+    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
+    if (!rest) {
+      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
+    }
 
     emp.status = 'ON_CLOCK';
     emp.lastLoginAt = new Date().toISOString();
@@ -1336,20 +1312,37 @@ export class DinelyApiClient {
 
   async logout(scope?: PortalScope) {
     const targetScope = scope || getPortalScopeFromPath();
-    delete this.currentUsersByScope[targetScope];
-    delete this.currentTokensByScope[targetScope];
-    delete this.currentRestaurantIdsByScope[targetScope];
+    if (scope) {
+      delete this.currentUsersByScope[scope];
+      delete this.currentTokensByScope[scope];
+      delete this.currentRestaurantIdsByScope[scope];
+    } else {
+      this.currentUsersByScope = {};
+      this.currentTokensByScope = {};
+      this.currentRestaurantIdsByScope = {};
+    }
+    this._currentRestaurantId = null;
+    this.restaurants = [];
 
     if (typeof window !== 'undefined') {
-      const storageKey = `dinely_user_${targetScope.toLowerCase()}`;
-      localStorage.removeItem(storageKey);
-      sessionStorage.removeItem(storageKey);
-      if (targetScope === 'ADMIN') {
-        localStorage.removeItem('dinely_platform_admin_id_token');
-        sessionStorage.removeItem('dinely_admin_token');
-      }
+      const allScopes: PortalScope[] = ['OWNER', 'WAITER', 'KITCHEN', 'BAR', 'INVENTORY', 'ADMIN', 'CUSTOMER'];
+      const scopesToClear = scope ? [scope] : allScopes;
+      scopesToClear.forEach((s) => {
+        const storageKey = `dinely_user_${s.toLowerCase()}`;
+        localStorage.removeItem(storageKey);
+        sessionStorage.removeItem(storageKey);
+      });
+      localStorage.removeItem('dinely_active_restaurant_id');
+      localStorage.removeItem('dinely_restaurant_id');
+      sessionStorage.removeItem('dinely_active_restaurant_id');
+      sessionStorage.removeItem('dinely_restaurant_id');
+      localStorage.removeItem('dinely_platform_admin_id_token');
+      sessionStorage.removeItem('dinely_admin_token');
       localStorage.removeItem('dinely_auth_token');
     }
+    try {
+      realtimeBus.disconnect();
+    } catch (_) {}
     this.saveDatabase();
   }
 
@@ -1397,6 +1390,7 @@ export class DinelyApiClient {
     ownerName?: string;
     ownerEmail?: string;
     ownerUid?: string;
+    tableCount?: number;
     features?: any;
     theme?: any;
   }) {
@@ -1412,6 +1406,7 @@ export class DinelyApiClient {
     const ownerEmail = (restData.ownerEmail || this.currentUser?.email || '').trim().toLowerCase();
     const ownerName = restData.ownerName || this.currentUser?.name || 'Restaurant Owner';
     const ownerUid = restData.ownerUid || this.currentUser?.id;
+    const finalTableCount = restData.tableCount !== undefined ? restData.tableCount : (hasTables ? 8 : 0);
 
     const newRest: Restaurant = {
       id,
@@ -1440,7 +1435,7 @@ export class DinelyApiClient {
       status: 'CLOSED',
       rating: 5.0,
       activeOrdersCount: 0,
-      tablesCount: hasTables ? 8 : 0,
+      tablesCount: finalTableCount,
       submittedAt: new Date().toISOString(),
       theme: {
         restaurantId: id,
@@ -1475,7 +1470,6 @@ export class DinelyApiClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id,
           name: restData.name,
           cuisine: restData.cuisine || 'Multi-Cuisine',
           businessType: bType,
@@ -1485,6 +1479,7 @@ export class DinelyApiClient {
           hasInventory: restData.hasInventory !== false,
           hasBilling: restData.hasBilling !== false,
           hasTables,
+          tableCount: finalTableCount,
           enabledModules: restData.enabledModules,
           phone: restData.phone || '+1 555-0100',
           email: restData.email || 'contact@dinely.com',
@@ -1502,8 +1497,14 @@ export class DinelyApiClient {
         const backendRest = await res.json();
         if (backendRest && backendRest.id) {
           newRest.id = backendRest.id;
+          newRest.slug = backendRest.slug || newRest.slug;
+          newRest.publicSlug = backendRest.public_slug || backendRest.slug || newRest.slug;
+          newRest.domain = backendRest.domain || `https://${newRest.publicSlug}.dinely.app`;
           newRest.lifecycleStatus = (backendRest.lifecycle_status || 'PENDING_APPROVAL') as RestaurantLifecycleStatus;
           newRest.isApproved = Boolean(backendRest.is_approved);
+          if (newRest.theme) {
+            newRest.theme.restaurantId = backendRest.id;
+          }
         }
       }
     } catch (e) {
@@ -1650,28 +1651,14 @@ export class DinelyApiClient {
   // --- Platform Admin Control Plane APIs ---
 
   async getPlatformStats() {
-    try {
-      const apiBase = getApiBaseUrl();
-      const headers = this.getAuthHeader('ADMIN');
-      const res = await fetch(`${apiBase}/admin/stats`, { headers });
-      if (res.ok) {
-        const stats = await res.json();
-        return stats;
-      }
-    } catch (e) {
-      console.warn('Backend getPlatformStats failed, calculating from real restaurants:', e);
+    const apiBase = getApiBaseUrl();
+    const headers = this.getAuthHeader('ADMIN');
+    const res = await fetch(`${apiBase}/admin/stats`, { headers });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => 'Server error');
+      throw new Error(`Failed to load authoritative platform stats (${res.status}): ${errText}`);
     }
-    const activeRests = await this.getPlatformRestaurants();
-    const liveRestaurants = activeRests.filter((r) => !r.isDeleted && (r.isApproved || r.lifecycleStatus === 'LIVE')).length;
-    const pendingApprovals = activeRests.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved)).length;
-
-    return {
-      activeTenants: Math.max(1, liveRestaurants + pendingApprovals),
-      liveRestaurants,
-      pendingApprovals,
-      totalOrdersProcessed: this.orders.length,
-      systemUptimePercent: 99.99,
-    };
+    return await res.json();
   }
 
   async getOrganizations() {
@@ -1769,8 +1756,25 @@ export class DinelyApiClient {
   async getOwnerRestaurants(ownerEmail?: string, ownerUid?: string): Promise<Restaurant[]> {
     const scope = getPortalScopeFromPath();
     const user = this.getCurrentUser(scope);
-    const email = (ownerEmail || user?.email || (typeof window !== 'undefined' && firebaseAuth.currentUser?.email) || '').trim().toLowerCase();
-    const uid = (ownerUid || user?.id || (typeof window !== 'undefined' && firebaseAuth.currentUser?.uid) || '').trim();
+    let email = (ownerEmail || user?.email || (typeof window !== 'undefined' && firebaseAuth.currentUser?.email) || '').trim().toLowerCase();
+    let uid = (ownerUid || user?.id || (typeof window !== 'undefined' && firebaseAuth.currentUser?.uid) || '').trim();
+
+    if (typeof window !== 'undefined' && firebaseAuth.currentUser) {
+      try {
+        const token = await firebaseAuth.currentUser.getIdToken();
+        if (token) {
+          localStorage.setItem('dinely_auth_token', token);
+        }
+        if (!email && firebaseAuth.currentUser.email) {
+          email = firebaseAuth.currentUser.email.trim().toLowerCase();
+        }
+        if (!uid && firebaseAuth.currentUser.uid) {
+          uid = firebaseAuth.currentUser.uid;
+        }
+      } catch (e) {
+        console.warn('Firebase token refresh error:', e);
+      }
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
@@ -1781,7 +1785,9 @@ export class DinelyApiClient {
       if (email) params.append('owner_email', email);
       if (uid) params.append('owner_uid', uid);
 
+      const headers = this.getAuthHeader(scope);
       const res = await fetch(`${apiBase}/restaurants/owner/my?${params.toString()}`, {
+        headers,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -1824,6 +1830,18 @@ export class DinelyApiClient {
     this._currentRestaurantId = cleanId;
     const scope = getPortalScopeFromPath();
     this.currentRestaurantIdsByScope[scope] = cleanId;
+    this.currentRestaurantIdsByScope['OWNER'] = cleanId;
+
+    const user = this.getCurrentUser(scope);
+    if (user) {
+      user.restaurantId = cleanId;
+      this.setCurrentUser(user, scope);
+    }
+    const ownerUser = this.getCurrentUser('OWNER');
+    if (ownerUser && ownerUser !== user) {
+      ownerUser.restaurantId = cleanId;
+      this.setCurrentUser(ownerUser, 'OWNER');
+    }
 
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('dinely_active_restaurant_id', cleanId);
@@ -1836,6 +1854,7 @@ export class DinelyApiClient {
     if (rest) {
       this._currentRestaurantId = rest.id;
       this.currentRestaurantIdsByScope[scope] = rest.id;
+      this.currentRestaurantIdsByScope['OWNER'] = rest.id;
       realtimeBus.emit('RestaurantSwitched' as any, {
         restaurantId: rest.id,
         data: rest,
@@ -2548,20 +2567,12 @@ export class DinelyApiClient {
 
   async getRestaurantDetails(restaurantId?: string) {
     let targetId = this.resolveTenantRestaurantId(restaurantId);
-    if (!targetId) {
-      const owned = await this.getOwnedRestaurants();
-      if (owned.length > 0) {
-        targetId = owned[0].id;
-        this._currentRestaurantId = targetId;
-        const scope = getPortalScopeFromPath();
-        this.currentRestaurantIdsByScope[scope] = targetId;
-      }
-    }
     if (!targetId) return null;
 
     try {
       const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`);
+      const headers = this.getAuthHeader();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data && data.id) {
@@ -2575,6 +2586,8 @@ export class DinelyApiClient {
           }
           return this.ensureRestaurantDefaults(mappedRest);
         }
+      } else if (res.status === 404) {
+        return null;
       }
     } catch (e) {
       console.warn('API fetch for getRestaurantDetails failed:', e);
@@ -3896,25 +3909,6 @@ export class DinelyApiClient {
 
   async getBillingConfig(restaurantId?: string): Promise<BillingConfig> {
     const targetId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
-      return {
-        restaurantId: '',
-        name: '',
-        legalName: '',
-        state: '',
-        stateCode: '',
-        currency: 'INR (₹)',
-        taxPercentage: 5.0,
-        serviceChargePercentage: 0,
-        serviceChargeEnabled: false,
-        gstin: '',
-        pan: '',
-        invoicePrefix: 'INV-',
-        invoiceStartingNumber: 1001,
-        upiId: '',
-        upiMerchantName: '',
-        upiQrUrl: '',
-        upiEnabled: true,
-      };
     const apiBase = getApiBaseUrl();
     let remoteConfig: any = null;
     try {

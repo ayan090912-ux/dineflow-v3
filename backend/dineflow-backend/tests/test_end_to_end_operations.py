@@ -9,6 +9,31 @@ async def test_end_to_end_full_restaurant_operations():
         rest_a = "rest-1787446097984"
         rest_b = "rest-isolation-tenant-999"
         table_num = "Table 03"
+        owner_a_email = "owner_e2e_a@test.com"
+        owner_a_uid = "uid_e2e_a"
+
+        # 0. Seed Restaurants
+        await client.post("/api/v1/restaurants", json={
+            "id": rest_a,
+            "name": "E2E Restaurant A",
+            "ownerEmail": owner_a_email,
+            "ownerUid": owner_a_uid,
+            "hasTables": True,
+        })
+        await client.post("/api/v1/restaurants", json={
+            "id": rest_b,
+            "name": "E2E Restaurant B",
+            "ownerEmail": "owner_e2e_b@test.com",
+            "ownerUid": "uid_e2e_b",
+            "hasTables": True,
+        })
+
+        owner_headers_a = {"Authorization": f"Bearer firebase_token_owner::{owner_a_uid}::{owner_a_email}"}
+        staff_headers_a = {
+            "X-Staff-Role": "WAITER",
+            "X-Staff-Restaurant-Id": rest_a,
+            "X-Staff-Id": "staff-ayaan"
+        }
 
         # TEST 17 & TEST 1: Owner adds Food Item (DEBUG PIZZA, ₹299, KITCHEN)
         pizza_payload = {
@@ -20,7 +45,7 @@ async def test_end_to_end_full_restaurant_operations():
             "isVegetarian": True,
             "targetDestination": "KITCHEN"
         }
-        res_pizza = await client.post(f"/api/v1/restaurants/{rest_a}/menu", json=pizza_payload)
+        res_pizza = await client.post(f"/api/v1/restaurants/{rest_a}/menu", json=pizza_payload, headers=owner_headers_a)
         assert res_pizza.status_code == 201, f"Failed adding DEBUG PIZZA: {res_pizza.text}"
         pizza_item = res_pizza.json()
         assert pizza_item["name"] == "DEBUG PIZZA"
@@ -36,7 +61,7 @@ async def test_end_to_end_full_restaurant_operations():
             "isVegetarian": False,
             "targetDestination": "BAR"
         }
-        res_mojito = await client.post(f"/api/v1/restaurants/{rest_a}/menu", json=mojito_payload)
+        res_mojito = await client.post(f"/api/v1/restaurants/{rest_a}/menu", json=mojito_payload, headers=owner_headers_a)
         assert res_mojito.status_code == 201, f"Failed adding DEBUG MOJITO: {res_mojito.text}"
         mojito_item = res_mojito.json()
         assert mojito_item["name"] == "DEBUG MOJITO"
@@ -51,25 +76,25 @@ async def test_end_to_end_full_restaurant_operations():
         assert "DEBUG MOJITO" in item_names
 
         # TEST 19: Owner edits price -> DEBUG PIZZA ₹299 -> ₹319
-        res_edit_price = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"price": 319.0})
+        res_edit_price = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"price": 319.0}, headers=owner_headers_a)
         assert res_edit_price.status_code == 200
         assert float(res_edit_price.json()["price"]) == 319.0
 
         # Restore price to 299
-        await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"price": 299.0})
+        await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"price": 299.0}, headers=owner_headers_a)
 
         # TEST 20: Owner disables item & re-enables
-        res_dis = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"isAvailable": False})
+        res_dis = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"isAvailable": False}, headers=owner_headers_a)
         assert res_dis.status_code == 200
         assert res_dis.json()["is_available"] is False
 
-        res_en = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"isAvailable": True})
+        res_en = await client.put(f"/api/v1/restaurants/{rest_a}/menu/{pizza_item['id']}", json={"isAvailable": True}, headers=owner_headers_a)
         assert res_en.status_code == 200
         assert res_en.json()["is_available"] is True
 
-        # TEST 1: QR Scan Creates TableSession A
-        res_sess_a = await client.get(f"/api/v1/restaurants/{rest_a}/tables/tbl-03/session?table_number={table_num}")
-        assert res_sess_a.status_code == 200
+        # TEST 1: QR Scan Creates TableSession A via POST
+        res_sess_a = await client.post(f"/api/v1/restaurants/{rest_a}/tables/tbl-03/session?table_number={table_num}")
+        assert res_sess_a.status_code in [200, 201]
         session_a = res_sess_a.json()
         session_a_id = session_a["id"]
         assert session_a["status"] == "ACTIVE"
@@ -105,8 +130,12 @@ async def test_end_to_end_full_restaurant_operations():
         assert order_a["tableSessionId"] == session_a_id
         assert order_a.get("eta_target_timestamp") is None, "PENDING orders MUST NOT have an ETA timestamp generated"
 
-        # Update order to PREPARING to verify server ETA timestamp generation
-        res_prep = await client.put(f"/api/v1/orders/{order_a_id}/status", json={"kitchenStatus": "PREPARING", "estimatedPrepTimeMinutes": 15})
+        # Update order to PREPARING to verify server ETA timestamp generation (staff auth)
+        res_prep = await client.put(
+            f"/api/v1/orders/{order_a_id}/status",
+            json={"kitchenStatus": "PREPARING", "estimatedPrepTimeMinutes": 15},
+            headers=staff_headers_a
+        )
         assert res_prep.status_code == 200
         prep_order = res_prep.json()
         assert prep_order.get("eta_target_timestamp") is not None, "PREPARING order MUST generate authoritative server ETA timestamp"
@@ -131,8 +160,11 @@ async def test_end_to_end_full_restaurant_operations():
         req_data = res_req.json()
         assert req_data["requestType"] == "WATER"
 
-        # TEST 8 & TEST 9: Close Table 03 Session
-        res_close = await client.post(f"/api/v1/restaurants/{rest_a}/tables/tbl-03/close-session")
+        # TEST 8 & TEST 9: Close Table 03 Session (staff auth)
+        res_close = await client.post(
+            f"/api/v1/restaurants/{rest_a}/tables/tbl-03/close-session",
+            headers=staff_headers_a
+        )
         assert res_close.status_code == 200
         close_res = res_close.json()
         assert close_res["status"] == "success"
@@ -150,9 +182,9 @@ async def test_end_to_end_full_restaurant_operations():
         assert res_customer_orders_old.status_code == 200
         assert len(res_customer_orders_old.json()) == 1
 
-        # TEST 11: New Customer B scans SAME Table 03 QR -> Backend MUST create Session B
-        res_sess_b = await client.get(f"/api/v1/restaurants/{rest_a}/tables/tbl-03/session?table_number={table_num}")
-        assert res_sess_b.status_code == 200
+        # TEST 11: New Customer B scans SAME Table 03 QR -> Backend MUST create Session B via POST
+        res_sess_b = await client.post(f"/api/v1/restaurants/{rest_a}/tables/tbl-03/session?table_number={table_num}")
+        assert res_sess_b.status_code in [200, 201]
         session_b = res_sess_b.json()
         session_b_id = session_b["id"]
         assert session_b_id != session_a_id

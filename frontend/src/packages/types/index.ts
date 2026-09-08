@@ -39,12 +39,12 @@ export function canAccessWorkspace(
   const role = user.role;
   const userEmail = (user.email || '').trim().toLowerCase();
 
-  // 1. Platform Admin has exclusive access to platform admin ONLY if email matches authorized account
+  // 1. Platform Admin has exclusive access to platform admin based on verified role
   if (workspace === 'admin') {
-    return (role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') && userEmail === 'ayan090912@gmail.com';
+    return role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN';
   }
 
-  if ((role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') && userEmail === 'ayan090912@gmail.com') {
+  if (role === 'PLATFORM_ADMIN' || role === 'SUPER_ADMIN') {
     return true;
   }
 
@@ -711,39 +711,7 @@ export function getFulfillmentStation(item: {
   name?: string;
 }): 'KITCHEN' | 'BAR' {
   const dest = (item.targetDestination || '').toUpperCase();
-  if (dest === 'KITCHEN') {
-    return 'KITCHEN';
-  }
-  if (dest === 'BAR' || item.isAlcoholic === true || item.barCategory !== undefined) {
-    return 'BAR';
-  }
-  const cat = (item.category || '').toLowerCase();
-  const name = (item.name || '').toLowerCase();
-  if (
-    cat.includes('bar') ||
-    cat.includes('cocktail') ||
-    cat.includes('beer') ||
-    cat.includes('wine') ||
-    cat.includes('whiskey') ||
-    cat.includes('spirit') ||
-    cat.includes('beverage') ||
-    cat.includes('drink') ||
-    name.includes('beer') ||
-    name.includes('kingfisher') ||
-    name.includes('wine') ||
-    name.includes('whiskey') ||
-    name.includes('cocktail') ||
-    name.includes('vodka') ||
-    name.includes('rum') ||
-    name.includes('gin') ||
-    name.includes('brandy') ||
-    name.includes('coke') ||
-    name.includes('pepsi') ||
-    name.includes('sprite') ||
-    name.includes('soda') ||
-    name.includes('juice') ||
-    name.includes('mocktail')
-  ) {
+  if (dest === 'BAR' || item.isAlcoholic === true) {
     return 'BAR';
   }
   return 'KITCHEN';

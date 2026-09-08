@@ -59,3 +59,16 @@ class Restaurant(Base, TimestampMixin, SoftDeleteMixin):
     dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     dismissed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     dismiss_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class RestaurantLifecycleLog(Base):
+    __tablename__ = "restaurant_lifecycle_logs"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    restaurant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    previous_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    performed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

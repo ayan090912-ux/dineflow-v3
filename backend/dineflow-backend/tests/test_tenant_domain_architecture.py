@@ -135,11 +135,14 @@ class TestDinelyTenantDomainArchitecture:
         t_stamp = int(time.time() * 1000)
         rest_id = f"rest-qr-tenant-{t_stamp}"
 
+        owner_email = f"qr_owner_{t_stamp}@test.com"
+        owner_uid = f"uid_qr_{t_stamp}"
         create_res = client.post("/api/v1/restaurants", json={
             "id": rest_id,
             "name": f"QR Bistro {t_stamp}",
             "cuisine": "Italian",
-            "ownerEmail": f"qr_owner_{t_stamp}@test.com",
+            "ownerEmail": owner_email,
+            "ownerUid": owner_uid,
             "hasTables": True,
         })
         assert create_res.status_code == 201
@@ -158,12 +161,13 @@ class TestDinelyTenantDomainArchitecture:
                 f"QR Code URL '{tbl['qr_code_url']}' does not point to tenant subdomain '{expected_prefix}'!"
             )
 
-        # Create new table and verify QR
+        # Create new table and verify QR (requires owner auth)
+        owner_headers = {"Authorization": f"Bearer firebase_token_owner::{owner_uid}::{owner_email}"}
         new_tbl_res = client.post(f"/api/v1/restaurants/{rest_id}/tables", json={
             "tableNumber": "Table 99",
             "section": "VIP Lounge",
             "capacity": 6,
-        })
+        }, headers=owner_headers)
         assert new_tbl_res.status_code == 201
         new_tbl = new_tbl_res.json()
         assert new_tbl["qr_code_url"] == f"https://{slug}.dinely.app/customer?table=Table 99"
@@ -195,13 +199,15 @@ class TestDinelyTenantDomainArchitecture:
             "hasTables": True,
         })
 
+        owner_headers = {"Authorization": f"Bearer firebase_token_owner::{owner_uid}::{owner_email}"}
+
         # Create Menu item on THE DUNK
         item_dunk_res = client.post(f"/api/v1/restaurants/{dunk_id}/menu", json={
             "name": "Smoked Bacon Burger",
             "price": 450.0,
             "categoryId": "Main Course",
             "isAvailable": True,
-        })
+        }, headers=owner_headers)
         assert item_dunk_res.status_code == 201
 
         # Create Menu item on CAFE.CO
@@ -210,7 +216,7 @@ class TestDinelyTenantDomainArchitecture:
             "price": 220.0,
             "categoryId": "Bakery",
             "isAvailable": True,
-        })
+        }, headers=owner_headers)
         assert item_cafe_res.status_code == 201
 
         # Verify Menu isolation:

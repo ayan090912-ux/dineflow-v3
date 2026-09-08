@@ -93,12 +93,18 @@ import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
 
 interface RestaurantAppProps {
+  activeRestaurant?: any;
   onEditSetup?: () => void;
   onLogout?: () => void;
   onNavigate?: (path: string) => void;
 }
 
-export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLogout, onNavigate }) => {
+export const RestaurantApp: React.FC<RestaurantAppProps> = ({
+  activeRestaurant,
+  onEditSetup,
+  onLogout,
+  onNavigate,
+}) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'workspace_settings'>('dashboard');
 
@@ -266,9 +272,33 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     notes: '',
   });
 
-  const [currentRestaurant, setCurrentRestaurant] = useState<any>(null);
+  const [currentRestaurant, setCurrentRestaurant] = useState<any>(activeRestaurant || null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [viewState, setViewState] = useState<'INITIALIZING' | 'LOADING' | 'READY' | 'ERROR'>('INITIALIZING');
+  const [viewError, setViewError] = useState<string>('');
   const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
+
+  useEffect(() => {
+    if (activeRestaurant && (!currentRestaurant || currentRestaurant.id !== activeRestaurant.id)) {
+      setCurrentRestaurant(activeRestaurant);
+      if (activeRestaurant.theme) {
+        setTheme({
+          restaurantId: activeRestaurant.id,
+          restaurantName: activeRestaurant.name,
+          logo: activeRestaurant.theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
+          bannerUrl: activeRestaurant.theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+          primaryColor: activeRestaurant.theme.primaryColor || '#e11d48',
+          secondaryColor: activeRestaurant.theme.secondaryColor || '#475569',
+          accentColor: '#f59e0b',
+          backgroundColor: '#f8fafc',
+          textColor: '#0f172a',
+          fontFamily: 'sans',
+          borderRadius: 'lg',
+          currency: activeRestaurant.theme.currency || activeRestaurant.currency || 'INR (₹)',
+        });
+      }
+    }
+  }, [activeRestaurant]);
 
   // Business Day & Daily Closing State
   const [currentBusinessDay, setCurrentBusinessDay] = useState<BusinessDay | null>(null);
@@ -492,7 +522,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
   };
 
   useEffect(() => {
-    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+    const restId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     if (restId) {
       realtimeBus.connect(restId, 'OWNER');
     }
@@ -547,6 +577,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
         setEmployees((prev) =>
           prev.map((emp) => (emp.id === event.employeeId || emp.name === event.name ? { ...emp, isClockedIn: event.status === 'ON_CLOCK' } : emp))
         );
+      } else if (event.type === 'RESTAURANT_APPROVED' || event.type === 'RestaurantStatusUpdated') {
+        const evtRestId = event.restaurantId || event.restaurant_id;
+        if (!restId || !evtRestId || evtRestId === restId) {
+          api.getRestaurantDetails(restId).then((updatedRest) => {
+            if (updatedRest) {
+              setCurrentRestaurant(updatedRest);
+              addToast('success', 'Restaurant Status Updated', `Status is now ${updatedRest.lifecycleStatus}`);
+            }
+          }).catch(() => {});
+        }
       }
     });
 
@@ -562,61 +602,84 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
       unsubscribe();
       clearInterval(interval);
     };
-  }, [currentRestaurant?.id]);
+  }, [activeRestaurant?.id, currentRestaurant?.id]);
 
 
   const loadData = async () => {
-    const user = api.getCurrentUser();
-    const rest = await api.getRestaurantDetails();
-    const ownerRests = await api.getOwnerRestaurants();
-    setCurrentUser(user);
-    setCurrentRestaurant(rest);
-    setAllMyRestaurants(ownerRests);
-
-    if (rest?.theme) {
-      setTheme({
-        restaurantId: rest.id,
-        restaurantName: rest.name,
-        logo: rest.theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
-        bannerUrl: rest.theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-        primaryColor: rest.theme.primaryColor || '#e11d48',
-        secondaryColor: rest.theme.secondaryColor || '#475569',
-        accentColor: '#f59e0b',
-        backgroundColor: '#f8fafc',
-        textColor: '#0f172a',
-        fontFamily: 'sans',
-        borderRadius: 'lg',
-        currency: rest.theme.currency || rest.currency || 'INR (₹)',
-      });
+    const targetRestId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId();
+    if (!targetRestId) {
+      setViewState('ERROR');
+      setViewError('No active restaurant selected. Please return to workspace and select your restaurant.');
+      return;
     }
 
-    const [o, m, t, e, i, sup, fc, bc, bDay, bHistory, activeSess, bList] = await Promise.all([
-      api.getOrders(rest?.id),
-      api.getMenuItems(rest?.id),
-      api.getTables(rest?.id),
-      api.getEmployees(rest?.id),
-      api.getInventory(rest?.id),
-      api.getSuppliers(rest?.id),
-      api.getCategories(rest?.id),
-      api.getBarCategories(rest?.id),
-      api.getCurrentBusinessDay(rest?.id),
-      api.getBusinessDayHistory(rest?.id),
-      api.getActiveTableSessions(rest?.id),
-      api.getBills(rest?.id),
-    ]);
+    setViewState('LOADING');
+    setViewError('');
+    try {
+      const user = api.getCurrentUser();
+      const rest = await api.getRestaurantDetails(targetRestId);
+      if (!rest) {
+        setViewState('ERROR');
+        setViewError(`Restaurant "${targetRestId}" could not be loaded or was not found.`);
+        return;
+      }
 
-    setOrders(o);
-    setMenuItems(m);
-    setTables(t);
-    setEmployees(e);
-    setInventory(i);
-    setSuppliers(sup || []);
-    setFoodCategories(fc);
-    setBarCategories(bc);
-    setCurrentBusinessDay(bDay);
-    setBusinessDayHistory(bHistory);
-    setActiveSessions(activeSess || []);
-    setBills(bList || []);
+      const ownerRests = await api.getOwnerRestaurants();
+      setCurrentUser(user);
+      setCurrentRestaurant(rest);
+      setAllMyRestaurants(ownerRests);
+
+      if (rest?.theme) {
+        setTheme({
+          restaurantId: rest.id,
+          restaurantName: rest.name,
+          logo: rest.theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
+          bannerUrl: rest.theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+          primaryColor: rest.theme.primaryColor || '#e11d48',
+          secondaryColor: rest.theme.secondaryColor || '#475569',
+          accentColor: '#f59e0b',
+          backgroundColor: '#f8fafc',
+          textColor: '#0f172a',
+          fontFamily: 'sans',
+          borderRadius: 'lg',
+          currency: rest.theme.currency || rest.currency || 'INR (₹)',
+        });
+      }
+
+      const [o, m, t, e, i, sup, fc, bc, bDay, bHistory, activeSess, bList] = await Promise.all([
+        api.getOrders(rest.id).catch(() => []),
+        api.getMenuItems(rest.id).catch(() => []),
+        api.getTables(rest.id).catch(() => []),
+        api.getEmployees(rest.id).catch(() => []),
+        api.getInventory(rest.id).catch(() => []),
+        api.getSuppliers(rest.id).catch(() => []),
+        api.getCategories(rest.id).catch(() => []),
+        api.getBarCategories(rest.id).catch(() => []),
+        api.getCurrentBusinessDay(rest.id).catch(() => null),
+        api.getBusinessDayHistory(rest.id).catch(() => []),
+        api.getActiveTableSessions(rest.id).catch(() => []),
+        api.getBills(rest.id).catch(() => []),
+      ]);
+
+      setOrders(o || []);
+      setMenuItems(m || []);
+      setTables(t || []);
+      setEmployees(e || []);
+      setInventory(i || []);
+      setSuppliers(sup || []);
+      setFoodCategories(fc || []);
+      setBarCategories(bc || []);
+      setCurrentBusinessDay(bDay);
+      setBusinessDayHistory(bHistory || []);
+      setActiveSessions(activeSess || []);
+      setBills(bList || []);
+
+      setViewState('READY');
+    } catch (err: any) {
+      console.error('[RestaurantApp] Failed to load data:', err);
+      setViewState('ERROR');
+      setViewError(err?.message || 'Failed to initialize restaurant operating system.');
+    }
   };
 
   // Category CRUD Handlers
@@ -1008,7 +1071,55 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({ onEditSetup, onLog
     loadData();
   };
 
+  if (viewState === 'INITIALIZING' || viewState === 'LOADING') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center space-y-4 font-sans">
+        <div className="w-12 h-12 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
+        <div className="text-center space-y-1">
+          <p className="text-sm font-bold text-white tracking-wide">
+            {activeRestaurant?.name || currentRestaurant?.name || 'Restaurant Workspace'}
+          </p>
+          <p className="text-xs text-slate-400 font-mono">Initializing Restaurant OS & Terminal Data...</p>
+        </div>
+      </div>
+    );
+  }
 
+  if (viewState === 'ERROR') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+        <Card className="max-w-md w-full bg-slate-900/90 border-slate-800 p-8 shadow-2xl text-center space-y-5 rounded-3xl">
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-black text-white">Restaurant Unavailable</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {viewError || 'Could not resolve the selected restaurant workspace.'}
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={() => loadData()}
+              className="px-5 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white"
+            >
+              Retry
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => (onNavigate ? onNavigate('/workspace') : (window.location.href = '/workspace'))}
+              className="px-5 py-2.5 text-xs font-bold border-slate-700 text-slate-300"
+            >
+              Choose Restaurant
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (currentRestaurant && (
     currentRestaurant.lifecycleStatus === 'PENDING_APPROVAL' ||

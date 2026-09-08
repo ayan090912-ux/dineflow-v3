@@ -174,6 +174,7 @@ async def test_strict_multi_tenant_data_isolation():
         res_a = await client.post("/api/v1/restaurants", json={
             "name": "Trattoria Milano",
             "ownerEmail": "milano@dinely.test",
+            "ownerUid": "uid_milano",
         })
         rest_a = res_a.json()["id"]
         await client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": rest_a})
@@ -182,15 +183,19 @@ async def test_strict_multi_tenant_data_isolation():
         res_b = await client.post("/api/v1/restaurants", json={
             "name": "Tokyo Robata Grill",
             "ownerEmail": "tokyo@dinely.test",
+            "ownerUid": "uid_tokyo",
         })
         rest_b = res_b.json()["id"]
         await client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": rest_b})
 
+        headers_a = {"Authorization": "Bearer firebase_token_owner::uid_milano::milano@dinely.test"}
+        headers_b = {"Authorization": "Bearer firebase_token_owner::uid_tokyo::tokyo@dinely.test"}
+
         # 3. Create Categories for A and B
-        cat_a_res = await client.post(f"/api/v1/restaurants/{rest_a}/categories", json={"name": "Pasta Fresca", "sortOrder": 1})
+        cat_a_res = await client.post(f"/api/v1/restaurants/{rest_a}/categories", json={"name": "Pasta Fresca", "sortOrder": 1}, headers=headers_a)
         cat_a_id = cat_a_res.json()["id"]
 
-        cat_b_res = await client.post(f"/api/v1/restaurants/{rest_b}/categories", json={"name": "Yakitori Skewers", "sortOrder": 1})
+        cat_b_res = await client.post(f"/api/v1/restaurants/{rest_b}/categories", json={"name": "Yakitori Skewers", "sortOrder": 1}, headers=headers_b)
         cat_b_id = cat_b_res.json()["id"]
 
         # 4. Add Menu Item to A and Menu Item to B
@@ -199,7 +204,7 @@ async def test_strict_multi_tenant_data_isolation():
             "name": "Truffle Tagliatelle",
             "price": 24.50,
             "targetDestination": "KITCHEN"
-        })
+        }, headers=headers_a)
         item_a_id = item_a_res.json()["id"]
 
         item_b_res = await client.post(f"/api/v1/restaurants/{rest_b}/menu", json={
@@ -207,7 +212,7 @@ async def test_strict_multi_tenant_data_isolation():
             "name": "Wagyu Beef Kushiyaki",
             "price": 38.00,
             "targetDestination": "KITCHEN"
-        })
+        }, headers=headers_b)
         item_b_id = item_b_res.json()["id"]
 
         # 5. Verify Menu Item Isolation

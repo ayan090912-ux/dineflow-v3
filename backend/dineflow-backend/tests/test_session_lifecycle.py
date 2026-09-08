@@ -11,6 +11,26 @@ async def test_full_table_session_lifecycle_scenarios():
         tbl_num = "Table 03"
         tbl_id = f"tbl-{rest_a}-table_03"
 
+        # 0. Seed Restaurants
+        await client.post("/api/v1/restaurants", json={
+            "id": rest_a,
+            "name": "Session Lifecycle Restaurant A",
+            "ownerEmail": "owner_a@lifecycle.com",
+            "hasTables": True,
+        })
+        await client.post("/api/v1/restaurants", json={
+            "id": rest_b,
+            "name": "Session Lifecycle Restaurant B",
+            "ownerEmail": "owner_b@lifecycle.com",
+            "hasTables": True,
+        })
+
+        waiter_headers_a = {
+            "X-Staff-Role": "WAITER",
+            "X-Staff-Restaurant-Id": rest_a,
+            "X-Staff-Id": "staff-ayaan"
+        }
+
         # TEST 1: Table 03 starts VACANT.
         res_tables_init = await client.get(f"/api/v1/restaurants/{rest_a}/tables")
         assert res_tables_init.status_code == 200
@@ -20,9 +40,9 @@ async def test_full_table_session_lifecycle_scenarios():
             assert matching_tbl[0]["status"] == "AVAILABLE"
             assert matching_tbl[0]["is_occupied"] is False
 
-        # TEST 2: Customer A scans Table 03 QR -> Session A created (status = ACTIVE)
-        res_sess_a = await client.get(f"/api/v1/restaurants/{rest_a}/tables/{tbl_id}/session?table_number={tbl_num}")
-        assert res_sess_a.status_code == 200
+        # TEST 2: Customer A scans Table 03 QR -> Session A created via POST (status = ACTIVE)
+        res_sess_a = await client.post(f"/api/v1/restaurants/{rest_a}/tables/{tbl_id}/session?table_number={tbl_num}")
+        assert res_sess_a.status_code in [200, 201]
         sess_a = res_sess_a.json()
         session_a_id = sess_a["id"]
         assert sess_a["status"] == "ACTIVE"
@@ -65,12 +85,19 @@ async def test_full_table_session_lifecycle_scenarios():
         assert req_a["status"] == "PENDING"
 
         # TEST 5: Waiter completes service request
-        res_req_comp = await client.patch(f"/api/v1/customer-requests/{req_a['id']}", json={"status": "COMPLETED"})
+        res_req_comp = await client.patch(
+            f"/api/v1/customer-requests/{req_a['id']}",
+            json={"status": "COMPLETED"},
+            headers=waiter_headers_a
+        )
         assert res_req_comp.status_code == 200
         assert res_req_comp.json()["status"] == "COMPLETED"
 
         # TEST 6: Waiter clicks CLOSE TABLE -> Session A = CLOSED, Table 03 = VACANT
-        res_close = await client.post(f"/api/v1/restaurants/{rest_a}/tables/{tbl_id}/close-session")
+        res_close = await client.post(
+            f"/api/v1/restaurants/{rest_a}/tables/{tbl_id}/close-session",
+            headers=waiter_headers_a
+        )
         assert res_close.status_code == 200
         assert res_close.json()["status"] == "success"
 
@@ -88,9 +115,9 @@ async def test_full_table_session_lifecycle_scenarios():
         assert len(hist_order_a) == 1
         assert hist_order_a[0]["tableSessionId"] == session_a_id
 
-        # TEST 8: Customer B scans Table 03 QR -> Session B created (NEW Session ID)
-        res_sess_b = await client.get(f"/api/v1/restaurants/{rest_a}/tables/{tbl_id}/session?table_number={tbl_num}")
-        assert res_sess_b.status_code == 200
+        # TEST 8: Customer B scans Table 03 QR -> Session B created via POST (NEW Session ID)
+        res_sess_b = await client.post(f"/api/v1/restaurants/{rest_a}/tables/{tbl_id}/session?table_number={tbl_num}")
+        assert res_sess_b.status_code in [200, 201]
         sess_b = res_sess_b.json()
         session_b_id = sess_b["id"]
         assert session_b_id != session_a_id, "New QR scan MUST create a new session ID"

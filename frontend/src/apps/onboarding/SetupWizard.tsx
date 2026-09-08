@@ -85,8 +85,27 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [isAuthInitializing, setIsAuthInitializing] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  // 4-Step Onboarding State
-  const [currentStep, setCurrentStep] = useState<number>(1);
+  // 4-Step Onboarding State with URL search params synchronization
+  const getInitialStep = () => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const s = parseInt(searchParams.get('step') || '1', 10);
+      if (s >= 1 && s <= 4) return s;
+    }
+    return 1;
+  };
+
+  const [currentStep, setCurrentStepState] = useState<number>(getInitialStep);
+
+  const setCurrentStep = (step: number) => {
+    const valid = Math.max(1, Math.min(step, 4));
+    setCurrentStepState(valid);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('step', String(valid));
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -187,7 +206,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       const isCreateMode = searchParams.get('mode') === 'create' || searchParams.get('new') === 'true' || window.location.hash.includes('create');
       
       if (isCreateMode) {
-        setCurrentStep(1);
+        const stepParam = parseInt(searchParams.get('step') || '', 10);
+        if (stepParam >= 1 && stepParam <= 4) {
+          setCurrentStep(stepParam);
+        } else {
+          setCurrentStep(1);
+        }
         return;
       }
 
@@ -331,6 +355,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         hasTables: !isNoSeating,
         hasKitchen: enableKitchen,
         hasWaiter: enableWaiter && !isNoSeating,
+        tableCount: finalTablesCount,
         address: fullAddress,
         phone: phone.trim(),
         email: user.email,

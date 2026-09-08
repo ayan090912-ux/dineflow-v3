@@ -28,7 +28,7 @@ conn_mod.engine = engine
 conn_mod.AsyncSessionLocal = TestingSessionLocal
 
 
-from app.modules.restaurants.models import Restaurant
+from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog
 from app.modules.menu.models import MenuCategory, MenuItem
 from app.modules.tables.models import Table, TableSession
 from app.modules.orders.models import Order, OrderItem, Bill
@@ -39,6 +39,7 @@ TEST_TABLES = [
     PlatformAdmin.__table__,
     RefreshToken.__table__,
     Restaurant.__table__,
+    RestaurantLifecycleLog.__table__,
     MenuCategory.__table__,
     MenuItem.__table__,
     Table.__table__,

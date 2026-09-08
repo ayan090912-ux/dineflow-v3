@@ -123,12 +123,13 @@ def test_restaurant_rejection_resubmission_and_approval_lifecycle():
     assert get_rej.json()["rejection_reason"] == "Please provide verified business address and phone."
 
     # 3. Owner Resubmits application with updated details
+    owner_headers = {"Authorization": f"Bearer firebase_token_owner::uid_resubmit_{t_stamp}::resubmit_{t_stamp}@gmail.com"}
     resubmit_resp = client.put(f"/api/v1/restaurants/{rest_id}", json={
         "name": f"Resubmit Cycle Venue Updated {t_stamp}",
         "address": "456 Verified Blvd, Mumbai",
         "phone": "+919988776655",
         "lifecycleStatus": "PENDING_APPROVAL",
-    })
+    }, headers=owner_headers)
     assert resubmit_resp.status_code == 200
     resubmitted_data = resubmit_resp.json()
     assert resubmitted_data["lifecycle_status"] == "PENDING_APPROVAL"

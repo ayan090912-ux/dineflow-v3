@@ -1,5 +1,5 @@
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.core.database.connection import get_db
 from app.modules.customer_requests.models import CustomerRequestModel
+from app.modules.restaurants.models import Restaurant
 from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
@@ -27,7 +28,8 @@ class UpdateCustomerRequestSchema(BaseModel):
     waiterName: Optional[str] = None
 
 def format_request_dict(req: CustomerRequestModel) -> dict:
-    iso_time = req.created_at.isoformat() if getattr(req, "created_at", None) else datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    iso_time = req.created_at.isoformat() if getattr(req, "created_at", None) else now_iso
     return {
         "id": req.id,
         "restaurantId": req.restaurant_id,
@@ -59,7 +61,14 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     if not payload.tableNumber:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="tableNumber is required")
 
-    req_id = f"req-{int(datetime.utcnow().timestamp() * 1000)}"
+    # Tenant verification
+    rest_chk = await db.execute(select(Restaurant).where(Restaurant.id == payload.restaurantId))
+    rest = rest_chk.scalar_one_or_none()
+    if rest and (rest.deleted_at is not None or rest.lifecycle_status == "ARCHIVED"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant is archived or inactive")
+
+    now_utc = datetime.now(timezone.utc)
+    req_id = f"req-{int(now_utc.timestamp() * 1000)}"
     req_type = (payload.requestType or "WATER").upper()
     title = payload.customTitle or req_type.replace("_", " ").title()
     msg = payload.message or payload.customerNotes or f"Table {payload.tableNumber} requested: {title}"
@@ -162,13 +171,41 @@ async def get_customer_requests(
     return [format_request_dict(r) for r in reqs]
 
 
+from app.core.security.tenant_auth import get_caller_context, CallerContext
+
 @router.patch("/{request_id}")
-async def update_customer_request(request_id: str, payload: UpdateCustomerRequestSchema, db: AsyncSession = Depends(get_db)):
+async def update_customer_request(
+    request_id: str,
+    payload: UpdateCustomerRequestSchema,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
     query = select(CustomerRequestModel).where(CustomerRequestModel.id == request_id)
     result = await db.execute(query)
     req = result.scalar_one_or_none()
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to update service requests"
+        )
+
+    if not caller.is_admin:
+        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+            res_r = await db.execute(select(Restaurant).where(Restaurant.id == req.restaurant_id))
+            r_obj = res_r.scalar_one_or_none()
+            if not r_obj or not (
+                (caller.uid and r_obj.owner_uid == caller.uid) or
+                (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
+            ):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
+        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+            if caller.restaurant_id and caller.restaurant_id != req.restaurant_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update service requests")
 
     new_status = payload.status.upper()
     current_status = req.status.upper()

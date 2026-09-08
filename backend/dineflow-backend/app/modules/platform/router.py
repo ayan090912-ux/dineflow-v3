@@ -9,7 +9,7 @@ from sqlalchemy import select, func, or_
 from app.core.database.connection import get_db
 from app.core.security.rbac import require_platform_admin, get_current_firebase_admin
 from app.modules.admin.audit_service import AdminAuditLogger
-from app.modules.restaurants.models import Restaurant
+from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog
 from app.modules.tables.models import Table
 from app.modules.orders.models import Order
 from app.modules.menu.models import MenuCategory, MenuItem
@@ -176,6 +176,7 @@ async def approve_restaurant(
             "already_approved": True
         }
 
+    prev_status = rest.lifecycle_status
     rest.is_approved = True
     rest.lifecycle_status = "LIVE"
     rest.status = "OPEN"
@@ -183,6 +184,17 @@ async def approve_restaurant(
     rest.approved_by = admin_email
     rest.rejection_reason = None
     rest.requested_changes = None
+
+    db.add(RestaurantLifecycleLog(
+        id=f"log-{rest.id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        restaurant_id=rest.id,
+        event_type="APPROVED",
+        previous_status=prev_status,
+        new_status="LIVE",
+        reason=action.reason or "Application approved by platform administrator",
+        performed_by=admin_email,
+        performed_at=datetime.now(timezone.utc)
+    ))
 
     # Ensure default initial categories exist for this tenant
     cat_query = select(MenuCategory).where(MenuCategory.restaurant_id == rest.id)
@@ -292,6 +304,7 @@ async def reject_restaurant(
     Rejects a restaurant application with optional reason.
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
+    admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
     clean_id = (action.restaurant_id or "").strip()
 
     query = select(Restaurant).where(
@@ -319,10 +332,22 @@ async def reject_restaurant(
             "already_rejected": True
         }
 
+    prev_status = rest.lifecycle_status
     rest.is_approved = False
     rest.lifecycle_status = "REJECTED"
     rest.status = "CLOSED"
     rest.rejection_reason = action.reason or "Application did not meet platform requirements."
+
+    db.add(RestaurantLifecycleLog(
+        id=f"log-{rest.id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        restaurant_id=rest.id,
+        event_type="REJECTED",
+        previous_status=prev_status,
+        new_status="REJECTED",
+        reason=rest.rejection_reason,
+        performed_by=admin_email,
+        performed_at=datetime.now(timezone.utc)
+    ))
 
     await db.commit()
     await db.refresh(rest)
@@ -418,12 +443,24 @@ async def dismiss_restaurant(
             "already_archived": True
         }
 
+    prev_status = rest.lifecycle_status
     rest.lifecycle_status = "ARCHIVED"
     rest.is_approved = False
     rest.status = "CLOSED"
     rest.dismissed_at = datetime.now(timezone.utc)
     rest.dismissed_by = admin_email
     rest.dismiss_reason = action.reason or "Archived from pending approval queue by administrator"
+
+    db.add(RestaurantLifecycleLog(
+        id=f"log-{rest.id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        restaurant_id=rest.id,
+        event_type="ARCHIVED",
+        previous_status=prev_status,
+        new_status="ARCHIVED",
+        reason=rest.dismiss_reason,
+        performed_by=admin_email,
+        performed_at=datetime.now(timezone.utc)
+    ))
 
     await db.commit()
     await db.refresh(rest)

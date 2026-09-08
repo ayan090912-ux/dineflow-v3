@@ -1,11 +1,12 @@
 from typing import Optional, List, Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
 from app.core.database.connection import get_db
+from app.core.security.tenant_auth import require_tenant_owner_or_admin, CallerContext
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, TaxAuditLog, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
 from app.modules.menu.models import MenuCategory, MenuItem
@@ -84,7 +85,12 @@ async def get_taxes(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     return result
 
 @router.post("/{restaurant_id}/taxes", status_code=status.HTTP_201_CREATED)
-async def create_tax(restaurant_id: str, payload: CreateTaxSchema, db: AsyncSession = Depends(get_db)):
+async def create_tax(
+    restaurant_id: str,
+    payload: CreateTaxSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
     if not payload.name.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tax name cannot be empty")
     
@@ -117,7 +123,8 @@ async def create_tax(restaurant_id: str, payload: CreateTaxSchema, db: AsyncSess
         if invalid_items:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Menu Item IDs do not belong to restaurant: {list(invalid_items)}")
 
-    tax_id = f"tax-{restaurant_id}-{int(datetime.utcnow().timestamp() * 1000)}"
+    now_utc = datetime.now(timezone.utc)
+    tax_id = f"tax-{restaurant_id}-{int(now_utc.timestamp() * 1000)}"
     new_tax = Tax(
         id=tax_id,
         restaurant_id=restaurant_id,
@@ -142,9 +149,9 @@ async def create_tax(restaurant_id: str, payload: CreateTaxSchema, db: AsyncSess
 
     # Audit Log
     audit = TaxAuditLog(
-        id=f"audit-{tax_id}-{int(datetime.utcnow().timestamp() * 1000)}",
+        id=f"audit-{tax_id}-{int(now_utc.timestamp() * 1000)}",
         restaurant_id=restaurant_id,
-        user_id="Owner",
+        user_id=caller.email or caller.uid or "Owner",
         action="CREATE",
         tax_id=tax_id,
         new_values=payload.model_dump(),
@@ -165,7 +172,13 @@ async def get_tax(restaurant_id: str, tax_id: str, db: AsyncSession = Depends(ge
     return format_tax_response(tax, cat_ids, item_ids)
 
 @router.put("/{restaurant_id}/taxes/{tax_id}")
-async def update_tax(restaurant_id: str, tax_id: str, payload: UpdateTaxSchema, db: AsyncSession = Depends(get_db)):
+async def update_tax(
+    restaurant_id: str,
+    tax_id: str,
+    payload: UpdateTaxSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
     res = await db.execute(select(Tax).where((Tax.id == tax_id) & (Tax.restaurant_id == restaurant_id)))
     tax = res.scalar_one_or_none()
     if not tax:
@@ -211,7 +224,7 @@ async def update_tax(restaurant_id: str, tax_id: str, payload: UpdateTaxSchema, 
 
     # Audit Log
     audit = TaxAuditLog(
-        id=f"audit-{tax_id}-{int(datetime.utcnow().timestamp() * 1000)}",
+        id=f"audit-{tax_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
         restaurant_id=restaurant_id,
         user_id="Owner",
         action="UPDATE",
@@ -226,7 +239,12 @@ async def update_tax(restaurant_id: str, tax_id: str, payload: UpdateTaxSchema, 
     return new_snapshot
 
 @router.post("/{restaurant_id}/taxes/{tax_id}/activate")
-async def activate_tax(restaurant_id: str, tax_id: str, db: AsyncSession = Depends(get_db)):
+async def activate_tax(
+    restaurant_id: str,
+    tax_id: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
     res = await db.execute(select(Tax).where((Tax.id == tax_id) & (Tax.restaurant_id == restaurant_id)))
     tax = res.scalar_one_or_none()
     if not tax:
@@ -234,9 +252,9 @@ async def activate_tax(restaurant_id: str, tax_id: str, db: AsyncSession = Depen
 
     tax.status = "ACTIVE"
     audit = TaxAuditLog(
-        id=f"audit-{tax_id}-{int(datetime.utcnow().timestamp() * 1000)}",
+        id=f"audit-{tax_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
         restaurant_id=restaurant_id,
-        user_id="Owner",
+        user_id=caller.email or caller.uid or "Owner",
         action="ACTIVATE",
         tax_id=tax_id,
         new_values={"status": "ACTIVE"},
@@ -248,7 +266,12 @@ async def activate_tax(restaurant_id: str, tax_id: str, db: AsyncSession = Depen
     return format_tax_response(tax, cat_ids, item_ids)
 
 @router.post("/{restaurant_id}/taxes/{tax_id}/deactivate")
-async def deactivate_tax(restaurant_id: str, tax_id: str, db: AsyncSession = Depends(get_db)):
+async def deactivate_tax(
+    restaurant_id: str,
+    tax_id: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
     res = await db.execute(select(Tax).where((Tax.id == tax_id) & (Tax.restaurant_id == restaurant_id)))
     tax = res.scalar_one_or_none()
     if not tax:
@@ -256,9 +279,9 @@ async def deactivate_tax(restaurant_id: str, tax_id: str, db: AsyncSession = Dep
 
     tax.status = "INACTIVE"
     audit = TaxAuditLog(
-        id=f"audit-{tax_id}-{int(datetime.utcnow().timestamp() * 1000)}",
+        id=f"audit-{tax_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
         restaurant_id=restaurant_id,
-        user_id="Owner",
+        user_id=caller.email or caller.uid or "Owner",
         action="DEACTIVATE",
         tax_id=tax_id,
         new_values={"status": "INACTIVE"},

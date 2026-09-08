@@ -12,9 +12,31 @@ async def test_waiter_terminal_end_to_end_suite():
         tbl_num = "Table 03"
         tbl_id = f"tbl-{test_rest_id}-table_03"
 
-        # 1. Customer Scans QR for Table 03 (creates active session)
-        res_sess = await client.get(f"/api/v1/restaurants/{test_rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
-        assert res_sess.status_code == 200, res_sess.text
+        # 0. Create Restaurants
+        await client.post("/api/v1/restaurants", json={
+            "id": test_rest_id,
+            "name": "Waiter Test Bistro",
+            "ownerEmail": "owner@waitertest.com",
+            "ownerUid": "uid_waiter_owner",
+            "hasTables": True,
+        })
+        await client.post("/api/v1/restaurants", json={
+            "id": test_rest_b,
+            "name": "Waiter Test B",
+            "ownerEmail": "owner_b@waitertest.com",
+            "ownerUid": "uid_waiter_b",
+            "hasTables": True,
+        })
+
+        waiter_headers = {
+            "X-Staff-Role": "WAITER",
+            "X-Staff-Restaurant-Id": test_rest_id,
+            "X-Staff-Id": "staff-ayaan"
+        }
+
+        # 1. Customer Scans QR for Table 03 (creates active session via POST)
+        res_sess = await client.post(f"/api/v1/restaurants/{test_rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
+        assert res_sess.status_code in [200, 201], res_sess.text
         sess_data = res_sess.json()
         assert sess_data["status"] == "ACTIVE"
         session_id_1 = sess_data["id"]
@@ -45,13 +67,21 @@ async def test_waiter_terminal_end_to_end_suite():
         assert any(r["id"] == req_id and r["status"] == "PENDING" for r in reqs_list)
 
         # 4. Waiter accepts request
-        res_accept = await client.patch(f"/api/v1/customer-requests/{req_id}", json={"status": "IN_PROGRESS", "waiterName": "Ayaan"})
+        res_accept = await client.patch(
+            f"/api/v1/customer-requests/{req_id}",
+            json={"status": "IN_PROGRESS", "waiterName": "Ayaan"},
+            headers=waiter_headers
+        )
         assert res_accept.status_code == 200
         assert res_accept.json()["status"] == "IN_PROGRESS"
         assert res_accept.json()["waiterName"] == "Ayaan"
 
         # 5. Waiter completes request
-        res_complete = await client.patch(f"/api/v1/customer-requests/{req_id}", json={"status": "COMPLETED", "waiterName": "Ayaan"})
+        res_complete = await client.patch(
+            f"/api/v1/customer-requests/{req_id}",
+            json={"status": "COMPLETED", "waiterName": "Ayaan"},
+            headers=waiter_headers
+        )
         assert res_complete.status_code == 200
         assert res_complete.json()["status"] == "COMPLETED"
 
@@ -85,10 +115,11 @@ async def test_waiter_terminal_end_to_end_suite():
         assert not any(o["id"] == ord_id for o in res_b_orders.json())
 
         # 8. Waiter closes Table 03
-        res_close = await client.post(f"/api/v1/restaurants/{test_rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_1}", json={
-            "table_session_id": session_id_1,
-            "waiter_name": "Ayaan"
-        })
+        res_close = await client.post(
+            f"/api/v1/restaurants/{test_rest_id}/tables/{tbl_id}/close-session?table_session_id={session_id_1}",
+            json={"table_session_id": session_id_1, "waiter_name": "Ayaan"},
+            headers=waiter_headers
+        )
         assert res_close.status_code == 200
         close_data = res_close.json()
         assert close_data["status"] == "success"
@@ -103,9 +134,9 @@ async def test_waiter_terminal_end_to_end_suite():
         assert res_ord_get.status_code == 200
         assert res_ord_get.json()["status"] == "COMPLETED"
 
-        # 11. New customer scans QR for Table 03 (creates clean NEW session)
-        res_new_sess = await client.get(f"/api/v1/restaurants/{test_rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
-        assert res_new_sess.status_code == 200
+        # 11. New customer scans QR for Table 03 (creates clean NEW session via POST)
+        res_new_sess = await client.post(f"/api/v1/restaurants/{test_rest_id}/tables/{tbl_id}/session?table_number={tbl_num}")
+        assert res_new_sess.status_code in [200, 201]
         new_sess_data = res_new_sess.json()
         assert new_sess_data["id"] != session_id_1
         assert new_sess_data["status"] == "ACTIVE"
