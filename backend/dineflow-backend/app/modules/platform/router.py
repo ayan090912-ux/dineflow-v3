@@ -234,7 +234,7 @@ async def approve_restaurant(
                     capacity=4,
                     status="AVAILABLE",
                     is_occupied=False,
-                    qr_code_url=f"https://{pub_slug}.dinely.app/customer?table={t_num}"
+                    qr_code_url=f"https://dinely.food/customer?tenant={pub_slug}&table={t_num}&tableId={t_id}"
                 ))
 
     await db.commit()

@@ -207,14 +207,14 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider font-mono">Public Tenant Domain</span>
-                <Badge variant="success" className="font-mono text-[10px]">LIVE SUBDOMAIN</Badge>
+                <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider font-mono">Customer Ordering Portal</span>
+                <Badge variant="success" className="font-mono text-[10px]">ACTIVE</Badge>
               </div>
-              <h4 className="text-lg font-black text-white font-mono mt-0.5">
-                {publicDomain}
+              <h4 className="text-sm sm:text-base font-bold text-white font-mono mt-0.5 break-all">
+                {customerUrl}
               </h4>
               <p className="text-xs text-slate-400 mt-1">
-                Your restaurant's dedicated customer ordering domain. Scanned QR codes and public diners access this exclusive subdomain.
+                Your venue's dedicated digital menu & table ordering URL. Scanned QR codes and public diners access this link.
               </p>
             </div>
           </div>

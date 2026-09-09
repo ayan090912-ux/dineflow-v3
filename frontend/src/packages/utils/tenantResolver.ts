@@ -58,7 +58,15 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     return { isTenantSubdomain: false, slug: null, hostname };
   }
 
-  // 3. Production Tenant Subdomain: <slug>.dinely.app
+  // 3. Subdomain Routing: <slug>.dinely.food or <slug>.dinely.app
+  if (hostname.endsWith('.dinely.food')) {
+    const subdomain = hostname.slice(0, -'.dinely.food'.length).trim();
+    if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
+      return { isTenantSubdomain: true, slug: subdomain, hostname };
+    }
+    return { isTenantSubdomain: false, slug: null, hostname };
+  }
+
   if (hostname.endsWith('.dinely.app')) {
     const subdomain = hostname.slice(0, -'.dinely.app'.length).trim();
     if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
@@ -87,37 +95,40 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
 }
 
 /**
- * Returns canonical public domain for a restaurant tenant: https://<slug>.dinely.app
+ * Returns canonical public domain for a restaurant tenant: https://dinely.food
  */
 export function getRestaurantPublicDomain(
   slugOrRest?: string | { publicSlug?: string; slug?: string } | null
 ): string {
-  if (!slugOrRest) return 'https://dinely.app';
-  const slug =
-    typeof slugOrRest === 'string'
-      ? slugOrRest
-      : slugOrRest.publicSlug || slugOrRest.slug || '';
-  if (!slug) return 'https://dinely.app';
-
-  // In local dev development on localhost
-  if (typeof window !== 'undefined' && window.location.hostname.includes('localhost')) {
-    const port = window.location.port ? `:${window.location.port}` : '';
-    return `${window.location.protocol}//${slug}.localhost${port}`;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('0.0.0.0')) {
+      return window.location.origin;
+    }
   }
-
-  return `https://${slug.toLowerCase()}.dinely.app`;
+  return 'https://dinely.food';
 }
 
 /**
  * Generates customer QR code or direct menu URL pointing to tenant public domain.
+ * Formats: https://dinely.food/customer?tenant=<slug>&table=<tableNumber>&tableId=<tableId>
+ * Guaranteed to resolve and load on all iOS Safari and Android camera QR scans worldwide.
  */
 export function getRestaurantCustomerUrl(
-  slugOrRest?: string | { publicSlug?: string; slug?: string } | null,
+  slugOrRest?: string | { publicSlug?: string; slug?: string; id?: string } | null,
   tableNumber?: string,
   tableId?: string
 ): string {
+  const slug =
+    typeof slugOrRest === 'string'
+      ? slugOrRest
+      : slugOrRest?.publicSlug || slugOrRest?.slug || slugOrRest?.id || '';
+
   const base = getRestaurantPublicDomain(slugOrRest);
   const params = new URLSearchParams();
+  if (slug && slug !== 'restaurant') {
+    params.set('tenant', slug.toLowerCase());
+  }
   if (tableNumber) params.set('table', tableNumber);
   if (tableId) params.set('tableId', tableId);
   const query = params.toString();

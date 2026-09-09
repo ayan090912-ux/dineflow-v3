@@ -156,9 +156,9 @@ class TestDinelyTenantDomainArchitecture:
         assert len(tbls) >= 1
 
         for tbl in tbls:
-            expected_prefix = f"https://{slug}.dinely.app/customer?table="
+            expected_prefix = f"https://dinely.food/customer?tenant={slug}&table="
             assert tbl["qr_code_url"].startswith(expected_prefix), (
-                f"QR Code URL '{tbl['qr_code_url']}' does not point to tenant subdomain '{expected_prefix}'!"
+                f"QR Code URL '{tbl['qr_code_url']}' does not point to canonical domain '{expected_prefix}'!"
             )
 
         # Create new table and verify QR (requires owner auth)
@@ -170,7 +170,7 @@ class TestDinelyTenantDomainArchitecture:
         }, headers=owner_headers)
         assert new_tbl_res.status_code == 201
         new_tbl = new_tbl_res.json()
-        assert new_tbl["qr_code_url"] == f"https://{slug}.dinely.app/customer?table=Table 99"
+        assert new_tbl["qr_code_url"].startswith(f"https://dinely.food/customer?tenant={slug}&table=Table 99")
 
     def test_two_restaurants_simultaneous_isolation(self):
         t_stamp = int(time.time() * 1000)

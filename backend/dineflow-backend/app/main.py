@@ -68,6 +68,8 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismissed_by VARCHAR(255);",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismiss_reason TEXT;",
         "UPDATE restaurants SET public_slug = slug WHERE public_slug IS NULL;",
+        "UPDATE tables SET qr_code_url = 'https://dinely.food/customer?tenant=' || (SELECT COALESCE(public_slug, slug, 'the-dunk') FROM restaurants WHERE restaurants.id = tables.restaurant_id) || '&table=' || table_number || '&tableId=' || id WHERE qr_code_url LIKE '%.dinely.app%';",
+        "UPDATE restaurants SET domain = 'https://dinely.food/customer?tenant=' || COALESCE(public_slug, slug) WHERE domain LIKE '%.dinely.app%';",
         # Bills Columns
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",

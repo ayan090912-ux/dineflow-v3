@@ -413,7 +413,7 @@ export class DinelyApiClient {
     });
 
     this.tables.forEach((tbl) => {
-      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || (!tbl.qrCodeUrl.includes('.dinely.app') && !tbl.qrCodeUrl.includes('table='))) {
+      if (!tbl.qrCodeUrl || tbl.qrCodeUrl.includes('qrserver.com') || tbl.qrCodeUrl.includes('.dinely.app') || (!tbl.qrCodeUrl.includes('tenant=') && !tbl.qrCodeUrl.includes('restaurant='))) {
         const rest = this.restaurants.find((r) => r.id === tbl.restaurantId);
         const slug = rest?.publicSlug || rest?.slug || tbl.restaurantId;
         tbl.qrCodeUrl = getRestaurantCustomerUrl(slug, tbl.tableNumber, tbl.id);
@@ -1435,7 +1435,7 @@ export class DinelyApiClient {
       ownerName,
       ownerEmail,
       ownerUid,
-      domain: `${slug}.dinely.app`,
+      domain: getRestaurantCustomerUrl(slug),
       isApproved: false,
       lifecycleStatus: 'PENDING_APPROVAL',
       status: 'CLOSED',
@@ -1505,7 +1505,9 @@ export class DinelyApiClient {
           newRest.id = backendRest.id;
           newRest.slug = backendRest.slug || newRest.slug;
           newRest.publicSlug = backendRest.public_slug || backendRest.slug || newRest.slug;
-          newRest.domain = backendRest.domain || `https://${newRest.publicSlug}.dinely.app`;
+          newRest.domain = (backendRest.domain && !backendRest.domain.includes('.dinely.app'))
+            ? backendRest.domain
+            : getRestaurantCustomerUrl(newRest.publicSlug);
           newRest.lifecycleStatus = (backendRest.lifecycle_status || 'PENDING_APPROVAL') as RestaurantLifecycleStatus;
           newRest.isApproved = Boolean(backendRest.is_approved);
           if (newRest.theme) {
@@ -1715,7 +1717,7 @@ export class DinelyApiClient {
     const bType = (r.businessType || r.business_type || 'RESTAURANT').toUpperCase();
     const cleanSlug = (r.slug || r.name || 'restaurant').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'restaurant';
     const pubSlug = (r.publicSlug || r.public_slug || cleanSlug).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'restaurant';
-    const canonicalDomain = `https://${pubSlug}.dinely.app`;
+    const canonicalDomain = (r.domain && !r.domain.includes('.dinely.app')) ? r.domain : getRestaurantCustomerUrl(pubSlug);
     return {
       id: r.id,
       orgId: r.org_id || r.orgId || 'org-dinely',
@@ -3162,16 +3164,22 @@ export class DinelyApiClient {
         const tables = await res.json();
         if (Array.isArray(tables)) {
           const origin = getProductionOrigin();
-          const mappedTables: Table[] = tables.map((t: any) => ({
-            id: t.id,
-            restaurantId: t.restaurant_id || targetId,
-            tableNumber: t.table_number || t.tableNumber,
-            section: t.section || 'Main Hall',
-            capacity: t.capacity || 4,
-            status: t.status || 'AVAILABLE',
-            isOccupied: t.is_occupied || false,
-            qrCodeUrl: t.qr_code_url || `${origin}/customer?restaurant=${targetId}&tableId=${t.id}&table=${encodeURIComponent(t.table_number || t.tableNumber)}`,
-          }));
+          const mappedTables: Table[] = tables.map((t: any) => {
+            const rawQr = t.qr_code_url || '';
+            const cleanQr = (rawQr && !rawQr.includes('.dinely.app'))
+              ? rawQr
+              : `${origin}/customer?restaurant=${targetId}&tableId=${t.id}&table=${encodeURIComponent(t.table_number || t.tableNumber)}`;
+            return {
+              id: t.id,
+              restaurantId: t.restaurant_id || targetId,
+              tableNumber: t.table_number || t.tableNumber,
+              section: t.section || 'Main Hall',
+              capacity: t.capacity || 4,
+              status: t.status || 'AVAILABLE',
+              isOccupied: t.is_occupied || false,
+              qrCodeUrl: cleanQr,
+            };
+          });
           return mappedTables;
         }
       }
@@ -3247,6 +3255,10 @@ export class DinelyApiClient {
         if (res.ok) {
           const t = await res.json();
           const origin = getProductionOrigin();
+          const rawQr = t.qr_code_url || '';
+          const cleanQr = (rawQr && !rawQr.includes('.dinely.app'))
+            ? rawQr
+            : `${origin}/customer?restaurant=${targetRestId}&tableId=${t.id}&table=${encodeURIComponent(t.table_number || tblNum)}`;
           const mapped: Table = {
             id: t.id,
             restaurantId: t.restaurant_id || targetRestId,
@@ -3255,7 +3267,7 @@ export class DinelyApiClient {
             capacity: t.capacity || 4,
             status: t.status || 'AVAILABLE',
             isOccupied: t.is_occupied || false,
-            qrCodeUrl: t.qr_code_url || `${origin}/customer?restaurant=${targetRestId}&tableId=${t.id}&table=${encodeURIComponent(t.table_number || tblNum)}`,
+            qrCodeUrl: cleanQr,
           };
           const existingIdx = this.tables.findIndex((x) => x.id === mapped.id);
           if (existingIdx >= 0) this.tables[existingIdx] = mapped;

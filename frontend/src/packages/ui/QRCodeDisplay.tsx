@@ -198,8 +198,27 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
     defaultUrl = `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}`;
   }
 
+  // Sanitize and normalize candidate URLs (convert unresolvable .dinely.app subdomains to working canonical links)
+  const sanitizeQrUrl = (inputUrl?: string): string => {
+    if (!inputUrl) return '';
+    try {
+      if (inputUrl.includes('.dinely.app')) {
+        const parsed = new URL(inputUrl);
+        const sub = parsed.hostname.replace('.dinely.app', '').trim();
+        const search = new URLSearchParams(parsed.search);
+        if (sub && sub !== 'www' && sub !== 'app' && !search.get('tenant')) {
+          search.set('tenant', sub);
+        }
+        return `${defaultOrigin}/customer?${search.toString()}`;
+      }
+    } catch {
+      // ignore
+    }
+    return inputUrl;
+  };
+
   // Exact encoded customer destination URL (single source of truth for display, QR code, copy link, and live view)
-  const candidateUrl = url || value;
+  const candidateUrl = sanitizeQrUrl(url || value);
   const qrUrl = candidateUrl || defaultUrl;
 
   // Copy link to clipboard

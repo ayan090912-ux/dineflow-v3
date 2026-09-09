@@ -170,7 +170,7 @@ async def create_table(
         capacity=payload.capacity or 4,
         status="AVAILABLE",
         is_occupied=False,
-        qr_code_url=f"https://{pub_slug}.dinely.app/customer?table={t_num}"
+        qr_code_url=f"https://dinely.food/customer?tenant={pub_slug}&table={t_num}&tableId={t_id}"
     )
     db.add(new_tbl)
     await db.commit()
@@ -269,7 +269,7 @@ async def create_table_session(
             capacity=4,
             status="OCCUPIED",
             is_occupied=True,
-            qr_code_url=f"https://{pub_slug}.dinely.app/customer?table={resolved_tbl_num}"
+            qr_code_url=f"https://dinely.food/customer?tenant={pub_slug}&table={resolved_tbl_num}&tableId={table_id}"
         )
         db.add(tbl)
     

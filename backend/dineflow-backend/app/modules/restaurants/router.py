@@ -39,6 +39,10 @@ def extract_subdomain_from_hostname(hostname: Optional[str]) -> Optional[str]:
     if not hostname:
         return None
     host = hostname.split(":")[0].strip().lower()
+    if host.endswith(".dinely.food"):
+        sub = host[:-len(".dinely.food")].strip()
+        if sub and sub not in ("www", "app", "api", "platform", "admin", "staging"):
+            return sub
     if host.endswith(".dinely.app"):
         sub = host[:-len(".dinely.app")].strip()
         if sub and sub not in ("www", "app", "api", "platform", "admin", "staging"):
@@ -144,7 +148,7 @@ async def resolve_public_restaurant(
         "name": rest.name,
         "slug": rest.slug,
         "publicSlug": pub_slug,
-        "domain": rest.domain or f"https://{pub_slug}.dinely.app",
+        "domain": rest.domain if (rest.domain and ".dinely.app" not in rest.domain) else f"https://dinely.food/customer?tenant={pub_slug}",
         "cuisine": rest.cuisine,
         "businessType": rest.business_type,
         "hasBar": rest.has_bar,
@@ -307,7 +311,7 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
                 capacity=4,
                 status="AVAILABLE",
                 is_occupied=False,
-                qr_code_url=f"https://{public_slug}.dinely.app/customer?table={t_num}"
+                qr_code_url=f"https://dinely.food/customer?tenant={public_slug}&table={t_num}&tableId={t_id}"
             ))
 
     # Record Initial Application Lifecycle Log
