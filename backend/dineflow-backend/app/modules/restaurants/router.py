@@ -10,7 +10,8 @@ from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import require_tenant_owner_or_admin, get_caller_context, CallerContext
-from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog
+from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain
+from app.modules.restaurants.tenant_resolver import resolve_public_tenant_from_host
 from app.modules.tables.models import Table
 from app.modules.websocket.manager import ws_manager
 
@@ -114,10 +115,13 @@ async def resolve_public_restaurant(
     slug: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
-    target_slug = slug
-    if not target_slug and hostname:
-        target_slug = extract_subdomain_from_hostname(hostname)
+    if hostname:
+        resolved = await resolve_public_tenant_from_host(hostname, db, require_live=False)
+        if resolved is None:
+            return {"isPlatformDomain": True, "message": "Platform root context"}
+        return resolved
 
+    target_slug = slug
     if not target_slug:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -148,7 +152,7 @@ async def resolve_public_restaurant(
         "name": rest.name,
         "slug": rest.slug,
         "publicSlug": pub_slug,
-        "domain": rest.domain if (rest.domain and ".dinely.app" not in rest.domain) else f"https://dinely.food/customer?tenant={pub_slug}",
+        "domain": f"https://{pub_slug}.dinely.food",
         "cuisine": rest.cuisine,
         "businessType": rest.business_type,
         "hasBar": rest.has_bar,
@@ -199,7 +203,7 @@ async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(ge
         "name": rest.name,
         "slug": rest.slug,
         "publicSlug": pub_slug,
-        "domain": rest.domain if (rest.domain and ".dinely.app" not in rest.domain) else f"https://dinely.food/customer?tenant={pub_slug}",
+        "domain": f"https://{pub_slug}.dinely.food",
         "cuisine": rest.cuisine,
         "businessType": rest.business_type,
         "hasBar": rest.has_bar,
@@ -228,7 +232,7 @@ async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(ge
 async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = Depends(get_db)):
     rest_id = payload.id or f"rest-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
     public_slug = await generate_unique_public_slug(db, payload.name, rest_id)
-    domain_url = f"https://dinely.food/customer?tenant={public_slug}"
+    domain_url = f"https://{public_slug}.dinely.food"
 
     query = select(Restaurant).where(Restaurant.id == rest_id)
     result = await db.execute(query)
@@ -311,8 +315,17 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
                 capacity=4,
                 status="AVAILABLE",
                 is_occupied=False,
-                qr_code_url=f"https://dinely.food/customer?tenant={public_slug}&table={t_num}&tableId={t_id}"
+                qr_code_url=f"https://{public_slug}.dinely.food/customer?table={t_num}&tableId={t_id}"
             ))
+
+    # Register Canonical Primary Domain
+    db.add(RestaurantDomain(
+        id=f"dom-{rest_id}",
+        restaurant_id=rest_id,
+        domain=f"{public_slug}.dinely.food",
+        is_primary=True,
+        is_verified=True
+    ))
 
     # Record Initial Application Lifecycle Log
     initial_log = RestaurantLifecycleLog(

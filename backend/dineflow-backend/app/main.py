@@ -68,8 +68,23 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismissed_by VARCHAR(255);",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismiss_reason TEXT;",
         "UPDATE restaurants SET public_slug = slug WHERE public_slug IS NULL;",
-        "UPDATE tables SET qr_code_url = 'https://dinely.food/customer?tenant=' || (SELECT COALESCE(public_slug, slug, 'the-dunk') FROM restaurants WHERE restaurants.id = tables.restaurant_id) || '&table=' || table_number || '&tableId=' || id WHERE qr_code_url LIKE '%.dinely.app%';",
-        "UPDATE restaurants SET domain = 'https://dinely.food/customer?tenant=' || COALESCE(public_slug, slug) WHERE domain LIKE '%.dinely.app%';",
+        """CREATE TABLE IF NOT EXISTS restaurant_domains (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            domain VARCHAR(255) NOT NULL UNIQUE,
+            is_primary BOOLEAN DEFAULT FALSE,
+            is_verified BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );""",
+        "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_domain ON restaurant_domains (domain);",
+        "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_rest_id ON restaurant_domains (restaurant_id);",
+        "UPDATE tables SET qr_code_url = 'https://' || (SELECT COALESCE(public_slug, slug, 'the-dunk') FROM restaurants WHERE restaurants.id = tables.restaurant_id) || '.dinely.food/customer?table=' || table_number || '&tableId=' || id WHERE qr_code_url LIKE '%.dinely.app%' OR qr_code_url LIKE '%dinely.food/customer?tenant=%';",
+        "UPDATE restaurants SET domain = 'https://' || COALESCE(public_slug, slug) || '.dinely.food' WHERE domain LIKE '%.dinely.app%' OR domain LIKE '%dinely.food/customer?tenant=%';",
+        """INSERT INTO restaurant_domains (id, restaurant_id, domain, is_primary, is_verified)
+           SELECT 'dom-' || id, id, COALESCE(public_slug, slug) || '.dinely.food', TRUE, TRUE
+           FROM restaurants
+           WHERE COALESCE(public_slug, slug) IS NOT NULL
+           ON CONFLICT (domain) DO NOTHING;""",
         # Bills Columns
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",

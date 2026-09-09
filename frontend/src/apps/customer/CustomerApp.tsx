@@ -295,26 +295,31 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     let r: Restaurant | null = null;
 
-    // 1. Resolve strictly from Tenant Subdomain (e.g. the-dunk.dinely.app -> the-dunk)
+    // 1. Resolve strictly from Tenant Subdomain (e.g. the-dunk.dinely.food -> the-dunk)
     if (domainResolution.isTenantSubdomain && domainResolution.slug) {
       r = await api.resolveRestaurantBySlug(domainResolution.slug);
-    }
+      if (!r) {
+        // Strict multi-tenant isolation: Never fallback on unknown tenant subdomains
+        setRestaurantError('RESTAURANT_NOT_FOUND');
+        return null;
+      }
+    } else {
+      // 2. Resolve from explicit query parameter override (platform domain or dev only)
+      if (!r && urlTenantParam) {
+        r = await api.resolveRestaurantBySlug(urlTenantParam);
+      }
 
-    // 2. Resolve from explicit query parameter override
-    if (!r && urlTenantParam) {
-      r = await api.resolveRestaurantBySlug(urlTenantParam);
-    }
+      // 3. Resolve from explicit restaurant ID param
+      if (!r && urlRestParam) {
+        r = await api.getRestaurantDetails(urlRestParam);
+      }
 
-    // 3. Resolve from explicit restaurant ID param
-    if (!r && urlRestParam) {
-      r = await api.getRestaurantDetails(urlRestParam);
-    }
-
-    // 4. Resolve from table ID if encoded with restaurant ID (tbl-{restaurantId}-table_XX)
-    if (!r && urlTableIdParam) {
-      const match = urlTableIdParam.match(/^tbl-(.+?)-(?:table_|tbl_)/);
-      if (match && match[1]) {
-        r = await api.getRestaurantDetails(match[1]);
+      // 4. Resolve from table ID if encoded with restaurant ID (tbl-{restaurantId}-table_XX)
+      if (!r && urlTableIdParam) {
+        const match = urlTableIdParam.match(/^tbl-(.+?)-(?:table_|tbl_)/);
+        if (match && match[1]) {
+          r = await api.getRestaurantDetails(match[1]);
+        }
       }
     }
 
@@ -567,11 +572,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           </div>
           <div className="space-y-2">
             <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-medium uppercase bg-white/[0.04] text-white/60 border border-white/[0.08]">
-              Venue Unavailable
+              404 Venue Not Found
             </span>
-            <h2 className="text-xl font-semibold text-white">Menu Currently Unavailable</h2>
+            <h2 className="text-xl font-semibold text-white">Venue Not Found</h2>
             <p className="text-xs text-white/50 max-w-xs mx-auto leading-relaxed">
-              The menu for this restaurant is temporarily offline or has no active items. Please ask floor staff for assistance.
+              The venue or restaurant you are looking for does not exist or is no longer active on Dinely. Please check the URL or ask staff for assistance.
             </p>
           </div>
         </div>

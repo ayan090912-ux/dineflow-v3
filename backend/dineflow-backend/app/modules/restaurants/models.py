@@ -72,3 +72,14 @@ class RestaurantLifecycleLog(Base):
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     performed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class RestaurantDomain(Base, TimestampMixin):
+    __tablename__ = "restaurant_domains"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    restaurant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    domain: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    domain_type: Mapped[str] = mapped_column(String(50), default="SUBDOMAIN", nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

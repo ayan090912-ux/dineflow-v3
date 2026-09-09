@@ -1,0 +1,11 @@
+name = "dinely-tenant-router"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+[vars]
+ORIGIN_HOST = "dinely-cd6cd.web.app"
+
+# Production Wildcard Route (Attach after testing workers.dev)
+# routes = [
+#   { pattern = "*.dinely.food/*", zone_name = "dinely.food" }
+# ]

@@ -3,7 +3,7 @@
  *
  * Distinguishes between:
  * 1. Primary Platform Domain: https://dinely.food (Landing, Login, Owner Dashboard, Wizard, Admin)
- * 2. Tenant Public Domains: https://<public_slug>.dinely.app (Customer Web App, Digital Menu, QR scan, Table ordering)
+ * 2. Tenant Public Domains: https://<public_slug>.dinely.food (Customer Web App, Digital Menu, QR scan, Table ordering)
  */
 
 export interface TenantDomainResolution {
@@ -34,6 +34,9 @@ const PLATFORM_DOMAINS = new Set([
   'www.dinely.app',
   'dinely-cd6cd.web.app',
   'dinely-cd6cd.firebaseapp.com',
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
 ]);
 
 export function getTenantFromHostname(customHostname?: string): TenantDomainResolution {
@@ -42,23 +45,9 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
   }
 
   const hostname = (customHostname || window.location.hostname || '').toLowerCase().trim();
-  const searchParams = new URLSearchParams(window.location.search);
 
-  // 1. Explicit query parameter override (supports local testing, dev tools, and deep links)
-  const queryTenant = searchParams.get('tenant') || searchParams.get('restaurant_slug');
-  if (queryTenant && queryTenant.trim()) {
-    const slug = queryTenant.trim().toLowerCase();
-    if (!RESERVED_SUBDOMAINS.has(slug)) {
-      return { isTenantSubdomain: true, slug, hostname };
-    }
-  }
-
-  // 2. Primary platform domains without subdomains
-  if (PLATFORM_DOMAINS.has(hostname)) {
-    return { isTenantSubdomain: false, slug: null, hostname };
-  }
-
-  // 3. Subdomain Routing: <slug>.dinely.food or <slug>.dinely.app
+  // 1. Hostname is the public tenant identity - check subdomain FIRST
+  // https://<slug>.dinely.food
   if (hostname.endsWith('.dinely.food')) {
     const subdomain = hostname.slice(0, -'.dinely.food'.length).trim();
     if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
@@ -67,6 +56,7 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     return { isTenantSubdomain: false, slug: null, hostname };
   }
 
+  // https://<slug>.dinely.app
   if (hostname.endsWith('.dinely.app')) {
     const subdomain = hostname.slice(0, -'.dinely.app'.length).trim();
     if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
@@ -75,7 +65,7 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     return { isTenantSubdomain: false, slug: null, hostname };
   }
 
-  // 4. Local Development Tenant Subdomain: <slug>.localhost or <slug>.127.0.0.1
+  // Local Development: https://<slug>.localhost
   if (hostname.endsWith('.localhost')) {
     const subdomain = hostname.slice(0, -'.localhost'.length).trim();
     if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
@@ -83,7 +73,7 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     }
   }
 
-  // 5. Firebase Hosting Subdomains: <slug>.dinely-cd6cd.web.app
+  // Direct Firebase Hosting staging subdomains
   if (hostname.endsWith('.dinely-cd6cd.web.app')) {
     const subdomain = hostname.slice(0, -'.dinely-cd6cd.web.app'.length).trim();
     if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
@@ -91,27 +81,43 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     }
   }
 
+  // 2. Query parameter fallback ONLY for platform domains or local dev testing
+  if (PLATFORM_DOMAINS.has(hostname) || hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryTenant = searchParams.get('tenant') || searchParams.get('restaurant_slug');
+    if (queryTenant && queryTenant.trim()) {
+      const slug = queryTenant.trim().toLowerCase();
+      if (!RESERVED_SUBDOMAINS.has(slug)) {
+        return { isTenantSubdomain: true, slug, hostname };
+      }
+    }
+    return { isTenantSubdomain: false, slug: null, hostname };
+  }
+
   return { isTenantSubdomain: false, slug: null, hostname };
 }
 
 /**
- * Returns canonical public domain for a restaurant tenant: https://dinely.food
+ * Returns canonical public domain for a restaurant tenant: https://<slug>.dinely.food
  */
 export function getRestaurantPublicDomain(
-  slugOrRest?: string | { publicSlug?: string; slug?: string } | null
+  slugOrRest?: string | { publicSlug?: string; slug?: string; id?: string } | null
 ): string {
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('0.0.0.0')) {
-      return window.location.origin;
-    }
+  const slug =
+    typeof slugOrRest === 'string'
+      ? slugOrRest
+      : slugOrRest?.publicSlug || slugOrRest?.slug || '';
+  const cleanSlug = (slug || '').toLowerCase().trim();
+
+  if (cleanSlug && !RESERVED_SUBDOMAINS.has(cleanSlug)) {
+    return `https://${cleanSlug}.dinely.food`;
   }
   return 'https://dinely.food';
 }
 
 /**
  * Generates customer QR code or direct menu URL pointing to tenant public domain.
- * Formats: https://dinely.food/customer?tenant=<slug>&table=<tableNumber>&tableId=<tableId>
+ * Formats: https://<slug>.dinely.food/customer?table=<tableNumber>&tableId=<tableId>
  * Guaranteed to resolve and load on all iOS Safari and Android camera QR scans worldwide.
  */
 export function getRestaurantCustomerUrl(
@@ -122,13 +128,14 @@ export function getRestaurantCustomerUrl(
   const slug =
     typeof slugOrRest === 'string'
       ? slugOrRest
-      : slugOrRest?.publicSlug || slugOrRest?.slug || slugOrRest?.id || '';
+      : slugOrRest?.publicSlug || slugOrRest?.slug || '';
+  const cleanSlug = (slug || '').toLowerCase().trim();
 
-  const base = getRestaurantPublicDomain(slugOrRest);
+  const base = cleanSlug && !RESERVED_SUBDOMAINS.has(cleanSlug)
+    ? `https://${cleanSlug}.dinely.food`
+    : 'https://dinely.food';
+
   const params = new URLSearchParams();
-  if (slug && slug !== 'restaurant') {
-    params.set('tenant', slug.toLowerCase());
-  }
   if (tableNumber) params.set('table', tableNumber);
   if (tableId) params.set('tableId', tableId);
   const query = params.toString();

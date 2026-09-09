@@ -198,18 +198,26 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
     defaultUrl = `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}`;
   }
 
-  // Sanitize and normalize candidate URLs (convert unresolvable .dinely.app subdomains to working canonical links)
+  // Sanitize and normalize candidate URLs to canonical https://<slug>.dinely.food/customer format
   const sanitizeQrUrl = (inputUrl?: string): string => {
     if (!inputUrl) return '';
     try {
       if (inputUrl.includes('.dinely.app')) {
         const parsed = new URL(inputUrl);
         const sub = parsed.hostname.replace('.dinely.app', '').trim();
-        const search = new URLSearchParams(parsed.search);
-        if (sub && sub !== 'www' && sub !== 'app' && !search.get('tenant')) {
-          search.set('tenant', sub);
+        if (sub && sub !== 'www' && sub !== 'app') {
+          return `https://${sub}.dinely.food${parsed.pathname}${parsed.search}`;
         }
-        return `${defaultOrigin}/customer?${search.toString()}`;
+      }
+      if (inputUrl.includes('dinely.food/customer?tenant=') || inputUrl.includes('dinely.food/customer?')) {
+        const parsed = new URL(inputUrl);
+        const tenant = parsed.searchParams.get('tenant') || parsed.searchParams.get('restaurant_slug');
+        if (tenant) {
+          parsed.searchParams.delete('tenant');
+          parsed.searchParams.delete('restaurant_slug');
+          const qs = parsed.searchParams.toString();
+          return `https://${tenant}.dinely.food/customer${qs ? `?${qs}` : ''}`;
+        }
       }
     } catch {
       // ignore

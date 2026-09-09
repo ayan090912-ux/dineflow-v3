@@ -24,11 +24,11 @@ def create_admin_jwt(email: str = "ayan090912@gmail.com", uid: str = "admin_uid_
 class TestDinelyTenantDomainArchitecture:
     """
     Comprehensive Test Suite for Dinely Multi-Tenant URL Architecture:
-    1. Primary platform domain (dinely.food) vs Tenant public domain (<slug>.dinely.app)
+    1. Primary platform domain (dinely.food) vs Tenant public domain (<slug>.dinely.food)
     2. Canonical public_slug generation & collision handling
     3. Hostname/subdomain tenant resolution with zero fallbacks
     4. 404 on unknown subdomains/slugs
-    5. Tenant-specific QR codes pointing to https://<slug>.dinely.app
+    5. Tenant-specific QR codes pointing to https://<slug>.dinely.food/customer?table=...
     6. Multi-tenant data & order isolation between THE DUNK and CAFE.CO
     """
 
@@ -51,7 +51,7 @@ class TestDinelyTenantDomainArchitecture:
         data_a = resp_a.json()
         slug_a = data_a["public_slug"] or data_a["slug"]
         assert slug_a.startswith(f"the-dunk-{t_stamp}")
-        assert data_a["domain"] == f"https://{slug_a}.dinely.app"
+        assert data_a["domain"] == f"https://{slug_a}.dinely.food"
 
         # 2. Create Restaurant B with SAME NAME to test collision safety
         resp_b = client.post("/api/v1/restaurants", json={
@@ -67,7 +67,7 @@ class TestDinelyTenantDomainArchitecture:
         slug_b = data_b["public_slug"] or data_b["slug"]
         assert slug_b != slug_a, "Duplicate slug generated! Must be unique & collision safe."
         assert slug_b.startswith(f"the-dunk-{t_stamp}-")
-        assert data_b["domain"] == f"https://{slug_b}.dinely.app"
+        assert data_b["domain"] == f"https://{slug_b}.dinely.food"
 
         # 3. Create Restaurant C: "CAFE.CO"
         resp_c = client.post("/api/v1/restaurants", json={
@@ -82,7 +82,7 @@ class TestDinelyTenantDomainArchitecture:
         data_c = resp_c.json()
         slug_c = data_c["public_slug"] or data_c["slug"]
         assert slug_c.startswith(f"cafe-co-{t_stamp}")
-        assert data_c["domain"] == f"https://{slug_c}.dinely.app"
+        assert data_c["domain"] == f"https://{slug_c}.dinely.food"
 
     def test_hostname_and_slug_public_tenant_resolution(self):
         t_stamp = int(time.time() * 1000)
@@ -105,16 +105,22 @@ class TestDinelyTenantDomainArchitecture:
         data_slug = res_slug.json()
         assert data_slug["id"] == rest_id
         assert data_slug["publicSlug"] == slug
-        assert data_slug["domain"] == f"https://{slug}.dinely.app"
+        assert data_slug["domain"] == f"https://{slug}.dinely.food"
 
-        # 2. Resolve by production hostname: <slug>.dinely.app
-        res_host = client.get(f"/api/v1/restaurants/public/resolve?hostname={slug}.dinely.app")
+        # 2. Resolve by production hostname: <slug>.dinely.food
+        res_host = client.get(f"/api/v1/restaurants/public/resolve?hostname={slug}.dinely.food")
         assert res_host.status_code == 200
         data_host = res_host.json()
         assert data_host["id"] == rest_id
         assert data_host["publicSlug"] == slug
+        assert data_host["domain"] == f"https://{slug}.dinely.food"
 
-        # 3. Resolve by local development hostname: <slug>.localhost:5173
+        # 3. Resolve platform root domain -> Platform Context
+        res_platform = client.get("/api/v1/restaurants/public/resolve?hostname=dinely.food")
+        assert res_platform.status_code == 200
+        assert res_platform.json().get("isPlatformDomain") is True
+
+        # 4. Resolve by local development hostname: <slug>.localhost:5173
         res_local = client.get(f"/api/v1/restaurants/public/resolve?hostname={slug}.localhost:5173")
         assert res_local.status_code == 200
         data_local = res_local.json()
@@ -127,7 +133,7 @@ class TestDinelyTenantDomainArchitecture:
         assert "not found" in res_404_slug.json()["detail"].lower()
 
         # 2. Querying unknown subdomain must return 404, NEVER fall back to another restaurant!
-        res_404_host = client.get("/api/v1/restaurants/public/resolve?hostname=nonexistent-restaurant.dinely.app")
+        res_404_host = client.get("/api/v1/restaurants/public/resolve?hostname=nonexistent-restaurant.dinely.food")
         assert res_404_host.status_code == 404
         assert "not found" in res_404_host.json()["detail"].lower()
 
@@ -156,7 +162,7 @@ class TestDinelyTenantDomainArchitecture:
         assert len(tbls) >= 1
 
         for tbl in tbls:
-            expected_prefix = f"https://dinely.food/customer?tenant={slug}&table="
+            expected_prefix = f"https://{slug}.dinely.food/customer?table="
             assert tbl["qr_code_url"].startswith(expected_prefix), (
                 f"QR Code URL '{tbl['qr_code_url']}' does not point to canonical domain '{expected_prefix}'!"
             )
@@ -170,7 +176,7 @@ class TestDinelyTenantDomainArchitecture:
         }, headers=owner_headers)
         assert new_tbl_res.status_code == 201
         new_tbl = new_tbl_res.json()
-        assert new_tbl["qr_code_url"].startswith(f"https://dinely.food/customer?tenant={slug}&table=Table 99")
+        assert new_tbl["qr_code_url"].startswith(f"https://{slug}.dinely.food/customer?table=Table 99")
 
     def test_two_restaurants_simultaneous_isolation(self):
         t_stamp = int(time.time() * 1000)

@@ -105,7 +105,9 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     active_session_map = {sess.table_id: sess.id for sess in active_sessions}
     active_session_num_map = {sess.table_number: sess.id for sess in active_sessions}
 
+    pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
     for t in tables:
+        t.qr_code_url = f"https://{pub_slug}.dinely.food/customer?table={t.table_number}&tableId={t.id}"
         sess_id = active_session_map.get(t.id) or active_session_num_map.get(t.table_number)
         if sess_id:
             t.status = "OCCUPIED"
@@ -170,7 +172,7 @@ async def create_table(
         capacity=payload.capacity or 4,
         status="AVAILABLE",
         is_occupied=False,
-        qr_code_url=f"https://dinely.food/customer?tenant={pub_slug}&table={t_num}&tableId={t_id}"
+        qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={t_num}&tableId={t_id}"
     )
     db.add(new_tbl)
     await db.commit()
@@ -269,7 +271,7 @@ async def create_table_session(
             capacity=4,
             status="OCCUPIED",
             is_occupied=True,
-            qr_code_url=f"https://dinely.food/customer?tenant={pub_slug}&table={resolved_tbl_num}&tableId={table_id}"
+            qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={resolved_tbl_num}&tableId={table_id}"
         )
         db.add(tbl)
     
