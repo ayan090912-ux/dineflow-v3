@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
-import { ErrorBoundary, DinelyLogo } from './packages/ui';
+import { ErrorBoundary, DinelyLogo, LoadingScreen } from './packages/ui';
 import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } from './packages/types';
@@ -30,10 +30,10 @@ const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector
 
 function RouteLoadingFallback() {
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3">
-      <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
-      <span className="text-xs font-semibold text-slate-400">Loading workspace...</span>
-    </div>
+    <LoadingScreen
+      status="Loading workspace..."
+      substatus="Optimizing and preparing interface resources"
+    />
   );
 }
 
@@ -213,10 +213,10 @@ function AppContent() {
     // 0.1. Guard protected routes while Firebase Auth initializes session
     if (isInitializing && !['/', '/landing', '/home', '/about', '/pricing', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
       return (
-        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
-          <div className="w-12 h-12 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
-          <p className="text-xs text-slate-400 font-mono">Initializing secure session...</p>
-        </div>
+        <LoadingScreen
+          status="Initializing secure session..."
+          substatus="Validating multi-tenant authorization credentials"
+        />
       );
     }
 
@@ -522,10 +522,22 @@ function AppContent() {
         const storedRestId = api.getCurrentRestaurantId();
         if (storedRestId) {
           return (
-            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
-              <div className="w-10 h-10 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
-              <p className="text-xs text-slate-400 font-mono">Loading restaurant workspace...</p>
-            </div>
+            <LoadingScreen
+              status="Loading restaurant workspace..."
+              substatus="Retrieving active venue configuration & operational data"
+              onRetry={() => {
+                const id = api.getCurrentRestaurantId();
+                if (id) {
+                  api.getRestaurantDetails(id).then((r) => {
+                    if (r) setCurrentRestaurant(r);
+                  }).catch(() => {});
+                }
+              }}
+              onChooseRestaurant={() => {
+                localStorage.removeItem('dinely_active_restaurant_id');
+                navigateTo('/workspace');
+              }}
+            />
           );
         }
 
@@ -634,7 +646,9 @@ function AppContent() {
           orders={kitchenOrders}
           onRefreshOrders={() => {
             const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
-            api.getOrders(restId).then(setKitchenOrders);
+            if (restId) {
+              api.getOrders(restId).then(setKitchenOrders).catch(() => {});
+            }
           }}
           onLogout={() => handleLogout('/kitchen/login')}
         />

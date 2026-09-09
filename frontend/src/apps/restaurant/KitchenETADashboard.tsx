@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Flame,
@@ -110,7 +110,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   activeRole = 'KITCHEN',
   onLogout,
 }) => {
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [orders, setOrders] = useState<Order[]>(initialOrders || []);
+  const onRefreshOrdersRef = useRef(onRefreshOrders);
+  useEffect(() => {
+    onRefreshOrdersRef.current = onRefreshOrders;
+  }, [onRefreshOrders]);
   const [viewMode, setViewMode] = useState<'KDS' | 'WAITER' | 'COMPLETED' | 'ANALYTICS'>(
     activeRole === 'WAITER' ? 'WAITER' : activeRole === 'OWNER' ? 'ANALYTICS' : 'KDS'
   );
@@ -209,6 +213,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     const fetchFreshOrders = () => {
       const restId = currentRestId || undefined;
       api.getOrders(restId).then((freshOrders) => {
+        if (!freshOrders) return;
         setOrders((prevOrders) => {
           if (!isMuted && freshOrders.length > prevOrders.length) {
             const hasNewPending = freshOrders.some(
@@ -220,10 +225,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           }
           return freshOrders;
         });
-      });
-      if (onRefreshOrders) {
-        onRefreshOrders();
-      }
+      }).catch(() => {});
     };
 
     fetchFreshOrders();
@@ -261,7 +263,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       clearInterval(pollInterval);
       unsubscribe();
     };
-  }, [onRefreshOrders, isMuted]);
+  }, [isMuted]);
 
 
   // Handlers
@@ -282,13 +284,13 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     if (!isMuted) playKitchenChime('BUMP');
     showToast(`Order #${selectedOrderToAccept.id} Kitchen Ticket Accepted! Timer set to ${finalMins} mins.`, 'success');
     setSelectedOrderToAccept(null);
-    onRefreshOrders();
+    onRefreshOrdersRef.current?.();
   };
 
   const handleEtaDelta = async (orderId: string, delta: number) => {
     await api.updateOrderETA(orderId, delta, undefined, `Adjusted by ${delta > 0 ? '+' : ''}${delta} mins`);
     showToast(`ETA updated by ${delta > 0 ? '+' : ''}${delta} mins for #${orderId}`, 'info');
-    onRefreshOrders();
+    onRefreshOrdersRef.current?.();
   };
 
   const handleSaveCustomEta = async () => {
@@ -299,12 +301,12 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     showToast(`ETA set to ${mins} mins for Order #${selectedOrderForEta.id}`, 'success');
     setSelectedOrderForEta(null);
     setEtaChangeReason('');
-    onRefreshOrders();
+    onRefreshOrdersRef.current?.();
   };
 
   const handleToggleTimer = async (orderId: string) => {
     await api.toggleOrderTimer(orderId);
-    onRefreshOrders();
+    onRefreshOrdersRef.current?.();
   };
 
   const handleMarkReady = async (order: Order) => {
@@ -313,13 +315,13 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     setBumpedHistory((prev) => [order, ...prev.slice(0, 19)]);
     if (!isMuted) playKitchenChime('BUMP');
     showToast(`Order #${order.id} Kitchen Ticket Plated & Ready! ✨`, 'success');
-    onRefreshOrders();
+    onRefreshOrdersRef.current?.();
   };
 
   const handleDeliverOrder = async (orderId: string) => {
     await api.deliverOrder(orderId);
     showToast(`Order #${orderId} Delivered to Table. Completed!`, 'success');
-    onRefreshOrders();
+    onRefreshOrdersRef.current?.();
   };
 
   const handleRecallOrder = async (order: Order) => {
@@ -327,7 +329,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     setBumpedHistory((prev) => prev.filter((o) => o.id !== order.id));
     showToast(`Order #${order.id} Recalled back to Cooking Grid!`, 'warning');
     setIsRecallModalOpen(false);
-    onRefreshOrders();
+    onRefreshOrdersRef.current?.();
   };
 
   const handleBroadcastDelay = () => {
@@ -392,16 +394,17 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
   // Filtered Orders Logic: ONLY orders containing kitchen items
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const hasKitchenItems = order.items.some((i) => getFulfillmentStation(i) === 'KITCHEN');
+    return (orders || []).filter((order) => {
+      const items = order.items || [];
+      const hasKitchenItems = items.some((i) => getFulfillmentStation(i) === 'KITCHEN');
       if (!hasKitchenItems) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesId = order.id.toLowerCase().includes(q);
-        const matchesTable = order.tableNumber.toLowerCase().includes(q);
+        const matchesId = (order.id || '').toLowerCase().includes(q);
+        const matchesTable = (order.tableNumber || '').toLowerCase().includes(q);
         const matchesCustomer = (order.customerName || '').toLowerCase().includes(q);
-        const matchesItem = order.items.some((i) => i.name.toLowerCase().includes(q));
+        const matchesItem = items.some((i) => (i.name || '').toLowerCase().includes(q));
         return matchesId || matchesTable || matchesCustomer || matchesItem;
       }
       return true;
@@ -530,8 +533,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
         {/* Real Operational Stats Bar */}
         {(() => {
-          const foodOrders = orders.filter((o) =>
-            o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN')
+          const foodOrders = (orders || []).filter((o) =>
+            (o.items || []).some((i) => getFulfillmentStation(i) === 'KITCHEN')
           );
           const received = foodOrders.filter((o) => o.kitchenStatus === 'PENDING' || (!o.kitchenStatus && (o.status === 'PENDING' || o.status === 'CONFIRMED'))).length;
           const preparing = foodOrders.filter((o) => o.kitchenStatus === 'PREPARING' || o.kitchenStatus === 'ACCEPTED' || (!o.kitchenStatus && (o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION'))).length;
@@ -654,7 +657,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     {/* Dish Items list with check toggles */}
                     <div className="space-y-1.5 border-y border-[#1e232e] py-2.5">
                       {(() => {
-                        const kitchenItems = order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN');
+                        const kitchenItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
                         return (
                           <>
                             <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Dish Items ({kitchenItems.length}):</p>
@@ -839,7 +842,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                       {/* Dish Item Checklist */}
                       <div className="space-y-1 border-y border-[#1e232e] py-2">
-                        {order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((item) => {
+                        {(order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((item) => {
                           const isChecked = checkedItems[item.id] || false;
                           return (
                             <div
@@ -915,7 +918,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                     <div className="text-xs text-slate-300 bg-[#0c0e14] p-2.5 rounded-lg border border-[#1e232e] space-y-1">
                       <p className="text-slate-400 font-mono text-[10px] uppercase mb-1">Items Ready to Serve:</p>
-                      {order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
+                      {(order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
                         <div key={i.id} className="text-slate-300 flex justify-between font-medium">
                           <span>• {i.quantity}x {i.name}</span>
                           <span className="text-emerald-400 font-mono text-[10px]">Plated</span>
@@ -973,7 +976,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                   <div className="space-y-1.5 border-y border-[#1e232e] py-2.5">
                     <p className="text-[10px] font-mono uppercase text-slate-400">Plated Items:</p>
-                    {order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
+                    {(order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
                       <div key={i.id} className="flex justify-between text-xs text-slate-200 font-medium">
                         <span>{i.quantity}x {i.name}</span>
                       </div>
@@ -1081,7 +1084,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {completedOrders.map((order) => {
-                  const kitchenItems = order.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN');
+                  const kitchenItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
                   return (
                     <div key={order.id} className="bg-[#12151b] border border-[#1e232e] p-4 space-y-3 rounded-xl hover:border-[#2a3243] transition-colors">
                       <div className="flex items-center justify-between">
@@ -1292,7 +1295,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 <div key={order.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
                   <div>
                     <span className="font-mono font-bold text-amber-400">#{order.id}</span>
-                    <p className="text-[11px] text-slate-400">Table {order.tableNumber} • {order.items.length} items</p>
+                    <p className="text-[11px] text-slate-400">Table {order.tableNumber} • {(order.items || []).length} items</p>
                   </div>
                   <Button variant="brand" size="sm" onClick={() => handleRecallOrder(order)} className="text-xs">
                     Recall Ticket

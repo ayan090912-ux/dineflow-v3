@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -75,6 +75,7 @@ import {
   ToastContainer,
   ToastMessage,
   DinelyLogo,
+  LoadingScreen,
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
@@ -274,7 +275,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   const [currentRestaurant, setCurrentRestaurant] = useState<any>(activeRestaurant || null);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [viewState, setViewState] = useState<'INITIALIZING' | 'LOADING' | 'READY' | 'ERROR'>('INITIALIZING');
+  const [viewState, setViewState] = useState<'INITIALIZING' | 'LOADING' | 'READY' | 'ERROR'>(
+    activeRestaurant ? 'READY' : 'INITIALIZING'
+  );
   const [viewError, setViewError] = useState<string>('');
   const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
 
@@ -605,7 +608,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   }, [activeRestaurant?.id, currentRestaurant?.id]);
 
 
-  const loadData = async () => {
+  const loadData = useCallback(async (forceLoading = false) => {
     const targetRestId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId();
     if (!targetRestId) {
       setViewState('ERROR');
@@ -613,18 +616,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       return;
     }
 
-    setViewState('LOADING');
+    if (forceLoading || (!activeRestaurant && !currentRestaurant)) {
+      setViewState('LOADING');
+    }
     setViewError('');
     try {
       const user = api.getCurrentUser();
-      const rest = await api.getRestaurantDetails(targetRestId);
+      const rest = (await api.getRestaurantDetails(targetRestId).catch(() => null)) || activeRestaurant || currentRestaurant;
       if (!rest) {
         setViewState('ERROR');
         setViewError(`Restaurant "${targetRestId}" could not be loaded or was not found.`);
         return;
       }
 
-      const ownerRests = await api.getOwnerRestaurants();
+      const ownerRests = await api.getOwnerRestaurants().catch(() => []);
       setCurrentUser(user);
       setCurrentRestaurant(rest);
       setAllMyRestaurants(ownerRests);
@@ -677,10 +682,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       setViewState('READY');
     } catch (err: any) {
       console.error('[RestaurantApp] Failed to load data:', err);
-      setViewState('ERROR');
-      setViewError(err?.message || 'Failed to initialize restaurant operating system.');
+      if (!activeRestaurant && !currentRestaurant) {
+        setViewState('ERROR');
+        setViewError(err?.message || 'Failed to initialize restaurant operating system.');
+      }
     }
-  };
+  }, [activeRestaurant, currentRestaurant?.id]);
+
+  const handleRefreshOrders = useCallback(async () => {
+    const targetRestId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId();
+    if (targetRestId) {
+      const freshOrders = await api.getOrders(targetRestId).catch(() => []);
+      setOrders(freshOrders);
+    }
+  }, [activeRestaurant?.id, currentRestaurant?.id]);
 
   // Category CRUD Handlers
   const handleAddCategory = async () => {
@@ -1073,15 +1088,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   if (viewState === 'INITIALIZING' || viewState === 'LOADING') {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center space-y-4 font-sans">
-        <div className="w-12 h-12 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
-        <div className="text-center space-y-1">
-          <p className="text-sm font-bold text-white tracking-wide">
-            {activeRestaurant?.name || currentRestaurant?.name || 'Restaurant Workspace'}
-          </p>
-          <p className="text-xs text-slate-400 font-mono">Initializing Restaurant OS & Terminal Data...</p>
-        </div>
-      </div>
+      <LoadingScreen
+        restaurantName={activeRestaurant?.name || currentRestaurant?.name}
+        status="Initializing Restaurant OS & Terminal Data..."
+        substatus="Connecting live Kitchen KDS hot line, orders and POS floorplan"
+        onRetry={() => loadData(true)}
+        onChooseRestaurant={() => (onNavigate ? onNavigate('/workspace') : (window.location.href = '/workspace'))}
+      />
     );
   }
 
@@ -2025,7 +2038,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab 3: Kitchen Display System (KDS) & ETA Controls */}
         {activeTab === 'kitchen' && (
-          <KitchenETADashboard orders={orders} onRefreshOrders={loadData} />
+          <KitchenETADashboard orders={orders} onRefreshOrders={handleRefreshOrders} />
         )}
 
         {/* Tab 3.5: Bar Terminal */}

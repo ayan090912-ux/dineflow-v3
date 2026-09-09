@@ -1286,7 +1286,10 @@ export class DinelyApiClient {
 
   getCurrentRestaurantId(): string {
     const scope = getPortalScopeFromPath();
-    const candidateId = this.currentRestaurantIdsByScope[scope] || this.getCurrentUser(scope)?.restaurantId || this._currentRestaurantId || '';
+    let candidateId = this.currentRestaurantIdsByScope[scope] || this.getCurrentUser(scope)?.restaurantId || this._currentRestaurantId || '';
+    if (!candidateId && typeof window !== 'undefined') {
+      candidateId = localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id') || sessionStorage.getItem('dinely_active_restaurant_id') || '';
+    }
     return this.resolveTenantRestaurantId(candidateId) || candidateId || '';
   }
 
@@ -2624,10 +2627,17 @@ export class DinelyApiClient {
     let targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return null;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
     try {
       const apiBase = getApiBaseUrl();
       const headers = this.getAuthHeader();
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`, { headers });
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`, {
+        headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
         if (data && data.id) {
@@ -2645,6 +2655,7 @@ export class DinelyApiClient {
         return null;
       }
     } catch (e) {
+      clearTimeout(timeoutId);
       console.warn('API fetch for getRestaurantDetails failed:', e);
     }
 
