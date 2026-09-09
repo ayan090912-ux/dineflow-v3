@@ -62,8 +62,8 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   };
 
   useEffect(() => {
-    // Connect to global WebSocket channel for realtime lifecycle updates
-    realtimeBus.connect('global', 'OWNER');
+    // Do NOT connect to 'global' WS — that channel is reserved for Platform Admins.
+    // This page relies on direct polling (loadOwnerRestaurants) to get lifecycle updates.
 
     if (currentUser?.email || currentUser?.id) {
       loadOwnerRestaurants(currentUser?.email, currentUser?.id);

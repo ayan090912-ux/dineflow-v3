@@ -98,7 +98,9 @@ async def get_all_restaurants(
     output = []
     for r in rests:
         clean_slug = re.sub(r"[^a-z0-9]+", "-", (r.public_slug or r.slug or r.name or "restaurant").strip().lower()).strip("-") or "restaurant"
-        canonical_domain = f"https://{clean_slug}.dinely.app"
+        # Use existing domain if canonical, else generate from slug (always use dinely.food query-param format)
+        existing_domain = r.domain or ""
+        canonical_domain = existing_domain if (existing_domain and ".dinely.app" not in existing_domain) else f"https://dinely.food/customer?tenant={clean_slug}"
         output.append({
             "id": r.id,
             "name": r.name,

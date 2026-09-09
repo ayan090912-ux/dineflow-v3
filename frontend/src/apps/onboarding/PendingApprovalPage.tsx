@@ -47,7 +47,11 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
   const [resubmitError, setResubmitError] = useState('');
 
   useEffect(() => {
-    realtimeBus.connect(restaurantId || 'global', 'OWNER');
+    // Connect to restaurant-specific channel when we know the tenant ID.
+    // Never use 'global' — that channel is reserved for Platform Admins only.
+    if (restaurantId) {
+      realtimeBus.connect(restaurantId, 'OWNER');
+    }
     loadRestaurantData();
     const interval = setInterval(() => {
       loadRestaurantDataSilent();

@@ -199,7 +199,7 @@ async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(ge
         "name": rest.name,
         "slug": rest.slug,
         "publicSlug": pub_slug,
-        "domain": rest.domain or f"https://{pub_slug}.dinely.app",
+        "domain": rest.domain if (rest.domain and ".dinely.app" not in rest.domain) else f"https://dinely.food/customer?tenant={pub_slug}",
         "cuisine": rest.cuisine,
         "businessType": rest.business_type,
         "hasBar": rest.has_bar,
@@ -228,7 +228,7 @@ async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(ge
 async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = Depends(get_db)):
     rest_id = payload.id or f"rest-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
     public_slug = await generate_unique_public_slug(db, payload.name, rest_id)
-    domain_url = f"https://{public_slug}.dinely.app"
+    domain_url = f"https://dinely.food/customer?tenant={public_slug}"
 
     query = select(Restaurant).where(Restaurant.id == rest_id)
     result = await db.execute(query)
