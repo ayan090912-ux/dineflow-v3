@@ -1,16 +1,25 @@
-# Dinely Production Subdomain & Multi-Tenant Architecture Walkthrough
+# Dinely Production Deployment & Multi-Tenant Audit Walkthrough
 
-## Executive Summary
+## 1. Production Deployment Status
 
-We have fully implemented, tested, built, and deployed the production multi-tenant wildcard subdomain architecture for Dinely (`*.dinely.food`).
+All components of the Dinely SaaS platform have been built, audited, deployed, and verified live:
 
-All backend models, canonical tenant resolver endpoints, database schema migrations, test fixtures, frontend Host Authority guards, and Cloudflare Worker routing configurations have been implemented and verified.
+| Component | Target / Host | Deployment Status | Verification Endpoint | Live Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Frontend Webapp** | Firebase Hosting (`dinely-cd6cd`) | **Deployed** (68 files) | `https://dinely-cd6cd.web.app`<br/>`https://dinely.food` | **HTTP 200 OK**<br/>Active Bundle: `index-DYLlbnnq.js` |
+| **Backend API** | Render Cloud (`dineflow-v3`) | **Deployed** (via GitHub `main`) | `https://dineflow-v3.onrender.com/healthz`<br/>`https://dineflow-v3.onrender.com/readyz` | **Healthy & Ready**<br/>DB Connected |
+| **Database** | Neon Serverless PostgreSQL | **Active & Migrated** | Managed Pool | Synchronized |
+| **Edge Router** | Cloudflare Worker (`dinely-tenant-router`) | **Active** | `https://*.dinely.food/*` | Host Preserved Proxy to Firebase |
 
 ---
 
-## Key Achievements & Delivered Capabilities
+## 2. GitHub Synchronization
+- **Repository**: `https://github.com/ayan090912-ux/dineflow-v3.git`
+- **Branch**: `main`
+- **Latest Commit**: `64d6856` (`fix(tenant): enforce 404 on public resolve for archived and deactivated restaurants`)
+- **Auto-Deploy**: Render webhook triggered and synced.
 
-### 1. Cloudflare Tenant Router Worker
+### 3. Cloudflare Tenant Router Worker
 - **Files**: 
   - [`cloudflare/dinely-tenant-router/src/index.js`](file:///c:/dineflow%20v3/v3/cloudflare/dinely-tenant-router/src/index.js)
   - [`cloudflare/dinely-tenant-router/wrangler.toml`](file:///c:/dineflow%20v3/v3/cloudflare/dinely-tenant-router/wrangler.toml)
