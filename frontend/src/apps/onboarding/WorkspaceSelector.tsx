@@ -122,8 +122,23 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
       }
     });
 
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && (currentUser?.email || currentUser?.id)) {
+        api.getOwnerRestaurants(currentUser?.email, currentUser?.id)
+          .then((freshList) => {
+            if (Array.isArray(freshList)) {
+              setRestaurants(freshList);
+              if (freshList.length === 0) setViewState('EMPTY');
+              else setViewState('READY');
+            }
+          })
+          .catch(() => {});
+      }
+    }, 6000);
+
     return () => {
       unsub();
+      clearInterval(interval);
     };
   }, [currentUser?.email, currentUser?.id]);
 

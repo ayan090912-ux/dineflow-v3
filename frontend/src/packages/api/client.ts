@@ -1827,14 +1827,11 @@ export class DinelyApiClient {
         const data = await res.json();
         if (Array.isArray(data)) {
           const mappedList = data.map((r: any) => this.mapBackendRestaurant(r));
-          mappedList.forEach((freshRest) => {
-            const idx = this.restaurants.findIndex((ex) => ex.id === freshRest.id);
-            if (idx >= 0) {
-              this.restaurants[idx] = { ...this.restaurants[idx], ...freshRest };
-            } else {
-              this.restaurants.push(freshRest);
-            }
-          });
+          // Synchronize memory cache strictly with authoritative backend data
+          this.restaurants = [
+            ...this.restaurants.filter((ex) => !mappedList.some((m) => m.id === ex.id)),
+            ...mappedList,
+          ];
           this.saveDatabase();
           return mappedList;
         }

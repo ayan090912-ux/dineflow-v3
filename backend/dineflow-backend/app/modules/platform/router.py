@@ -553,24 +553,49 @@ async def purge_demo_fixtures(
     cleaned_count = 0
     now = datetime.now(timezone.utc)
     for r in all_rests:
-        is_fake_email = r.owner_email in fake_emails or r.email in fake_emails
+        # Never archive legitimate live restaurants like THE fly
+        if r.id == "rest-1788659067434" or (r.owner_email and r.owner_email.lower() == "ayanamity77@gmail.com"):
+            continue
+
+        owner_em = (r.owner_email or "").strip().lower()
+        contact_em = (r.email or "").strip().lower()
+        is_fake_email = (
+            owner_em in fake_emails or contact_em in fake_emails or
+            owner_em.endswith("@test.dinely.internal") or
+            contact_em.endswith("@test.dinely.internal") or
+            owner_em == "testowner@dinely.app"
+        )
         is_fake_name = any(fn.lower() in (r.name or "").lower() for fn in fake_names)
         is_synthetic_test_id = (
+            r.id.startswith("rest-iso-") or
             r.id.startswith("rest-test-") or
             r.id.startswith("rest-dunk-") or
             r.id.startswith("rest-cafe-") or
             r.id.startswith("rest-resolve-") or
             r.id.startswith("rest-qr-tenant-") or
-            r.id in ["rest-1", "rest-1787446097984", "rest-1787655544312"]
+            r.id in [
+                "rest-1",
+                "rest-1787446097984",
+                "rest-1787655544312",
+                "rest-1788864160386-5be7ad",
+                "rest-1788336268705",
+                "rest-1788336351754",
+                "rest-1788118012475",
+                "rest-1788222983146",
+                "rest-1788319813381",
+                "rest-1788319728226",
+            ]
         )
-        if is_fake_email or is_fake_name or (is_synthetic_test_id and (r.owner_uid is None or r.owner_uid.startswith("uid_") or r.owner_uid.startswith("test_"))):
+        is_unowned_orphan = not r.owner_email and not r.owner_uid
+
+        if is_fake_email or is_fake_name or is_synthetic_test_id or is_unowned_orphan:
             r.deleted_at = now
             r.lifecycle_status = "ARCHIVED"
             r.is_approved = False
             r.status = "CLOSED"
             r.dismissed_at = now
             r.dismissed_by = admin_claims.get("email", "admin")
-            r.dismiss_reason = "Purged synthetic demo record"
+            r.dismiss_reason = "Purged synthetic demo or obsolete test record"
             cleaned_count += 1
 
     if cleaned_count > 0:
