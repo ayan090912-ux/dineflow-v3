@@ -409,6 +409,7 @@ async def reject_restaurant(
     }
 
 
+@router.post("/restaurants/archive")
 @router.post("/restaurants/dismiss")
 async def dismiss_restaurant(
     action: RestaurantStatusAction,
