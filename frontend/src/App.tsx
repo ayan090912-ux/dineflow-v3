@@ -6,7 +6,7 @@ import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } from './packages/types';
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
-import { firebaseAuth } from './packages/auth/firebase';
+import { firebaseAuth, signOutFirebase } from './packages/auth/firebase';
 import { getTenantFromHostname } from './packages/utils/tenantResolver';
 import { Loader2 } from 'lucide-react';
 
@@ -193,7 +193,9 @@ function AppContent() {
   const handleLogout = useCallback(async (redirectLoginPath: string = '/restaurant/login') => {
     const activeScope = getPortalScopeFromPath(cleanPath);
     await api.logout(activeScope);
+    await signOutFirebase();
     setCurrentUser(null);
+    setCurrentRestaurant(null);
     navigateTo(redirectLoginPath);
   }, [cleanPath, navigateTo]);
 
@@ -251,42 +253,36 @@ function AppContent() {
       );
     }
 
-    // 2. Generic Auth / Login Redirects
-    if (cleanPath === '/auth' || cleanPath === '/login' || cleanPath === '/signin') {
-      return <AuthPage onNavigate={navigateTo} />;
+    // 2. Unified Owner Authentication Flows (Glassmorphism Redesign)
+    if (
+      cleanPath === '/auth' ||
+      cleanPath === '/login' ||
+      cleanPath === '/signin' ||
+      cleanPath === '/restaurant/login' ||
+      cleanPath === '/owner/login' ||
+      cleanPath === '/manager/login'
+    ) {
+      return (
+        <AuthPage
+          initialMode="login"
+          onNavigate={navigateTo}
+          onLoginSuccess={async (res) => {
+            const user = res?.user || res;
+            if (user) setCurrentUser(user);
+            if (res?.restaurant) setCurrentRestaurant(res.restaurant);
+          }}
+        />
+      );
     }
 
-    // 3. Dedicated Terminal Login Portals
-    if (cleanPath === '/restaurant/login' || cleanPath === '/owner/login' || cleanPath === '/manager/login') {
+    if (cleanPath === '/signup' || cleanPath === '/register') {
       return (
-        <RoleLoginPage
-          portal="restaurant"
+        <AuthPage
+          initialMode="register"
           onNavigate={navigateTo}
-          onLoginSuccess={async (_, user) => {
-            setCurrentUser(user);
-            try {
-              const myRests = await api.getOwnerRestaurants(user?.email, user?.id);
-              if (myRests.length === 0) {
-                navigateTo('/wizard?mode=create');
-              } else if (myRests.length === 1) {
-                const onlyRest = myRests[0];
-                await api.switchActiveRestaurant(onlyRest.id);
-                setCurrentRestaurant(onlyRest);
-                if (
-                  onlyRest.isApproved !== false &&
-                  onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
-                  onlyRest.lifecycleStatus !== 'REJECTED'
-                ) {
-                  navigateTo('/restaurant/dashboard');
-                } else {
-                  navigateTo('/restaurant/pending-approval');
-                }
-              } else {
-                navigateTo('/workspace');
-              }
-            } catch {
-              navigateTo('/workspace');
-            }
+          onRegisterSuccess={async (res) => {
+            const user = res?.user || res;
+            if (user) setCurrentUser(user);
           }}
         />
       );

@@ -1,840 +1,646 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  UtensilsCrossed,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
   Lock,
   Mail,
   User as UserIcon,
   Phone,
-  Building,
-  ArrowRight,
-  CheckCircle2,
-  ShieldCheck,
-  Globe,
-  Eye,
-  EyeOff,
-  RefreshCw,
-  Clock,
-  ChevronRight,
-  Check,
+  ArrowLeft,
+  Loader2,
 } from 'lucide-react';
-import {
-  Button,
-  Card,
-  Input,
-  Badge,
-  DinelyLogo,
-} from '../../packages/ui';
+import { DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
-import { User, AuthTokens, Organization } from '../../packages/types';
-import { signInWithGooglePopup } from '../../packages/auth/firebase';
+import { signInWithGooglePopup, firebaseAuth } from '../../packages/auth/firebase';
 
 interface AuthPageProps {
   onLoginSuccess?: (ownerData: any) => void;
   onRegisterSuccess?: (registeredData: any) => void;
-  onContinueFreeTrial?: () => void;
   onNavigate?: (path: string) => void;
+  initialMode?: 'login' | 'register';
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({
   onLoginSuccess,
   onRegisterSuccess,
-  onContinueFreeTrial,
   onNavigate,
+  initialMode = 'login',
 }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'verify' | 'create_org' | 'forgot'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
 
-  // Login Form state
-  const [loginEmail, setLoginEmail] = useState('owner@lumiere.com');
-  const [loginPassword, setLoginPassword] = useState('password123');
-  const [rememberMe, setRememberMe] = useState(true);
+  // Form Fields
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // UI Feedback States
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
 
-  // Registration Form state
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPhone, setRegPhone] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regConfirmPassword, setRegConfirmPassword] = useState('');
-  const [acceptTerms, setAcceptTerms] = useState(false);
+  const navigateTo = (path: string) => {
+    if (onNavigate) {
+      onNavigate(path);
+    } else {
+      window.location.href = path;
+    }
+  };
 
-  // Email Verification state
-  const [verificationCode, setVerificationCode] = useState('123456');
-  const [verifiedUser, setVerifiedUser] = useState<User | null>(null);
-  const [jwtTokens, setJwtTokens] = useState<AuthTokens | null>(null);
+  // Route user according to their existing restaurant state
+  const routeUserAfterAuth = async (userEmail: string, userUid: string) => {
+    try {
+      const myRests = await api.getOwnerRestaurants(userEmail, userUid);
+      if (!myRests || myRests.length === 0) {
+        navigateTo('/wizard?mode=create');
+      } else if (myRests.length === 1) {
+        const onlyRest = myRests[0];
+        await api.switchActiveRestaurant(onlyRest.id);
+        const isLive =
+          onlyRest.isApproved !== false &&
+          onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
+          onlyRest.lifecycleStatus !== 'REJECTED' &&
+          onlyRest.lifecycleStatus !== 'ARCHIVED';
 
-  // Create Organization state
-  const [orgName, setOrgName] = useState('');
-  const [legalName, setLegalName] = useState('');
-  const [gstVatNumber, setGstVatNumber] = useState('');
-  const [country, setCountry] = useState('India');
-  const [currency, setCurrency] = useState('INR (₹)');
-  const [timezone, setTimezone] = useState('Asia/Kolkata (IST)');
-  const [businessAddress, setBusinessAddress] = useState('');
-  const [contactNumber, setContactNumber] = useState('');
-  const [supportEmail, setSupportEmail] = useState('');
-  const [createdOrg, setCreatedOrg] = useState<Organization | null>(null);
+        if (isLive) {
+          navigateTo('/restaurant/dashboard');
+        } else {
+          navigateTo('/restaurant/pending-approval');
+        }
+      } else {
+        navigateTo('/workspace');
+      }
+    } catch (err) {
+      console.warn('[AuthPage] Could not load restaurants, sending to workspace:', err);
+      navigateTo('/workspace');
+    }
+  };
 
-  // Forgot password email
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotSent, setForgotSent] = useState(false);
+  // Check for existing authenticated session on mount
+  useEffect(() => {
+    let isMounted = true;
 
-  // Handle Login Submit
-  const handleLoginSubmit = async (e: React.FormEvent) => {
+    const checkSession = async () => {
+      const currentUser = api.getCurrentUser('OWNER') || api.getCurrentUser();
+      const fbUser = firebaseAuth.currentUser;
+
+      if ((currentUser?.email || fbUser?.email) && isMounted) {
+        const activeEmail = (currentUser?.email || fbUser?.email || '').toLowerCase();
+        const activeUid = currentUser?.id || fbUser?.uid || '';
+        await routeUserAfterAuth(activeEmail, activeUid);
+        return;
+      }
+
+      if (isMounted) {
+        setIsRestoringSession(false);
+      }
+    };
+
+    checkSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 1. Google Authentication Flow
+  const handleGoogleAuth = async () => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsGoogleLoading(true);
+
+    try {
+      const googleUser = await signInWithGooglePopup();
+      setSuccessMessage(`Signed in as ${googleUser.displayName || googleUser.email}`);
+
+      // Authenticate with Dinely API engine
+      const res = await api.authenticateWithGoogle({
+        googleUid: googleUser.uid,
+        email: googleUser.email,
+        name: googleUser.displayName,
+        photoURL: googleUser.photoURL,
+      });
+
+      if (onLoginSuccess) {
+        onLoginSuccess(res);
+      }
+
+      await routeUserAfterAuth(googleUser.email, googleUser.uid);
+    } catch (err: any) {
+      console.error('[AuthPage] Google sign-in failed:', err);
+      setErrorMessage(err.message || 'Google authentication failed. Please try again.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  // 2. Email / Password Login Flow
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!loginEmail || !loginPassword) {
-      setErrorMessage('Please enter both email and password.');
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      setErrorMessage('Please enter both your email and password.');
       return;
     }
 
     setIsLoading(true);
+
     try {
-      const res = await api.loginOwner(loginEmail, loginPassword);
-      const restName = (res as any).restaurant?.name || 'Dashboard';
-      setSuccessMessage(`Welcome back, ${res.user.name}! Loading ${restName}...`);
-      setTimeout(() => {
-        if (onLoginSuccess) {
-          onLoginSuccess(res);
-        } else if (onNavigate) {
-          onNavigate('/workspace');
-        } else {
-          window.location.href = '/workspace';
-        }
-      }, 500);
+      const res = await api.loginOwner(cleanEmail, password);
+      setSuccessMessage(`Welcome back, ${res.user.name || 'Owner'}!`);
+
+      if (onLoginSuccess) {
+        onLoginSuccess(res);
+      }
+
+      await routeUserAfterAuth(cleanEmail, res.user.id);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please check your credentials.');
+      console.error('[AuthPage] Email login error:', err);
+      setErrorMessage(err.message || 'Invalid email or password. Please verify your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handle Google OAuth Popup
-  const handleGoogleAuth = async () => {
+  // 3. Email Registration Flow
+  const handleEmailRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = fullName.trim();
+
+    if (!cleanName || !cleanEmail || !password) {
+      setErrorMessage('Please fill in your name, email, and password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters.');
+      return;
+    }
+
     setIsLoading(true);
+
     try {
-      const googleUser = await signInWithGooglePopup();
-      const res = await api.authenticateWithGoogle({
-        googleUid: googleUser.uid,
-        email: googleUser.email || '',
-        name: googleUser.displayName || 'Owner',
-        photoURL: googleUser.photoURL || undefined,
+      const res = await api.registerOwner({
+        name: cleanName,
+        email: cleanEmail,
+        phone: phone.trim(),
+        password,
       });
 
-      setSuccessMessage(`Authenticated with Google! Welcome, ${res.user.name}.`);
+      setSuccessMessage('Account created! Setting up your workspace...');
 
-      setTimeout(() => {
-        setIsLoading(false);
-        if (res.hasRestaurant) {
-          if (onLoginSuccess) {
-            onLoginSuccess(res);
-          } else if (onNavigate) {
-            onNavigate('/workspace');
-          } else {
-            window.location.href = '/workspace';
-          }
-        } else {
-          if (onContinueFreeTrial) {
-            onContinueFreeTrial();
-          } else if (onRegisterSuccess) {
-            onRegisterSuccess(res);
-          } else if (onLoginSuccess) {
-            onLoginSuccess(res);
-          } else if (onNavigate) {
-            onNavigate('/wizard?mode=create');
-          } else {
-            window.location.href = '/wizard?mode=create';
-          }
-        }
-      }, 400);
+      if (onRegisterSuccess) {
+        onRegisterSuccess(res);
+      }
+
+      // Fresh registered owner -> route to Setup Wizard
+      navigateTo('/wizard?mode=create');
     } catch (err: any) {
+      console.error('[AuthPage] Registration error:', err);
+      setErrorMessage(err.message || 'Could not create account. Please try again or continue with Google.');
+    } finally {
       setIsLoading(false);
-      console.error('Google Sign-in failed:', err);
-      setErrorMessage(err.message || 'Google Sign-In failed. Please try email login.');
     }
   };
 
-  // Step 1: Handle Registration Submit
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
+  // 4. Forgot Password Flow
+  const handleForgotPassword = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!firstName || !lastName || !regEmail || !regPassword) {
-      setErrorMessage('Please complete all required fields.');
+    if (!email.trim()) {
+      setErrorMessage('Please enter your account email address.');
       return;
     }
-
-    if (regPassword !== regConfirmPassword) {
-      setErrorMessage('Passwords do not match.');
-      return;
-    }
-
-    if (regPassword.length < 6) {
-      setErrorMessage('Password must be at least 6 characters long.');
-      return;
-    }
-
-    if (!acceptTerms) {
-      setErrorMessage('Please accept the Terms of Service to continue.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await api.registerOwner({
-        name: `${firstName} ${lastName}`,
-        email: regEmail,
-        phone: regPhone,
-        password: regPassword,
-      });
-
-      setIsLoading(false);
-      setSuccessMessage(`Verification code sent to ${regEmail}.`);
-      setMode('verify');
-    } catch (err: any) {
-      setIsLoading(false);
-      setErrorMessage(err.message || 'Registration failed.');
-    }
+    setSuccessMessage(`Password reset instructions have been sent to ${email.trim()}.`);
   };
 
-  // Step 1.5: Handle Email Verification
-  const handleVerifyEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!verificationCode) {
-      setErrorMessage('Please enter the 6-digit verification code.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await api.verifyOwnerEmail(regEmail, verificationCode);
-      setIsLoading(false);
-      setVerifiedUser(res.user);
-      setJwtTokens(res.tokens);
-
-      setSupportEmail(regEmail);
-      setContactNumber(regPhone);
-      setOrgName(`${firstName}'s Hospitality Group`);
-      setLegalName(`${firstName} ${lastName} Dining Services LLC`);
-      setMode('create_org');
-    } catch (err: any) {
-      setIsLoading(false);
-      setErrorMessage(err.message || 'Verification failed.');
-    }
-  };
-
-  // Step 2: Handle Create Organization
-  const handleCreateOrgSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!orgName || !legalName || !businessAddress || !contactNumber || !supportEmail) {
-      setErrorMessage('Please complete all mandatory organization fields.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const newOrg = await api.createOrganization({
-        name: orgName,
-        legalBusinessName: legalName,
-        gstVatNumber,
-        country,
-        currency,
-        timezone,
-        businessAddress,
-        contactNumber,
-        supportEmail,
-        ownerEmail: regEmail || '',
-        ownerName: verifiedUser ? verifiedUser.name : `${firstName} ${lastName}`,
-      });
-
-      setIsLoading(false);
-      setCreatedOrg(newOrg);
-      setSuccessMessage('Organization created successfully. Launching setup wizard...');
-
-      setTimeout(() => {
-        if (onRegisterSuccess) {
-          onRegisterSuccess({
-            ownerName: verifiedUser ? verifiedUser.name : `${firstName} ${lastName}`,
-            restaurantName: `${orgName} Flagship Branch`,
-            email: regEmail,
-            phone: regPhone,
-            org: newOrg,
-          });
-        }
-      }, 700);
-    } catch (err: any) {
-      setIsLoading(false);
-      setErrorMessage(err.message || 'Failed to create organization.');
-    }
-  };
-
-  // Handle Forgot Password Submit
-  const handleForgotSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!forgotEmail) {
-      setErrorMessage('Please enter your account email.');
-      return;
-    }
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setForgotSent(true);
-    }, 700);
-  };
-
-  return (
-    <div className="min-h-screen bg-[#0b0d11] text-[#f3f4f6] flex flex-col justify-between font-sans selection:bg-[#f97316] selection:text-[#0b0d11]">
-      {/* Minimal Top Brand Bar */}
-      <div className="w-full border-b border-[#1e232e] bg-[#0b0d11]/80 backdrop-blur-md">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div
-            className="flex items-center cursor-pointer text-white"
-            onClick={() => {
-              if (onNavigate) onNavigate('/');
-              else window.location.href = '/';
-            }}
-          >
-            <DinelyLogo size="sm" />
-          </div>
-
-          <div className="flex items-center gap-3">
-            {mode === 'login' ? (
-              <button
-                onClick={() => { setMode('register'); setErrorMessage(''); setSuccessMessage(''); }}
-                className="text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
-              >
-                Create Account →
-              </button>
-            ) : (
-              <button
-                onClick={() => { setMode('login'); setErrorMessage(''); setSuccessMessage(''); }}
-                className="text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
-              >
-                Sign In →
-              </button>
-            )}
-          </div>
+  // If restoring existing authenticated session
+  if (isRestoringSession) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0b0d11] text-white">
+        <DinelyLogo size="lg" className="mb-6 animate-pulse" />
+        <div className="flex items-center gap-2.5 text-white/70 text-[14px]">
+          <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+          <span>Restoring your session...</span>
         </div>
       </div>
+    );
+  }
 
-      {/* Main Authentication Card Container */}
-      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-12">
-        <div className="w-full max-w-md space-y-6">
-          {/* LOGIN FORM */}
+  return (
+    <div className="relative min-h-screen w-full flex flex-col justify-between overflow-x-hidden select-none bg-[#0b0d11] text-slate-100 font-sans antialiased">
+      {/* ─── Cinematic Restaurant Atmosphere Background Video ─── */}
+      <video
+        className="fixed inset-0 h-full w-full object-cover pointer-events-none"
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-hidden="true"
+      >
+        <source
+          src="https://cdn.pixabay.com/video/2022/11/30/141046-776768279_large.mp4"
+          type="video/mp4"
+        />
+        <source
+          src="https://cdn.pixabay.com/video/2015/10/27/1192-143842659_large.mp4"
+          type="video/mp4"
+        />
+      </video>
+
+      {/* ─── Readability Scrim (Subtle dark gradient ensuring form clarity) ─── */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        aria-hidden="true"
+        style={{
+          background:
+            'linear-gradient(to top, rgba(11,13,17,0.92) 0%, rgba(11,13,17,0.70) 50%, rgba(11,13,17,0.50) 100%)',
+        }}
+      />
+
+      {/* ─── Top Header Navigation ─── */}
+      <header className="relative z-10 w-full px-5 py-5 sm:px-8 sm:py-6 lg:px-12 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => navigateTo('/')}
+          className="flex items-center cursor-pointer bg-transparent border-none text-white hover:opacity-90 transition-opacity"
+          aria-label="Back to Dinely Home"
+        >
+          <DinelyLogo size="md" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigateTo('/')}
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white/70 hover:text-white transition-colors bg-white/[0.06] hover:bg-white/[0.10] px-3.5 py-1.5 rounded-full border border-white/[0.08] cursor-pointer"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>Back to Home</span>
+        </button>
+      </header>
+
+      {/* ─── Main Glass Authentication Card ─── */}
+      <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
+        <div
+          className="w-full max-w-[440px] rounded-[24px] p-6 sm:p-8 border border-white/[0.14] shadow-2xl shadow-black/80 flex flex-col transition-all duration-300"
+          style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            boxShadow: '0 25px 80px rgba(0, 0, 0, 0.45)',
+          }}
+        >
+          {/* Card Header */}
+          <div className="text-center mb-6">
+            <h1 className="text-[24px] sm:text-[26px] font-semibold text-white tracking-tight">
+              {mode === 'login' && 'Welcome back'}
+              {mode === 'register' && 'Create your restaurant'}
+              {mode === 'forgot' && 'Reset your password'}
+            </h1>
+            <p className="mt-1.5 text-[13.5px] text-white/70 leading-relaxed">
+              {mode === 'login' && 'Sign in to manage your restaurant.'}
+              {mode === 'register' &&
+                'Start with Dinely and build your connected restaurant workspace.'}
+              {mode === 'forgot' &&
+                'Enter your account email and we will send you a reset link.'}
+            </p>
+          </div>
+
+          {/* Feedback Alerts */}
+          {errorMessage && (
+            <div className="mb-5 rounded-xl bg-rose-500/15 border border-rose-500/30 p-3.5 flex items-start gap-2.5 text-rose-300 text-[13px] leading-snug">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 flex items-start gap-2.5 text-emerald-300 text-[13px] leading-snug">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          {/* ── Primary Google Authentication Button (Login & Register) ── */}
+          {mode !== 'forgot' && (
+            <div className="mb-5">
+              <button
+                type="button"
+                onClick={handleGoogleAuth}
+                disabled={isLoading || isGoogleLoading}
+                className="w-full flex items-center justify-center gap-3 rounded-full py-3.5 px-5 bg-white hover:bg-white/95 text-slate-900 font-medium text-[14px] transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg disabled:opacity-60 disabled:cursor-not-allowed border-none"
+              >
+                {isGoogleLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-slate-700" />
+                    <span>Connecting to Google...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <span>Continue with Google</span>
+                  </>
+                )}
+              </button>
+
+              {/* Minimal Divider */}
+              <div className="relative my-5 flex items-center justify-center">
+                <div className="w-full border-t border-white/[0.10]" />
+                <span className="absolute bg-[#14161b] px-3 text-[11.5px] text-white/45 uppercase tracking-wider font-mono rounded-full border border-white/[0.08]">
+                  or continue with email
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Form: Login Mode ── */}
           {mode === 'login' && (
-            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
-              <div className="space-y-1.5">
-                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
-                  Sign in to your restaurant
-                </h1>
-                <p className="text-xs text-slate-400">
-                  Manage your venues, live orders, kitchen stations, and billing.
-                </p>
-              </div>
-
-              {errorMessage && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-                  {errorMessage}
-                </div>
-              )}
-
-              {successMessage && (
-                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{successMessage}</span>
-                </div>
-              )}
-
-              {/* Single-Click Google Authentication */}
-              <button
-                type="button"
-                onClick={handleGoogleAuth}
-                disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border border-[#2d3545] bg-[#1a1e27] hover:bg-[#222734] hover:border-slate-500 text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-50"
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
-
-              <div className="relative flex items-center justify-center my-2">
-                <div className="w-full border-t border-[#1e232e]" />
-                <span className="absolute bg-[#12151b] px-2.5 text-[10px] uppercase font-mono text-slate-500">
-                  or email
-                </span>
-              </div>
-
-              <form onSubmit={handleLoginSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Work Email</label>
-                  <input
-                    type="email"
-                    placeholder="owner@restaurant.com"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-[#f97316] transition-colors"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300">Password</label>
-                    <button
-                      type="button"
-                      onClick={() => setMode('forgot')}
-                      className="text-xs text-[#f97316] hover:underline"
-                    >
-                      Forgot?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      className="w-full px-3.5 py-2.5 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-[#f97316] transition-colors pr-10"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-2"
-                >
-                  <span>{isLoading ? 'Signing in...' : 'Sign In'}</span>
-                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
-                </button>
-              </form>
-
-              <div className="text-center text-xs text-slate-400 pt-2 border-t border-[#1e232e]">
-                New to Dinely?{' '}
-                <button
-                  onClick={() => setMode('register')}
-                  className="text-[#f97316] font-semibold hover:underline cursor-pointer"
-                >
-                  Create a free restaurant account
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* REGISTER FORM */}
-          {mode === 'register' && (
-            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
-              <div className="space-y-1.5">
-                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
-                  Create your owner account
-                </h1>
-                <p className="text-xs text-slate-400">
-                  Step 1 of 3: Set up your profile to manage multi-tenant venues.
-                </p>
-              </div>
-
-              {errorMessage && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-                  {errorMessage}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleGoogleAuth}
-                disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border border-[#2d3545] bg-[#1a1e27] hover:bg-[#222734] text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-50"
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
-
-              <div className="relative flex items-center justify-center my-2">
-                <div className="w-full border-t border-[#1e232e]" />
-                <span className="absolute bg-[#12151b] px-2.5 text-[10px] uppercase font-mono text-slate-500">
-                  or register with email
-                </span>
-              </div>
-
-              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">First Name</label>
-                    <input
-                      type="text"
-                      placeholder="Elena"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Last Name</label>
-                    <input
-                      type="text"
-                      placeholder="Rostova"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Business Email</label>
-                  <input
-                    type="email"
-                    placeholder="elena@hospitality.com"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Phone</label>
-                  <input
-                    type="tel"
-                    placeholder="+91 98765 43210"
-                    value={regPhone}
-                    onChange={(e) => setRegPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Password</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••••••"
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Confirm Password</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••••••"
-                      value={regConfirmPassword}
-                      onChange={(e) => setRegConfirmPassword(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <label className="flex items-start gap-2 pt-1 cursor-pointer text-xs text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={acceptTerms}
-                    onChange={(e) => setAcceptTerms(e.target.checked)}
-                    className="mt-0.5 rounded border-[#2d3545] bg-[#0b0d11]"
-                  />
-                  <span>I agree to the Terms of Service & Privacy Policy.</span>
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  Email address
                 </label>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-2"
-                >
-                  <span>{isLoading ? 'Creating account...' : 'Continue to Verification'}</span>
-                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
-                </button>
-              </form>
-
-              <div className="text-center text-xs text-slate-400 pt-2 border-t border-[#1e232e]">
-                Already registered?{' '}
-                <button
-                  onClick={() => setMode('login')}
-                  className="text-[#f97316] font-semibold hover:underline cursor-pointer"
-                >
-                  Sign in
-                </button>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@restaurant.com"
+                    required
+                    autoComplete="email"
+                    className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
+                  />
+                  <Mail className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/35 pointer-events-none" />
+                </div>
               </div>
-            </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[12.5px] font-medium text-white/80">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                      setMode('forgot');
+                    }}
+                    className="text-[12px] text-white/50 hover:text-white/90 transition-colors cursor-pointer bg-transparent border-none"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    autoComplete="current-password"
+                    className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer bg-transparent border-none"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Primary Dark Button */}
+              <button
+                type="submit"
+                disabled={isLoading || isGoogleLoading}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-full py-3.5 px-6 text-[14px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg shadow-black/60 border border-white/[0.16] disabled:opacity-50"
+                style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-white/70" />
+                    <span>Signing in...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign in</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </form>
           )}
 
-          {/* VERIFY EMAIL FORM */}
-          {mode === 'verify' && (
-            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
-              <div className="space-y-1.5">
-                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
-                  Verify your email
-                </h1>
-                <p className="text-xs text-slate-400">
-                  Step 2 of 3: Enter the 6-digit code sent to <span className="text-slate-200">{regEmail}</span>.
-                </p>
+          {/* ── Form: Register Mode ── */}
+          {mode === 'register' && (
+            <form onSubmit={handleEmailRegister} className="space-y-3.5">
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  Your name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Alice Chef"
+                  required
+                  autoComplete="name"
+                  className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
+                />
               </div>
 
-              {errorMessage && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-                  {errorMessage}
-                </div>
-              )}
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  Email address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@restaurant.com"
+                  required
+                  autoComplete="email"
+                  className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
+                />
+              </div>
 
-              <form onSubmit={handleVerifyEmailSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">6-Digit Code</label>
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  Phone number <span className="text-white/40 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
+                  autoComplete="tel"
+                  className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  Create password
+                </label>
+                <div className="relative">
                   <input
-                    type="text"
-                    maxLength={6}
-                    value={verificationCode}
-                    onChange={(e) => setVerificationCode(e.target.value)}
-                    placeholder="123456"
-                    className="w-full text-center tracking-[0.5em] font-mono text-xl px-3.5 py-3 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-[#f97316] font-bold focus:outline-none focus:border-[#f97316]"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 6 characters"
                     required
+                    autoComplete="new-password"
+                    className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all pr-10"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer bg-transparent border-none"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
+              </div>
 
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>{isLoading ? 'Verifying...' : 'Verify Email'}</span>
-                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
-                </button>
-              </form>
+              {/* Primary Dark Button */}
+              <button
+                type="submit"
+                disabled={isLoading || isGoogleLoading}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-full py-3.5 px-6 text-[14px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg shadow-black/60 border border-white/[0.16] disabled:opacity-50"
+                style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-white/70" />
+                    <span>Creating workspace...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create your restaurant</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
 
-              <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-[#1e232e]">
-                <span>Didn't receive code?</span>
+          {/* ── Form: Forgot Password Mode ── */}
+          {mode === 'forgot' && (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  Account email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@restaurant.com"
+                  required
+                  autoComplete="email"
+                  className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-full py-3.5 px-6 text-[14px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg shadow-black/60 border border-white/[0.16]"
+                style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
+              >
+                Send reset instructions
+              </button>
+
+              <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setSuccessMessage('New verification code sent!')}
-                  className="text-[#f97316] hover:underline cursor-pointer font-semibold"
+                  onClick={() => {
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                    setMode('login');
+                  }}
+                  className="text-[13px] text-white/60 hover:text-white transition-colors cursor-pointer bg-transparent border-none"
                 >
-                  Resend Code
+                  &larr; Back to sign in
                 </button>
               </div>
-            </div>
+            </form>
           )}
 
-          {/* CREATE ORGANIZATION FORM */}
-          {mode === 'create_org' && (
-            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
-              <div className="space-y-1.5">
-                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
-                  Set up your organization
-                </h1>
-                <p className="text-xs text-slate-400">
-                  Step 3 of 3: Primary legal business entity and address.
-                </p>
-              </div>
-
-              {errorMessage && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-                  {errorMessage}
-                </div>
-              )}
-
-              <form onSubmit={handleCreateOrgSubmit} className="space-y-3.5">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Organization Name *</label>
-                  <input
-                    type="text"
-                    placeholder="Gourmet Hospitality Group"
-                    value={orgName}
-                    onChange={(e) => setOrgName(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Legal Entity Name *</label>
-                  <input
-                    type="text"
-                    placeholder="Gourmet Hospitality Group LLC"
-                    value={legalName}
-                    onChange={(e) => setLegalName(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">GST / Tax ID</label>
-                    <input
-                      type="text"
-                      placeholder="27AABCU9603R1ZN"
-                      value={gstVatNumber}
-                      onChange={(e) => setGstVatNumber(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Currency</label>
-                    <div className="px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-slate-300">
-                      INR (₹) - Rupee
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Business Address *</label>
-                  <input
-                    type="text"
-                    placeholder="101 MG Road, Bengaluru, Karnataka 560001"
-                    value={businessAddress}
-                    onChange={(e) => setBusinessAddress(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Support Phone *</label>
-                    <input
-                      type="tel"
-                      placeholder="+91 98765 43210"
-                      value={contactNumber}
-                      onChange={(e) => setContactNumber(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Support Email *</label>
-                    <input
-                      type="email"
-                      placeholder="support@hospitality.com"
-                      value={supportEmail}
-                      onChange={(e) => setSupportEmail(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-2"
-                >
-                  <span>{isLoading ? 'Setting up...' : 'Create Organization & Open Setup'}</span>
-                  {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* FORGOT PASSWORD FORM */}
-          {mode === 'forgot' && (
-            <div className="bg-[#12151b] border border-[#1e232e] rounded-2xl p-7 sm:p-8 space-y-6 shadow-xl text-left">
-              <div className="space-y-1.5">
-                <h1 className="text-2xl font-bold text-white tracking-tight font-display">
-                  Reset your password
-                </h1>
-                <p className="text-xs text-slate-400">
-                  Enter your email address to receive reset instructions.
-                </p>
-              </div>
-
-              {forgotSent ? (
-                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 space-y-3">
-                  <p>A recovery link has been dispatched to {forgotEmail}.</p>
+          {/* ── Mode Switcher Footer ── */}
+          {mode !== 'forgot' && (
+            <div className="mt-6 pt-5 border-t border-white/[0.08] text-center">
+              {mode === 'login' ? (
+                <p className="text-[13px] text-white/60">
+                  New to Dinely?{' '}
                   <button
-                    onClick={() => setMode('login')}
-                    className="w-full py-2 rounded-lg bg-[#1a1e27] border border-[#2d3545] text-white font-semibold"
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                      setMode('register');
+                    }}
+                    className="text-white font-medium hover:underline cursor-pointer bg-transparent border-none ml-1"
                   >
-                    Back to Sign In
+                    Create your restaurant
                   </button>
-                </div>
+                </p>
               ) : (
-                <form onSubmit={handleForgotSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Account Email</label>
-                    <input
-                      type="email"
-                      placeholder="owner@restaurant.com"
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-
+                <p className="text-[13px] text-white/60">
+                  Already have a restaurant?{' '}
                   <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                      setMode('login');
+                    }}
+                    className="text-white font-medium hover:underline cursor-pointer bg-transparent border-none ml-1"
                   >
-                    <span>{isLoading ? 'Sending...' : 'Send Recovery Link'}</span>
-                    {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
+                    Sign in
                   </button>
-
-                  <div className="text-center pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setMode('login')}
-                      className="text-xs text-slate-400 hover:text-white"
-                    >
-                      ← Return to sign in
-                    </button>
-                  </div>
-                </form>
+                </p>
               )}
             </div>
           )}
         </div>
       </main>
 
-      {/* Minimal Footer */}
-      <footer className="border-t border-[#1e232e] py-6 px-4 text-center text-xs text-slate-500">
-        Dinely Restaurant Operating System • Enterprise Multi-Tenant Architecture
+      {/* ─── Bottom Sub-footer ─── */}
+      <footer className="relative z-10 w-full px-5 py-5 text-center text-[12px] text-white/40">
+        &copy; {new Date().getFullYear()} Dinely. All rights reserved.
       </footer>
     </div>
   );

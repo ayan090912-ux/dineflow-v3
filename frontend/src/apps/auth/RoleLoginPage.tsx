@@ -1,27 +1,24 @@
 import React, { useState } from 'react';
 import {
-  ShieldAlert,
   Building2,
-  Utensils,
   ChefHat,
   PhoneCall,
   Lock,
-  Mail,
-  KeyRound,
   ArrowRight,
   Eye,
   EyeOff,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
-  Users,
-  Info,
   Wine,
   Package,
+  ArrowLeft,
+  Loader2,
+  ShieldAlert,
 } from 'lucide-react';
-import { Button, Card, Input, Badge, DinelyLogo } from '../../packages/ui';
+import { DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
-import { signInWithGooglePopup, signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
+import { signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
+import { AuthPage } from './AuthPage';
 
 export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'admin';
 
@@ -31,75 +28,70 @@ interface RoleLoginPageProps {
   onLoginSuccess: (role: string, user: any) => void;
 }
 
-const PORTAL_CONFIGS: Record<PortalType, {
+interface PortalConfig {
   title: string;
   subtitle: string;
   roleBadge: string;
-  badgeVariant: 'brand' | 'warning' | 'info' | 'success';
   icon: React.ReactNode;
   targetDashboard: string;
-  accentGradient: string;
-  description: string;
-}> = {
+  identifierLabel: string;
+  identifierPlaceholder: string;
+}
+
+const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
   admin: {
-    title: 'Platform Administrator Login',
-    subtitle: 'Dinely Internal Control Plane',
-    roleBadge: 'Super Admin',
-    badgeVariant: 'brand',
-    icon: <Building2 className="w-6 h-6 text-purple-400" />,
+    title: 'Platform Administrator',
+    subtitle: 'Internal Dinely Control Plane & Multi-Tenant Infrastructure',
+    roleBadge: 'SUPER_ADMIN',
+    icon: <Building2 className="w-5 h-5 text-purple-300" />,
     targetDashboard: '/admin/dashboard',
-    accentGradient: 'from-purple-600 to-indigo-600',
-    description: 'Internal platform administration and tenant control panel.',
+    identifierLabel: 'Administrator Email / Key',
+    identifierPlaceholder: 'admin@dinely.food',
   },
   restaurant: {
     title: 'Restaurant Owner Login',
-    subtitle: 'Restaurant Operating System & Management Dashboard',
+    subtitle: 'Manage your connected restaurant workspace',
     roleBadge: 'RESTAURANT_OWNER',
-    badgeVariant: 'brand',
-    icon: <Utensils className="w-6 h-6 text-rose-400" />,
+    icon: <Building2 className="w-5 h-5 text-amber-300" />,
     targetDashboard: '/restaurant/dashboard',
-    accentGradient: 'from-rose-500 to-amber-500',
-    description: 'Access restaurant POS, live table layout, menu pricing, staff credential management, and inventory analytics.',
+    identifierLabel: 'Account Email',
+    identifierPlaceholder: 'name@restaurant.com',
   },
   kitchen: {
-    title: 'Kitchen Staff Login',
-    subtitle: 'Kitchen Display System (KDS) & Order Preparation',
-    roleBadge: 'CHEF / KITCHEN',
-    badgeVariant: 'warning',
-    icon: <ChefHat className="w-6 h-6 text-amber-400" />,
+    title: 'Kitchen Display System',
+    subtitle: 'Order preparation queues, stations & prep timings',
+    roleBadge: 'KITCHEN_STATION',
+    icon: <ChefHat className="w-5 h-5 text-amber-300" />,
     targetDashboard: '/kitchen/dashboard',
-    accentGradient: 'from-amber-500 to-orange-600',
-    description: 'Real-time kitchen order queue, ETA adjustments, item prep status, and station chef timing controls.',
+    identifierLabel: 'Staff ID or Email',
+    identifierPlaceholder: 'chef@restaurant.com or staff ID',
   },
   waiter: {
-    title: 'Waiter Terminal Login',
-    subtitle: 'Floor Waiter Terminal & Table Service Dispatch',
-    roleBadge: 'WAITER / SERVER',
-    badgeVariant: 'success',
-    icon: <PhoneCall className="w-6 h-6 text-emerald-400" />,
+    title: 'Waiter Service Terminal',
+    subtitle: 'Floor service dispatch, call management & table billing',
+    roleBadge: 'WAITER_TERMINAL',
+    icon: <PhoneCall className="w-5 h-5 text-emerald-300" />,
     targetDashboard: '/waiter',
-    accentGradient: 'from-emerald-500 to-teal-600',
-    description: 'Handheld terminal for floor staff to receive customer calls, deliver ready orders, process bills, and manage tables.',
+    identifierLabel: 'Staff ID or Email',
+    identifierPlaceholder: 'server@restaurant.com or staff ID',
   },
   bar: {
-    title: 'Bar Terminal Login',
-    subtitle: 'Bar Terminal & Mixology Order Queue',
-    roleBadge: 'BAR_STAFF / BARTENDER',
-    badgeVariant: 'brand',
-    icon: <Wine className="w-6 h-6 text-purple-400" />,
+    title: 'Bar Mixology Terminal',
+    subtitle: 'Beverage queue, drinks preparation & bar dispatch',
+    roleBadge: 'BAR_TERMINAL',
+    icon: <Wine className="w-5 h-5 text-indigo-300" />,
     targetDashboard: '/bar/dashboard',
-    accentGradient: 'from-purple-600 to-indigo-600',
-    description: 'Dedicated terminal for bar staff to receive drink orders, manage alcohol prep queues, and mark beverages ready.',
+    identifierLabel: 'Staff ID or Email',
+    identifierPlaceholder: 'bartender@restaurant.com or staff ID',
   },
   inventory: {
-    title: 'Inventory OS Login',
-    subtitle: 'Raw Stock, Vendors & Supply Chain Terminal',
-    roleBadge: 'INVENTORY_STAFF',
-    badgeVariant: 'brand',
-    icon: <Package className="w-6 h-6 text-rose-400" />,
+    title: 'Inventory OS Terminal',
+    subtitle: 'Stock levels, ingredient deductions & supply logs',
+    roleBadge: 'INVENTORY_TERMINAL',
+    icon: <Package className="w-5 h-5 text-rose-300" />,
     targetDashboard: '/inventory/terminal',
-    accentGradient: 'from-rose-600 to-amber-600',
-    description: 'Dedicated terminal for inventory staff to track raw materials, reorder thresholds, vendor deliveries, and stock consumption.',
+    identifierLabel: 'Staff ID or Email',
+    identifierPlaceholder: 'inventory@restaurant.com or staff ID',
   },
 };
 
@@ -108,84 +100,40 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
   onNavigate,
   onLoginSuccess,
 }) => {
-  const config = PORTAL_CONFIGS[portal] || PORTAL_CONFIGS.restaurant;
+  // If this is the public owner portal, render the canonical unified AuthPage
+  if (portal === 'restaurant') {
+    return (
+      <AuthPage
+        onNavigate={onNavigate}
+        onLoginSuccess={(res) => {
+          const user = res?.user || res;
+          onLoginSuccess('RESTAURANT_OWNER', user);
+        }}
+      />
+    );
+  }
 
-  // 2-Step Email-First Auth State for Restaurant Portal
-  const [authStage, setAuthStage] = useState<'ENTER_EMAIL' | 'PASSWORD_LOGIN' | 'CREATE_ACCOUNT'>(
-    portal === 'restaurant' ? 'ENTER_EMAIL' : 'PASSWORD_LOGIN'
-  );
-  const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState('');
+  const config = PORTAL_CONFIGS[portal] || PORTAL_CONFIGS.kitchen;
+
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAdminGoogleLoading, setIsAdminGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-
-
-  const handleEmailContinue = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!email || !email.includes('@')) {
-      setErrorMessage('Please enter a valid email address.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const exists = await api.checkUserExists(email);
-      setIsLoading(false);
-      if (exists) {
-        setAuthStage('PASSWORD_LOGIN');
-      } else {
-        setAuthStage('CREATE_ACCOUNT');
-      }
-    } catch (err: any) {
-      setIsLoading(false);
-      setErrorMessage(err.message || 'Failed to check account.');
-    }
-  };
-
-  const handleCreateAccountSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!fullName || !email || !password) {
-      setErrorMessage('Please complete all required fields.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await api.registerOwner({
-        name: fullName,
-        email,
-        phone: '',
-        password,
-      });
-
-      setSuccessMessage('Account created successfully! Loading workspace...');
-      setTimeout(() => {
-        onLoginSuccess('RESTAURANT_OWNER', result.user);
-        onNavigate('/workspace');
-      }, 500);
-    } catch (err: any) {
-      setIsLoading(false);
-      setErrorMessage(err.message || 'Failed to create account.');
-    }
-  };
+  const portalScope = portal === 'admin' ? 'ADMIN' : 'STAFF';
+  const currentUser = api.getCurrentUser(portalScope);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!email || !password) {
-      setErrorMessage('Please enter both email address and password.');
+    const cleanIdentifier = identifier.trim();
+    if (!cleanIdentifier || !password) {
+      setErrorMessage('Please enter both your credentials and password.');
       return;
     }
 
@@ -194,408 +142,186 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
     try {
       let result: any;
       if (portal === 'admin') {
-        result = await api.loginPlatformAdmin(email, password);
-      } else if (portal === 'restaurant') {
-        result = await api.loginOwner(email, password);
+        result = await api.loginPlatformAdmin(cleanIdentifier, password);
       } else if (portal === 'kitchen') {
-        result = await api.loginKitchen(email, password);
+        result = await api.loginKitchen(cleanIdentifier, password);
       } else if (portal === 'waiter') {
-        result = await api.loginWaiter(email, password);
+        result = await api.loginWaiter(cleanIdentifier, password);
       } else if (portal === 'bar') {
-        result = await api.loginBar(email, password);
+        result = await api.loginBar(cleanIdentifier, password);
       } else if (portal === 'inventory') {
-        result = await api.loginInventory(email, password);
+        result = await api.loginInventory(cleanIdentifier, password);
       }
 
-      setSuccessMessage(`Authenticated successfully! Loading ${config.title}...`);
+      setSuccessMessage(`Authenticated successfully. Loading terminal...`);
       setTimeout(() => {
-        onLoginSuccess(result.user?.role || portal, result.user);
-
-        if (portal === 'restaurant') {
-          onNavigate('/workspace');
-        } else {
-          onNavigate(config.targetDashboard);
-        }
-      }, 500);
+        onLoginSuccess(result?.user?.role || portal, result?.user);
+        onNavigate(config.targetDashboard);
+      }, 400);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please check your credentials.');
+      setErrorMessage(err.message || 'Authentication failed. Please verify your credentials.');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleGoogleAuth = async () => {
-    setErrorMessage('');
-    setSuccessMessage('');
-    setIsLoading(true);
-    try {
-      const googleUser = await signInWithGooglePopup();
-      const res = await api.authenticateWithGoogle({
-        googleUid: googleUser.uid,
-        email: googleUser.email,
-        name: googleUser.displayName,
-        photoURL: googleUser.photoURL,
-      });
-
-      setSuccessMessage(`Welcome, ${res.user.name}! Directing to Restaurant OS...`);
-      setTimeout(() => {
-        setIsLoading(false);
-        onLoginSuccess('RESTAURANT_OWNER', res.user);
-        if (res.hasRestaurant) {
-          onNavigate('/restaurant/dashboard');
-        } else {
-          onNavigate('/wizard');
-        }
-      }, 500);
-    } catch (err: any) {
-      setIsLoading(false);
-      setErrorMessage(err.message || 'Google Authentication failed.');
     }
   };
 
   const handleAdminGoogleAuth = async () => {
     setErrorMessage('');
     setSuccessMessage('');
-    setIsLoading(true);
+    setIsAdminGoogleLoading(true);
+
     try {
       const googleUser = await signInPlatformAdminWithGoogle();
       const idToken = googleUser.idToken || googleUser.email;
       const res = await api.loginPlatformAdmin(idToken, googleUser.email);
 
-      setSuccessMessage(`Authenticated Platform Administrator! Loading Control Plane...`);
+      setSuccessMessage(`Platform Administrator verified. Loading Control Plane...`);
       setTimeout(() => {
-        setIsLoading(false);
+        setIsAdminGoogleLoading(false);
         onLoginSuccess('PLATFORM_ADMIN', res.user);
         onNavigate('/admin/dashboard');
-      }, 500);
+      }, 400);
     } catch (err: any) {
-      setIsLoading(false);
+      setIsAdminGoogleLoading(false);
       const msg = err.message || '';
       if (msg.includes('403') || msg.includes('not authorized') || msg.includes('Access denied')) {
-        setErrorMessage('Access denied. This Google account is not authorized to access Dinely Platform Administration.');
+        setErrorMessage('Access denied. This Google account is not authorized for Dinely Platform Administration.');
       } else {
         setErrorMessage(msg || 'Platform Admin authentication failed. Please try again.');
       }
     }
   };
 
-
-  const portalScope = portal === 'admin' ? 'ADMIN' : portal === 'restaurant' ? 'OWNER' : 'STAFF';
-  const currentUser = api.getCurrentUser(portalScope);
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
-      {/* Subtle Background Radial Accent */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-slate-800/10 blur-[100px] rounded-full pointer-events-none" />
+    <div className="relative min-h-screen w-full flex flex-col justify-between overflow-x-hidden select-none bg-[#0b0d11] text-slate-100 font-sans antialiased">
+      {/* ─── Cinematic Restaurant Background Video ─── */}
+      <video
+        className="fixed inset-0 h-full w-full object-cover pointer-events-none"
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-hidden="true"
+      >
+        <source
+          src="https://cdn.pixabay.com/video/2022/11/30/141046-776768279_large.mp4"
+          type="video/mp4"
+        />
+        <source
+          src="https://cdn.pixabay.com/video/2015/10/27/1192-143842659_large.mp4"
+          type="video/mp4"
+        />
+      </video>
 
-      {/* Main Container */}
-      <div className="w-full max-w-md space-y-6 relative z-10">
-        {/* Brand Header */}
-        <div className="text-center space-y-3">
-          <DinelyLogo size="md" className="justify-center mb-1" />
+      {/* ─── Dark Readability Scrim ─── */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        aria-hidden="true"
+        style={{
+          background:
+            'linear-gradient(to top, rgba(11,13,17,0.92) 0%, rgba(11,13,17,0.70) 50%, rgba(11,13,17,0.50) 100%)',
+        }}
+      />
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800/80 text-[11px] font-medium text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            <span>{portal === 'restaurant' ? 'Dinely Owner Portal' : 'Dedicated Terminal Portal'}</span>
-          </div>
+      {/* ─── Top Header Navigation ─── */}
+      <header className="relative z-10 w-full px-5 py-5 sm:px-8 sm:py-6 lg:px-12 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => onNavigate('/')}
+          className="flex items-center cursor-pointer bg-transparent border-none text-white hover:opacity-90 transition-opacity"
+          aria-label="Back to Dinely Home"
+        >
+          <DinelyLogo size="md" />
+        </button>
 
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 tracking-tight">
-              {portal === 'restaurant' && authStage === 'ENTER_EMAIL' ? 'Start with Dinely' :
-               portal === 'restaurant' && authStage === 'CREATE_ACCOUNT' ? 'Create your Dinely account' :
-               portal === 'restaurant' && authStage === 'PASSWORD_LOGIN' ? 'Welcome back' : config.title}
+        {portal !== 'admin' && (
+          <button
+            type="button"
+            onClick={() => onNavigate('/')}
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white/70 hover:text-white transition-colors bg-white/[0.06] hover:bg-white/[0.10] px-3.5 py-1.5 rounded-full border border-white/[0.08] cursor-pointer"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Back to Home</span>
+          </button>
+        )}
+      </header>
+
+      {/* ─── Glass Authentication Card ─── */}
+      <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
+        <div
+          className="w-full max-w-[440px] rounded-[24px] p-6 sm:p-8 border border-white/[0.14] flex flex-col transition-all duration-300"
+          style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            boxShadow: '0 25px 80px rgba(0, 0, 0, 0.45)',
+          }}
+        >
+          {/* Card Title & Icon */}
+          <div className="text-center mb-6">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-white/[0.08] border border-white/[0.14] flex items-center justify-center mb-3 shadow-inner">
+              {config.icon}
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.10] text-[11px] font-mono uppercase tracking-wider text-white/70 mb-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              <span>{config.roleBadge}</span>
+            </div>
+
+            <h1 className="text-[22px] sm:text-[24px] font-semibold text-white tracking-tight">
+              {config.title}
             </h1>
-
-            <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-              {portal === 'restaurant' && authStage === 'ENTER_EMAIL' ? 'Enter your email to sign in or create an account' :
-               portal === 'restaurant' && authStage === 'CREATE_ACCOUNT' ? 'Set up your credentials for Dinely Restaurant Cloud' :
-               portal === 'restaurant' && authStage === 'PASSWORD_LOGIN' ? 'Enter your password to access your restaurant workspace' : config.subtitle}
+            <p className="mt-1 text-[13px] text-white/65 leading-relaxed">
+              {config.subtitle}
             </p>
           </div>
-        </div>
 
-        {/* Login Card */}
-        <Card className="bg-slate-900/80 border-slate-800/90 p-6 sm:p-8 backdrop-blur-md shadow-xl space-y-6 rounded-2xl">
-          {/* Active Session Status (Only shown for relevant portal role, never exposed publicly) */}
-          {currentUser && (portal === 'admin' ? currentUser.role === 'PLATFORM_ADMIN' : currentUser.role !== 'PLATFORM_ADMIN') && (
-            <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-medium">Active Session:</span>
-                <span className="font-semibold text-emerald-400 flex items-center gap-1.5 truncate max-w-[180px]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                  {currentUser.name || currentUser.email}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={() => {
-                    const dashboard = currentUser.role === 'RESTAURANT_OWNER' ? '/workspace' :
-                                      currentUser.role === 'CHEF' ? '/kitchen/dashboard' :
-                                      currentUser.role === 'WAITER' ? '/waiter' :
-                                      currentUser.role === 'BARTENDER' ? '/bar/dashboard' :
-                                      currentUser.role === 'INVENTORY_MANAGER' ? '/inventory/terminal' :
-                                      portal === 'admin' ? '/admin/dashboard' : '/workspace';
-                    onNavigate(dashboard);
-                  }}
-                  className="flex-1 text-xs py-2 font-medium bg-indigo-600 hover:bg-indigo-500 text-white"
-                >
-                  Go to Workspace Dashboard
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    await api.logout(portalScope);
-                    onLoginSuccess('', null);
-                    onNavigate(window.location.pathname);
-                  }}
-                  className="text-xs border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800 py-2 font-medium"
-                >
-                  Log Out
-                </Button>
-              </div>
+          {/* Active Session Notice if already signed in */}
+          {currentUser && (
+            <div className="mb-5 rounded-xl bg-white/[0.05] border border-white/[0.10] p-3 flex items-center justify-between text-[12.5px]">
+              <span className="text-white/60">Signed in as <strong className="text-white font-medium">{currentUser.name || currentUser.email}</strong></span>
+              <button
+                type="button"
+                onClick={() => onNavigate(config.targetDashboard)}
+                className="text-amber-400 hover:text-amber-300 font-medium cursor-pointer bg-transparent border-none"
+              >
+                Open &rarr;
+              </button>
             </div>
           )}
 
-          {/* Messages */}
+          {/* Feedback Alerts */}
           {errorMessage && (
-            <div className="p-3.5 bg-rose-950/40 border border-rose-800/60 rounded-xl text-xs text-rose-300 flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="mb-5 rounded-xl bg-rose-500/15 border border-rose-500/30 p-3.5 flex items-start gap-2.5 text-rose-300 text-[13px] leading-snug">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {successMessage && (
-            <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-xl text-xs text-emerald-300 flex items-center gap-2.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div className="mb-5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 flex items-start gap-2.5 text-emerald-300 text-[13px] leading-snug">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{successMessage}</span>
             </div>
           )}
 
-          {/* DEDICATED PLATFORM ADMIN LOGIN */}
-          {portal === 'admin' ? (
-            <div className="space-y-5 text-center">
-              <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-xs text-left flex items-start gap-3">
-                <ShieldAlert className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold text-white mb-0.5">Private Platform Access</p>
-                  <p className="text-[11px] text-purple-300/80 leading-relaxed">
-                    Access is restricted to authorized Dinely Super Administrators. Authenticate with your verified administrator account.
-                  </p>
-                </div>
-              </div>
-
+          {/* Platform Admin Dedicated Google Auth */}
+          {portal === 'admin' && (
+            <div className="mb-5">
               <button
                 type="button"
                 onClick={handleAdminGoogleAuth}
-                disabled={isLoading}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl border border-purple-500/40 bg-purple-600/20 hover:bg-purple-600/30 text-xs font-bold text-white transition-all shadow-lg hover:shadow-purple-950/40 cursor-pointer disabled:opacity-50"
+                disabled={isLoading || isAdminGoogleLoading}
+                className="w-full flex items-center justify-center gap-3 rounded-full py-3.5 px-5 bg-white hover:bg-white/95 text-slate-900 font-medium text-[14px] transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg disabled:opacity-60 disabled:cursor-not-allowed border-none"
               >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>{isLoading ? 'Verifying Admin Permissions...' : 'Continue with Google'}</span>
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* STAGE 1: ENTER EMAIL (RESTAURANT PORTAL) */}
-              {portal === 'restaurant' && authStage === 'ENTER_EMAIL' && (
-                <form onSubmit={handleEmailContinue} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-300">
-                      Email Address
-                    </label>
-                    <div className="relative">
-                      <Input
-                        type="email"
-                        placeholder="name@restaurant.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="pl-10 bg-slate-950 border-slate-800 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-xl"
-                      />
-                      <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    </div>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    variant="brand"
-                    className="w-full py-3 text-xs font-medium shadow-md mt-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl"
-                    disabled={isLoading}
-                    icon={isLoading ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                  >
-                    {isLoading ? 'Checking Email...' : 'Continue'}
-                  </Button>
-                </form>
-              )}
-
-              {/* STAGE 2: CREATE ACCOUNT (NEW USER) */}
-              {portal === 'restaurant' && authStage === 'CREATE_ACCOUNT' && (
-                <form onSubmit={handleCreateAccountSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-300">
-                      Full Name
-                    </label>
-                    <Input
-                      placeholder="e.g. Ayaan Sharma"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      required
-                      className="bg-slate-950 border-slate-800 text-slate-100 placeholder:text-slate-500 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-300">
-                      Email Address
-                    </label>
-                    <Input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="bg-slate-950 border-slate-800 text-slate-100 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-300">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="Create a strong password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        className="pr-10 bg-slate-950 border-slate-800 text-slate-100 placeholder:text-slate-500 rounded-xl"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setAuthStage('ENTER_EMAIL')}
-                      className="text-xs border-slate-800 text-slate-400 hover:text-slate-200 rounded-xl"
-                    >
-                      Back
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="brand"
-                      className="flex-1 py-3 text-xs font-medium shadow-md bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? 'Creating Account...' : 'Create Account'}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {/* STAGE 3 / STAFF LOGIN: PASSWORD LOGIN */}
-              {authStage === 'PASSWORD_LOGIN' && (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-300">
-                      {portal === 'restaurant' ? 'Account Email' : `${portal.charAt(0).toUpperCase() + portal.slice(1)} Login`}
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder={portal === 'restaurant' ? 'name@restaurant.com' : 'Enter credentials'}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="bg-slate-950 border-slate-800 text-slate-100 placeholder:text-slate-500 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-slate-300">
-                        Password
-                      </label>
-                    </div>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="Enter your password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        className="pr-10 bg-slate-950 border-slate-800 text-slate-100 placeholder:text-slate-500 rounded-xl"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 pt-2">
-                    {portal === 'restaurant' && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setAuthStage('ENTER_EMAIL')}
-                        className="text-xs border-slate-800 text-slate-400 hover:text-slate-200 rounded-xl"
-                      >
-                        Change Email
-                      </Button>
-                    )}
-                    <Button
-                      type="submit"
-                      variant="brand"
-                      className="flex-1 py-3 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md"
-                      disabled={isLoading}
-                      icon={isLoading ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                    >
-                      {isLoading ? 'Authenticating...' : `Log in`}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {portal === 'restaurant' && (
-                <div className="space-y-3 pt-4 border-t border-slate-800/80 text-center">
-                  <button
-                    type="button"
-                    onClick={handleGoogleAuth}
-                    disabled={isLoading}
-                    className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-xs font-medium text-slate-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                {isAdminGoogleLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-slate-700" />
+                    <span>Verifying Admin Access...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
                       <path
                         fill="#4285F4"
                         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -613,87 +339,100 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                       />
                     </svg>
-                    <span>Continue with Google</span>
-                  </button>
+                    <span>Continue with Admin Google ID</span>
+                  </>
+                )}
+              </button>
 
-                  <p className="text-xs text-slate-400">
-                    New Restaurant Owner?{' '}
-                    <button
-                      onClick={() => onNavigate('/wizard')}
-                      className="text-indigo-400 hover:text-indigo-300 font-medium underline cursor-pointer"
-                    >
-                      Register Outlet Trial
-                    </button>
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </Card>
-
-        {/* Segmented Terminal Switcher Footer (Hidden for private Platform Admin login) */}
-        {portal !== 'admin' && (
-          <div className="space-y-3 text-center bg-slate-900/80 p-4 rounded-xl border border-slate-800">
-            <div className="space-y-2">
-              <p className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
-                Staff Terminals
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { id: 'kitchen', path: '/kitchen/login', label: 'Kitchen KDS', icon: <ChefHat className="w-3.5 h-3.5" /> },
-                  { id: 'waiter', path: '/waiter/login', label: 'Waiter OS', icon: <PhoneCall className="w-3.5 h-3.5" /> },
-                  { id: 'bar', path: '/bar/login', label: 'Bar Terminal', icon: <Wine className="w-3.5 h-3.5" /> },
-                  { id: 'inventory', path: '/inventory/login', label: 'Inventory OS', icon: <Package className="w-3.5 h-3.5" /> },
-                ].map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => onNavigate(p.path)}
-                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[11px] font-medium border transition-colors ${
-                      portal === p.id
-                        ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-sm'
-                        : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                    }`}
-                  >
-                    {p.icon}
-                    <span>{p.label}</span>
-                  </button>
-                ))}
+              <div className="relative my-5 flex items-center justify-center">
+                <div className="w-full border-t border-white/[0.10]" />
+                <span className="absolute bg-[#14161b] px-3 text-[11.5px] text-white/45 uppercase tracking-wider font-mono rounded-full border border-white/[0.08]">
+                  or master admin credentials
+                </span>
               </div>
             </div>
+          )}
 
-            <div className="space-y-2 pt-2.5 border-t border-slate-800/80">
-              <p className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
-                Management Portal
-              </p>
-              <div>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                {config.identifierLabel}
+              </label>
+              <input
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder={config.identifierPlaceholder}
+                required
+                className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all pr-10"
+                />
                 <button
-                  onClick={() => onNavigate('/restaurant/login')}
-                  className={`w-full flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[11px] font-medium border transition-colors ${
-                    portal === 'restaurant'
-                      ? 'bg-slate-800 text-slate-100 border-slate-700 shadow-sm'
-                      : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                  }`}
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer bg-transparent border-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  <Utensils className="w-3.5 h-3.5" />
-                  <span>Restaurant Owner Portal</span>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Back to Home Link (Hidden for Platform Admin) */}
-        {portal !== 'admin' && (
-          <div className="text-center">
             <button
-              onClick={() => onNavigate('/')}
-              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              type="submit"
+              disabled={isLoading || isAdminGoogleLoading}
+              className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-full py-3.5 px-6 text-[14px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg shadow-black/60 border border-white/[0.16] disabled:opacity-50"
+              style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
             >
-              ← Back to Dinely Home Page
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-white/70" />
+                  <span>Authenticating...</span>
+                </>
+              ) : (
+                <>
+                  <span>Authenticate Terminal</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
+          </form>
+
+          {/* Security & Isolation Notice */}
+          <div className="mt-6 pt-4 border-t border-white/[0.08] text-center">
+            {portal === 'admin' ? (
+              <p className="text-[11.5px] text-purple-300/70 leading-relaxed font-mono flex items-center justify-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                <span>Internal control plane. Access strictly logged and monitored.</span>
+              </p>
+            ) : (
+              <p className="text-[12px] text-white/45">
+                Terminal credentials provided by your restaurant manager.
+              </p>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      </main>
+
+      {/* ─── Bottom Sub-footer ─── */}
+      <footer className="relative z-10 w-full px-5 py-5 text-center text-[12px] text-white/40">
+        &copy; {new Date().getFullYear()} Dinely. All rights reserved.
+      </footer>
     </div>
   );
 };
