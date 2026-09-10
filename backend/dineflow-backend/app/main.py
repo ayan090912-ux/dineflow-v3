@@ -209,12 +209,18 @@ app.add_middleware(
 from sqlalchemy import text
 from app.core.database.connection import AsyncSessionLocal
 
-# Health checks
+# Health & Readiness checks
 @app.get("/healthz")
+@app.get("/health")
+@app.get("/api/v1/health")
+@app.get("/api/v1/healthz")
 async def health_check():
     return {"status": "healthy", "version": settings.APP_VERSION}
 
 @app.get("/readyz")
+@app.get("/ready")
+@app.get("/api/v1/readyz")
+@app.get("/api/v1/ready")
 async def readiness_check():
     db_status = "unknown"
     try:
