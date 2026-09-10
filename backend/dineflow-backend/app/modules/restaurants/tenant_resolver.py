@@ -146,10 +146,14 @@ async def resolve_public_tenant_from_host(
 
     return {
         "id": rest.id,
+        "restaurant_id": rest.id,
+        "restaurantId": rest.id,
         "name": rest.name,
         "slug": rest.slug,
         "publicSlug": pub_slug,
+        "public_slug": pub_slug,
         "domain": canonical_domain,
+        "public_domain": canonical_domain,
         "hostname": clean_host,
         "isTenantSubdomain": True,
         "lifecycleStatus": rest.lifecycle_status,
