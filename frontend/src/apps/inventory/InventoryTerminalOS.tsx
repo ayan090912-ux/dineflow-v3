@@ -23,7 +23,7 @@ import {
   ShieldCheck,
   Filter,
 } from 'lucide-react';
-import { Badge, Button, Card, Modal } from '../../packages/ui';
+import { Badge, Button, Card, Modal, DinelyLogo } from '../../packages/ui';
 import { InventoryItem, Supplier } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
@@ -271,7 +271,8 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
             <Package className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <DinelyLogo size="sm" />
               <h1 className="text-base font-black tracking-wide text-white uppercase font-mono">
                 Inventory & Raw Materials OS
               </h1>

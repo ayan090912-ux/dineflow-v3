@@ -163,13 +163,8 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
       {/* Editorial Header Bar */}
       <header className="border-b border-[#1e232e] bg-[#0b0d11]/80 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#f97316] flex items-center justify-center text-[#0b0d11] font-bold text-xs shadow-sm">
-              D
-            </div>
-            <span className="text-base font-bold tracking-tight text-white font-display">
-              dinely<span className="text-[#f97316]">.food</span>
-            </span>
+          <div className="flex items-center gap-2.5 text-white">
+            <DinelyLogo size="sm" />
             <span className="text-slate-600 text-sm hidden sm:inline">•</span>
             <span className="text-xs font-mono text-slate-400 hidden sm:inline">Workspace Hub</span>
           </div>

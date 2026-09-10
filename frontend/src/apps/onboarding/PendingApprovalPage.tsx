@@ -16,7 +16,7 @@ import {
   Phone,
   Grid,
 } from 'lucide-react';
-import { Button, Card, Badge, Modal, Input } from '../../packages/ui';
+import { Button, Card, Badge, Modal, Input, DinelyLogo } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant } from '../../packages/types';
 
@@ -178,6 +178,11 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      {/* Platform Branding */}
+      <div className="absolute top-6 left-6 z-20 text-white">
+        <DinelyLogo size="sm" />
+      </div>
+
       {/* Background Ambient Lighting */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-amber-500/10 via-rose-600/10 to-indigo-600/10 blur-[140px] rounded-full pointer-events-none" />
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Home, ArrowLeft } from 'lucide-react';
-import { Button } from '../../packages/ui';
+import { Button, DinelyLogo } from '../../packages/ui';
 
 interface NotFoundPageProps {
   onNavigate?: (path: string) => void;
@@ -18,6 +18,9 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
   return (
     <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
       <div className="w-full max-w-md space-y-6 text-center">
+        <div className="flex justify-center mb-2">
+          <DinelyLogo size="md" />
+        </div>
         <div className="space-y-2">
           <span className="text-4xl font-extrabold text-indigo-400 font-mono">404</span>
           <h1 className="text-2xl font-bold text-white tracking-tight">

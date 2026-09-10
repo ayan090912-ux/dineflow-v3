@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import { Button, Card } from './index';
+import { Button, Card, DinelyLogo } from './index';
 
 export interface ErrorBoundaryProps {
   children: ReactNode;
@@ -50,6 +50,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
           <Card className="max-w-md w-full bg-slate-900/90 border-slate-800 p-8 shadow-2xl relative z-10 backdrop-blur-xl rounded-3xl text-center space-y-6">
+            <div className="flex justify-center mb-1">
+              <DinelyLogo size="md" />
+            </div>
             <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border-2 border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto shadow-xl shadow-rose-950/40">
               <AlertTriangle className="w-8 h-8 animate-bounce" />
             </div>

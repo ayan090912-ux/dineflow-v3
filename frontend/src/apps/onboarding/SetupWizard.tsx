@@ -417,13 +417,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     return (
       <div className="min-h-screen bg-[#0b0d11] text-[#f3f4f6] flex flex-col justify-center items-center p-4 sm:p-6 relative font-sans">
         <div className="w-full max-w-md space-y-6 relative z-10 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-[#f97316] flex items-center justify-center text-[#0b0d11] font-bold text-sm shadow-sm">
-              D
-            </div>
-            <span className="text-lg font-bold tracking-tight text-white font-display">
-              dinely<span className="text-[#f97316]">.food</span>
-            </span>
+          <div className="flex items-center justify-center mb-4 text-white">
+            <DinelyLogo size="md" />
           </div>
 
           <div className="space-y-1.5">
@@ -485,13 +480,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       {/* Top Header Navbar */}
       <header className="border-b border-[#1e232e] bg-[#0b0d11]/80 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#f97316] flex items-center justify-center text-[#0b0d11] font-bold text-xs shadow-sm">
-              D
-            </div>
-            <span className="text-base font-bold tracking-tight text-white font-display">
-              dinely<span className="text-[#f97316]">.food</span>
-            </span>
+          <div className="flex items-center gap-2.5 text-white">
+            <DinelyLogo size="sm" />
             <span className="text-slate-600 text-sm hidden sm:inline">•</span>
             <span className="text-xs font-mono text-slate-400 hidden sm:inline">Venue Onboarding</span>
           </div>
