@@ -93,6 +93,11 @@ function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableS
   let wsProto = 'wss:';
   let host = 'dineflow-v3.onrender.com';
 
+  const token = typeof window !== 'undefined'
+    ? (localStorage.getItem('dinely_auth_token') || sessionStorage.getItem('dinely_admin_token') || localStorage.getItem('dinely_platform_admin_id_token') || '')
+    : '';
+  const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
+
   if (typeof window !== 'undefined') {
     const loc = window.location;
     wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -105,11 +110,11 @@ function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableS
       /^10\./.test(h);
 
     if (isDev) {
-      return `${wsProto}//${h}:8000/api/v1/ws?restaurant_id=${encodeURIComponent(restaurantId)}&role=${encodeURIComponent(role)}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}`;
+      return `${wsProto}//${h}:8000/api/v1/ws?restaurant_id=${encodeURIComponent(restaurantId)}&role=${encodeURIComponent(role)}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
     }
   }
 
-  return `wss://${host}/api/v1/ws?restaurant_id=${encodeURIComponent(restaurantId)}&role=${encodeURIComponent(role)}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}`;
+  return `wss://${host}/api/v1/ws?restaurant_id=${encodeURIComponent(restaurantId)}&role=${encodeURIComponent(role)}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
 }
 
 export type ConnectionStatusType = 'CONNECTED' | 'CONNECTING' | 'RECONNECTING' | 'DISCONNECTED';

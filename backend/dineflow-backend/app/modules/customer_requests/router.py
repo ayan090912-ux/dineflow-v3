@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database.connection import get_db
+from app.core.security.tenant_auth import get_caller_context, CallerContext, require_tenant_staff_or_owner
 from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.restaurants.models import Restaurant
 from app.modules.websocket.manager import ws_manager
@@ -121,6 +122,7 @@ async def get_customer_requests(
     active_only: bool = False,
     table_id: Optional[str] = None,
     table_session_id: Optional[str] = None,
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
     query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == restaurant_id)
@@ -168,8 +170,6 @@ async def get_customer_requests(
 
     return [format_request_dict(r) for r in reqs]
 
-
-from app.core.security.tenant_auth import get_caller_context, CallerContext
 
 @router.patch("/{request_id}")
 async def update_customer_request(

@@ -38,17 +38,26 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
     Verifies a Firebase ID token using the Firebase Admin SDK when initialized,
     or fallback parser for local development and test scenarios.
     """
-    settings = get_settings()
+    is_prod = (settings.ENVIRONMENT or "").strip().lower() == "production"
 
-    # 1. Attempt verification via official Firebase Admin SDK if available (check_revoked=False verifies signature locally via public certs without hanging on GCP metadata server)
+    if is_prod and id_token.startswith("firebase_token_"):
+        raise ValueError("Synthetic tokens are prohibited in production environment")
+
+    # 1. Attempt verification via official Firebase Admin SDK if available
     if _firebase_admin_initialized and id_token.startswith("ey"):
         try:
             decoded = firebase_auth_admin.verify_id_token(id_token, check_revoked=False)
             return decoded
         except Exception as err:
-            logger.warning(f"Firebase Admin SDK token verification failed: {err}. Falling back to JWT payload decode.")
+            logger.warning(f"Firebase Admin SDK token verification failed: {err}.")
+            if is_prod:
+                raise ValueError(f"Invalid or expired authentication token: {str(err)}")
+            logger.warning("Falling back to dev token parser for non-production environment.")
 
-    # 2. Development / Fallback token parsing for unit testing & local dev
+    if is_prod and not _firebase_admin_initialized:
+        raise ValueError("Firebase Admin SDK is not initialized in production environment")
+
+    # 2. Development / Fallback token parsing for unit testing & local dev ONLY
     if not id_token or not isinstance(id_token, str):
         raise ValueError("Invalid Firebase ID token format")
 

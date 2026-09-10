@@ -550,6 +550,7 @@ async def list_restaurant_bills(
     table_number: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
     rest = await find_restaurant_by_identifier(restaurant_id, db)
@@ -643,6 +644,7 @@ async def close_table_settlement(
     restaurant_id: str,
     bill_id: str,
     closed_by: Optional[str] = Query("Staff"),
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
     rest = await find_restaurant_by_identifier(restaurant_id, db)

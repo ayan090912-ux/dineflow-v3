@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
-from app.core.security.tenant_auth import get_caller_context, CallerContext
+from app.core.security.tenant_auth import get_caller_context, CallerContext, require_tenant_staff_or_owner
 from app.modules.orders.models import Order, OrderItem, Bill
 from app.modules.tables.models import Table, TableSession
 
@@ -387,6 +387,7 @@ async def get_restaurant_orders(
     active_only: bool = Query(False),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -411,6 +412,8 @@ async def get_restaurant_orders(
         result = await db.execute(query)
         orders = result.scalars().all()
         return [format_order_response(o) for o in orders]
+    except HTTPException:
+        raise
     except Exception as e:
         print("[KITCHEN_ORDER_FETCH_EXCEPT]:", e)
         return []
