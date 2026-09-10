@@ -2,6 +2,20 @@
 
 All notable changes to the Dinely project will be documented in this file.
 
+## [3.1.0] - 2026-09-10
+### Added
+- **Production Subdomain Routing**: Cloudflare Worker (`dinely-tenant-router`) wildcard proxy (`*.dinely.food/*`) forwarding to Firebase Hosting origin (`https://dinely-cd6cd.web.app`).
+- **Domain Registry Model**: `RestaurantDomain` model and database table (`restaurant_domains`) with `id`, `restaurant_id`, `hostname`, `domain`, `domain_type`, `verification_status`, `is_primary`, `is_verified`, `created_at`, `updated_at`, `verified_at`.
+- **Authoritative Tenant Resolver**: Canonical `/api/v1/restaurants/public/resolve` endpoint matching `hostname`, `domain`, and `public_slug` with strict 404 for unknown tenants.
+- **Automated Verification Script**: `verify_production_tenant_architecture.js` auditing platform, origin, resolver, two-tenant isolation, and QR codes.
+
+### Fixed
+- **Database Schema Drift on Render**: Added missing columns (`hostname`, `domain_type`, `verification_status`, `verified_at`, `updated_at`) to `restaurant_domains` on Neon PostgreSQL.
+- **Backend Test Fixtures**: Registered `RestaurantDomain.__table__` in `tests/conftest.py` ensuring 100% test pass rate across all 64 pytest cases.
+- **Frontend TypeScript Mismatch**: Fixed `onClick={() => loadData()}` in `RestaurantApp.tsx`.
+- **Wrangler Route Directive**: Moved `routes` to top-level in `wrangler.toml` so it is not treated as an environment variable.
+- **Frontend Host Authority**: Enforced hostname authority in `CustomerApp.tsx` and attached `X-Tenant-Domain` and `X-Tenant-Slug` headers to all client fetch calls.
+
 ## [3.0.0] - 2026-09-08
 ### Added
 - **Multi-Tenant Architecture Specification**: Comprehensive design system documented in `architecture.md` and `dinely_multitenant_architecture.md`.

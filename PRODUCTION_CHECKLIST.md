@@ -14,9 +14,9 @@ All items must be verified and checked before declaring Dinely production-ready.
 - [x] Fast, idempotent approval workflow without infinite loading spinners.
 - [x] Rejection captures auditable reasons; resubmission updates state without duplicates.
 - [x] Owner receives realtime `LIVE` updates without manual browser refresh.
-- [x] Public tenant domain resolution (`https://<slug>.dinely.app`) strictly loads target restaurant.
+- [x] Public tenant domain resolution (`https://<slug>.dinely.food`) strictly loads target restaurant.
 - [x] Unknown tenant domains return strict 404 with zero fallback to other outlets.
-- [x] QR codes point to canonical public domain: `https://<slug>.dinely.app/customer?table=...`.
+- [x] QR codes point to canonical public domain: `https://<slug>.dinely.food/customer?table=...`.
 - [x] Customer app loads only target restaurant menus, categories, tables, and cart sessions.
 - [x] Kitchen and Bar orders are routed based on explicit destination flags (`KITCHEN` / `BAR`).
 - [x] Customer waiter/water/bill requests are partitioned strictly to target restaurant rooms.
