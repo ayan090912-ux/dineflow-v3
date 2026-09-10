@@ -67,7 +67,7 @@ class TestOnboardingAndPlatformApprovalFlow:
         assert data_a["id"] == rest_a_id
         assert data_a.get("is_approved") is False or data_a.get("isApproved") is False
         assert data_a.get("lifecycle_status") == "PENDING_APPROVAL" or data_a.get("lifecycleStatus") == "PENDING_APPROVAL"
-        assert data_a["domain"] == f"https://{data_a['public_slug']}.dinely.app"
+        assert data_a["domain"] == f"https://{data_a['public_slug']}.dinely.food"
 
         # ----------------------------------------------------------------------
         # 2. PLATFORM ADMIN: Pending queue reflects Restaurant A

@@ -90,13 +90,23 @@ async def resolve_public_tenant_from_host(
     # 3. Query database by domain mapping or extracted slug
     rest = None
     
-    # Try custom domain mapping first
-    domain_query = select(RestaurantDomain).where(
-        func.lower(RestaurantDomain.domain) == clean_host,
-        RestaurantDomain.is_verified.is_(True)
-    )
-    domain_result = await db.execute(domain_query)
-    domain_entry = domain_result.scalar_one_or_none()
+    # Try domain mapping first (by hostname or domain)
+    domain_entry = None
+    try:
+        domain_query = select(RestaurantDomain).where(
+            or_(
+                func.lower(RestaurantDomain.hostname) == clean_host,
+                func.lower(RestaurantDomain.domain) == clean_host,
+            ),
+            or_(
+                RestaurantDomain.is_verified.is_(True),
+                RestaurantDomain.verification_status == "VERIFIED"
+            )
+        )
+        domain_result = await db.execute(domain_query)
+        domain_entry = domain_result.scalar_one_or_none()
+    except Exception:
+        domain_entry = None
 
     if domain_entry:
         rest_query = select(Restaurant).where(

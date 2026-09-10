@@ -120,7 +120,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       // 2. Load restaurant details & menu items
       const r = await loadRestaurantAndMenu();
-      const targetRestId = r?.id || urlRestParam || api.getCurrentRestaurantId() || undefined;
+      if (!r) {
+        // Strict isolation: if venue resolution failed (e.g. unknown tenant), stop immediately
+        return;
+      }
+      const targetRestId = r.id;
 
       // 3. Load table & active session details
       await loadTableInfo(urlTableNumParam, targetRestId, urlTableIdParam);
@@ -211,8 +215,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       pathTableIdParam = pathParts.length >= 3 ? pathParts[2] : pathParts[1];
     }
 
-    const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId');
-    const restId = explicitRestId || urlRestParam || currentRestaurant?.id || api.getCurrentRestaurantId() || undefined;
+    const domainResolution = getTenantFromHostname();
+    // Host Authority: Ignore injected restaurant query parameters when on a tenant subdomain
+    const urlRestParam = domainResolution.isTenantSubdomain ? undefined : (urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId') || urlParams?.get('restaurant_id'));
+    const restId = (domainResolution.isTenantSubdomain && currentRestaurant?.id)
+      ? currentRestaurant.id
+      : (explicitRestId || currentRestaurant?.id || urlRestParam || api.getCurrentRestaurantId() || undefined);
     const urlTableIdParam = explicitTableId || urlParams?.get('tableId') || pathTableIdParam || undefined;
     const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
     const rawTableStr = explicitTableNum || urlTableParam || selectedTableNum || 'Table 01';
@@ -289,8 +297,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     }
 
     const domainResolution = getTenantFromHostname();
-    const urlTenantParam = urlParams?.get('tenant') || urlParams?.get('slug');
-    const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId') || pathRestParam;
+    // Host Authority: query overrides are only allowed on platform domains or localhost
+    const urlTenantParam = domainResolution.isTenantSubdomain ? null : (urlParams?.get('tenant') || urlParams?.get('slug'));
+    const urlRestParam = domainResolution.isTenantSubdomain ? null : (urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId') || urlParams?.get('restaurant_id') || pathRestParam);
     const urlTableIdParam = urlParams?.get('tableId') || pathTableIdParam;
 
     let r: Restaurant | null = null;

@@ -79,7 +79,10 @@ class RestaurantDomain(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     restaurant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    domain: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    hostname: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     domain_type: Mapped[str] = mapped_column(String(50), default="SUBDOMAIN", nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(50), default="VERIFIED", nullable=False)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

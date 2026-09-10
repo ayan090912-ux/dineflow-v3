@@ -3345,7 +3345,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={loadData}
+                        onClick={() => loadData()}
                         className="text-xs border-slate-800 text-slate-300 hover:text-white"
                       >
                         Refresh Live Tables

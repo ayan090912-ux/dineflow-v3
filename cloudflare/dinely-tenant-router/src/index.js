@@ -31,7 +31,8 @@ const RESERVED_SUBDOMAINS = new Set([
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const originalHostname = url.hostname.toLowerCase().trim();
+    const hostHeader = request.headers.get('x-forwarded-host') || request.headers.get('host') || url.hostname;
+    const originalHostname = hostHeader.split(':')[0].toLowerCase().trim();
 
     // 1. Root Platform Domain Handling (dinely.food or www.dinely.food)
     if (
@@ -49,6 +50,8 @@ export default {
       tenantSlug = originalHostname.slice(0, -'.dinely.food'.length).trim();
     } else if (originalHostname.endsWith('.dinely.app')) {
       tenantSlug = originalHostname.slice(0, -'.dinely.app'.length).trim();
+    } else if (originalHostname.endsWith('.localhost')) {
+      tenantSlug = originalHostname.slice(0, -'.localhost'.length).trim();
     }
 
     // If no subdomain was matched or it's a reserved system subdomain

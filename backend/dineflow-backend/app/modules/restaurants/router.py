@@ -322,9 +322,13 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
     db.add(RestaurantDomain(
         id=f"dom-{rest_id}",
         restaurant_id=rest_id,
+        hostname=f"{public_slug}.dinely.food",
         domain=f"{public_slug}.dinely.food",
+        domain_type="SUBDOMAIN",
+        verification_status="VERIFIED",
         is_primary=True,
-        is_verified=True
+        is_verified=True,
+        verified_at=datetime.now(timezone.utc),
     ))
 
     # Record Initial Application Lifecycle Log

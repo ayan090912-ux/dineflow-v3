@@ -71,20 +71,37 @@ async def ensure_db_schema_columns(conn):
         """CREATE TABLE IF NOT EXISTS restaurant_domains (
             id VARCHAR(255) PRIMARY KEY,
             restaurant_id VARCHAR(255) NOT NULL,
-            domain VARCHAR(255) NOT NULL UNIQUE,
-            is_primary BOOLEAN DEFAULT FALSE,
+            hostname VARCHAR(255) UNIQUE,
+            domain VARCHAR(255),
+            domain_type VARCHAR(50) DEFAULT 'SUBDOMAIN',
+            verification_status VARCHAR(50) DEFAULT 'VERIFIED',
+            is_primary BOOLEAN DEFAULT TRUE,
             is_verified BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            verified_at TIMESTAMPTZ DEFAULT NOW()
         );""",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS hostname VARCHAR(255);",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS domain VARCHAR(255);",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS domain_type VARCHAR(50) DEFAULT 'SUBDOMAIN';",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'VERIFIED';",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ DEFAULT NOW();",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+        "UPDATE restaurant_domains SET hostname = domain WHERE hostname IS NULL AND domain IS NOT NULL;",
+        "UPDATE restaurant_domains SET domain = hostname WHERE domain IS NULL AND hostname IS NOT NULL;",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_domains_hostname ON restaurant_domains (hostname);",
         "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_domain ON restaurant_domains (domain);",
         "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_rest_id ON restaurant_domains (restaurant_id);",
         "UPDATE tables SET qr_code_url = 'https://' || (SELECT COALESCE(public_slug, slug, 'the-dunk') FROM restaurants WHERE restaurants.id = tables.restaurant_id) || '.dinely.food/customer?table=' || table_number || '&tableId=' || id WHERE qr_code_url LIKE '%.dinely.app%' OR qr_code_url LIKE '%dinely.food/customer?tenant=%';",
         "UPDATE restaurants SET domain = 'https://' || COALESCE(public_slug, slug) || '.dinely.food' WHERE domain LIKE '%.dinely.app%' OR domain LIKE '%dinely.food/customer?tenant=%';",
-        """INSERT INTO restaurant_domains (id, restaurant_id, domain, is_primary, is_verified)
-           SELECT 'dom-' || id, id, COALESCE(public_slug, slug) || '.dinely.food', TRUE, TRUE
+        """INSERT INTO restaurant_domains (id, restaurant_id, hostname, domain, domain_type, verification_status, is_primary, is_verified)
+           SELECT 'dom-' || id, id, COALESCE(public_slug, slug) || '.dinely.food', COALESCE(public_slug, slug) || '.dinely.food', 'SUBDOMAIN', 'VERIFIED', TRUE, TRUE
            FROM restaurants
            WHERE COALESCE(public_slug, slug) IS NOT NULL
-           ON CONFLICT (domain) DO NOTHING;""",
+           ON CONFLICT (hostname) DO NOTHING;""",
         # Bills Columns
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",

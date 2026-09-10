@@ -1202,6 +1202,14 @@ export class DinelyApiClient {
                     sessionStorage.getItem('dinely_admin_token')
                   ) : null);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const resolution = getTenantFromHostname();
+      if (resolution.isTenantSubdomain && resolution.slug) {
+        headers['X-Tenant-Domain'] = resolution.hostname;
+        headers['X-Tenant-Slug'] = resolution.slug;
+        headers['X-Forwarded-Host'] = resolution.hostname;
+      }
+    }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
