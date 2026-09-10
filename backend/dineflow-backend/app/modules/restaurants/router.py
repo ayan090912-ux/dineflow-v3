@@ -36,23 +36,6 @@ async def generate_unique_public_slug(db: AsyncSession, name: str, exclude_id: O
         counter += 1
         candidate = f"{clean}-{counter}"
 
-def extract_subdomain_from_hostname(hostname: Optional[str]) -> Optional[str]:
-    if not hostname:
-        return None
-    host = hostname.split(":")[0].strip().lower()
-    if host.endswith(".dinely.food"):
-        sub = host[:-len(".dinely.food")].strip()
-        if sub and sub not in ("www", "app", "api", "platform", "admin", "staging"):
-            return sub
-    if host.endswith(".dinely.app"):
-        sub = host[:-len(".dinely.app")].strip()
-        if sub and sub not in ("www", "app", "api", "platform", "admin", "staging"):
-            return sub
-    if host.endswith(".localhost"):
-        sub = host[:-len(".localhost")].strip()
-        if sub and sub not in ("www", "app", "api", "platform", "admin", "staging"):
-            return sub
-    return None
 
 class CreateRestaurantSchema(BaseModel):
     id: Optional[str] = None

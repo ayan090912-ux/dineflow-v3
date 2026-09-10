@@ -37,19 +37,15 @@ export default {
     // 1. Root Platform Domain Handling (dinely.food or www.dinely.food)
     if (
       originalHostname === 'dinely.food' ||
-      originalHostname === 'www.dinely.food' ||
-      originalHostname === 'dinely.app' ||
-      originalHostname === 'www.dinely.app'
+      originalHostname === 'www.dinely.food'
     ) {
       return proxyToOrigin(request, url, originalHostname, null);
     }
 
-    // 2. Tenant Subdomain Extraction (*.dinely.food or *.dinely.app)
+    // 2. Tenant Subdomain Extraction (*.dinely.food)
     let tenantSlug = null;
     if (originalHostname.endsWith('.dinely.food')) {
       tenantSlug = originalHostname.slice(0, -'.dinely.food'.length).trim();
-    } else if (originalHostname.endsWith('.dinely.app')) {
-      tenantSlug = originalHostname.slice(0, -'.dinely.app'.length).trim();
     } else if (originalHostname.endsWith('.localhost')) {
       tenantSlug = originalHostname.slice(0, -'.localhost'.length).trim();
     }

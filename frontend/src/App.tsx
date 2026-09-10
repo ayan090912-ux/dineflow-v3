@@ -204,7 +204,7 @@ function AppContent() {
 
   // Main Route Dispatcher with Comprehensive State Handling
   const renderRoute = useMemo(() => {
-    // 0. Tenant-Specific Public Domain Routing (e.g. https://<slug>.dinely.app)
+    // 0. Tenant-Specific Public Domain Routing (e.g. https://<slug>.dinely.food)
     const domainResolution = getTenantFromHostname();
     if (domainResolution.isTenantSubdomain && domainResolution.slug) {
       return <CustomerApp />;

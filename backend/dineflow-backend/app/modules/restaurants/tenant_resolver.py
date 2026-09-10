@@ -9,8 +9,6 @@ from app.modules.restaurants.models import Restaurant, RestaurantDomain
 PLATFORM_DOMAINS = {
     "dinely.food",
     "www.dinely.food",
-    "dinely.app",
-    "www.dinely.app",
     "dinely-cd6cd.web.app",
     "dinely-cd6cd.firebaseapp.com",
     "localhost",
@@ -72,14 +70,10 @@ async def resolve_public_tenant_from_host(
     if clean_host in PLATFORM_DOMAINS:
         return None
 
-    # 2. Extract slug if subdomain of dinely.food or dinely.app
+    # 2. Extract slug if subdomain of dinely.food
     extracted_slug = None
     if clean_host.endswith(".dinely.food"):
         sub = clean_host[:-len(".dinely.food")].strip()
-        if sub and sub not in RESERVED_SUBDOMAINS:
-            extracted_slug = sub
-    elif clean_host.endswith(".dinely.app"):
-        sub = clean_host[:-len(".dinely.app")].strip()
         if sub and sub not in RESERVED_SUBDOMAINS:
             extracted_slug = sub
     elif clean_host.endswith(".localhost"):

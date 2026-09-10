@@ -257,7 +257,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         businessAddress,
         contactNumber,
         supportEmail,
-        ownerEmail: regEmail || 'owner@dinely.app',
+        ownerEmail: regEmail || '',
         ownerName: verifiedUser ? verifiedUser.name : `${firstName} ${lastName}`,
       });
 
@@ -302,18 +302,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       <div className="w-full border-b border-[#1e232e] bg-[#0b0d11]/80 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div
-            className="flex items-center gap-2.5 cursor-pointer"
+            className="flex items-center cursor-pointer text-white"
             onClick={() => {
               if (onNavigate) onNavigate('/');
               else window.location.href = '/';
             }}
           >
-            <div className="w-7 h-7 rounded-lg bg-[#f97316] flex items-center justify-center text-[#0b0d11] font-bold text-xs shadow-sm">
-              D
-            </div>
-            <span className="text-base font-bold tracking-tight text-white font-display">
-              dinely<span className="text-[#f97316]">.food</span>
-            </span>
+            <DinelyLogo size="sm" />
           </div>
 
           <div className="flex items-center gap-3">

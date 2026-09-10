@@ -25,6 +25,10 @@ from app.scripts.clean_production_applications import run_clean_production_appli
 from sqlalchemy import text
 
 async def ensure_db_schema_columns(conn):
+    # Only run PostgreSQL-specific schema synchronization on PostgreSQL engines
+    if "postgres" not in str(conn.engine.url).lower():
+        return
+
     alter_statements = [
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(50);",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_prep_time_minutes INTEGER DEFAULT 15;",
@@ -95,24 +99,18 @@ async def ensure_db_schema_columns(conn):
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_domains_hostname ON restaurant_domains (hostname);",
         "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_domain ON restaurant_domains (domain);",
         "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_rest_id ON restaurant_domains (restaurant_id);",
-        "UPDATE tables SET qr_code_url = 'https://' || (SELECT COALESCE(public_slug, slug, 'the-dunk') FROM restaurants WHERE restaurants.id = tables.restaurant_id) || '.dinely.food/customer?table=' || table_number || '&tableId=' || id WHERE qr_code_url LIKE '%.dinely.app%' OR qr_code_url LIKE '%dinely.food/customer?tenant=%';",
+        "UPDATE tables SET qr_code_url = 'https://' || (SELECT COALESCE(public_slug, slug) FROM restaurants WHERE restaurants.id = tables.restaurant_id) || '.dinely.food/customer?table=' || table_number || '&tableId=' || id WHERE qr_code_url LIKE '%.dinely.app%' OR qr_code_url LIKE '%dinely.food/customer?tenant=%';",
         "UPDATE restaurants SET domain = 'https://' || COALESCE(public_slug, slug) || '.dinely.food' WHERE domain LIKE '%.dinely.app%' OR domain LIKE '%dinely.food/customer?tenant=%';",
         """UPDATE restaurants
            SET deleted_at = NOW(), lifecycle_status = 'ARCHIVED', is_approved = FALSE, status = 'CLOSED'
            WHERE deleted_at IS NULL
-             AND id != 'rest-1788659067434'
-             AND (owner_email IS NULL OR owner_email != 'ayanamity77@gmail.com')
              AND (
                id LIKE 'rest-iso-%' OR
                id LIKE 'rest-test-%' OR
-               id LIKE 'rest-dunk-%' OR
-               id LIKE 'rest-cafe-%' OR
-               id LIKE 'rest-resolve-%' OR
-               id LIKE 'rest-qr-tenant-%' OR
+               id LIKE 'rest-synthetic-%' OR
                owner_email LIKE '%@test.dinely.internal' OR
                owner_email = 'testowner@dinely.app' OR
-               (owner_email IS NULL AND owner_uid IS NULL) OR
-               id IN ('rest-1', 'rest-1787446097984', 'rest-1787655544312', 'rest-1788864160386-5be7ad', 'rest-1788336268705', 'rest-1788336351754', 'rest-1788118012475', 'rest-1788222983146', 'rest-1788319813381', 'rest-1788319728226')
+               (owner_email IS NULL AND owner_uid IS NULL)
              );""",
         """INSERT INTO restaurant_domains (id, restaurant_id, hostname, domain, domain_type, verification_status, is_primary, is_verified)
            SELECT 'dom-' || id, id, COALESCE(public_slug, slug) || '.dinely.food', COALESCE(public_slug, slug) || '.dinely.food', 'SUBDOMAIN', 'VERIFIED', TRUE, TRUE
@@ -199,7 +197,7 @@ cors_origins = settings.CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*dinely\.food|https://.*dinely\.app|https://.*onrender\.com|http://.*",
+    allow_origin_regex=r"https://.*dinely\.food|https://.*onrender\.com|http://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -30,8 +30,6 @@ const RESERVED_SUBDOMAINS = new Set([
 const PLATFORM_DOMAINS = new Set([
   'dinely.food',
   'www.dinely.food',
-  'dinely.app',
-  'www.dinely.app',
   'dinely-cd6cd.web.app',
   'dinely-cd6cd.firebaseapp.com',
   'localhost',
@@ -50,15 +48,6 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
   // https://<slug>.dinely.food
   if (hostname.endsWith('.dinely.food')) {
     const subdomain = hostname.slice(0, -'.dinely.food'.length).trim();
-    if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
-      return { isTenantSubdomain: true, slug: subdomain, hostname };
-    }
-    return { isTenantSubdomain: false, slug: null, hostname };
-  }
-
-  // https://<slug>.dinely.app
-  if (hostname.endsWith('.dinely.app')) {
-    const subdomain = hostname.slice(0, -'.dinely.app'.length).trim();
     if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
       return { isTenantSubdomain: true, slug: subdomain, hostname };
     }

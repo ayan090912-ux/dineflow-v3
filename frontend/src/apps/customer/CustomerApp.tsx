@@ -265,15 +265,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       setCurrentTableSession(session);
 
-      if (typeof window !== 'undefined' && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.search.includes('debug'))) {
-        console.log('[DINELY DEBUG]', {
-          restaurantId: restId,
-          tableId: resolvedTableId,
-          tableNumber: displayTableNum,
-          tableSessionId: session.id,
-        });
-      }
-
       await loadInitialOrder(session.id, restId, displayTableNum);
     }
   };
