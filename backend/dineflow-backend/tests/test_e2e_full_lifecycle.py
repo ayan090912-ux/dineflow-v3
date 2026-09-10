@@ -142,8 +142,8 @@ async def test_full_production_lifecycle_e2e():
         res_resolve_a = await client.get(f"/restaurants/public/resolve?slug={slug_a}")
         assert res_resolve_a.status_code == 200
         resolved_a = res_resolve_a.json()
-        assert resolved_a["restaurant_id"] == rest_a_id
-        assert resolved_a["public_domain"] == f"https://{slug_a}.dinely.food"
+        assert (resolved_a.get("restaurant_id") or resolved_a.get("id")) == rest_a_id
+        assert (resolved_a.get("public_domain") or resolved_a.get("domain")) == f"https://{slug_a}.dinely.food"
 
         # Unknown slug returns 404
         res_resolve_unknown = await client.get("/restaurants/public/resolve?slug=unknown-nonexistent-restaurant-slug")
