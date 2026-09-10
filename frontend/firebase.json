@@ -15,11 +15,28 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css)",
+        "source": "**/*.@(js|css|webp|png|jpg|svg)",
         "headers": [
           {
             "key": "Cache-Control",
             "value": "max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          },
+          {
+            "key": "Pragma",
+            "value": "no-cache"
+          },
+          {
+            "key": "Expires",
+            "value": "0"
           }
         ]
       },
@@ -43,6 +60,10 @@
       {
         "source": "**",
         "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          },
           {
             "key": "X-Content-Type-Options",
             "value": "nosniff"
