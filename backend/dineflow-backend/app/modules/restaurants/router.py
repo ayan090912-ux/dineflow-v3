@@ -123,7 +123,7 @@ async def resolve_public_restaurant(
     result = await db.execute(query)
     rest = result.scalar_one_or_none()
 
-    if not rest:
+    if not rest or getattr(rest, "lifecycle_status", None) in ["ARCHIVED", "DEACTIVATED"] or getattr(rest, "status", None) in ["ARCHIVED", "DEACTIVATED"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Restaurant '{target_slug}' not found"
@@ -132,9 +132,11 @@ async def resolve_public_restaurant(
     pub_slug = rest.public_slug or rest.slug
     return {
         "id": rest.id,
+        "restaurant_id": rest.id,
         "name": rest.name,
         "slug": rest.slug,
         "publicSlug": pub_slug,
+        "public_domain": f"https://{pub_slug}.dinely.food",
         "domain": f"https://{pub_slug}.dinely.food",
         "cuisine": rest.cuisine,
         "businessType": rest.business_type,
@@ -174,7 +176,7 @@ async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(ge
     result = await db.execute(query)
     rest = result.scalar_one_or_none()
 
-    if not rest:
+    if not rest or getattr(rest, "lifecycle_status", None) in ["ARCHIVED", "DEACTIVATED"] or getattr(rest, "status", None) in ["ARCHIVED", "DEACTIVATED"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Restaurant '{slug}' not found"
@@ -183,9 +185,11 @@ async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(ge
     pub_slug = rest.public_slug or rest.slug
     return {
         "id": rest.id,
+        "restaurant_id": rest.id,
         "name": rest.name,
         "slug": rest.slug,
         "publicSlug": pub_slug,
+        "public_domain": f"https://{pub_slug}.dinely.food",
         "domain": f"https://{pub_slug}.dinely.food",
         "cuisine": rest.cuisine,
         "businessType": rest.business_type,
