@@ -39,8 +39,9 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount FLOAT DEFAULT 0.0;",
         "ALTER TABLE orders ALTER COLUMN table_session_id DROP NOT NULL;",
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS target_destination VARCHAR(20) DEFAULT 'KITCHEN';",
-        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS notes TEXT;",
         "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS table_id VARCHAR(255);",
+        "ALTER TABLE customer_requests ALTER COLUMN request_type TYPE VARCHAR(50) USING request_type::text;",
+        "ALTER TABLE customer_requests ALTER COLUMN status TYPE VARCHAR(50) USING status::text;",
         # Restaurant Billing & Compliance Columns
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS legal_name VARCHAR(255);",
         "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS state VARCHAR(100);",
