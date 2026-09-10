@@ -1360,6 +1360,10 @@ export class DinelyApiClient {
     try {
       realtimeBus.disconnect();
     } catch (_) {}
+    try {
+      const { signOutFirebase } = await import('../auth/firebase');
+      await signOutFirebase();
+    } catch (_) {}
     this.saveDatabase();
   }
 

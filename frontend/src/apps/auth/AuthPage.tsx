@@ -87,12 +87,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     let isMounted = true;
 
     const checkSession = async () => {
-      const currentUser = api.getCurrentUser('OWNER') || api.getCurrentUser();
-      const fbUser = firebaseAuth.currentUser;
+      // If the user explicitly requested registration or switching accounts, do not auto-redirect
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      if (initialMode === 'register' || search.includes('switch=true') || search.includes('logout=true')) {
+        if (isMounted) setIsRestoringSession(false);
+        return;
+      }
 
-      if ((currentUser?.email || fbUser?.email) && isMounted) {
-        const activeEmail = (currentUser?.email || fbUser?.email || '').toLowerCase();
-        const activeUid = currentUser?.id || fbUser?.uid || '';
+      const currentUser = api.getCurrentUser('OWNER');
+
+      // Only auto-route if an explicit active Dinely owner session is currently valid
+      if (currentUser?.email && isMounted) {
+        const activeEmail = currentUser.email.toLowerCase();
+        const activeUid = currentUser.id || '';
         await routeUserAfterAuth(activeEmail, activeUid);
         return;
       }
@@ -107,7 +114,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialMode]);
 
   // 1. Google Authentication Flow
   const handleGoogleAuth = async () => {
