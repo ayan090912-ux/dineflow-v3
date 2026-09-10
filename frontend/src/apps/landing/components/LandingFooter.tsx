@@ -10,7 +10,6 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onNavigateSection 
     { label: 'Product', id: 'product' },
     { label: 'Solutions', id: 'solutions' },
     { label: 'How it works', id: 'how-it-works' },
-    { label: 'Pricing', id: 'pricing' },
   ];
 
   return (

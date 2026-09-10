@@ -45,7 +45,6 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
     { label: 'Product', id: 'product' },
     { label: 'Solutions', id: 'solutions' },
     { label: 'How it works', id: 'how-it-works' },
-    { label: 'Pricing', id: 'pricing' },
   ];
 
   const handleLinkClick = (e: React.MouseEvent, sectionId: string) => {

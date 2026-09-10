@@ -213,7 +213,7 @@ function AppContent() {
     }
 
     // 0.1. Guard protected routes while Firebase Auth initializes session
-    if (isInitializing && !['/', '/landing', '/home', '/about', '/pricing', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
+    if (isInitializing && !['/', '/landing', '/home', '/about', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
       return (
         <LoadingScreen
           status="Initializing secure session..."
@@ -228,7 +228,6 @@ function AppContent() {
       cleanPath === '/landing' ||
       cleanPath === '/home' ||
       cleanPath === '/about' ||
-      cleanPath === '/pricing' ||
       cleanPath === '/contact' ||
       cleanPath === '/terms' ||
       cleanPath === '/privacy' ||

@@ -5,7 +5,6 @@ import { LandingHero } from './components/LandingHero';
 import { ProductSection } from './components/ProductSection';
 import { SolutionsSection } from './components/SolutionsSection';
 import { HowItWorksSection } from './components/HowItWorksSection';
-import { PricingSection } from './components/PricingSection';
 import { FinalCTASection } from './components/FinalCTASection';
 import { LandingFooter } from './components/LandingFooter';
 
@@ -97,8 +96,6 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
       {/* 5. How It Works (4-Step Onboarding & Dining Pipeline) */}
       <HowItWorksSection />
 
-      {/* 6. Pricing Section (Honest Modular SaaS Plans) */}
-      <PricingSection onStartTrial={handleStartTrial} />
 
       {/* 7. Final Call to Action */}
       <FinalCTASection onStartTrial={handleStartTrial} />
