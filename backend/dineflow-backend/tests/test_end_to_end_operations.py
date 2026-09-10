@@ -141,7 +141,7 @@ async def test_end_to_end_full_restaurant_operations():
         assert prep_order.get("eta_target_timestamp") is not None, "PREPARING order MUST generate authoritative server ETA timestamp"
 
         # TEST 4, TEST 5, TEST 6: Terminal order retrieval & kitchen/bar item routing
-        res_active_orders = await client.get(f"/api/v1/orders/restaurant/{rest_a}?active_only=true")
+        res_active_orders = await client.get(f"/api/v1/orders/restaurant/{rest_a}?active_only=true", headers=staff_headers_a)
         assert res_active_orders.status_code == 200
         active_orders = res_active_orders.json()
         order_ids = [o["id"] for o in active_orders]

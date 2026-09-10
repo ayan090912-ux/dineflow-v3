@@ -61,7 +61,7 @@ async def test_waiter_terminal_end_to_end_suite():
         assert req_data["tableSessionId"] == session_id_1
 
         # 3. Waiter retrieves active customer requests for restaurant
-        res_get_reqs = await client.get(f"/api/v1/customer-requests?restaurant_id={test_rest_id}")
+        res_get_reqs = await client.get(f"/api/v1/customer-requests?restaurant_id={test_rest_id}", headers=waiter_headers)
         assert res_get_reqs.status_code == 200
         reqs_list = res_get_reqs.json()
         assert any(r["id"] == req_id and r["status"] == "PENDING" for r in reqs_list)
@@ -110,7 +110,8 @@ async def test_waiter_terminal_end_to_end_suite():
         assert res_b_sessions.status_code == 200
         assert not any(s["id"] == session_id_1 for s in res_b_sessions.json())
 
-        res_b_orders = await client.get(f"/api/v1/orders/restaurant/{test_rest_b}")
+        waiter_b_headers = {"X-Staff-Role": "WAITER", "X-Staff-Restaurant-Id": test_rest_b}
+        res_b_orders = await client.get(f"/api/v1/orders/restaurant/{test_rest_b}", headers=waiter_b_headers)
         assert res_b_orders.status_code == 200
         assert not any(o["id"] == ord_id for o in res_b_orders.json())
 

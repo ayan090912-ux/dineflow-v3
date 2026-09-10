@@ -79,20 +79,20 @@ async def test_end_to_end_customer_to_kitchen_flow(db_session, setup_cafe_co):
         assert res_db.restaurant_id == "rest-cafe-co"
         assert res_db.table_number == "Table 03"
 
+        kitchen_headers = {
+            "X-Staff-Role": "KITCHEN",
+            "X-Staff-Restaurant-Id": "rest-cafe-co",
+            "X-Staff-Id": "staff-chef-1"
+        }
+
         # 3. Kitchen KDS queries orders for CAFE.CO
-        res_kds = await ac.get("/api/v1/orders/restaurant/rest-cafe-co")
+        res_kds = await ac.get("/api/v1/orders/restaurant/rest-cafe-co", headers=kitchen_headers)
         assert res_kds.status_code == 200
         kds_orders = res_kds.json()
         assert len(kds_orders) >= 1
         found_ord = next((o for o in kds_orders if o["id"] == order_id), None)
         assert found_ord is not None
         assert found_ord["status"] == "PENDING"
-
-        kitchen_headers = {
-            "X-Staff-Role": "KITCHEN",
-            "X-Staff-Restaurant-Id": "rest-cafe-co",
-            "X-Staff-Id": "staff-chef-1"
-        }
 
         # 4. Kitchen accepts order & sets prep timer to 15 mins
         res_status = await ac.put(

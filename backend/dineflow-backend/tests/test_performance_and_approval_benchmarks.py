@@ -78,7 +78,10 @@ async def test_performance_and_approval_benchmarks():
 
         # 5. Benchmark: Orders Fetch with Limits
         t0 = time.perf_counter()
-        orders_res = await client.get(f"/api/v1/orders/restaurant/{rest_id}?limit=50")
+        orders_res = await client.get(
+            f"/api/v1/orders/restaurant/{rest_id}?limit=50",
+            headers={"X-Staff-Role": "WAITER", "X-Staff-Restaurant-Id": rest_id}
+        )
         t_orders = (time.perf_counter() - t0) * 1000
         assert orders_res.status_code == 200
         print(f"[BENCHMARK] Paginated Orders Fetch: {t_orders:.2f}ms")

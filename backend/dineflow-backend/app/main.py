@@ -19,7 +19,6 @@ import app.modules.tables.models
 import app.modules.orders.models
 import app.modules.customer_requests.models
 import app.modules.taxes.models
-from app.scripts.clean_production_applications import run_clean_production_applications
 
 
 from sqlalchemy import text

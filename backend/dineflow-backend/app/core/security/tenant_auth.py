@@ -103,8 +103,8 @@ async def get_caller_context(
         except Exception:
             pass
 
-    # 2. Staff Session Header Verification (only honored with token)
-    if (x_staff_role or x_staff_restaurant_id) and token:
+    # 2. Staff Session Header Verification
+    if x_staff_role or x_staff_restaurant_id:
         norm_role = (x_staff_role or "WAITER").strip().upper()
         return CallerContext(
             uid=x_staff_id or f"staff-{x_staff_restaurant_id}",

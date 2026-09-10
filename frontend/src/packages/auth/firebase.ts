@@ -7,14 +7,15 @@ import {
   UserCredential,
 } from 'firebase/auth';
 
-// Firebase Web SDK Configuration for Dinely Cloud (Project: dinely-cd6cd)
+const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {}) as any;
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'dinely-cd6cd.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'dinely-cd6cd',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'dinely-cd6cd.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '99267644103',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:99267644103:web:c7f93f68625d3c0da04ce2',
+  apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyAp2Mt6i7JfWHdQyxogoMtlDh1RQrtJtUg',
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'dinely-cd6cd.firebaseapp.com',
+  projectId: env.VITE_FIREBASE_PROJECT_ID || 'dinely-cd6cd',
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'dinely-cd6cd.firebasestorage.app',
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '99267644103',
+  appId: env.VITE_FIREBASE_APP_ID || '1:99267644103:web:c7f93f68625d3c0da04ce2',
 };
 
 // Initialize Firebase App singleton safely

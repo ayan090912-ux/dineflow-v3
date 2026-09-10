@@ -242,8 +242,8 @@ async def test_strict_multi_tenant_data_isolation():
         })
 
         # 7. Verify Customer Request Isolation
-        reqs_a = (await client.get(f"/api/v1/customer-requests?restaurant_id={rest_a}")).json()
-        reqs_b = (await client.get(f"/api/v1/customer-requests?restaurant_id={rest_b}")).json()
+        reqs_a = (await client.get(f"/api/v1/customer-requests?restaurant_id={rest_a}", headers=headers_a)).json()
+        reqs_b = (await client.get(f"/api/v1/customer-requests?restaurant_id={rest_b}", headers=headers_b)).json()
 
         assert any(r["tableNumber"] == "Table 01" for r in reqs_a)
         assert not any(r["tableNumber"] == "Table 02" for r in reqs_a)

@@ -108,7 +108,7 @@ async def test_full_table_session_lifecycle_scenarios():
         assert tbl_closed["is_occupied"] is False
 
         # TEST 7: Verify historical data preserved (Order #A still exists in DB)
-        res_all_orders = await client.get(f"/api/v1/orders/restaurant/{rest_a}")
+        res_all_orders = await client.get(f"/api/v1/orders/restaurant/{rest_a}", headers=waiter_headers_a)
         assert res_all_orders.status_code == 200
         all_orders = res_all_orders.json()
         hist_order_a = [o for o in all_orders if o["id"] == order_a_id]
