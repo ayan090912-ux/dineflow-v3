@@ -98,9 +98,8 @@ async def get_all_restaurants(
     output = []
     for r in rests:
         clean_slug = re.sub(r"[^a-z0-9]+", "-", (r.public_slug or r.slug or r.name or "restaurant").strip().lower()).strip("-") or "restaurant"
-        # Use existing domain if canonical, else generate from slug (always use dinely.food query-param format)
-        existing_domain = r.domain or ""
-        canonical_domain = existing_domain if (existing_domain and ".dinely.app" not in existing_domain) else f"https://dinely.food/customer?tenant={clean_slug}"
+        # Always use canonical tenant subdomain: https://<slug>.dinely.food
+        canonical_domain = f"https://{clean_slug}.dinely.food"
         output.append({
             "id": r.id,
             "name": r.name,
@@ -236,7 +235,7 @@ async def approve_restaurant(
                     capacity=4,
                     status="AVAILABLE",
                     is_occupied=False,
-                    qr_code_url=f"https://dinely.food/customer?tenant={pub_slug}&table={t_num}&tableId={t_id}"
+                    qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={t_num}&tableId={t_id}"
                 ))
 
     await db.commit()

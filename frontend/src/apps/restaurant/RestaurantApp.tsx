@@ -1637,7 +1637,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               className="inline-flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-lg bg-[#141822] border border-[#222838] text-emerald-400 hover:border-emerald-500/40 transition-colors"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>dinely.food/customer?tenant={currentRestaurant?.publicSlug || currentRestaurant?.slug || 'restaurant'}</span>
+              <span>{getRestaurantPublicDomain(currentRestaurant).replace(/^https?:\/\//, '')}</span>
             </a>
           </div>
         </header>
@@ -1670,7 +1670,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         {currentRestaurant?.lifecycleStatus === 'ACTIVE' || !currentRestaurant?.lifecycleStatus ? 'Live' : currentRestaurant?.lifecycleStatus}
                       </span>
                       <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                        dinely.food/customer?tenant={currentRestaurant?.publicSlug || currentRestaurant?.slug || 'restaurant'}
+                        {getRestaurantPublicDomain(currentRestaurant).replace(/^https?:\/\//, '')}
                       </span>
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
@@ -1949,7 +1949,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <QrCode className="w-10 h-10 text-sky-400 mx-auto" />
                     <div>
                       <p className="text-xs font-medium text-white">Counter Entry Point</p>
-                      <p className="text-[10px] font-mono text-slate-400 truncate">https://dinely.food/customer?tenant={currentRestaurant?.slug || 'foodtruck'}&table=COUNTER</p>
+                      <p className="text-[10px] font-mono text-slate-400 truncate">{getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}</p>
                     </div>
                     <Button variant="brand" size="sm" onClick={() => setActiveTab('qr_pickup')} className="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs">
                       View Printable Counter QR
@@ -2078,7 +2078,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   COUNTER PICKUP QR
                 </Badge>
                 <h4 className="text-xl font-bold text-white">{currentRestaurant?.name || 'Food Truck'}</h4>
-                <p className="text-xs font-mono text-sky-300">https://dinely.food/customer?tenant={currentRestaurant?.slug || 'foodtruck'}&table=COUNTER</p>
+                <p className="text-xs font-mono text-sky-300">{getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}</p>
                 <p className="text-xs text-slate-400 max-w-md mx-auto">
                   Customers scan this code to view your food menu, add items to cart, and place pickup orders with unique ticket numbers (e.g. #F1024).
                 </p>

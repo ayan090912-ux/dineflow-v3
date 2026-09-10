@@ -897,7 +897,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       <p className="truncate"><span className="text-white/40">Owner:</span> {rest.ownerName || 'Owner'} ({rest.ownerEmail || rest.email})</p>
                       <p className="font-mono text-[11px]"><span className="text-white/40">Type:</span> <span className="text-amber-400 font-semibold">{rest.businessType || (rest.features?.bar ? 'BAR' : 'RESTAURANT')}</span> · Bar: <span className={rest.hasBar ? "text-purple-400" : "text-white/40"}>{rest.hasBar ? 'YES' : 'NO'}</span> · Tables: <span className={rest.hasTables !== false ? "text-emerald-400" : "text-white/40"}>{rest.hasTables !== false ? 'YES' : 'NO'}</span></p>
                       <p className="font-mono text-[11px]"><span className="text-white/40">Phone:</span> {rest.phone}</p>
-                      <p className="truncate font-mono text-[11px]"><span className="text-white/40">Customer URL:</span> dinely.food/customer?tenant={rest.publicSlug || rest.slug}</p>
+                      <p className="truncate font-mono text-[11px]"><span className="text-white/40">Customer URL:</span> {rest.publicSlug || rest.slug}.dinely.food</p>
                     </div>
                   </div>
 
@@ -1045,7 +1045,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   render: (o) => (
                     <div>
                       <p className="font-semibold text-white text-xs">{o.name}</p>
-                      <p className="text-[11px] text-white/40 font-mono">dinely.food/customer?tenant={o.slug}</p>
+                      <p className="text-[11px] text-white/40 font-mono">{o.slug}.dinely.food</p>
                     </div>
                   ),
                 },
@@ -1144,7 +1144,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 <div>
                   <h3 className="text-base font-semibold text-white">{selectedRestaurant.name}</h3>
                   <p className="text-white/60 text-xs">{selectedRestaurant.cuisine} ({selectedRestaurant.restaurantType || 'Casual Dining'})</p>
-                  <p className="text-white/40 font-mono text-[11px]">dinely.food/customer?tenant={selectedRestaurant.publicSlug || selectedRestaurant.slug}</p>
+                  <p className="text-white/40 font-mono text-[11px]">{selectedRestaurant.publicSlug || selectedRestaurant.slug}.dinely.food</p>
                 </div>
               </div>
               <Badge variant={selectedRestaurant.lifecycleStatus === 'LIVE' || selectedRestaurant.isApproved ? 'success' : 'warning'}>
