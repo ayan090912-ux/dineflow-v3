@@ -42,28 +42,34 @@ export default {
       return proxyToOrigin(request, url, originalHostname, null);
     }
 
-    // 2. Tenant Subdomain Extraction (*.dinely.food)
+    // 2. Tenant Subdomain & Custom Domain Extraction
     let tenantSlug = null;
+    let isCustomDomain = false;
     if (originalHostname.endsWith('.dinely.food')) {
       tenantSlug = originalHostname.slice(0, -'.dinely.food'.length).trim();
     } else if (originalHostname.endsWith('.localhost')) {
       tenantSlug = originalHostname.slice(0, -'.localhost'.length).trim();
+    } else if (originalHostname.endsWith('.dinely-cd6cd.web.app')) {
+      tenantSlug = originalHostname.slice(0, -'.dinely-cd6cd.web.app'.length).trim();
+    } else {
+      // Verified custom domain routed to Dinely (e.g. www.thedunkrestaurant.com)
+      isCustomDomain = true;
     }
 
-    // If no subdomain was matched or it's a reserved system subdomain
-    if (!tenantSlug || RESERVED_SUBDOMAINS.has(tenantSlug)) {
+    // If it's a reserved platform subdomain
+    if (tenantSlug && RESERVED_SUBDOMAINS.has(tenantSlug)) {
       return proxyToOrigin(request, url, originalHostname, null);
     }
 
-    // 3. Valid Tenant Subdomain: Proxy to frontend SPA with tenant headers preserved
-    return proxyToOrigin(request, url, originalHostname, tenantSlug);
+    // 3. Valid Tenant Subdomain or Custom Domain: Proxy to frontend SPA with tenant headers preserved
+    return proxyToOrigin(request, url, originalHostname, tenantSlug, isCustomDomain);
   },
 };
 
 /**
  * Proxies request to Firebase Hosting origin while preserving the original tenant hostname in browser
  */
-async function proxyToOrigin(request, url, originalHostname, tenantSlug) {
+async function proxyToOrigin(request, url, originalHostname, tenantSlug, isCustomDomain = false) {
   // Target URL points to Firebase Hosting origin while keeping exact pathname and search query
   const targetUrl = new URL(url.pathname + url.search, ORIGIN_BASE);
 
@@ -79,6 +85,9 @@ async function proxyToOrigin(request, url, originalHostname, tenantSlug) {
 
   if (tenantSlug) {
     reqHeaders.set('X-Tenant-Slug', tenantSlug);
+  }
+  if (isCustomDomain) {
+    reqHeaders.set('X-Dinely-Custom-Domain', 'true');
   }
 
   // Handle request init (support GET, HEAD, POST, etc.)
@@ -110,6 +119,9 @@ async function proxyToOrigin(request, url, originalHostname, tenantSlug) {
     resHeaders.set('X-Dinely-Original-Host', originalHostname);
     if (tenantSlug) {
       resHeaders.set('X-Dinely-Tenant-Slug', tenantSlug);
+    }
+    if (isCustomDomain) {
+      resHeaders.set('X-Dinely-Custom-Domain', 'true');
     }
 
     // Security: Do not allow origin to frame outside of proper security context

@@ -2639,7 +2639,7 @@ export class DinelyApiClient {
     if (!targetId) return null;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
       const apiBase = getApiBaseUrl();
@@ -2679,7 +2679,7 @@ export class DinelyApiClient {
     const cleanSlug = slug.trim().toLowerCase();
     try {
       const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/restaurants/public/slug/${encodeURIComponent(cleanSlug)}`);
+      const res = await fetch(`${apiBase}/restaurants/public/resolve?slug=${encodeURIComponent(cleanSlug)}`);
       if (res.ok) {
         const data = await res.json();
         if (data && data.id) {
@@ -2706,9 +2706,42 @@ export class DinelyApiClient {
   }
 
   async resolveRestaurantFromHostname(hostname?: string): Promise<Restaurant | null> {
-    const resolution = getTenantFromHostname(hostname);
-    if (!resolution.slug) return null;
-    return this.resolveRestaurantBySlug(resolution.slug);
+    const cleanHost = (hostname || (typeof window !== 'undefined' ? window.location.hostname : '')).trim().toLowerCase();
+    if (!cleanHost) return null;
+
+    const resolution = getTenantFromHostname(cleanHost);
+    const apiBase = getApiBaseUrl();
+
+    try {
+      let queryUrl = '';
+      if (resolution.slug) {
+        queryUrl = `${apiBase}/restaurants/public/resolve?slug=${encodeURIComponent(resolution.slug)}&hostname=${encodeURIComponent(cleanHost)}`;
+      } else {
+        queryUrl = `${apiBase}/restaurants/public/resolve?hostname=${encodeURIComponent(cleanHost)}`;
+      }
+
+      const res = await fetch(queryUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.id && !data.isPlatformDomain) {
+          const mapped = this.mapBackendRestaurant(data);
+          const existingIdx = this.restaurants.findIndex((r) => r.id === mapped.id);
+          if (existingIdx >= 0) {
+            this.restaurants[existingIdx] = { ...this.restaurants[existingIdx], ...mapped };
+          } else {
+            this.restaurants.push(mapped);
+          }
+          return this.ensureRestaurantDefaults(mapped);
+        }
+      }
+    } catch (e) {
+      console.warn('API resolveRestaurantFromHostname failed:', e);
+    }
+
+    if (resolution.slug) {
+      return this.resolveRestaurantBySlug(resolution.slug);
+    }
+    return null;
   }
 
   async updateRestaurantDetails(restaurantId: string, updates: Partial<Restaurant>) {

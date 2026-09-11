@@ -209,6 +209,23 @@ class RealTimeEventBus {
     this.currentRole = role;
     this.currentTableSessionId = tableSessionId || null;
 
+    // Strict Tenant Isolation: Scope in-browser BroadcastChannel to this tenant only
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        if (this.channel) {
+          this.channel.close();
+        }
+        this.channel = new BroadcastChannel(`dinely_realtime_${restaurantId}`);
+        this.channel.onmessage = (e) => {
+          if (e.data && e.data.type) {
+            this.notifyListeners(e.data, false);
+          }
+        };
+      } catch (err) {
+        console.warn('BroadcastChannel setup:', err);
+      }
+    }
+
     this.setStatus(this.reconnectAttempts > 0 ? 'RECONNECTING' : 'CONNECTING');
 
     const wsUrl = getWebSocketUrl(restaurantId, role, tableSessionId);
@@ -381,6 +398,16 @@ class RealTimeEventBus {
   }
 
   private notifyListeners(event: RealTimeEventPayload, isLocal: boolean) {
+    // Client-side tenant guard: do not process events for other restaurants unless platform admin
+    if (
+      event.restaurantId &&
+      this.currentRestaurantId &&
+      this.currentRole !== 'PLATFORM_ADMIN' &&
+      event.restaurantId.toLowerCase().trim() !== this.currentRestaurantId.toLowerCase().trim()
+    ) {
+      return;
+    }
+
     this.listeners.forEach((listener) => {
       try {
         listener(event);

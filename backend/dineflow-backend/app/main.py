@@ -141,6 +141,8 @@ async def ensure_db_schema_columns(conn):
         "CREATE INDEX IF NOT EXISTS idx_restaurants_approved ON restaurants (is_approved);",
         "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_uid ON restaurants (owner_uid);",
         "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_email ON restaurants (owner_email);",
+        "CREATE INDEX IF NOT EXISTS idx_restaurants_public_slug ON restaurants (public_slug);",
+        "CREATE INDEX IF NOT EXISTS idx_restaurants_slug ON restaurants (slug);",
         # Restaurant Lifecycle History Table & Index
         """CREATE TABLE IF NOT EXISTS restaurant_lifecycle_logs (
             id VARCHAR(255) PRIMARY KEY,

@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeProvider } from './packages/theme/ThemeEngine';
-import { ErrorBoundary, DinelyLogo, LoadingScreen } from './packages/ui';
+import { ErrorBoundary, DinelyLogo, LoadingScreen, AccessDeniedScreen } from './packages/ui';
 import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } from './packages/types';
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
 import { firebaseAuth, signOutFirebase } from './packages/auth/firebase';
-import { getTenantFromHostname } from './packages/utils/tenantResolver';
-import { Loader2 } from 'lucide-react';
+import { getTenantFromHostname, resolveTenantAppFromPath } from './packages/utils/tenantResolver';
+import { Loader2, AlertCircle } from 'lucide-react';
 
 // Lazy-loaded route bundles for optimal bundle size and instantaneous initial load
 const LandingWebsite = lazy(() => import('./apps/landing/LandingWebsite').then(m => ({ default: m.LandingWebsite })));
@@ -54,6 +54,75 @@ function AppContent() {
   const [activeOwnerData, setActiveOwnerData] = useState<any>(null);
   const [kitchenOrders, setKitchenOrders] = useState<any[]>([]);
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
+
+  // Tenant Domain Resolution for Multi-Tenant Operating System
+  const domainResolution = useMemo(() => getTenantFromHostname(), []);
+  const [resolvedTenant, setResolvedTenant] = useState<Restaurant | null>(null);
+  const [tenantResolutionState, setTenantResolutionState] = useState<'IDLE' | 'RESOLVING' | 'RESOLVED' | 'NOT_FOUND' | 'SUSPENDED'>('IDLE');
+
+  // Asynchronously resolve tenant on subdomains or custom domains
+  useEffect(() => {
+    let isMounted = true;
+    if (!domainResolution.isTenantSubdomain) {
+      setTenantResolutionState('IDLE');
+      return;
+    }
+
+    setTenantResolutionState('RESOLVING');
+    const resolveTenant = async () => {
+      try {
+        let rest: Restaurant | null = null;
+        if (domainResolution.slug) {
+          rest = await api.resolveRestaurantBySlug(domainResolution.slug);
+        }
+        if (!rest && domainResolution.hostname) {
+          rest = await api.resolveRestaurantFromHostname(domainResolution.hostname);
+        }
+
+        if (!isMounted) return;
+
+        if (!rest) {
+          setTenantResolutionState('NOT_FOUND');
+          return;
+        }
+
+        const isArchived =
+          rest.lifecycleStatus === 'ARCHIVED' ||
+          rest.status === 'ARCHIVED' ||
+          rest.lifecycleStatus === 'DEACTIVATED';
+        if (isArchived) {
+          setTenantResolutionState('NOT_FOUND');
+          return;
+        }
+
+        const isSuspended =
+          rest.lifecycleStatus === 'SUSPENDED' || rest.status === 'SUSPENDED';
+        if (isSuspended) {
+          setResolvedTenant(rest);
+          setTenantResolutionState('SUSPENDED');
+          return;
+        }
+
+        setResolvedTenant(rest);
+        setCurrentRestaurant(rest);
+        api.setCurrentRestaurantId(rest.id);
+        setTenantResolutionState('RESOLVED');
+
+        // Connect realtime bus to resolved tenant ID
+        const scope = getPortalScopeFromPath(cleanPath);
+        realtimeBus.connect(rest.id, scope);
+      } catch (err) {
+        console.error('[TenantResolution] Failed to resolve tenant:', err);
+        if (isMounted) setTenantResolutionState('NOT_FOUND');
+      }
+    };
+
+    resolveTenant();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [domainResolution, cleanPath]);
 
   // Sync route and user on navigation events
   const syncLocation = useCallback(() => {
@@ -206,10 +275,310 @@ function AppContent() {
 
   // Main Route Dispatcher with Comprehensive State Handling
   const renderRoute = useMemo(() => {
-    // 0. Tenant-Specific Public Domain Routing (e.g. https://<slug>.dinely.food)
-    const domainResolution = getTenantFromHostname();
-    if (domainResolution.isTenantSubdomain && domainResolution.slug) {
-      return <CustomerApp />;
+    // 0. Multi-Tenant Restaurant Operating System Routing (*.dinely.food or custom domains)
+    if (domainResolution.isTenantSubdomain) {
+      if (tenantResolutionState === 'RESOLVING') {
+        return (
+          <LoadingScreen
+            status="Connecting to Restaurant..."
+            substatus={`Resolving tenant ${domainResolution.slug || domainResolution.hostname}`}
+          />
+        );
+      }
+
+      if (tenantResolutionState === 'NOT_FOUND' || !resolvedTenant) {
+        return (
+          <NotFoundPage
+            title="Venue Not Found"
+            message={`We couldn't find an active restaurant matching "${domainResolution.hostname}". Please verify the domain or contact the venue.`}
+            onNavigate={navigateTo}
+            onBackToHome={() => { window.location.href = 'https://dinely.food'; }}
+          />
+        );
+      }
+
+      if (tenantResolutionState === 'SUSPENDED') {
+        return (
+          <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col items-center justify-center p-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-6">
+              <AlertCircle size={32} />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white mb-2">{resolvedTenant.name} is Suspended</h1>
+            <p className="text-white/60 text-sm max-w-md mb-6">This venue is temporarily inactive on the Dinely platform. Please check back later or contact restaurant management.</p>
+            <button
+              onClick={() => { window.location.href = 'https://dinely.food'; }}
+              className="py-2.5 px-5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-all"
+            >
+              Back to Dinely Platform
+            </button>
+          </div>
+        );
+      }
+
+      // Inside Resolved Tenant: Route by Path to the corresponding Tenant Application
+      const tenantApp = resolveTenantAppFromPath(cleanPath);
+
+      // 1. Customer Digital Menu & Ordering
+      if (tenantApp === 'CUSTOMER') {
+        const isLive =
+          resolvedTenant.lifecycleStatus === 'LIVE' ||
+          resolvedTenant.lifecycleStatus === 'APPROVED' ||
+          (resolvedTenant.isApproved === true &&
+            resolvedTenant.lifecycleStatus !== 'PENDING_APPROVAL' &&
+            resolvedTenant.lifecycleStatus !== 'REJECTED' &&
+            resolvedTenant.lifecycleStatus !== 'ARCHIVED');
+
+        if (!isLive) {
+          return (
+            <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col items-center justify-center p-6 text-center">
+              <DinelyLogo size={48} className="mb-4" />
+              <h1 className="text-2xl font-bold tracking-tight text-white mb-2">{resolvedTenant.name} — Opening Soon!</h1>
+              <p className="text-white/60 text-sm max-w-md mb-6">
+                This restaurant is currently completing setup and verification. Public online ordering and table service will be enabled once approved.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigateTo('/login')}
+                  className="py-2.5 px-5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-all"
+                >
+                  Staff / Owner Sign In
+                </button>
+                <button
+                  onClick={() => { window.location.href = 'https://dinely.food'; }}
+                  className="py-2.5 px-5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 text-sm font-medium transition-all"
+                >
+                  Dinely Home
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        return <CustomerApp />;
+      }
+
+      // 2. Kitchen Terminal (KDS)
+      if (tenantApp === 'KITCHEN') {
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="kitchen"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                navigateTo('/kitchen');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedStaff =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['KITCHEN', 'CHEF', 'COOK', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedStaff) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="KITCHEN STAFF"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <KitchenETADashboard onLogout={() => handleLogout('/login')} />;
+      }
+
+      // 3. Waiter Terminal
+      if (tenantApp === 'WAITER') {
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="waiter"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                navigateTo('/waiter');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedStaff =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['WAITER', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedStaff) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="WAITER STAFF"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <WaiterTerminalOS onLogout={() => handleLogout('/login')} />;
+      }
+
+      // 4. Bar Terminal
+      if (tenantApp === 'BAR') {
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="bar"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                navigateTo('/bar');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedStaff =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['BAR', 'BARTENDER', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedStaff) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="BARTENDER"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <BarTerminal onLogout={() => handleLogout('/login')} />;
+      }
+
+      // 5. Inventory Terminal
+      if (tenantApp === 'INVENTORY') {
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="inventory"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                navigateTo('/inventory');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedStaff =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['INVENTORY', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedStaff) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="INVENTORY MANAGER"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <InventoryTerminalOS onLogout={() => handleLogout('/login')} />;
+      }
+
+      // 6. Billing / Operations Center
+      if (tenantApp === 'BILLING') {
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="restaurant"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                navigateTo('/billing');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedStaff =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['BILLING', 'CASHIER', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedStaff) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="BILLING / CASHIER"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <RestaurantApp onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
+      }
+
+      // 7. Settings / Tenant Management Dashboard
+      if (tenantApp === 'SETTINGS') {
+        if (!currentUser) {
+          return (
+            <AuthPage
+              initialMode="login"
+              onNavigate={navigateTo}
+              onLoginSuccess={async (res) => {
+                const user = res?.user || res;
+                if (user) setCurrentUser(user);
+                navigateTo('/settings');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedOwner =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['OWNER', 'RESTAURANT_OWNER', 'MANAGER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedOwner) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="RESTAURANT OWNER"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <RestaurantApp onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
+      }
+
+      // 8. Auth inside tenant
+      if (tenantApp === 'AUTH') {
+        return (
+          <AuthPage
+            initialMode="login"
+            onNavigate={navigateTo}
+            onLoginSuccess={async (res) => {
+              const user = res?.user || res;
+              if (user) setCurrentUser(user);
+              navigateTo('/');
+            }}
+          />
+        );
+      }
+
+      // 9. Unknown route inside tenant
+      return (
+        <NotFoundPage
+          title="Page Not Found"
+          message={`The requested path does not exist on ${resolvedTenant.name}.`}
+          onNavigate={navigateTo}
+        />
+      );
     }
 
     // 0.1. Guard protected routes while Firebase Auth initializes session
@@ -791,7 +1160,7 @@ function AppContent() {
 
     // 15. Exhaustive Fallback: Never render a blank screen!
     return <NotFoundPage onNavigate={navigateTo} />;
-  }, [cleanPath, currentUser, currentRestaurant, kitchenOrders, activeOwnerData, checkWorkspaceAccess, navigateTo, handleLogout]);
+  }, [cleanPath, currentUser, currentRestaurant, kitchenOrders, activeOwnerData, checkWorkspaceAccess, navigateTo, handleLogout, domainResolution, resolvedTenant, tenantResolutionState, isInitializing]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">

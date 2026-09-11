@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
-import { getProductionOrigin } from '../api/client';
+import { api, getProductionOrigin } from '../api/client';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../utils/tenantResolver';
 import { Card } from './Card';
 import { Button } from './Button';
@@ -189,8 +189,9 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
   let defaultUrl = '';
   if (effectiveRestId) {
+    const matchingRest = (api as any).restaurants?.find?.((r: any) => r.id === effectiveRestId);
     defaultUrl = getRestaurantCustomerUrl(
-      effectiveRestId,
+      matchingRest || effectiveRestId,
       isPickup || safeTableNum.toUpperCase() === 'COUNTER' ? 'COUNTER' : safeTableNum,
       cleanTableId
     );

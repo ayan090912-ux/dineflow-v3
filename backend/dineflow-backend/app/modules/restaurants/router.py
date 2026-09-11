@@ -93,9 +93,10 @@ class WorkspaceModulesSchema(BaseModel):
     hasTables: Optional[bool] = None
 
 @router.get("/public/resolve")
+@router.get("/public/slug/{slug}")
 async def resolve_public_restaurant(
     hostname: Optional[str] = Query(None),
-    slug: Optional[str] = Query(None),
+    slug: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     if hostname:

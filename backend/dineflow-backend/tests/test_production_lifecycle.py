@@ -4,6 +4,7 @@ import base64
 import time
 from datetime import datetime, timezone
 import httpx
+import pytest
 
 # PRODUCTION BACKEND URL
 BASE_URL = "https://dineflow-v3.onrender.com/api/v1"
@@ -22,7 +23,8 @@ def make_token(uid: str, email: str, role: str = "RESTAURANT_OWNER", is_admin: b
     payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
     return f"{header}.{payload}.sig"
 
-async def run_lifecycle_verification():
+@pytest.mark.asyncio
+async def test_complete_production_lifecycle():
     print("=" * 70)
     print("STARTING COMPLETE LIVE PRODUCTION RESTAURANT LIFECYCLE AUDIT")
     print(f"Target Backend: {BASE_URL}")
@@ -433,4 +435,4 @@ async def run_lifecycle_verification():
         print("=" * 70)
 
 if __name__ == "__main__":
-    asyncio.run(run_lifecycle_verification())
+    asyncio.run(test_complete_production_lifecycle())
