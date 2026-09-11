@@ -93,10 +93,9 @@ class WorkspaceModulesSchema(BaseModel):
     hasTables: Optional[bool] = None
 
 @router.get("/public/resolve")
-@router.get("/public/slug/{slug}")
 async def resolve_public_restaurant(
     hostname: Optional[str] = Query(None),
-    slug: Optional[str] = None,
+    slug: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     if hostname:
@@ -111,6 +110,16 @@ async def resolve_public_restaurant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant subdomain or slug not specified"
         )
+    return await _lookup_public_restaurant_by_slug(target_slug, db)
+
+@router.get("/public/slug/{slug}")
+async def resolve_public_restaurant_by_slug(
+    slug: str,
+    db: AsyncSession = Depends(get_db)
+):
+    return await _lookup_public_restaurant_by_slug(slug, db)
+
+async def _lookup_public_restaurant_by_slug(target_slug: str, db: AsyncSession):
 
     clean_slug = target_slug.strip().lower()
     query = select(Restaurant).where(
