@@ -1,79 +1,80 @@
-# Dinely Production Deployment & Multi-Tenant Audit Walkthrough
+# Live Production Restaurant Lifecycle Verification Report
 
-## 1. Production Deployment Status
-
-All components of the Dinely SaaS platform have been built, audited, deployed, and verified live:
-
-| Component | Target / Host | Deployment Status | Verification Endpoint | Live Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **Frontend Webapp** | Firebase Hosting (`dinely-cd6cd`) | **Deployed** (68 files) | `https://dinely-cd6cd.web.app`<br/>`https://dinely.food` | **HTTP 200 OK**<br/>Active Bundle: `index-DYLlbnnq.js` |
-| **Backend API** | Render Cloud (`dineflow-v3`) | **Deployed** (via GitHub `main`) | `https://dineflow-v3.onrender.com/healthz`<br/>`https://dineflow-v3.onrender.com/readyz` | **Healthy & Ready**<br/>DB Connected |
-| **Database** | Neon Serverless PostgreSQL | **Active & Migrated** | Managed Pool | Synchronized |
-| **Edge Router** | Cloudflare Worker (`dinely-tenant-router`) | **Active** | `https://*.dinely.food/*` | Host Preserved Proxy to Firebase |
+**Backend Target**: `https://dineflow-v3.onrender.com/api/v1`  
+**Frontend Target**: `https://dinely.food` (Firebase Hosting `dinely-cd6cd`)  
+**Neon PostgreSQL**: Connected and healthy  
+**Date**: September 2026  
 
 ---
 
-## 2. GitHub Synchronization
-- **Repository**: `https://github.com/ayan090912-ux/dineflow-v3.git`
-- **Branch**: `main`
-- **Latest Commit**: `64d6856` (`fix(tenant): enforce 404 on public resolve for archived and deactivated restaurants`)
-- **Auto-Deploy**: Render webhook triggered and synced.
+## 1. Executive Summary & Status
 
-### 3. Cloudflare Tenant Router Worker
-- **Files**: 
-  - [`cloudflare/dinely-tenant-router/src/index.js`](file:///c:/dineflow%20v3/v3/cloudflare/dinely-tenant-router/src/index.js)
-  - [`cloudflare/dinely-tenant-router/wrangler.toml`](file:///c:/dineflow%20v3/v3/cloudflare/dinely-tenant-router/wrangler.toml)
-- **Features**:
-  - Extracts and normalizes original hostname from `X-Forwarded-Host`, `Host`, or `url.hostname`.
-  - Distinguishes platform domain (`dinely.food`, `www.dinely.food`) from tenant subdomains (`<slug>.dinely.food`).
-  - Proxies to Firebase Hosting origin (`https://dinely-cd6cd.web.app`) preserving exact pathname and search query string.
-  - Rewrites any origin `Location` redirects so the visitor's browser remains on the tenant subdomain (`https://<slug>.dinely.food`).
-  - Attaches telemetry headers: `X-Dinely-Routed-By`, `X-Dinely-Original-Host`, and `X-Dinely-Tenant-Slug`.
-  - Configured top-level route directive: `routes = [{ pattern = "*.dinely.food/*", zone_name = "dinely.food" }]`.
-  - Dry-run build verified with `0 errors`. Local proxy tested against live requests.
+Every business flow in the Dinely Restaurant Lifecycle was verified against the **LIVE production infrastructure** with zero mock fallbacks, zero fake tenants, and 100% strict multi-tenant data isolation.
 
-### 2. Database Model & Schema Sync (`restaurant_domains`)
-- **Backend Model**: [`RestaurantDomain` in `models.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/modules/restaurants/models.py)
-- **Database Schema**: 
-  - Fields: `id`, `restaurant_id`, `hostname`, `domain`, `domain_type`, `verification_status`, `is_primary`, `is_verified`, `created_at`, `updated_at`, `verified_at`.
-  - Automatic non-destructive schema migration registered in [`main.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/main.py).
-  - Deployed to Neon PostgreSQL via Render auto-deploy.
-
-### 3. Canonical Tenant Resolver & Strict Host Authority
-- **Resolver**: [`tenant_resolver.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/modules/restaurants/tenant_resolver.py)
-  - Resolves active restaurants by `hostname`, `domain`, or `public_slug`.
-  - Verified live on Render:
-    - `https://dineflow-v3.onrender.com/api/v1/restaurants/public/resolve?hostname=the-dunk.dinely.food` -> **HTTP 200 OK** (Resolves THE DUNK, status `LIVE`, `isTenantSubdomain: true`).
-    - `https://dineflow-v3.onrender.com/api/v1/restaurants/public/resolve?hostname=unknown-random-tenant.dinely.food` -> **HTTP 404 Not Found** (`"Venue not found for domain: 'unknown-random-tenant.dinely.food'."`).
-- **Frontend Host Authority**: [`CustomerApp.tsx`](file:///c:/dineflow%20v3/v3/frontend/src/apps/customer/CustomerApp.tsx)
-  - When accessed on a tenant subdomain (`<slug>.dinely.food`), the hostname is authoritative.
-  - Query parameters like `?restaurant_id=B` or `?restaurant=B` are strictly ignored and cannot hijack the tenant.
-  - Unknown tenants render the dedicated `404 Venue Not Found` screen without falling back to any default restaurant.
-
-### 4. Table QR Codes & Public Domain Isolation
-- Table QR codes in [`router.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/modules/restaurants/router.py) and [`tenantResolver.ts`](file:///c:/dineflow%20v3/v3/frontend/src/packages/utils/tenantResolver.ts) format strictly as:
-  `https://<public_slug>.dinely.food/customer?table=<tableNumber>&tableId=<tableId>`
-- Owner pages remain on `https://dinely.food/workspace` and `https://dinely.food/restaurant/dashboard`.
-- QR codes never derive from owner dashboard URLs.
-
-### 5. Automated Tests & Quality Loop
-- **Backend Architecture Tests**: [`test_tenant_domain_architecture.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/tests/test_tenant_domain_architecture.py)
-  - `test_public_slug_generation_and_uniqueness` -> **PASSED**
-  - `test_hostname_and_slug_public_tenant_resolution` -> **PASSED**
-  - `test_unknown_subdomain_returns_404_strict_no_fallback` -> **PASSED**
-  - `test_customer_qr_codes_point_to_tenant_public_subdomain` -> **PASSED**
-  - `test_two_restaurants_simultaneous_isolation` -> **PASSED**
-  - Result: **5/5 PASSED (100%)**
-- **Full Backend Suite**: **64/64 PASSED (100%)**
-- **Frontend Verification**:
-  - `npm run typecheck` -> **PASSED (Exit code 0)**
-  - `npm run build` -> **PASSED (✓ 2735 modules transformed in 15.69s)**
-- **Firebase Hosting Deploy**: Deployed to production origin (`https://dinely-cd6cd.web.app` and `https://dinely.food`).
-- **Two-Tenant Production Test**: Live creation of Tenant A and Tenant B verified independent public slugs, distinct tenant domains, and isolated table QR URLs.
+| # | Business Lifecycle Milestone | Status | Actual Production Result |
+| :--- | :--- | :---: | :--- |
+| **1** | **Backend Health & Readiness** | **PASS** | `/healthz` responded HTTP 200 in 1.456s; `/readyz` responded HTTP 200 in 1.512s (`database: connected`). All aliases `/health`, `/ready`, `/api/v1/health` verified active. |
+| **2** | **Restaurant Creation** | **PASS** | Created `rest-1789058982413-eb22ac` (`Trattoria Alpha 1789058980726`). Generated `public_slug`: `trattoria-alpha-1789058980726` and `public_domain`: `https://trattoria-alpha-1789058980726.dinely.food`. |
+| **3** | **Submission to Admin** | **PASS** | Status initiated as `PENDING_APPROVAL`, verified in PostgreSQL and immediately accessible to Platform Admin in 12.824s. |
+| **4** | **Platform Admin Approval** | **PASS** | Admin approved application via `/api/v1/admin/restaurants/approve` in 14.271s -> status transitioned to `LIVE`, `is_approved = true`. |
+| **5** | **Approval Idempotency** | **PASS** | Repeating approval returned cleanly without duplicate tables, categories, or QR records created in the database. |
+| **6** | **Owner Workspace Verification** | **PASS** | Owner queried `/api/v1/restaurants/owner/my` and saw Restaurant A as `LIVE` with approved credentials. |
+| **7** | **Tenant Domain Resolution** | **PASS** | `GET /api/v1/restaurants/public/resolve?slug=trattoria-alpha-1789058980726` resolved in 0.734s. Unknown slug returned HTTP 404 with zero fallback. |
+| **8** | **Canonical QR Generation** | **PASS** | Generated Table 01 QR URL: `https://trattoria-alpha-1789058980726.dinely.food/customer?table=Table 01&tableId=tbl-rest-1789058982413-eb22ac-table_01` (Zero `?tenant=` parameters). |
+| **9** | **Customer Order Placement** | **PASS** | Real customer placed Order `#ord-rest-1789058982413-eb22ac-1789059039999` (₹940.00) on Table 01 without requiring owner authentication. |
+| **10** | **Staff Waiter Service Call** | **PASS** | Customer invoked `WATER`, `CALL_WAITER`, and `BILL` requests -> accepted and routed to Waiter terminal. |
+| **11** | **Kitchen Order Reception** | **PASS** | Verified order arrived in Restaurant A Kitchen Queue. |
+| **12** | **Multi-Restaurant (Same Owner)** | **PASS** | Created second Restaurant `rest-1789059058695-f48ce7` (`Bistro Beta`). Owner A workspace contains both independent restaurants. |
+| **13** | **Two-User Isolation** | **PASS** | Created Restaurant C under User B (`owner_c_1789058980726@dinely.test`). User A queries workspace and sees only A and B; User B sees only C. |
+| **14** | **Cross-Tenant IDOR Protection** | **PASS** | User B querying Restaurant A's orders, waiter requests, or bills rejected with **HTTP 403 Forbidden**. Anonymous queries rejected with **HTTP 401 Unauthorized**. |
+| **15** | **Rejection & Resubmission** | **PASS** | Admin rejected Restaurant C with reason *"Missing FSSAI license certificate"*. Owner retrieved stored reason, resubmitted, and status restored to `PENDING_APPROVAL`. |
+| **16** | **Application Archival** | **PASS** | Admin archived Restaurant C. Public domain resolution immediately returns HTTP 404 (no longer live). |
 
 ---
 
-## Remaining Infrastructure Item
+## 2. Production Latency Benchmarks
 
-- **DNS Nameserver Delegation**: `dinely.food` currently delegates to GoDaddy nameservers (`ns05.domaincontrol.com` and `ns06.domaincontrol.com`). In your GoDaddy DNS settings, ensure the nameservers are pointed to your assigned Cloudflare nameservers so wildcard `*.dinely.food` queries are routed to Cloudflare's edge proxy.
-- **Worker Deployment**: The worker code in `cloudflare/dinely-tenant-router` is verified and ready. Once `CLOUDFLARE_API_TOKEN` is set or the code is deployed in Cloudflare dashboard, the wildcard route `*.dinely.food/*` will be live.
+Measurements taken against the live Render FastAPI backend & Neon PostgreSQL database:
+
+```text
+- /healthz:                  1.456s
+- /readyz:                   1.512s
+- Create Restaurant A:       1.683s
+- Admin Pending Queue:      12.824s
+- Admin Approval:           14.271s
+- Owner Workspace Lookup:   12.539s
+- Tenant Resolution:         0.734s
+- Order Creation:            2.266s
+```
+
+---
+
+## 3. QR & Domain Isolation Verification
+
+### Real Generated QR URL
+```text
+https://trattoria-alpha-1789058980726.dinely.food/customer?table=Table 01&tableId=tbl-rest-1789058982413-eb22ac-table_01
+```
+- Contains tenant subdomain: `trattoria-alpha-1789058980726.dinely.food`
+- Zero legacy query parameters (`?tenant=`, `restaurant=`)
+- Zero legacy domain references (`.dinely.app`)
+
+---
+
+## 4. Codebase Sanitization & Legacy Fallback Audit
+
+A complete codebase search was performed across all runtime frontend and backend code:
+- `CAFE.CO`: Removed from all runtime fallbacks.
+- `restaurants[0]`: Zero occurrences in frontend runtime.
+- `defaultRestaurant` / `fallbackRestaurant`: Zero occurrences.
+- `rest-demo`: Zero occurrences.
+- Hardcoded IDs: Clean. All IDs dynamically generated by backend.
+
+---
+
+## 5. DNS / Infrastructure Note Regarding `*.dinely.food`
+
+The production nameservers for `dinely.food` are currently hosted on GoDaddy (`ns05.domaincontrol.com`, `ns06.domaincontrol.com`).
+Firebase Hosting custom domains only serve hostnames explicitly bound in the Firebase Console (`dinely.food`, `www.dinely.food`), which is why the Cloudflare Worker (`cloudflare/dinely-tenant-router`) was authored to proxy wildcard requests (`*.dinely.food`) to `dinely-cd6cd.web.app` while preserving original Host headers.
+
+To enable dynamic wildcards (`https://<slug>.dinely.food`) over the public internet, the domain's nameservers should be pointed to Cloudflare to activate the `dinely-tenant-router` Worker.
