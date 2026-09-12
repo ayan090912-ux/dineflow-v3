@@ -199,7 +199,9 @@ async def test_complete_production_lifecycle():
         qr_url = table_1.get("qr_code_url") or table_1.get("qrCodeUrl") or ""
         assert f"https://{slug_a}.dinely.food/customer?table=" in qr_url, f"Invalid QR code URL: {qr_url}"
         assert "?tenant=" not in qr_url, f"Illegal ?tenant= param in QR URL: {qr_url}"
-        print(f"  [PASS] Verified Table 1 QR URL: {qr_url}")
+        assert " " not in qr_url, f"Illegal space in canonical QR URL: {qr_url}"
+        assert "tableId=" in qr_url, f"Missing tableId param in canonical QR URL: {qr_url}"
+        print(f"  [PASS] Verified Table 1 Canonical Machine-Safe QR URL: {qr_url}")
 
         # -------------------------------------------------------------
         # 9. Customer Order Placement (No Owner Auth Required)

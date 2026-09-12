@@ -15,6 +15,7 @@ from app.core.tenant.resolver import resolve_public_tenant, resolve_tenant, Tena
 from app.modules.restaurants.tenant_resolver import resolve_public_tenant_from_host
 from app.modules.tables.models import Table
 from app.modules.websocket.manager import ws_manager
+from app.core.tenant.qr import generate_canonical_qr_url
 
 router = APIRouter()
 
@@ -215,7 +216,7 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
                     capacity=4,
                     status="AVAILABLE",
                     is_occupied=False,
-                    qr_code_url=f"https://{public_slug}.dinely.food/customer?table={clean_num}"
+                    qr_code_url=generate_canonical_qr_url(public_slug, clean_num, t_id)
                 ))
 
         # Register Canonical Primary Domain

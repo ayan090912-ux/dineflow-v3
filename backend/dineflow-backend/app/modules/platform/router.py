@@ -16,6 +16,7 @@ from app.modules.tables.models import Table
 from app.modules.orders.models import Order
 from app.modules.menu.models import MenuCategory, MenuItem
 from app.modules.websocket.manager import ws_manager
+from app.core.tenant.qr import generate_canonical_qr_url
 
 router = APIRouter()
 
@@ -237,7 +238,7 @@ async def approve_restaurant(
                     capacity=4,
                     status="AVAILABLE",
                     is_occupied=False,
-                    qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={clean_num}"
+                    qr_code_url=generate_canonical_qr_url(pub_slug, clean_num, t_id)
                 ))
 
     await db.commit()

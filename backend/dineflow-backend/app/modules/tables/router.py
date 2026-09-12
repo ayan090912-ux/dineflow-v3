@@ -8,6 +8,7 @@ from sqlalchemy import select, or_
 
 from app.core.database.connection import get_db
 from app.modules.tables.models import Table, TableSession
+from app.core.tenant.qr import generate_canonical_qr_url
 
 router = APIRouter()
 
@@ -129,7 +130,7 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
     for t in tables:
         clean_table = _extract_clean_table_number(t.table_number, t.id)
-        t.qr_code_url = f"https://{pub_slug}.dinely.food/customer?table={clean_table}"
+        t.qr_code_url = generate_canonical_qr_url(pub_slug, clean_table, t.id)
         sess_id = active_session_map.get(t.id) or active_session_num_map.get(t.table_number)
         if sess_id:
             t.status = "OCCUPIED"
@@ -182,7 +183,7 @@ async def create_table(
             existing.section = payload.section
         if payload.capacity:
             existing.capacity = payload.capacity
-        existing.qr_code_url = f"https://{pub_slug}.dinely.food/customer?table={t_num}"
+        existing.qr_code_url = generate_canonical_qr_url(pub_slug, clean_num, existing.id)
         await db.commit()
         await db.refresh(existing)
         return existing
@@ -195,7 +196,7 @@ async def create_table(
         capacity=payload.capacity or 4,
         status="AVAILABLE",
         is_occupied=False,
-        qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={t_num}"
+        qr_code_url=generate_canonical_qr_url(pub_slug, clean_num, t_id)
     )
     db.add(new_tbl)
     await db.commit()

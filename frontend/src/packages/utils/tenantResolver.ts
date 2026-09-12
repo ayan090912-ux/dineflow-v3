@@ -199,10 +199,10 @@ export function getRestaurantPublicDomain(
 }
 
 /**
- * Generates customer QR code or direct menu URL pointing to tenant public domain.
- * Formats: https://<slug>.dinely.food/customer?table=01
- * Strict canonical Dinely QR architecture:
- * restaurant_id + table_id -> clean 2-digit table URL: https://<slug>.dinely.food/customer?table=01
+ * ONE Canonical Dinely Customer QR Code & Direct Menu URL Generator.
+ * Preferred machine-safe format:
+ * https://<slug>.dinely.food/customer?table=01&tableId=<id>
+ * Strictly zero spaces, machine-safe 2-digit zero-padded table number, URL-encoded.
  */
 export function getRestaurantCustomerUrl(
   slugOrRest?: string | { publicSlug?: string; slug?: string; id?: string; domain?: string } | null,
@@ -217,11 +217,16 @@ export function getRestaurantCustomerUrl(
   // Extract clean 2-digit table number if tableNumber or tableId is provided
   let cleanTable: string | undefined = undefined;
   if (tableNumber) {
-    const digits = tableNumber.match(/\d+/);
-    if (digits) {
-      cleanTable = digits[0].padStart(2, '0');
+    const tTrim = tableNumber.trim();
+    if (tTrim.toUpperCase() === 'COUNTER' || tTrim.toUpperCase() === 'PICKUP' || tTrim.toUpperCase() === 'BAR') {
+      cleanTable = tTrim.toUpperCase();
     } else {
-      cleanTable = tableNumber.trim();
+      const digits = tTrim.match(/\d+/g);
+      if (digits && digits.length > 0) {
+        cleanTable = digits[digits.length - 1].padStart(2, '0');
+      } else {
+        cleanTable = tTrim.replace(/\s+/g, '_');
+      }
     }
   } else if (tableId) {
     const digits = tableId.match(/\d+/g);
@@ -231,6 +236,10 @@ export function getRestaurantCustomerUrl(
   }
 
   if (cleanTable) {
+    const cleanId = (tableId || '').trim();
+    if (cleanId) {
+      return `${base}/customer?table=${encodeURIComponent(cleanTable)}&tableId=${encodeURIComponent(cleanId)}`;
+    }
     return `${base}/customer?table=${encodeURIComponent(cleanTable)}`;
   }
   return `${base}/customer`;

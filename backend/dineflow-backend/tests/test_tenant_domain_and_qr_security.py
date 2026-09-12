@@ -123,10 +123,10 @@ class TestTenantDomainAndQRSecurity:
             # Must start with https://<slug>.dinely.food/customer?table=
             expected_prefix = f"https://{public_slug}.dinely.food/customer?table="
             assert qr_url.startswith(expected_prefix), f"QR URL '{qr_url}' does not start with '{expected_prefix}'"
-            # Verify clean table number (e.g. 01, 02) with no space or tableId param
-            table_param = qr_url.split("?table=")[1]
-            assert " " not in table_param, f"Table param '{table_param}' contains spaces"
-            assert "&tableId=" not in qr_url, f"Table param '{qr_url}' contains deprecated tableId"
+            # Verify clean table number (e.g. 01, 02) with no spaces and canonical tableId
+            table_param = qr_url.split("?table=")[1].split("&")[0]
+            assert " " not in qr_url, f"QR URL '{qr_url}' contains spaces"
+            assert "&tableId=" in qr_url, f"QR URL '{qr_url}' missing canonical tableId"
             assert len(table_param) >= 2, f"Table param '{table_param}' should be padded to at least 2 chars"
 
     def test_03_qr_cross_tenant_security_verification(self):

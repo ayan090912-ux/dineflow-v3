@@ -187,17 +187,12 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
 
   const cleanTableId = (tableId || (effectiveRestId ? `tbl-${effectiveRestId}-${safeTableNum.toLowerCase().replace(/\s+/g, '_')}` : '')).trim();
 
-  let defaultUrl = '';
-  if (effectiveRestId) {
-    const matchingRest = (api as any).restaurants?.find?.((r: any) => r.id === effectiveRestId);
-    defaultUrl = getRestaurantCustomerUrl(
-      matchingRest || effectiveRestId,
-      isPickup || safeTableNum.toUpperCase() === 'COUNTER' ? 'COUNTER' : safeTableNum,
-      cleanTableId
-    );
-  } else {
-    defaultUrl = `${defaultOrigin}/customer?table=${encodeURIComponent(safeTableNum)}`;
-  }
+  const matchingRest = effectiveRestId ? (api as any).restaurants?.find?.((r: any) => r.id === effectiveRestId) : null;
+  const defaultUrl = getRestaurantCustomerUrl(
+    matchingRest || effectiveRestId || null,
+    isPickup || safeTableNum.toUpperCase() === 'COUNTER' ? 'COUNTER' : safeTableNum,
+    cleanTableId
+  );
 
   // Sanitize and normalize candidate URLs to canonical https://<slug>.dinely.food/customer format
   const sanitizeQrUrl = (inputUrl?: string): string => {
