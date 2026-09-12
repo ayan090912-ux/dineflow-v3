@@ -53,8 +53,9 @@ async def ensure_db_schema_columns(conn):
 async def _background_startup_init():
     try:
         async with engine.begin() as conn:
-            await ensure_db_schema_columns(conn)
             await conn.run_sync(Base.metadata.create_all)
+        async with engine.begin() as conn:
+            await ensure_db_schema_columns(conn)
     except Exception as e:
         print("[STARTUP NOTICE] Database table initialization:", e)
 
