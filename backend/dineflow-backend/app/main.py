@@ -102,12 +102,11 @@ async def _background_startup_init():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure database migrations and tables are initialized synchronously before serving requests
-    try:
-        await _background_startup_init()
-    except Exception as e:
-        print("[STARTUP LIFESPAN NOTICE] Error running startup init:", e)
+    # Launch startup migration tasks asynchronously in background so uvicorn binds to port immediately
+    bg_task = asyncio.create_task(_background_startup_init())
     yield
+    if not bg_task.done():
+        bg_task.cancel()
 
 
 app = FastAPI(
