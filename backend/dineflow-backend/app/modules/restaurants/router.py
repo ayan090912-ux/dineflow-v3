@@ -128,10 +128,17 @@ async def resolve_public_restaurant_by_slug(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = Depends(get_db)):
+async def create_restaurant(
+    payload: CreateRestaurantSchema,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
     rest_id = payload.id or f"rest-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
     public_slug = await generate_unique_public_slug(db, payload.name, rest_id)
     domain_url = f"https://{public_slug}.dinely.food"
+
+    effective_owner_uid = payload.ownerUid or (caller.uid if caller.is_authenticated else None)
+    effective_owner_email = (payload.ownerEmail or (caller.email if caller.is_authenticated else "") or "").strip().lower() or None
 
     query = select(Restaurant).where(Restaurant.id == rest_id)
     result = await db.execute(query)
@@ -141,8 +148,12 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
         if not existing.public_slug:
             existing.public_slug = public_slug
             existing.domain = domain_url
-            await db.commit()
-            await db.refresh(existing)
+        if effective_owner_uid and not existing.owner_uid:
+            existing.owner_uid = effective_owner_uid
+        if effective_owner_email and not existing.owner_email:
+            existing.owner_email = effective_owner_email
+        await db.commit()
+        await db.refresh(existing)
         return existing
 
     # Compute default enabled modules if not provided
@@ -182,8 +193,8 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
         email=payload.email,
         address=payload.address,
         owner_name=payload.ownerName,
-        owner_email=payload.ownerEmail.strip().lower() if payload.ownerEmail else None,
-        owner_uid=payload.ownerUid,
+        owner_email=effective_owner_email,
+        owner_uid=effective_owner_uid,
         currency=payload.currency or "INR (₹)",
         tax_percentage=payload.taxPercentage or 5.0,
         is_approved=False,

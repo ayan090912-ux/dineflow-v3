@@ -132,6 +132,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         email: googleUser.email,
         name: googleUser.displayName,
         photoURL: googleUser.photoURL,
+        idToken: googleUser.idToken,
       });
 
       if (onLoginSuccess) {

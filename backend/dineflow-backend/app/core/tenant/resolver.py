@@ -198,6 +198,13 @@ async def resolve_public_tenant(
             "currency": rest.currency,
             "taxPercentage": rest.tax_percentage,
             "theme": rest.theme_json,
+            "is_approved": bool(rest.is_approved),
+            "isApproved": bool(rest.is_approved),
+            "lifecycle_status": rest.lifecycle_status or ("LIVE" if rest.is_approved else "PENDING_APPROVAL"),
+            "lifecycleStatus": rest.lifecycle_status or ("LIVE" if rest.is_approved else "PENDING_APPROVAL"),
+            "status": rest.status or "OPEN",
+            "owner_name": rest.owner_name,
+            "owner_email": rest.owner_email,
         }
     )
 

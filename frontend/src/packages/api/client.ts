@@ -716,6 +716,7 @@ export class DinelyApiClient {
     email: string;
     name: string;
     photoURL?: string;
+    idToken?: string;
   }) {
     await delay(300);
     const normalizedEmail = googleData.email.trim().toLowerCase();
@@ -778,8 +779,9 @@ export class DinelyApiClient {
       restaurant = null;
     }
 
+    const effectiveAccessToken = googleData.idToken || `df_jwt_google_${user.id}_${Date.now()}`;
     const tokens: AuthTokens = {
-      accessToken: `df_jwt_google_${user.id}_${Date.now()}`,
+      accessToken: effectiveAccessToken,
       refreshToken: `df_ref_google_${user.id}_${Date.now()}`,
       expiresIn: 86400,
       tokenType: 'Bearer',
@@ -793,6 +795,10 @@ export class DinelyApiClient {
     }
 
     this.saveSession(user, tokens, restaurant?.id || null);
+    if (googleData.idToken && typeof window !== 'undefined') {
+      localStorage.setItem('dinely_auth_token', googleData.idToken);
+      sessionStorage.setItem('dinely_auth_token', googleData.idToken);
+    }
 
     this.auditLogs.unshift({
       id: `log-${Date.now()}`,
@@ -1498,37 +1504,61 @@ export class DinelyApiClient {
 
     try {
       const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/restaurants`, {
+      let authHeaders = this.getAuthHeader('OWNER');
+      const createPayload = {
+        name: restData.name,
+        cuisine: restData.cuisine || 'Multi-Cuisine',
+        businessType: bType,
+        hasKitchen,
+        hasWaiter,
+        hasBar,
+        hasInventory: restData.hasInventory !== false,
+        hasBilling: restData.hasBilling !== false,
+        hasTables,
+        tableCount: finalTableCount,
+        enabledModules: restData.enabledModules,
+        phone: restData.phone || '+1 555-0100',
+        email: restData.email || 'contact@dinely.com',
+        address: restData.address || 'Main Street Center',
+        ownerName,
+        ownerEmail,
+        ownerUid,
+        currency: 'INR (₹)',
+        taxPercentage: 5.0,
+        theme: newRest.theme,
+        initialStatus: 'DRAFT',
+        lifecycleStatus: 'DRAFT',
+      };
+
+      let res = await fetch(`${apiBase}/restaurants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.getAuthHeader('OWNER'),
+          ...authHeaders,
         },
-        body: JSON.stringify({
-          name: restData.name,
-          cuisine: restData.cuisine || 'Multi-Cuisine',
-          businessType: bType,
-          hasKitchen,
-          hasWaiter,
-          hasBar,
-          hasInventory: restData.hasInventory !== false,
-          hasBilling: restData.hasBilling !== false,
-          hasTables,
-          tableCount: finalTableCount,
-          enabledModules: restData.enabledModules,
-          phone: restData.phone || '+1 555-0100',
-          email: restData.email || 'contact@dinely.com',
-          address: restData.address || 'Main Street Center',
-          ownerName,
-          ownerEmail,
-          ownerUid,
-          currency: 'INR (₹)',
-          taxPercentage: 5.0,
-          theme: newRest.theme,
-          initialStatus: 'DRAFT',
-          lifecycleStatus: 'DRAFT',
-        }),
+        body: JSON.stringify(createPayload),
       });
+
+      if (res.status === 401 && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+        try {
+          const freshToken = await firebaseAuth.currentUser.getIdToken(true);
+          if (freshToken) {
+            localStorage.setItem('dinely_auth_token', freshToken);
+            sessionStorage.setItem('dinely_auth_token', freshToken);
+            authHeaders = { ...authHeaders, Authorization: `Bearer ${freshToken}` };
+            res = await fetch(`${apiBase}/restaurants`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders,
+              },
+              body: JSON.stringify(createPayload),
+            });
+          }
+        } catch (tokErr) {
+          console.warn('Could not refresh Firebase token for createRestaurant:', tokErr);
+        }
+      }
 
       if (res.ok) {
         const backendRest = await res.json();
@@ -1545,9 +1575,14 @@ export class DinelyApiClient {
             newRest.theme.restaurantId = backendRest.id;
           }
         }
+      } else {
+        const errText = await res.text().catch(() => '');
+        console.error('Backend createRestaurant failed with status:', res.status, errText);
+        throw new Error(`Failed to create restaurant in production database (${res.status}): ${errText}`);
       }
-    } catch (e) {
-      console.warn('Backend createRestaurant notice:', e);
+    } catch (e: any) {
+      console.error('Backend createRestaurant error:', e);
+      throw e;
     }
 
     this.restaurants = [newRest, ...this.restaurants.filter((r) => r.id !== newRest.id)];
@@ -1631,24 +1666,48 @@ export class DinelyApiClient {
 
       try {
         const apiBase = getApiBaseUrl();
-        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(existing.id)}/submit`, {
+        let authHeaders = this.getAuthHeader('OWNER');
+        const submitPayload = {
+          name: existing.name,
+          restaurantName: existing.name,
+          cuisine: existing.cuisine,
+          businessType: existing.businessType,
+          address: existing.address,
+          phone: existing.phone,
+          email: existing.email,
+          enabledModules: existing.enabledModules || setupData.enabledModules,
+          totalTablesCount: setupData.totalTablesCount || existing.tablesCount,
+        };
+
+        let res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(existing.id)}/submit`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...this.getAuthHeader('OWNER'),
+            ...authHeaders,
           },
-          body: JSON.stringify({
-            name: existing.name,
-            restaurantName: existing.name,
-            cuisine: existing.cuisine,
-            businessType: existing.businessType,
-            address: existing.address,
-            phone: existing.phone,
-            email: existing.email,
-            enabledModules: existing.enabledModules || setupData.enabledModules,
-            totalTablesCount: setupData.totalTablesCount || existing.tablesCount,
-          }),
+          body: JSON.stringify(submitPayload),
         });
+
+        if (res.status === 401 && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+          try {
+            const freshToken = await firebaseAuth.currentUser.getIdToken(true);
+            if (freshToken) {
+              localStorage.setItem('dinely_auth_token', freshToken);
+              sessionStorage.setItem('dinely_auth_token', freshToken);
+              authHeaders = { ...authHeaders, Authorization: `Bearer ${freshToken}` };
+              res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(existing.id)}/submit`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...authHeaders,
+                },
+                body: JSON.stringify(submitPayload),
+              });
+            }
+          } catch (tokErr) {
+            console.warn('Could not refresh Firebase token for submitRestaurantLaunch:', tokErr);
+          }
+        }
 
         if (res.ok) {
           const updated = await res.json();

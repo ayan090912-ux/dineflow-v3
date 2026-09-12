@@ -88,6 +88,17 @@ export async function signInPlatformAdminWithGoogle(): Promise<GoogleAuthResult>
   return signInWithGooglePopup(true);
 }
 
+export async function getFirebaseIdToken(forceRefresh: boolean = false): Promise<string | null> {
+  const user = firebaseAuth.currentUser;
+  if (!user) return null;
+  try {
+    return await user.getIdToken(forceRefresh);
+  } catch (e) {
+    console.warn('Failed to get Firebase ID token:', e);
+    return null;
+  }
+}
+
 export async function signOutFirebase(): Promise<void> {
   try {
     await firebaseSignOut(firebaseAuth);
@@ -95,3 +106,4 @@ export async function signOutFirebase(): Promise<void> {
     console.warn('Firebase SignOut Warning:', e);
   }
 }
+

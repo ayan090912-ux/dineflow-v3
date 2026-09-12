@@ -246,6 +246,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         email: googleResult.email,
         name: googleResult.displayName,
         photoURL: googleResult.photoURL,
+        idToken: googleResult.idToken,
       });
 
       const user = authRes.user;

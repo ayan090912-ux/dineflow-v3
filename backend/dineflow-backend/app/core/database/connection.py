@@ -32,24 +32,19 @@ if "sqlite" not in db_url:
     connect_args = {
         "statement_cache_size": 0,
         "prepared_statement_cache_size": 0,
-        "command_timeout": 30,
+        "command_timeout": 60,
     }
     if is_remote:
-        from sqlalchemy.pool import NullPool
         connect_args["ssl"] = "require"
-        engine_kwargs.update({
-            "poolclass": NullPool,
-            "connect_args": connect_args,
-        })
-    else:
-        engine_kwargs.update({
-            "pool_size": settings.DB_POOL_SIZE,
-            "max_overflow": settings.DB_MAX_OVERFLOW,
-            "pool_pre_ping": True,
-            "pool_recycle": 60,
-            "pool_timeout": 30,
-            "connect_args": connect_args,
-        })
+
+    engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_pre_ping": True,
+        "pool_recycle": 60,
+        "pool_timeout": 30,
+        "connect_args": connect_args,
+    })
 
 # Create async engine
 engine = create_async_engine(db_url, **engine_kwargs)
