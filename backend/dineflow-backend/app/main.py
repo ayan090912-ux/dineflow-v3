@@ -121,12 +121,18 @@ app = FastAPI(
 # Middleware
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware)
+is_prod_env = (settings.ENVIRONMENT or "").strip().lower() == "production"
 cors_origins = settings.CORS_ORIGINS
+
+if is_prod_env:
+    origin_regex = r"^https://([a-zA-Z0-9-]+\.)*(dinely\.food|web\.app|firebaseapp\.com|onrender\.com)$"
+else:
+    origin_regex = r"https://.*dinely\.food|https://.*onrender\.com|http://.*"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*dinely\.food|https://.*onrender\.com|http://.*",
+    allow_origin_regex=origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

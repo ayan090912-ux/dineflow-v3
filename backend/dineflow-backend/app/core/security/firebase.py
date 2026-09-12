@@ -39,10 +39,18 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
     """
     is_prod = (settings.ENVIRONMENT or "").strip().lower() == "production"
 
-    if is_prod and id_token.startswith("firebase_token_"):
-        raise ValueError("Synthetic tokens are prohibited in production environment")
+    if is_prod:
+        if not id_token or not isinstance(id_token, str) or not id_token.startswith("ey"):
+            raise ValueError("Cryptographically signed Firebase ID token is required in production environment")
+        if not _firebase_admin_initialized:
+            raise ValueError("Firebase Admin SDK is not initialized in production environment")
+        try:
+            return firebase_auth_admin.verify_id_token(id_token, check_revoked=False)
+        except Exception as err:
+            logger.warning(f"Production Firebase Admin token verification failed: {err}")
+            raise ValueError(f"Invalid or expired authentication token: {str(err)}")
 
-    # 1. Attempt verification via official Firebase Admin SDK if available (and not running in test suite)
+    # 1. Non-production / test suite verification paths
     import sys
     is_test_env = (
         "pytest" in sys.modules or
@@ -55,13 +63,7 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
             decoded = firebase_auth_admin.verify_id_token(id_token, check_revoked=False)
             return decoded
         except Exception as err:
-            logger.warning(f"Firebase Admin SDK token verification failed: {err}.")
-            if is_prod:
-                raise ValueError(f"Invalid or expired authentication token: {str(err)}")
-            logger.warning("Falling back to dev token parser for non-production environment.")
-
-    if is_prod and not _firebase_admin_initialized:
-        raise ValueError("Firebase Admin SDK is not initialized in production environment")
+            logger.warning(f"Firebase Admin SDK token verification failed: {err}. Falling back for non-prod.")
 
     # 2. Development / Fallback token parsing for unit testing & local dev ONLY
     if not id_token or not isinstance(id_token, str):
@@ -154,6 +156,8 @@ def set_platform_admin_custom_claims(uid: str) -> Dict[str, Any]:
             logger.error(f"Failed to set custom user claims for UID {uid}: {e}")
             raise RuntimeError(f"Failed to assign Platform Admin claims via Firebase Admin SDK: {e}")
     else:
+        if (settings.ENVIRONMENT or "").strip().lower() == "production":
+            raise RuntimeError("Cannot assign custom claims: Firebase Admin SDK is uninitialized in production")
         logger.info(f"Mocked custom admin claim assignment for UID: {uid}")
 
     return claims
