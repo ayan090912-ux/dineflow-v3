@@ -1963,8 +1963,21 @@ export class DinelyApiClient {
   async getPlatformRestaurants(): Promise<Restaurant[]> {
     try {
       const apiBase = getApiBaseUrl();
-      const headers = this.getAuthHeader('ADMIN');
-      const res = await fetch(`${apiBase}/admin/restaurants`, { headers });
+      let headers = this.getAuthHeader('ADMIN');
+      let res = await fetch(`${apiBase}/admin/restaurants`, { headers });
+      if (res.status === 401 && typeof window !== 'undefined' && firebaseAuth.currentUser) {
+        try {
+          const freshToken = await firebaseAuth.currentUser.getIdToken(true);
+          if (freshToken) {
+            localStorage.setItem('dinely_platform_admin_id_token', freshToken);
+            sessionStorage.setItem('dinely_admin_token', freshToken);
+            headers = { ...headers, Authorization: `Bearer ${freshToken}` };
+            res = await fetch(`${apiBase}/admin/restaurants`, { headers });
+          }
+        } catch (tokErr) {
+          console.warn('Could not refresh Firebase token for getPlatformRestaurants:', tokErr);
+        }
+      }
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -2687,7 +2700,8 @@ export class DinelyApiClient {
     if (!slug || !slug.trim()) return null;
     const cleanSlug = slug.trim().toLowerCase();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    let explicitNotFound = false;
     try {
       const apiBase = getApiBaseUrl();
       const res = await fetch(`${apiBase}/restaurants/public/resolve?slug=${encodeURIComponent(cleanSlug)}`, {
@@ -2707,10 +2721,15 @@ export class DinelyApiClient {
           this.saveDatabase();
           return this.ensureRestaurantDefaults(mapped);
         }
+      } else if (res.status === 404) {
+        explicitNotFound = true;
       }
     } catch (e) {
       clearTimeout(timeoutId);
       console.warn('API resolveRestaurantBySlug failed:', e);
+    }
+    if (explicitNotFound) {
+      return null;
     }
     const local = this.restaurants.find(
       (r) =>
@@ -2729,7 +2748,8 @@ export class DinelyApiClient {
     const resolution = getTenantFromHostname(cleanHost);
     const apiBase = getApiBaseUrl();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    let explicitNotFound = false;
 
     try {
       let queryUrl = '';
@@ -2754,10 +2774,16 @@ export class DinelyApiClient {
           this.saveDatabase();
           return this.ensureRestaurantDefaults(mapped);
         }
+      } else if (res.status === 404) {
+        explicitNotFound = true;
       }
     } catch (e) {
       clearTimeout(timeoutId);
       console.warn('API resolveRestaurantFromHostname failed:', e);
+    }
+
+    if (explicitNotFound) {
+      return null;
     }
 
     if (resolution.slug) {

@@ -81,7 +81,13 @@ async def ensure_db_schema_columns(conn):
            SELECT 'dom-' || id, id, COALESCE(public_slug, slug) || '.dinely.food', COALESCE(public_slug, slug) || '.dinely.food', 'SUBDOMAIN', 'VERIFIED', TRUE, TRUE
            FROM restaurants
            WHERE COALESCE(public_slug, slug) IS NOT NULL
-           ON CONFLICT (hostname) DO NOTHING;""",
+           ON CONFLICT (hostname) DO UPDATE SET
+               restaurant_id = EXCLUDED.restaurant_id,
+               is_verified = TRUE,
+               verification_status = 'VERIFIED'
+           WHERE EXCLUDED.restaurant_id IN (
+               SELECT id FROM restaurants WHERE lifecycle_status = 'LIVE' OR is_approved = TRUE
+           );""",
     ]
     for stmt in baseline_sync_statements:
         try:

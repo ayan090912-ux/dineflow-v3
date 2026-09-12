@@ -11,7 +11,7 @@ from app.core.database.connection import get_db
 from app.core.security.rbac import require_platform_admin, get_current_firebase_admin
 from app.core.config.settings import get_settings
 from app.modules.admin.audit_service import AdminAuditLogger
-from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog
+from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain
 from app.modules.tables.models import Table
 from app.modules.orders.models import Order
 from app.modules.menu.models import MenuCategory, MenuItem
@@ -240,6 +240,31 @@ async def approve_restaurant(
                     is_occupied=False,
                     qr_code_url=generate_canonical_qr_url(pub_slug, clean_num, t_id)
                 ))
+
+    # Ensure canonical primary subdomain maps directly to this approved restaurant
+    pub_slug = (rest.public_slug or rest.slug or rest.id).strip().lower()
+    dom_hostname = f"{pub_slug}.dinely.food"
+    dom_query = select(RestaurantDomain).where(func.lower(RestaurantDomain.hostname) == dom_hostname)
+    dom_res = await db.execute(dom_query)
+    existing_dom = dom_res.scalar_one_or_none()
+    if existing_dom:
+        existing_dom.restaurant_id = rest.id
+        existing_dom.is_primary = True
+        existing_dom.is_verified = True
+        existing_dom.verification_status = "VERIFIED"
+        existing_dom.verified_at = datetime.now(timezone.utc)
+    else:
+        db.add(RestaurantDomain(
+            id=f"dom-{rest.id}",
+            restaurant_id=rest.id,
+            hostname=dom_hostname,
+            domain=dom_hostname,
+            domain_type="SUBDOMAIN",
+            verification_status="VERIFIED",
+            is_primary=True,
+            is_verified=True,
+            verified_at=datetime.now(timezone.utc)
+        ))
 
     await db.commit()
     await db.refresh(rest)

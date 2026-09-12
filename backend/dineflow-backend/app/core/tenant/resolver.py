@@ -132,8 +132,9 @@ async def resolve_public_tenant(
             rest_res = await db.execute(rest_stmt)
             rest = rest_res.scalar_one_or_none()
 
-    # 2. Lookup by slug or id if not found via domain
-    if not rest and target_slug:
+    # 2. Lookup by slug or id if not found via domain OR if domain matched an unapproved/pending record but an approved/live one exists
+    if target_slug and (not rest or rest.lifecycle_status != "LIVE"):
+        from sqlalchemy import case
         rest_stmt = select(Restaurant).where(
             Restaurant.deleted_at.is_(None),
             or_(
@@ -141,9 +142,15 @@ async def resolve_public_tenant(
                 func.lower(Restaurant.slug) == target_slug,
                 Restaurant.id == target_slug
             )
+        ).order_by(
+            case((Restaurant.lifecycle_status == "LIVE", 1), else_=0).desc(),
+            case((Restaurant.is_approved.is_(True), 1), else_=0).desc(),
+            Restaurant.created_at.desc()
         ).limit(1)
         rest_res = await db.execute(rest_stmt)
-        rest = rest_res.scalar_one_or_none()
+        candidate_rest = rest_res.scalar_one_or_none()
+        if candidate_rest and (not rest or candidate_rest.lifecycle_status == "LIVE" or candidate_rest.is_approved):
+            rest = candidate_rest
 
     if not rest:
         identifier = clean_host or target_slug or "unknown"
