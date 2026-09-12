@@ -144,12 +144,10 @@ from app.core.database.connection import AsyncSessionLocal
 @app.get("/api/v1/health")
 @app.get("/api/v1/healthz")
 async def health_check():
-    from app.core.security.rbac import get_platform_admin_allowed_emails
     return {
         "status": "healthy",
         "version": settings.APP_VERSION,
-        "commit": "v3-hardening-prod-1",
-        "admin_emails": get_platform_admin_allowed_emails()
+        "commit": "v3-hardening-prod-1"
     }
 
 @app.get("/readyz")
