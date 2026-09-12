@@ -234,3 +234,84 @@ class TestPlatformAdminAuthorization:
         )
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+    def test_15_password_login_endpoint_is_disabled(self):
+        # Enforce that Platform Admin cannot be accessed via password authentication
+        response = client.post(
+            "/api/v1/auth/platform/login",
+            json={"email": "ayan090912@gmail.com", "password": "any_password_123"}
+        )
+        assert response.status_code == 403
+        assert "Password authentication is disabled" in response.json()["detail"]
+
+    def test_16_websocket_admin_channel_unauthorized_is_rejected(self):
+        # Non-admin attempting to connect to admin channel without valid credentials
+        from fastapi.testclient import TestClient
+        from starlette.websockets import WebSocketDisconnect
+        
+        # Test 1: No token
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/api/v1/ws?restaurant_id=__platform_admin__&role=PLATFORM_ADMIN") as ws:
+                pass
+        assert exc_info.value.code == 1008
+
+        # Test 2: Non-admin token
+        attacker_token = create_fake_jwt({"uid": "uid_hacker", "email": "attacker@gmail.com", "role": "PLATFORM_ADMIN"})
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(f"/api/v1/ws?restaurant_id=__platform_admin__&role=PLATFORM_ADMIN&token={attacker_token}") as ws:
+                pass
+        assert exc_info.value.code == 1008
+
+    def test_17_admin_authorized_via_env_emails_list(self):
+        # Configure secondary admin email via PLATFORM_ADMIN_EMAILS
+        orig_emails = settings.PLATFORM_ADMIN_EMAILS
+        try:
+            settings.PLATFORM_ADMIN_EMAILS = "ops-lead@dinely.food, security@dinely.food"
+            admin_claims = {
+                "uid": "uid_ops_lead",
+                "email": "ops-lead@dinely.food",
+                "email_verified": True,
+                "admin": True,
+                "role": "PLATFORM_ADMIN"
+            }
+            token = create_fake_jwt(admin_claims)
+            response = client.get(
+                "/api/v1/admin/restaurants",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            assert response.status_code == 200
+        finally:
+            settings.PLATFORM_ADMIN_EMAILS = orig_emails
+
+    @pytest.mark.asyncio
+    async def test_18_admin_authorized_via_db_platform_admin_table(self):
+        # Insert admin directly into PlatformAdmin table
+        from app.core.database.connection import get_db_session
+        from app.modules.auth.models import PlatformAdmin
+        import uuid
+
+        test_email = f"db-admin-{uuid.uuid4().hex[:6]}@dinely.food"
+        async with get_db_session() as session:
+            admin_record = PlatformAdmin(
+                email=test_email,
+                password_hash="argon2_hashed_placeholder",
+                full_name="Database Verified Admin",
+                is_active=True
+            )
+            session.add(admin_record)
+            await session.commit()
+
+        admin_claims = {
+            "uid": "uid_db_admin",
+            "email": test_email,
+            "email_verified": True,
+            "admin": True,
+            "role": "PLATFORM_ADMIN"
+        }
+        token = create_fake_jwt(admin_claims)
+        response = client.get(
+            "/api/v1/admin/restaurants",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 200
+

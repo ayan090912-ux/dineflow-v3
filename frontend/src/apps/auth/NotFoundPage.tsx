@@ -3,12 +3,22 @@ import { Home, ArrowLeft } from 'lucide-react';
 import { Button, DinelyLogo } from '../../packages/ui';
 
 interface NotFoundPageProps {
-  onNavigate?: (path: string) => void;
+  onNavigate?: (path: string, options?: { replace?: boolean }) => void;
+  title?: string;
+  message?: string;
+  onBackToHome?: () => void;
 }
 
-export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
+export const NotFoundPage: React.FC<NotFoundPageProps> = ({
+  onNavigate,
+  title = 'Page Not Found',
+  message = "The page you are looking for does not exist or you don't have permission to access it.",
+  onBackToHome,
+}) => {
   const handleHome = () => {
-    if (onNavigate) {
+    if (onBackToHome) {
+      onBackToHome();
+    } else if (onNavigate) {
       onNavigate('/');
     } else {
       window.location.href = '/';
@@ -24,10 +34,10 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onNavigate }) => {
         <div className="space-y-2">
           <span className="text-4xl font-extrabold text-indigo-400 font-mono">404</span>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            Page Not Found
+            {title}
           </h1>
           <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-            The page you are looking for does not exist or you don't have permission to access it.
+            {message}
           </p>
         </div>
 

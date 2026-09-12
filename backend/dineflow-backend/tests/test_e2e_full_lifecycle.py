@@ -5,7 +5,9 @@ import pytest
 import asyncio
 from datetime import datetime, timezone
 
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+from app.main import app
+
+BASE_URL = "http://testserver/api/v1"
 
 def make_token(uid: str, email: str, role: str = "RESTAURANT_OWNER", is_admin: bool = False, restaurant_id: str = None) -> str:
     header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256", "typ": "JWT"}).encode()).decode().rstrip("=")
@@ -22,7 +24,8 @@ def make_token(uid: str, email: str, role: str = "RESTAURANT_OWNER", is_admin: b
 
 @pytest.mark.asyncio
 async def test_full_production_lifecycle_e2e():
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=15.0) as client:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url=BASE_URL, timeout=15.0) as client:
         ts = int(datetime.now(timezone.utc).timestamp() * 1000)
 
         # -------------------------------------------------------------

@@ -19,6 +19,7 @@ import app.modules.tables.models
 import app.modules.orders.models
 import app.modules.customer_requests.models
 import app.modules.taxes.models
+import app.modules.inventory.models
 
 
 from sqlalchemy import text
@@ -28,138 +29,23 @@ async def ensure_db_schema_columns(conn):
     if "postgres" not in str(conn.engine.url).lower():
         return
 
-    alter_statements = [
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(50);",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_prep_time_minutes INTEGER DEFAULT 15;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS eta_target_timestamp TIMESTAMPTZ;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_json JSONB;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_breakdown_json JSONB;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal FLOAT DEFAULT 0.0;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_amount FLOAT DEFAULT 0.0;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount FLOAT DEFAULT 0.0;",
-        "ALTER TABLE orders ALTER COLUMN table_session_id DROP NOT NULL;",
-        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS target_destination VARCHAR(20) DEFAULT 'KITCHEN';",
-        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS table_id VARCHAR(255);",
-        "ALTER TABLE customer_requests ALTER COLUMN request_type TYPE VARCHAR(50) USING request_type::text;",
-        "ALTER TABLE customer_requests ALTER COLUMN status TYPE VARCHAR(50) USING status::text;",
-        # Restaurant Billing & Compliance Columns
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS legal_name VARCHAR(255);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS state VARCHAR(100);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS state_code VARCHAR(10);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS gstin VARCHAR(50);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS pan VARCHAR(50);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS invoice_prefix VARCHAR(20) DEFAULT 'INV-';",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS invoice_starting_number FLOAT DEFAULT 1001;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS service_charge_enabled BOOLEAN DEFAULT FALSE;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_merchant_name VARCHAR(255);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_qr_url TEXT;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS upi_enabled BOOLEAN DEFAULT TRUE;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS billing_settings_json JSONB;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS has_inventory BOOLEAN DEFAULT TRUE;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS has_billing BOOLEAN DEFAULT TRUE;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS enabled_modules JSONB;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS owner_uid VARCHAR(255);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(50) DEFAULT 'PENDING_APPROVAL';",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS rejection_reason TEXT;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS requested_changes TEXT;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS public_slug VARCHAR(255);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ;",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismissed_by VARCHAR(255);",
-        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dismiss_reason TEXT;",
-        "UPDATE restaurants SET public_slug = slug WHERE public_slug IS NULL;",
-        """CREATE TABLE IF NOT EXISTS restaurant_domains (
-            id VARCHAR(255) PRIMARY KEY,
-            restaurant_id VARCHAR(255) NOT NULL,
-            hostname VARCHAR(255) UNIQUE,
-            domain VARCHAR(255),
-            domain_type VARCHAR(50) DEFAULT 'SUBDOMAIN',
-            verification_status VARCHAR(50) DEFAULT 'VERIFIED',
-            is_primary BOOLEAN DEFAULT TRUE,
-            is_verified BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            verified_at TIMESTAMPTZ DEFAULT NOW()
-        );""",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS hostname VARCHAR(255);",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS domain VARCHAR(255);",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS domain_type VARCHAR(50) DEFAULT 'SUBDOMAIN';",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'VERIFIED';",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT TRUE;",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT TRUE;",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ DEFAULT NOW();",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
-        "ALTER TABLE restaurant_domains ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
-        "UPDATE restaurant_domains SET hostname = domain WHERE hostname IS NULL AND domain IS NOT NULL;",
-        "UPDATE restaurant_domains SET domain = hostname WHERE domain IS NULL AND hostname IS NOT NULL;",
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_domains_hostname ON restaurant_domains (hostname);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_domain ON restaurant_domains (domain);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurant_domains_rest_id ON restaurant_domains (restaurant_id);",
-        "UPDATE tables SET qr_code_url = 'https://' || (SELECT COALESCE(public_slug, slug) FROM restaurants WHERE restaurants.id = tables.restaurant_id) || '.dinely.food/customer?table=' || table_number || '&tableId=' || id WHERE qr_code_url LIKE '%.dinely.app%' OR qr_code_url LIKE '%dinely.food/customer?tenant=%';",
-        "UPDATE restaurants SET domain = 'https://' || COALESCE(public_slug, slug) || '.dinely.food' WHERE domain LIKE '%.dinely.app%' OR domain LIKE '%dinely.food/customer?tenant=%';",
-        """UPDATE restaurants
-           SET deleted_at = NOW(), lifecycle_status = 'ARCHIVED', is_approved = FALSE, status = 'CLOSED'
-           WHERE deleted_at IS NULL
-             AND (
-               id LIKE 'rest-iso-%' OR
-               id LIKE 'rest-test-%' OR
-               id LIKE 'rest-synthetic-%' OR
-               owner_email LIKE '%@test.dinely.internal' OR
-               owner_email = 'testowner@dinely.app' OR
-               (owner_email IS NULL AND owner_uid IS NULL)
-             );""",
+    # Ensure baseline data integrity for legacy records (idempotent)
+    baseline_sync_statements = [
+        """INSERT INTO restaurant_memberships (id, restaurant_id, user_uid, user_email, role)
+           SELECT 'mem-' || id, id, owner_uid, COALESCE(owner_email, ''), 'OWNER'
+           FROM restaurants
+           WHERE owner_uid IS NOT NULL AND deleted_at IS NULL
+           ON CONFLICT (restaurant_id, user_uid) DO NOTHING;""",
         """INSERT INTO restaurant_domains (id, restaurant_id, hostname, domain, domain_type, verification_status, is_primary, is_verified)
            SELECT 'dom-' || id, id, COALESCE(public_slug, slug) || '.dinely.food', COALESCE(public_slug, slug) || '.dinely.food', 'SUBDOMAIN', 'VERIFIED', TRUE, TRUE
            FROM restaurants
            WHERE COALESCE(public_slug, slug) IS NOT NULL
            ON CONFLICT (hostname) DO NOTHING;""",
-        # Bills Columns
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_amount FLOAT DEFAULT 0.0;",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS discount_percentage FLOAT DEFAULT 0.0;",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_amount FLOAT DEFAULT 0.0;",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS round_off_amount FLOAT DEFAULT 0.0;",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'OPEN';",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_verified_by VARCHAR(100);",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100);",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS items_snapshot_json JSONB;",
-        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS orders_snapshot_json JSONB;",
-        # High-Performance Indexes for Neon PostgreSQL Queries
-        "CREATE INDEX IF NOT EXISTS idx_orders_rest_status ON orders (restaurant_id, status);",
-        "CREATE INDEX IF NOT EXISTS idx_orders_rest_created ON orders (restaurant_id, created_at DESC);",
-        "CREATE INDEX IF NOT EXISTS idx_table_sessions_rest_status ON table_sessions (restaurant_id, status);",
-        "CREATE INDEX IF NOT EXISTS idx_bills_rest_status ON bills (restaurant_id, status);",
-        "CREATE INDEX IF NOT EXISTS idx_bills_rest_created ON bills (restaurant_id, created_at DESC);",
-        "CREATE INDEX IF NOT EXISTS idx_customer_requests_rest_status ON customer_requests (restaurant_id, status);",
-        "CREATE INDEX IF NOT EXISTS idx_tables_rest_num ON tables (restaurant_id, table_number);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurants_lifecycle ON restaurants (lifecycle_status);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurants_approved ON restaurants (is_approved);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_uid ON restaurants (owner_uid);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurants_owner_email ON restaurants (owner_email);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurants_public_slug ON restaurants (public_slug);",
-        "CREATE INDEX IF NOT EXISTS idx_restaurants_slug ON restaurants (slug);",
-        # Restaurant Lifecycle History Table & Index
-        """CREATE TABLE IF NOT EXISTS restaurant_lifecycle_logs (
-            id VARCHAR(255) PRIMARY KEY,
-            restaurant_id VARCHAR(255) NOT NULL,
-            event_type VARCHAR(50) NOT NULL,
-            previous_status VARCHAR(50),
-            new_status VARCHAR(50) NOT NULL,
-            reason TEXT,
-            performed_by VARCHAR(255),
-            performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );""",
-        "CREATE INDEX IF NOT EXISTS idx_lifecycle_logs_rest_id ON restaurant_lifecycle_logs (restaurant_id, performed_at DESC);",
     ]
-    for stmt in alter_statements:
+    for stmt in baseline_sync_statements:
         try:
             await conn.execute(text(stmt))
-        except Exception as e:
+        except Exception:
             pass
 
 
@@ -169,7 +55,6 @@ async def _background_startup_init():
         async with engine.begin() as conn:
             await ensure_db_schema_columns(conn)
             await conn.run_sync(Base.metadata.create_all)
-        await run_clean_production_applications()
     except Exception as e:
         print("[STARTUP NOTICE] Database table initialization:", e)
 
@@ -245,6 +130,7 @@ from app.modules.orders.router import router as order_router
 from app.modules.customer_requests.router import router as customer_requests_router
 from app.modules.taxes.router import router as tax_router
 from app.modules.billing.router import router as billing_router
+from app.modules.inventory.router import router as inventory_router
 from app.modules.websocket.router import router as websocket_router
 
 # API Routes
@@ -257,6 +143,7 @@ app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
 app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
 app.include_router(customer_requests_router, prefix="/api/v1/customer-requests", tags=["Customer Requests"])
+app.include_router(inventory_router, prefix="/api/v1", tags=["Inventory & Suppliers"])
 app.include_router(websocket_router, prefix="/api/v1", tags=["Realtime WebSocket"])
 
 

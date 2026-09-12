@@ -223,24 +223,43 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       : (explicitRestId || currentRestaurant?.id || urlRestParam || api.getCurrentRestaurantId() || undefined);
     const urlTableIdParam = explicitTableId || urlParams?.get('tableId') || pathTableIdParam || undefined;
     const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
-    const rawTableStr = explicitTableNum || urlTableParam || selectedTableNum || 'Table 01';
+    const rawTableStr = explicitTableNum || urlTableParam || (urlTableIdParam ? undefined : selectedTableNum);
 
     if (!restId) return;
 
-    const tbls = await api.getTables(restId);
-    setAllRestaurantTables(tbls);
+    let tbls: Table[] = [];
+    try {
+      tbls = await api.getTables(restId);
+      setAllRestaurantTables(tbls);
+    } catch (e) {
+      console.error('Failed to load restaurant tables:', e);
+    }
 
     let tbl: Table | undefined;
     if (urlTableIdParam) {
       tbl = tbls.find((t) => t.id === urlTableIdParam);
     }
-    if (!tbl) {
+    if (!tbl && rawTableStr) {
       tbl = tbls.find(
         (t) => t.id === rawTableStr || (t.tableNumber && matchTableNumber(t.tableNumber, rawTableStr)) || t.tableNumber === rawTableStr
       );
     }
 
-    const displayTableNum = tbl ? tbl.tableNumber : formatStandardTableNumber(rawTableStr);
+    // QR Security Verification:
+    // If a specific table was requested in the URL, it MUST exist in this restaurant.
+    // Cross-tenant injection (table from another restaurant or invalid table) triggers 403/404 error screen.
+    const isExplicitTableRequest = Boolean(urlTableParam || urlTableIdParam || explicitTableId || explicitTableNum);
+    if (isExplicitTableRequest && !tbl) {
+      setTableError('TABLE_NOT_FOUND');
+      return;
+    }
+
+    // Default fallback when visiting the restaurant customer root without a table query param
+    if (!tbl && tbls.length > 0) {
+      tbl = tbls[0];
+    }
+
+    const displayTableNum = tbl ? tbl.tableNumber : (rawTableStr ? formatStandardTableNumber(rawTableStr) : 'Table 01');
     const resolvedTableId = tbl ? tbl.id : (urlTableIdParam || `tbl-${restId}-${displayTableNum.toLowerCase().replace(/\s+/g, '_')}`);
 
     if (selectedTableNum !== displayTableNum) {
@@ -250,22 +269,29 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setCurrentTable(tbl);
     }
 
-    const session = await api.getOrCreateTableSession(restId, resolvedTableId, displayTableNum);
-    if (session) {
-      const lastSessionKey = `dinely_session_${restId}_${resolvedTableId}`;
-      const prevSessionId = typeof window !== 'undefined' ? sessionStorage.getItem(lastSessionKey) : null;
-      if (prevSessionId && prevSessionId !== session.id) {
-        setCart([]);
-        setCustomerOrders([]);
-        setIsSessionEnded(false);
-      }
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem(lastSessionKey, session.id);
-      }
+    try {
+      const session = await api.getOrCreateTableSession(restId, resolvedTableId, displayTableNum);
+      if (session) {
+        const lastSessionKey = `dinely_session_${restId}_${resolvedTableId}`;
+        const prevSessionId = typeof window !== 'undefined' ? sessionStorage.getItem(lastSessionKey) : null;
+        if (prevSessionId && prevSessionId !== session.id) {
+          setCart([]);
+          setCustomerOrders([]);
+          setIsSessionEnded(false);
+        }
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(lastSessionKey, session.id);
+        }
 
-      setCurrentTableSession(session);
+        setCurrentTableSession(session);
 
-      await loadInitialOrder(session.id, restId, displayTableNum);
+        await loadInitialOrder(session.id, restId, displayTableNum);
+      }
+    } catch (err: any) {
+      console.error('Table session creation rejected:', err);
+      // Backend returned 403 Forbidden or 404 Not Found (Cross-tenant security block)
+      setTableError('TABLE_NOT_FOUND');
+      return;
     }
   };
 

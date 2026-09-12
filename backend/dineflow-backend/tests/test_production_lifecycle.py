@@ -23,7 +23,13 @@ def make_token(uid: str, email: str, role: str = "RESTAURANT_OWNER", is_admin: b
     payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
     return f"{header}.{payload}.sig"
 
+import os
+
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.environ.get("RUN_PRODUCTION_SMOKE") != "1",
+    reason="Live production smoke test against https://dineflow-v3.onrender.com (set RUN_PRODUCTION_SMOKE=1 to execute)"
+)
 async def test_complete_production_lifecycle():
     print("=" * 70)
     print("STARTING COMPLETE LIVE PRODUCTION RESTAURANT LIFECYCLE AUDIT")

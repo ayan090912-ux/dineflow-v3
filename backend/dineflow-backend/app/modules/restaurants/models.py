@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any
-from sqlalchemy import String, Boolean, Float, Text, JSON, DateTime
+from sqlalchemy import String, Boolean, Float, Text, JSON, DateTime, UniqueConstraint, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database.connection import Base
 from app.core.database.base_model import TimestampMixin, SoftDeleteMixin
@@ -86,3 +86,17 @@ class RestaurantDomain(Base, TimestampMixin):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RestaurantMembership(Base, TimestampMixin):
+    __tablename__ = "restaurant_memberships"
+    __table_args__ = (
+        UniqueConstraint("restaurant_id", "user_uid", name="uq_restaurant_membership_user"),
+    )
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    restaurant_id: Mapped[str] = mapped_column(String(255), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_uid: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(50), default="OWNER", nullable=False, index=True)
+

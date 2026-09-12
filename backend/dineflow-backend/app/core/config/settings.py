@@ -163,8 +163,20 @@ class Settings(BaseSettings):
     # Platform Admin Security & Firebase
     PLATFORM_ADMIN_FIREBASE_UID: Optional[str] = None
     PLATFORM_ADMIN_EMAIL: Optional[str] = "ayan090912@gmail.com"
+    PLATFORM_ADMIN_EMAILS: Optional[str] = None
     FIREBASE_PROJECT_ID: str = "dinely-cd6cd"
     FIREBASE_SERVICE_ACCOUNT_KEY_PATH: Optional[str] = None
+
+    def get_platform_admin_emails(self) -> List[str]:
+        emails: List[str] = []
+        if self.PLATFORM_ADMIN_EMAIL:
+            emails.append(self.PLATFORM_ADMIN_EMAIL.strip().lower())
+        if self.PLATFORM_ADMIN_EMAILS:
+            for em in self.PLATFORM_ADMIN_EMAILS.split(","):
+                clean = em.strip().lower()
+                if clean and clean not in emails:
+                    emails.append(clean)
+        return emails
 
     @field_validator("CORS_ORIGINS", mode="before")
     def parse_cors_origins(cls, v):

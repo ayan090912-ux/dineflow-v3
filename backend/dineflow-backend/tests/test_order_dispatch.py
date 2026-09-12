@@ -79,10 +79,23 @@ async def test_end_to_end_customer_to_kitchen_flow(db_session, setup_cafe_co):
         assert res_db.restaurant_id == "rest-cafe-co"
         assert res_db.table_number == "Table 03"
 
+        from app.modules.restaurants.models import RestaurantMembership
+        import base64, json
+        chef_uid = "staff-chef-1"
+        chef_claims = {"uid": chef_uid, "email": "chef@cafeco.internal", "role": "CHEF"}
+        chef_token = f"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.{base64.urlsafe_b64encode(json.dumps(chef_claims).encode()).decode().rstrip('=')}.sig"
+
+        db_session.add(RestaurantMembership(
+            id="mem-chef-cafe-co",
+            restaurant_id="rest-cafe-co",
+            user_uid=chef_uid,
+            user_email="chef@cafeco.internal",
+            role="CHEF"
+        ))
+        await db_session.commit()
+
         kitchen_headers = {
-            "X-Staff-Role": "KITCHEN",
-            "X-Staff-Restaurant-Id": "rest-cafe-co",
-            "X-Staff-Id": "staff-chef-1"
+            "Authorization": f"Bearer {chef_token}"
         }
 
         # 3. Kitchen KDS queries orders for CAFE.CO

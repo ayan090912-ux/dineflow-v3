@@ -9,6 +9,7 @@ from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
 from app.core.security.rbac import require_platform_admin, get_current_firebase_admin
+from app.core.config.settings import get_settings
 from app.modules.admin.audit_service import AdminAuditLogger
 from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog
 from app.modules.tables.models import Table
@@ -150,7 +151,7 @@ async def approve_restaurant(
     Approves a restaurant application and transitions tenant to LIVE status.
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
-    admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
+    admin_email = admin_claims.get("email") or get_settings().PLATFORM_ADMIN_EMAIL or "admin@dinely.food"
     clean_id = (action.restaurant_id or "").strip()
 
     query = select(Restaurant).where(
@@ -225,8 +226,9 @@ async def approve_restaurant(
         if not tbl_res.scalars().first():
             pub_slug = rest.public_slug or rest.slug or "restaurant"
             for i in range(1, 9):
-                t_num = f"Table {str(i).zfill(2)}"
-                t_id = f"tbl-{rest.id}-table_{str(i).zfill(2)}"
+                clean_num = str(i).zfill(2)
+                t_num = f"Table {clean_num}"
+                t_id = f"tbl-{rest.id}-table_{clean_num}"
                 db.add(Table(
                     id=t_id,
                     restaurant_id=rest.id,
@@ -235,7 +237,7 @@ async def approve_restaurant(
                     capacity=4,
                     status="AVAILABLE",
                     is_occupied=False,
-                    qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={t_num}&tableId={t_id}"
+                    qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={clean_num}"
                 ))
 
     await db.commit()
@@ -306,7 +308,7 @@ async def reject_restaurant(
     Rejects a restaurant application with optional reason.
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
-    admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
+    admin_email = admin_claims.get("email") or get_settings().PLATFORM_ADMIN_EMAIL or "admin@dinely.food"
     clean_id = (action.restaurant_id or "").strip()
 
     query = select(Restaurant).where(
@@ -421,7 +423,7 @@ async def dismiss_restaurant(
     Dismisses/archives a test, synthetic, or duplicate restaurant application from the operational approval queue without deleting audit history.
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
-    admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
+    admin_email = admin_claims.get("email") or get_settings().PLATFORM_ADMIN_EMAIL or "admin@dinely.food"
     clean_id = (action.restaurant_id or "").strip()
 
     query = select(Restaurant).where(

@@ -159,7 +159,7 @@ async def create_order(
 
         now_utc = datetime.now(timezone.utc)
         tbl_num = payload.tableNumber or "Table 01"
-        tbl_id = payload.tableId or f"tbl-{payload.restaurantId}-{(tbl_num).lower().replace(' ', '_')}"
+        tbl_id = payload.tableId or f"tbl-{restaurant.id}-{(tbl_num).lower().replace(' ', '_')}"
 
         # If explicit tableId provided, verify it belongs to this restaurant
         if payload.tableId:
@@ -168,10 +168,10 @@ async def create_order(
             if existing_tbl and existing_tbl.restaurant_id != restaurant.id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Table '{payload.tableId}' does not belong to restaurant '{payload.restaurantId}'"
+                    detail=f"Table '{payload.tableId}' does not belong to restaurant '{restaurant.id}'"
                 )
 
-        session_id = payload.tableSessionId or f"sess-{payload.restaurantId}-{tbl_id}-{int(now_utc.timestamp())}"
+        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id}-{int(now_utc.timestamp())}"
 
         try:
             query_sess = select(TableSession).where(TableSession.id == session_id)
@@ -180,7 +180,7 @@ async def create_order(
 
             if not existing_sess or existing_sess.status == "CLOSED":
                 query_active = select(TableSession).where(
-                    (TableSession.restaurant_id == payload.restaurantId) &
+                    (TableSession.restaurant_id == restaurant.id) &
                     ((TableSession.table_id == tbl_id) | (TableSession.table_number == tbl_num)) &
                     (TableSession.status == "ACTIVE")
                 ).order_by(TableSession.session_started_at.desc())
@@ -190,10 +190,10 @@ async def create_order(
                 if active_sess:
                     session_id = active_sess.id
                 else:
-                    new_sess_id = session_id if not existing_sess else f"sess-{payload.restaurantId}-{int(now_utc.timestamp() * 1000)}"
+                    new_sess_id = session_id if not existing_sess else f"sess-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
                     new_sess = TableSession(
                         id=new_sess_id,
-                        restaurant_id=payload.restaurantId,
+                        restaurant_id=restaurant.id,
                         table_id=tbl_id,
                         table_number=tbl_num,
                         status="ACTIVE",
@@ -213,7 +213,7 @@ async def create_order(
 
         try:
             res_taxes = await db.execute(
-                select(Tax).where((Tax.restaurant_id == payload.restaurantId) & (Tax.status == "ACTIVE"))
+                select(Tax).where((Tax.restaurant_id == restaurant.id) & (Tax.status == "ACTIVE"))
             )
             active_taxes = res_taxes.scalars().all()
 
@@ -243,7 +243,7 @@ async def create_order(
 
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         query_count = select(func.count(Order.id)).where(
-            (Order.restaurant_id == payload.restaurantId) &
+            (Order.restaurant_id == restaurant.id) &
             (Order.created_at >= today_start)
         )
         res_count = await db.execute(query_count)
@@ -251,13 +251,13 @@ async def create_order(
         order_num = f"#ORD-{daily_seq}"
 
         now_utc = datetime.now(timezone.utc)
-        order_id = f"ord-{payload.restaurantId}-{int(now_utc.timestamp() * 1000)}"
+        order_id = f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
 
-        print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={payload.restaurantId} table_id={tbl_id} session_id={session_id}")
+        print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={restaurant.id} table_id={tbl_id} session_id={session_id}")
 
         new_order = Order(
             id=order_id,
-            restaurant_id=payload.restaurantId,
+            restaurant_id=restaurant.id,
             table_id=tbl_id,
             table_number=tbl_num,
             table_session_id=session_id,
@@ -279,7 +279,7 @@ async def create_order(
 
         try:
             query_tbl = select(Table).where(
-                (Table.restaurant_id == payload.restaurantId) &
+                (Table.restaurant_id == restaurant.id) &
                 ((Table.id == tbl_id) | (Table.table_number == tbl_num))
             )
             res_tbl = await db.execute(query_tbl)
@@ -323,14 +323,14 @@ async def create_order(
             print("[TAX_SNAPSHOT_NOTICE] Exception writing tax snapshots:", snap_err)
 
         await db.commit()
-        print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={payload.restaurantId} total={total}")
+        print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={restaurant.id} total={total}")
         await db.refresh(new_order)
         resp_data = format_order_response(new_order)
 
         try:
             from app.modules.websocket.manager import ws_manager
             await ws_manager.broadcast_event(
-                restaurant_id=payload.restaurantId,
+                restaurant_id=restaurant.id,
                 event_type="order_created",
                 payload=resp_data,
                 target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]

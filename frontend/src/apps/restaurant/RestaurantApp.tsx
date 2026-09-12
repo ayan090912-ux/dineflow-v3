@@ -590,6 +590,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             }
           }).catch(() => {});
         }
+      } else if (event.type === 'RECONNECTED') {
+        loadData(false);
+      }
+    });
+
+    const unsubStatus = realtimeBus.subscribeStatus((status) => {
+      if (status === 'CONNECTED') {
+        loadData(false);
       }
     });
 
@@ -603,6 +611,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
     return () => {
       unsubscribe();
+      unsubStatus();
       clearInterval(interval);
     };
   }, [activeRestaurant?.id, currentRestaurant?.id]);

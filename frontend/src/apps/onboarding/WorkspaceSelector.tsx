@@ -8,6 +8,7 @@ import {
   XCircle,
   AlertTriangle,
   LogOut,
+  LogIn,
   Building2,
   MapPin,
   Grid,
@@ -30,7 +31,7 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   onLogout,
 }) => {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [viewState, setViewState] = useState<'INITIALIZING' | 'LOADING' | 'READY' | 'EMPTY' | 'ERROR'>('INITIALIZING');
+  const [viewState, setViewState] = useState<'INITIALIZING' | 'LOADING' | 'READY' | 'EMPTY' | 'ERROR' | 'UNAUTHENTICATED'>('INITIALIZING');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [openingRestId, setOpeningRestId] = useState<string | null>(null);
 
@@ -41,7 +42,7 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
     const email = targetEmail || currentUser?.email;
     const uid = targetUid || currentUser?.id;
     if (!email && !uid) {
-      setViewState('INITIALIZING');
+      setViewState('UNAUTHENTICATED');
       return;
     }
     setViewState('LOADING');
@@ -61,16 +62,31 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
     }
   };
 
-  useEffect(() => {
-    // Do NOT connect to 'global' WS — that channel is reserved for Platform Admins.
-    // This page relies on direct polling (loadOwnerRestaurants) to get lifecycle updates.
+  const userEmail = currentUser?.email;
+  const userId = currentUser?.id;
 
-    if (currentUser?.email || currentUser?.id) {
-      loadOwnerRestaurants(currentUser?.email, currentUser?.id);
+  useEffect(() => {
+    let timer: any;
+    if (userEmail || userId) {
+      loadOwnerRestaurants(userEmail, userId);
     } else {
       setViewState('INITIALIZING');
+      timer = setTimeout(() => {
+        const u = user || api.getCurrentUser();
+        if (u?.email || u?.id) {
+          loadOwnerRestaurants(u.email, u.id);
+        } else {
+          setViewState('UNAUTHENTICATED');
+        }
+      }, 1200);
     }
 
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [userEmail, userId]);
+
+  useEffect(() => {
     const unsub = realtimeBus.subscribe((event: any) => {
       const evtRestId = event.restaurantId || event.restaurant_id;
       if (!evtRestId) return;
@@ -123,8 +139,8 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
     });
 
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && (currentUser?.email || currentUser?.id)) {
-        api.getOwnerRestaurants(currentUser?.email, currentUser?.id)
+      if (document.visibilityState === 'visible' && (userEmail || userId)) {
+        api.getOwnerRestaurants(userEmail, userId)
           .then((freshList) => {
             if (Array.isArray(freshList)) {
               setRestaurants(freshList);
@@ -140,7 +156,7 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
       unsub();
       clearInterval(interval);
     };
-  }, [currentUser?.email, currentUser?.id]);
+  }, [userEmail, userId]);
 
   const handleSelectRestaurant = async (rest: Restaurant) => {
     if (openingRestId) return;
@@ -198,7 +214,31 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
         </div>
 
         {/* Loading / Zero State / Error / Grid */}
-        {viewState === 'INITIALIZING' || viewState === 'LOADING' ? (
+        {viewState === 'UNAUTHENTICATED' ? (
+          <div className="py-16 px-6 text-center space-y-4 border border-[#1e232e] rounded-2xl bg-[#12151b] max-w-md mx-auto shadow-xl">
+            <div className="w-12 h-12 rounded-xl bg-[#f97316]/10 border border-[#f97316]/20 flex items-center justify-center text-[#f97316] mx-auto">
+              <LogIn className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-white font-display">Authentication Required</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Please sign in with your Google account to access and manage your Dinely restaurant workspaces.
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  if (onLogout) onLogout();
+                  else window.location.href = '/restaurant/login';
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Sign In to Continue</span>
+              </button>
+            </div>
+          </div>
+        ) : viewState === 'INITIALIZING' || viewState === 'LOADING' ? (
           <div className="py-24 text-center space-y-3 border border-[#1e232e] rounded-2xl bg-[#12151b]">
             <div className="w-8 h-8 border-2 border-[#f97316]/20 border-t-[#f97316] rounded-full animate-spin mx-auto" />
             <p className="text-xs text-slate-400 font-mono">Loading restaurant workspaces...</p>

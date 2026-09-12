@@ -28,12 +28,13 @@ conn_mod.engine = engine
 conn_mod.AsyncSessionLocal = TestingSessionLocal
 
 
-from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain
+from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain, RestaurantMembership
 from app.modules.menu.models import MenuCategory, MenuItem
 from app.modules.tables.models import Table, TableSession
 from app.modules.orders.models import Order, OrderItem, Bill
 from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot, TaxAuditLog
+from app.modules.inventory.models import InventoryItemModel, SupplierModel
 
 TEST_TABLES = [
     PlatformAdmin.__table__,
@@ -41,6 +42,7 @@ TEST_TABLES = [
     Restaurant.__table__,
     RestaurantLifecycleLog.__table__,
     RestaurantDomain.__table__,
+    RestaurantMembership.__table__,
     MenuCategory.__table__,
     MenuItem.__table__,
     Table.__table__,
@@ -54,6 +56,8 @@ TEST_TABLES = [
     TaxMenuItem.__table__,
     InvoiceTaxSnapshot.__table__,
     TaxAuditLog.__table__,
+    InventoryItemModel.__table__,
+    SupplierModel.__table__,
 ]
 
 

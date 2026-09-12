@@ -123,7 +123,16 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
       loadData();
     });
 
-    return () => unsubscribe();
+    const unsubStatus = realtimeBus.subscribeStatus((status) => {
+      if (status === 'CONNECTED') {
+        loadData();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      unsubStatus();
+    };
   }, [activeRestaurantId]);
 
   // Inventory Handlers

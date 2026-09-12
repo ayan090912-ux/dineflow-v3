@@ -49,43 +49,64 @@ async def _get_valid_restaurant_ids(restaurant_id: Optional[str], db: AsyncSessi
         pass
     return valid
 
+def _extract_clean_table_number(table_number: Optional[str], table_id: Optional[str] = None) -> str:
+    import re
+    raw = (table_number or "").strip()
+    digits = re.findall(r'\d+', raw)
+    if digits:
+        return digits[0].zfill(2)
+    if table_id:
+        digits_id = re.findall(r'\d+', table_id)
+        if digits_id:
+            return digits_id[-1].zfill(2)
+    return raw or "01"
+
 def _get_table_match_filter(table_id: str, table_number: Optional[str] = None):
+    import re
     candidates = [table_id, table_id.lower(), table_id.upper()]
     if table_number:
         candidates.extend([table_number, table_number.lower(), table_number.upper()])
     
-    clean = table_id.strip()
+    clean = str(table_id).strip()
+    clean_digits = re.findall(r'\d+', clean)
     suffix = None
     if clean.lower().startswith("tbl-") or clean.lower().startswith("tbl_"):
         suffix = clean[4:].strip()
     elif "table" in clean.lower():
         suffix = clean.lower().replace("table", "").strip()
-    
+    elif clean_digits:
+        suffix = clean_digits[0].lstrip("0") or "0"
+
     conditions = [
         Table.id.in_(candidates),
         Table.table_number.in_(candidates)
     ]
     if suffix:
+        raw_num = suffix.lstrip("0") or "0"
+        padded_2 = raw_num.zfill(2)
         normalized_variants = [
-            f"Table {suffix}",
-            f"Table {suffix.zfill(2)}",
-            f"table_{suffix}",
-            f"table_{suffix.zfill(2)}",
-            f"tbl-{suffix}",
-            f"tbl-{suffix.zfill(2)}",
-            suffix
+            f"Table {raw_num}",
+            f"Table {padded_2}",
+            f"table_{raw_num}",
+            f"table_{padded_2}",
+            f"tbl-{raw_num}",
+            f"tbl-{padded_2}",
+            raw_num,
+            padded_2
         ]
         conditions.extend([
             Table.table_number.in_(normalized_variants),
             Table.id.in_(normalized_variants),
-            Table.id.like(f"%table_{suffix}%"),
-            Table.id.like(f"%table_{suffix.zfill(2)}%")
+            Table.id.like(f"%table_{raw_num}%"),
+            Table.id.like(f"%table_{padded_2}%"),
+            Table.id.like(f"%-{padded_2}")
         ])
     return or_(*conditions)
 
 class CreateTableSchema(BaseModel):
     id: Optional[str] = None
-    tableNumber: str
+    tableNumber: Optional[str] = None
+    table_number: Optional[str] = None
     section: Optional[str] = "Main Hall"
     capacity: Optional[int] = 4
 
@@ -107,7 +128,8 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
     pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
     for t in tables:
-        t.qr_code_url = f"https://{pub_slug}.dinely.food/customer?table={t.table_number}&tableId={t.id}"
+        clean_table = _extract_clean_table_number(t.table_number, t.id)
+        t.qr_code_url = f"https://{pub_slug}.dinely.food/customer?table={clean_table}"
         sess_id = active_session_map.get(t.id) or active_session_num_map.get(t.table_number)
         if sess_id:
             t.status = "OCCUPIED"
@@ -146,9 +168,9 @@ async def create_table(
     caller: CallerContext = Depends(require_tenant_owner_or_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    t_num = payload.tableNumber.strip()
-    clean_num = t_num.lower().replace(" ", "_")
-    t_id = payload.id or f"tbl-{restaurant_id}-{clean_num}"
+    t_num = (payload.tableNumber or payload.table_number or "Table 01").strip()
+    clean_num = _extract_clean_table_number(t_num)
+    t_id = payload.id or f"tbl-{restaurant_id}-table_{clean_num}"
     pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
 
     query = select(Table).where((Table.restaurant_id == restaurant_id) & ((Table.id == t_id) | (Table.table_number == t_num)))
@@ -160,6 +182,7 @@ async def create_table(
             existing.section = payload.section
         if payload.capacity:
             existing.capacity = payload.capacity
+        existing.qr_code_url = f"https://{pub_slug}.dinely.food/customer?table={t_num}"
         await db.commit()
         await db.refresh(existing)
         return existing
@@ -172,7 +195,7 @@ async def create_table(
         capacity=payload.capacity or 4,
         status="AVAILABLE",
         is_occupied=False,
-        qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={t_num}&tableId={t_id}"
+        qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={t_num}"
     )
     db.add(new_tbl)
     await db.commit()
@@ -209,20 +232,45 @@ async def get_table_session(
 ):
     """
     Read-only retrieval of the current active session for a table.
-    Strictly idempotent; never creates or mutates sessions or tables on GET.
+    Strict multi-tenant cross-verification:
+    - If table belongs to another restaurant: 403 Forbidden
+    - If table does not exist: 404 Not Found
     """
+    valid_rest_ids = await _get_valid_restaurant_ids(restaurant_id, db)
+    if not valid_rest_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{restaurant_id}' not found."
+        )
+
+    # 1. Match table in this restaurant
     query_tbl = select(Table).where(
-        (Table.restaurant_id == restaurant_id) &
+        (Table.restaurant_id.in_(valid_rest_ids)) &
         _get_table_match_filter(table_id, table_number)
     )
     res_tbl = await db.execute(query_tbl)
     tbl = res_tbl.scalar_one_or_none()
     
-    resolved_tbl_id = tbl.id if tbl else table_id
-    resolved_tbl_num = tbl.table_number if tbl else (table_number or table_id)
+    if not tbl:
+        # Cross-tenant security check: does this table exist in another restaurant?
+        query_other = select(Table).where(_get_table_match_filter(table_id, table_number))
+        res_other = await db.execute(query_other)
+        other_tbl = res_other.scalars().first()
+        if other_tbl and other_tbl.restaurant_id not in valid_rest_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Table '{table_id}' does not belong to restaurant '{restaurant_id}'."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Table '{table_id}' not found in restaurant '{restaurant_id}'."
+        )
+
+    resolved_tbl_id = tbl.id
+    resolved_tbl_num = tbl.table_number
 
     query_sess = select(TableSession).where(
-        (TableSession.restaurant_id == restaurant_id) &
+        (TableSession.restaurant_id.in_(valid_rest_ids)) &
         ((TableSession.table_id == resolved_tbl_id) | (TableSession.table_number == resolved_tbl_num)) &
         (TableSession.status == "ACTIVE")
     ).order_by(TableSession.session_started_at.desc())
@@ -246,40 +294,47 @@ async def create_table_session(
 ):
     """
     Explicit mutation endpoint to start or claim an active session for a table.
+    Strict multi-tenant cross-verification:
+    - If table belongs to another restaurant: 403 Forbidden
+    - If table does not exist: 404 Not Found (Auto-creation forbidden)
     """
+    valid_rest_ids = await _get_valid_restaurant_ids(restaurant_id, db)
+    if not valid_rest_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{restaurant_id}' not found."
+        )
+
+    canonical_rest_id = valid_rest_ids[0]
+
+    # 1. Match table in this restaurant
     query_tbl = select(Table).where(
-        (Table.restaurant_id == restaurant_id) &
+        (Table.restaurant_id.in_(valid_rest_ids)) &
         _get_table_match_filter(table_id, table_number)
     )
     res_tbl = await db.execute(query_tbl)
     tbl = res_tbl.scalar_one_or_none()
 
     if not tbl:
-        query_rest = select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.deleted_at.is_(None))
-        res_rest = await db.execute(query_rest)
-        rest = res_rest.scalar_one_or_none()
-        if not rest:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Restaurant '{restaurant_id}' not found.")
-        
-        pub_slug = rest.public_slug or rest.slug
-        resolved_tbl_num = table_number or (table_id if "table" in str(table_id).lower() else "Table 01")
-        tbl = Table(
-            id=table_id,
-            restaurant_id=restaurant_id,
-            table_number=resolved_tbl_num,
-            section="Main Hall",
-            capacity=4,
-            status="OCCUPIED",
-            is_occupied=True,
-            qr_code_url=f"https://{pub_slug}.dinely.food/customer?table={resolved_tbl_num}&tableId={table_id}"
+        # Cross-tenant security check: does this table exist in another restaurant?
+        query_other = select(Table).where(_get_table_match_filter(table_id, table_number))
+        res_other = await db.execute(query_other)
+        other_tbl = res_other.scalars().first()
+        if other_tbl and other_tbl.restaurant_id not in valid_rest_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Table '{table_id}' does not belong to restaurant '{restaurant_id}'."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Table '{table_id}' not found in restaurant '{restaurant_id}'. Auto-creation forbidden."
         )
-        db.add(tbl)
-    
+
     resolved_tbl_id = tbl.id
     resolved_tbl_num = tbl.table_number
 
     query_sess = select(TableSession).where(
-        (TableSession.restaurant_id == restaurant_id) &
+        (TableSession.restaurant_id.in_(valid_rest_ids)) &
         ((TableSession.table_id == resolved_tbl_id) | (TableSession.table_number == resolved_tbl_num)) &
         (TableSession.status == "ACTIVE")
     ).order_by(TableSession.session_started_at.desc())
@@ -301,7 +356,7 @@ async def create_table_session(
     now_utc = datetime.now(timezone.utc)
     new_sess = TableSession(
         id=f"sess-{int(now_utc.timestamp() * 1000)}",
-        restaurant_id=restaurant_id,
+        restaurant_id=tbl.restaurant_id or canonical_rest_id,
         table_id=resolved_tbl_id,
         table_number=resolved_tbl_num,
         status="ACTIVE",
@@ -317,7 +372,7 @@ async def create_table_session(
     try:
         from app.modules.websocket.manager import ws_manager
         await ws_manager.broadcast_event(
-            restaurant_id=restaurant_id,
+            restaurant_id=tbl.restaurant_id or canonical_rest_id,
             event_type="table_status_updated",
             payload={"table_id": resolved_tbl_id, "table_number": resolved_tbl_num, "status": "OCCUPIED", "session_id": new_sess.id},
             target_audience=["WAITER", "CUSTOMER", "OWNER"]

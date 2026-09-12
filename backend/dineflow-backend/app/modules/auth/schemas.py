@@ -98,3 +98,29 @@ class AuthMeResponse(BaseModel):
     permissions: List[str]
     full_name: Optional[str]
     email: Optional[str]
+
+
+# Terminal Login
+class TerminalLoginRequest(BaseModel):
+    restaurant_id: str
+    identifier: Optional[str] = None
+    passcode: Optional[str] = None
+    pin: Optional[str] = None
+    role: Optional[str] = "STAFF"
+
+
+class TerminalUserPayload(BaseModel):
+    id: str
+    role: str
+    restaurantId: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+class TerminalLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "Bearer"
+    expires_in: int = 86400
+    restaurant_id: str
+    role: str
+    user: TerminalUserPayload

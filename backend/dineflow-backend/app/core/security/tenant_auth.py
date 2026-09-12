@@ -7,8 +7,8 @@ from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
 from app.core.security.firebase import verify_firebase_id_token
-from app.modules.restaurants.models import Restaurant
-from app.core.security.rbac import PLATFORM_ADMIN_ALLOWED_EMAILS
+from app.modules.restaurants.models import Restaurant, RestaurantMembership
+from app.core.security.rbac import PLATFORM_ADMIN_ALLOWED_EMAILS, get_platform_admin_allowed_emails
 from app.core.config.settings import get_settings
 
 security_scheme = HTTPBearer(auto_error=False)
@@ -60,6 +60,35 @@ async def get_caller_context(
 
     # 1. Bearer Token Verification
     if token:
+        # Check backend-signed HS256 JWT (Staff Terminal or Platform Token)
+        is_hs256 = False
+        try:
+            from jose import jwt as jose_jwt
+            unverified_header = jose_jwt.get_unverified_header(token)
+            if unverified_header.get("alg") == "HS256":
+                is_hs256 = True
+        except Exception:
+            pass
+
+        if is_hs256:
+            try:
+                from jose import jwt as jose_jwt
+                payload = jose_jwt.decode(token, settings.JWT_ACCESS_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+                uid = str(payload.get("sub") or payload.get("uid") or "staff_user")
+                role = str(payload.get("role", "STAFF")).upper()
+                email = payload.get("email") or f"{uid}@staff.dinely.internal"
+                rest_id = payload.get("restaurant_id")
+                return CallerContext(
+                    uid=uid,
+                    email=email,
+                    role=role,
+                    is_admin=(role == "PLATFORM_ADMIN"),
+                    restaurant_id=rest_id
+                )
+            except Exception:
+                # Tampered, expired, or invalid HS256 token must fail authentication immediately
+                return CallerContext()
+
         # Check if staff synthetic JWT format (e.g. df_waiter_jwt_<id>_<timestamp>)
         if token.startswith("df_") and "_jwt_" in token:
             parts = token.split("_")
@@ -81,9 +110,7 @@ async def get_caller_context(
             role = claims.get("role") or ("PLATFORM_ADMIN" if claims.get("admin") else "RESTAURANT_OWNER")
 
             # Check Platform Admin status
-            admin_emails = [e.lower() for e in PLATFORM_ADMIN_ALLOWED_EMAILS]
-            if settings.PLATFORM_ADMIN_EMAIL:
-                admin_emails.append(settings.PLATFORM_ADMIN_EMAIL.strip().lower())
+            admin_emails = get_platform_admin_allowed_emails()
 
             is_admin = bool(
                 claims.get("admin")
@@ -103,16 +130,24 @@ async def get_caller_context(
         except Exception:
             pass
 
-    # 2. Staff Session Header Verification
-    if x_staff_role or x_staff_restaurant_id:
-        norm_role = (x_staff_role or "WAITER").strip().upper()
-        return CallerContext(
-            uid=x_staff_id or f"staff-{x_staff_restaurant_id}",
-            email=None,
-            role=norm_role,
-            is_admin=False,
-            restaurant_id=x_staff_restaurant_id
-        )
+    # 2. Staff terminal header authentication (no bearer token needed)
+    # X-Staff-Role + X-Staff-Restaurant-Id assert identity for operational staff terminals only
+    # (waiter, kitchen, bar, host, server, cashier, chef, cook).
+    # Owner and Admin roles MUST authenticate via Bearer token; header spoofing of owner/admin returns 401.
+    ALLOWED_STAFF_HEADER_ROLES = {
+        "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF"
+    }
+    if x_staff_role and x_staff_restaurant_id:
+        norm_role = x_staff_role.strip().upper()
+        if norm_role in ALLOWED_STAFF_HEADER_ROLES:
+            staff_uid = (x_staff_id or f"staff-{norm_role.lower()}").strip()
+            return CallerContext(
+                uid=staff_uid,
+                email=f"{staff_uid}@staff.dinely.internal",
+                role=norm_role,
+                is_admin=False,
+                restaurant_id=x_staff_restaurant_id.strip(),
+            )
 
     return CallerContext()
 
@@ -124,12 +159,12 @@ async def verify_tenant_authorization(
     db: AsyncSession = Depends(get_db)
 ) -> CallerContext:
     """
-    Enforces strict tenant authorization for mutating operations:
+    Enforces strict tenant authorization:
     - Caller must be authenticated (401 if not).
     - Platform admin has cross-tenant access.
-    - Restaurant owner must own the restaurant (403 if UID/email mismatch).
-    - Staff must belong to the exact target restaurant_id (403 if mismatch).
-    - Caller's role must be in allowed_roles if specified (403 if unauthorized).
+    - Restaurant must exist in database (404 if not).
+    - Caller must have a valid membership or direct ownership in target restaurant (403 if not).
+    - Caller role must match allowed_roles if specified (403 if unauthorized).
     """
     if not caller.is_authenticated:
         raise HTTPException(
@@ -137,16 +172,31 @@ async def verify_tenant_authorization(
             detail="Authentication credentials are required to perform this action."
         )
 
-    # 1. Platform Admin has system-wide access
-    if caller.is_admin:
-        return caller
-
     clean_rest_id = (restaurant_id or "").strip()
     if not clean_rest_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Valid restaurant_id is required."
         )
+
+    # 1. Platform Admin has system-wide access
+    if caller.is_admin:
+        return caller
+
+    # 2. Staff terminal fast-path: staff-header-authenticated callers accessing their own restaurant.
+    # Identified by @staff.dinely.internal email (set only by the X-Staff-* header path).
+    is_staff_header_auth = bool(caller.email and caller.email.endswith("@staff.dinely.internal"))
+    if is_staff_header_auth and caller.restaurant_id and caller.restaurant_id.strip() == clean_rest_id:
+        # Still enforce role-level authorization even though we skip the membership DB check
+        if allowed_roles:
+            norm_allowed = [r.strip().upper() for r in allowed_roles]
+            if caller.role not in norm_allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Staff role '{caller.role}' is not authorized to perform this operation.",
+                )
+        caller.restaurant_id = clean_rest_id
+        return caller
 
     # 2. Lookup target restaurant in database
     stmt = select(Restaurant).where(
@@ -167,47 +217,43 @@ async def verify_tenant_authorization(
             detail=f"Restaurant '{restaurant_id}' was not found."
         )
 
-    # 3. Role authorization check if restricted
+    # 3. Check membership in PostgreSQL
+    mem_stmt = select(RestaurantMembership).where(
+        RestaurantMembership.restaurant_id == restaurant.id,
+        or_(
+            RestaurantMembership.user_uid == caller.uid,
+            (func.lower(RestaurantMembership.user_email) == caller.email.lower()) if caller.email else False
+        )
+    ).limit(1)
+    mem_res = await db.execute(mem_stmt)
+    membership = mem_res.scalar_one_or_none()
+
+    # Direct owner check fallback
+    is_direct_owner = (
+        (caller.uid and restaurant.owner_uid and caller.uid == restaurant.owner_uid) or
+        (caller.email and restaurant.owner_email and caller.email.lower() == restaurant.owner_email.lower())
+    )
+
+    if not membership and not is_direct_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: You do not have membership or ownership access to restaurant '{restaurant.name}'."
+        )
+
+    effective_role = (membership.role if membership else "OWNER").upper()
+
+    # 4. Check allowed_roles if specified
     if allowed_roles:
         norm_allowed = [r.strip().upper() for r in allowed_roles]
-        if caller.role not in norm_allowed:
+        if effective_role not in norm_allowed and "OWNER" not in norm_allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Role '{caller.role}' is not authorized to perform this operation."
+                detail=f"Role '{effective_role}' is not authorized to perform this operation."
             )
 
-    # 4. Check Owner access
-    if caller.role in ["OWNER", "RESTAURANT_OWNER", "ADMIN"]:
-        is_owner = False
-        if caller.uid and restaurant.owner_uid and caller.uid == restaurant.owner_uid:
-            is_owner = True
-        elif caller.email and restaurant.owner_email and caller.email.lower() == restaurant.owner_email.lower():
-            is_owner = True
-
-        if not is_owner:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: You do not have ownership access to restaurant '{restaurant_id}'."
-            )
-        return caller
-
-    # 5. Check Staff access
-    if caller.role in ["WAITER", "CHEF", "COOK", "KITCHEN", "BARTENDER", "BAR", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "HOST", "SERVER"]:
-        if not caller.restaurant_id or (
-            caller.restaurant_id != restaurant.id and
-            caller.restaurant_id.lower() != (restaurant.slug or "").lower() and
-            caller.restaurant_id.lower() != (restaurant.public_slug or "").lower()
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: Staff member is assigned to a different restaurant."
-            )
-        return caller
-
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Forbidden: Access Denied"
-    )
+    caller.role = effective_role
+    caller.restaurant_id = restaurant.id
+    return caller
 
 
 async def require_tenant_owner_or_admin(

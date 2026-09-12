@@ -89,6 +89,9 @@ async def test_table_session_closure_tenant_ownership_enforcement(db_session):
 
         # Create table session for restaurant A via explicit POST
         tbl_a_id = f"tbl-{rest_a}-01"
+        db_session.add(Table(id=tbl_a_id, restaurant_id=rest_a, table_number="Table 01", status="AVAILABLE", capacity=4))
+        await db_session.commit()
+
         res_sess = await client.post(f"/api/v1/restaurants/{rest_a}/tables/{tbl_a_id}/session?table_number=Table%2001")
         assert res_sess.status_code in [200, 201]
         sess_a_id = res_sess.json()["id"]

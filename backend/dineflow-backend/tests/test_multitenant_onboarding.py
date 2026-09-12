@@ -260,3 +260,34 @@ async def test_zero_cafe_co_fallback():
         res = await client.get("/api/v1/restaurants/rest-non-existent-999999")
         assert res.status_code == 404
         assert "not found" in res.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_transactional_restaurant_creation_atomic_rollback(monkeypatch):
+    from app.core.database.connection import get_db
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from unittest.mock import patch
+    
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # We simulate a database failure during Table or Domain creation
+        test_fail_id = f"rest-rollback-{uuid.uuid4().hex[:6]}"
+        payload = {
+            "id": test_fail_id,
+            "name": "Rollback Test Diner",
+            "businessType": "RESTAURANT",
+            "hasTables": True,
+            "ownerName": "Fail Tester",
+            "ownerEmail": "fail@tester.com"
+        }
+        
+        # Patch db.commit to raise an exception
+        with patch.object(AsyncSession, "commit", side_effect=RuntimeError("Simulated database disk failure")):
+            res = await client.post("/api/v1/restaurants", json=payload)
+            assert res.status_code == 500
+            assert "Failed to create restaurant atomically" in res.json()["detail"]
+            
+        # Verify the restaurant was NOT partially created
+        verify_res = await client.get(f"/api/v1/restaurants/{test_fail_id}")
+        assert verify_res.status_code == 404
+

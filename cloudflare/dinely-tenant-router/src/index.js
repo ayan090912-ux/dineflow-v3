@@ -110,8 +110,17 @@ async function proxyToOrigin(request, url, originalHostname, tenantSlug, isCusto
 
     // If origin issues a redirect, rewrite Location to preserve original tenant hostname
     if (resHeaders.has('Location')) {
-      const loc = resHeaders.get('Location');
-      resHeaders.set('Location', loc.replace(ORIGIN_HOST, originalHostname));
+      let loc = resHeaders.get('Location');
+      loc = loc
+        .replace(ORIGIN_HOST, originalHostname)
+        .replace('dinely-cd6cd.firebaseapp.com', originalHostname);
+      if (tenantSlug) {
+        loc = loc
+          .replace('https://dinely.food', `https://${originalHostname}`)
+          .replace('http://dinely.food', `https://${originalHostname}`)
+          .replace('https://www.dinely.food', `https://${originalHostname}`);
+      }
+      resHeaders.set('Location', loc);
     }
 
     // Add telemetry headers

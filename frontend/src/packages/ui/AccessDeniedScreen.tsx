@@ -4,18 +4,22 @@ import { DinelyLogo } from './DinelyLogo';
 
 export interface AccessDeniedScreenProps {
   tenantName?: string;
+  resourceName?: string;
   requiredRole?: string;
   message?: string;
   onLogout?: () => void;
   onGoHome?: () => void;
+  onBack?: () => void;
 }
 
 export function AccessDeniedScreen({
   tenantName,
+  resourceName,
   requiredRole,
   message,
   onLogout,
   onGoHome,
+  onBack,
 }: AccessDeniedScreenProps) {
   return (
     <div className="relative min-h-screen w-full bg-[#0a0a0c] text-white flex flex-col items-center justify-center p-6 overflow-hidden">
@@ -48,7 +52,7 @@ export function AccessDeniedScreen({
           {message || (
             <>
               Your authenticated credentials do not grant access to operational terminals for{' '}
-              <strong className="text-white">{tenantName || 'this restaurant'}</strong>. Each restaurant tenant on Dinely maintains isolated staff permissions and data boundaries.
+              <strong className="text-white">{resourceName || tenantName || 'this restaurant'}</strong>. Each restaurant tenant on Dinely maintains isolated staff permissions and data boundaries.
             </>
           )}
         </p>
@@ -72,11 +76,11 @@ export function AccessDeniedScreen({
           )}
 
           <button
-            onClick={onGoHome || (() => { window.location.href = 'https://dinely.food/workspace'; })}
+            onClick={onBack || onGoHome || (() => { window.location.href = 'https://dinely.food/workspace'; })}
             className="w-full py-3 px-5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-medium text-sm transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] flex items-center justify-center gap-2"
           >
             <ArrowLeft size={16} />
-            My Workspace
+            {onBack ? 'Back' : 'My Workspace'}
           </button>
         </div>
       </div>

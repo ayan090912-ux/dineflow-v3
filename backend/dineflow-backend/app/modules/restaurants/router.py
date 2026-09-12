@@ -10,7 +10,8 @@ from sqlalchemy import select, func, or_
 
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import require_tenant_owner_or_admin, get_caller_context, CallerContext
-from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain
+from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain, RestaurantMembership
+from app.core.tenant.resolver import resolve_public_tenant, resolve_tenant, TenantResolutionMode
 from app.modules.restaurants.tenant_resolver import resolve_public_tenant_from_host
 from app.modules.tables.models import Table
 from app.modules.websocket.manager import ws_manager
@@ -59,6 +60,9 @@ class CreateRestaurantSchema(BaseModel):
     taxPercentage: Optional[float] = 5.0
     tableCount: Optional[int] = 8
     theme: Optional[Any] = None
+    lifecycleStatus: Optional[str] = None
+    initialStatus: Optional[str] = None
+
 
 class UpdateRestaurantSchema(BaseModel):
     name: Optional[str] = None
@@ -99,10 +103,10 @@ async def resolve_public_restaurant(
     db: AsyncSession = Depends(get_db)
 ):
     if hostname:
-        resolved = await resolve_public_tenant_from_host(hostname, db, require_live=False)
-        if resolved is None:
+        ctx = await resolve_public_tenant(db=db, hostname=hostname, allow_platform_root=True)
+        if ctx is None:
             return {"isPlatformDomain": True, "message": "Platform root context"}
-        return resolved
+        return ctx.raw_restaurant
 
     target_slug = slug
     if not target_slug:
@@ -110,120 +114,17 @@ async def resolve_public_restaurant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant subdomain or slug not specified"
         )
-    return await _lookup_public_restaurant_by_slug(target_slug, db)
+    ctx = await resolve_public_tenant(db=db, slug=target_slug)
+    return ctx.raw_restaurant
 
 @router.get("/public/slug/{slug}")
 async def resolve_public_restaurant_by_slug(
     slug: str,
     db: AsyncSession = Depends(get_db)
 ):
-    return await _lookup_public_restaurant_by_slug(slug, db)
+    ctx = await resolve_public_tenant(db=db, slug=slug)
+    return ctx.raw_restaurant
 
-async def _lookup_public_restaurant_by_slug(target_slug: str, db: AsyncSession):
-
-    clean_slug = target_slug.strip().lower()
-    query = select(Restaurant).where(
-        or_(
-            func.lower(Restaurant.public_slug) == clean_slug,
-            func.lower(Restaurant.slug) == clean_slug,
-            Restaurant.id == target_slug.strip()
-        ),
-        Restaurant.deleted_at.is_(None)
-    )
-    result = await db.execute(query)
-    rest = result.scalar_one_or_none()
-
-    if not rest or getattr(rest, "lifecycle_status", None) in ["ARCHIVED", "DEACTIVATED"] or getattr(rest, "status", None) in ["ARCHIVED", "DEACTIVATED"]:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Restaurant '{target_slug}' not found"
-        )
-
-    pub_slug = rest.public_slug or rest.slug
-    return {
-        "id": rest.id,
-        "restaurant_id": rest.id,
-        "name": rest.name,
-        "slug": rest.slug,
-        "publicSlug": pub_slug,
-        "public_domain": f"https://{pub_slug}.dinely.food",
-        "domain": f"https://{pub_slug}.dinely.food",
-        "cuisine": rest.cuisine,
-        "businessType": rest.business_type,
-        "hasBar": rest.has_bar,
-        "hasTables": rest.has_tables,
-        "hasKitchen": rest.has_kitchen,
-        "hasWaiter": rest.has_waiter,
-        "hasInventory": rest.has_inventory,
-        "hasBilling": rest.has_billing,
-        "enabledModules": rest.enabled_modules,
-        "phone": rest.phone,
-        "email": rest.email,
-        "address": rest.address,
-        "currency": rest.currency,
-        "taxPercentage": rest.tax_percentage,
-        "isApproved": rest.is_approved,
-        "lifecycleStatus": rest.lifecycle_status,
-        "status": rest.status,
-        "upiId": rest.upi_id,
-        "upiMerchantName": rest.upi_merchant_name,
-        "upiQrUrl": rest.upi_qr_url,
-        "upiEnabled": rest.upi_enabled,
-        "theme": rest.theme_json,
-    }
-
-@router.get("/public/slug/{slug}")
-async def get_public_restaurant_by_slug(slug: str, db: AsyncSession = Depends(get_db)):
-    clean_slug = slug.strip().lower()
-    query = select(Restaurant).where(
-        or_(
-            func.lower(Restaurant.public_slug) == clean_slug,
-            func.lower(Restaurant.slug) == clean_slug,
-            Restaurant.id == slug.strip()
-        ),
-        Restaurant.deleted_at.is_(None)
-    )
-    result = await db.execute(query)
-    rest = result.scalar_one_or_none()
-
-    if not rest or getattr(rest, "lifecycle_status", None) in ["ARCHIVED", "DEACTIVATED"] or getattr(rest, "status", None) in ["ARCHIVED", "DEACTIVATED"]:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Restaurant '{slug}' not found"
-        )
-
-    pub_slug = rest.public_slug or rest.slug
-    return {
-        "id": rest.id,
-        "restaurant_id": rest.id,
-        "name": rest.name,
-        "slug": rest.slug,
-        "publicSlug": pub_slug,
-        "public_domain": f"https://{pub_slug}.dinely.food",
-        "domain": f"https://{pub_slug}.dinely.food",
-        "cuisine": rest.cuisine,
-        "businessType": rest.business_type,
-        "hasBar": rest.has_bar,
-        "hasTables": rest.has_tables,
-        "hasKitchen": rest.has_kitchen,
-        "hasWaiter": rest.has_waiter,
-        "hasInventory": rest.has_inventory,
-        "hasBilling": rest.has_billing,
-        "enabledModules": rest.enabled_modules,
-        "phone": rest.phone,
-        "email": rest.email,
-        "address": rest.address,
-        "currency": rest.currency,
-        "taxPercentage": rest.tax_percentage,
-        "isApproved": rest.is_approved,
-        "lifecycleStatus": rest.lifecycle_status,
-        "status": rest.status,
-        "upiId": rest.upi_id,
-        "upiMerchantName": rest.upi_merchant_name,
-        "upiQrUrl": rest.upi_qr_url,
-        "upiEnabled": rest.upi_enabled,
-        "theme": rest.theme_json,
-    }
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = Depends(get_db)):
@@ -285,8 +186,8 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
         currency=payload.currency or "INR (₹)",
         tax_percentage=payload.taxPercentage or 5.0,
         is_approved=False,
-        lifecycle_status="PENDING_APPROVAL",
-        submitted_at=datetime.now(timezone.utc),
+        lifecycle_status=(payload.lifecycleStatus or payload.initialStatus or "PENDING_APPROVAL").strip().upper(),
+        submitted_at=datetime.now(timezone.utc) if (payload.lifecycleStatus or payload.initialStatus or "PENDING_APPROVAL").strip().upper() == "PENDING_APPROVAL" else None,
         status="CLOSED",
         theme_json=payload.theme or {
             "restaurantId": rest_id,
@@ -295,68 +196,89 @@ async def create_restaurant(payload: CreateRestaurantSchema, db: AsyncSession = 
             "currency": payload.currency or "INR (₹)",
         }
     )
-    db.add(new_rest)
-    await db.flush()
+    try:
+        db.add(new_rest)
+        await db.flush()
 
-    # Pre-create tables strictly for this tenant with tenant subdomain QR url
-    if has_tables:
-        num_tables = max(1, min(payload.tableCount or 8, 100))
-        for i in range(1, num_tables + 1):
-            t_num = f"Table {str(i).zfill(2)}"
-            t_id = f"tbl-{rest_id}-table_{str(i).zfill(2)}"
-            db.add(Table(
-                id=t_id,
+        # Pre-create tables strictly for this tenant with tenant subdomain QR url
+        if has_tables:
+            num_tables = max(1, min(payload.tableCount or 8, 100))
+            for i in range(1, num_tables + 1):
+                clean_num = str(i).zfill(2)
+                t_num = f"Table {clean_num}"
+                t_id = f"tbl-{rest_id}-table_{clean_num}"
+                db.add(Table(
+                    id=t_id,
+                    restaurant_id=rest_id,
+                    table_number=t_num,
+                    section="Main Hall" if i <= max(1, int(num_tables * 0.7)) else "Terrace",
+                    capacity=4,
+                    status="AVAILABLE",
+                    is_occupied=False,
+                    qr_code_url=f"https://{public_slug}.dinely.food/customer?table={clean_num}"
+                ))
+
+        # Register Canonical Primary Domain
+        db.add(RestaurantDomain(
+            id=f"dom-{rest_id}",
+            restaurant_id=rest_id,
+            hostname=f"{public_slug}.dinely.food",
+            domain=f"{public_slug}.dinely.food",
+            domain_type="SUBDOMAIN",
+            verification_status="VERIFIED",
+            is_primary=True,
+            is_verified=True,
+            verified_at=datetime.now(timezone.utc),
+        ))
+
+        # Register Initial Owner Membership
+        owner_u = payload.ownerUid or (new_rest.owner_uid if new_rest.owner_uid else None)
+        if owner_u:
+            db.add(RestaurantMembership(
+                id=f"mem-{rest_id}-{uuid.uuid4().hex[:6]}",
                 restaurant_id=rest_id,
-                table_number=t_num,
-                section="Main Hall" if i <= max(1, int(num_tables * 0.7)) else "Terrace",
-                capacity=4,
-                status="AVAILABLE",
-                is_occupied=False,
-                qr_code_url=f"https://{public_slug}.dinely.food/customer?table={t_num}&tableId={t_id}"
+                user_uid=owner_u,
+                user_email=new_rest.owner_email or "",
+                role="OWNER"
             ))
 
-    # Register Canonical Primary Domain
-    db.add(RestaurantDomain(
-        id=f"dom-{rest_id}",
-        restaurant_id=rest_id,
-        hostname=f"{public_slug}.dinely.food",
-        domain=f"{public_slug}.dinely.food",
-        domain_type="SUBDOMAIN",
-        verification_status="VERIFIED",
-        is_primary=True,
-        is_verified=True,
-        verified_at=datetime.now(timezone.utc),
-    ))
+        # Record Initial Application Lifecycle Log
+        initial_log = RestaurantLifecycleLog(
+            id=f"log-{rest_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+            restaurant_id=rest_id,
+            event_type="CREATED",
+            previous_status=None,
+            new_status=new_rest.lifecycle_status,
+            reason="Initial restaurant onboarding draft created" if new_rest.lifecycle_status == "DRAFT" else "Initial restaurant onboarding submission",
+            performed_by=new_rest.owner_email or "Owner",
+            performed_at=datetime.now(timezone.utc)
+        )
+        db.add(initial_log)
 
-    # Record Initial Application Lifecycle Log
-    initial_log = RestaurantLifecycleLog(
-        id=f"log-{rest_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
-        restaurant_id=rest_id,
-        event_type="CREATED",
-        previous_status=None,
-        new_status="PENDING_APPROVAL",
-        reason="Initial restaurant onboarding submission",
-        performed_by=new_rest.owner_email or "Owner",
-        performed_at=datetime.now(timezone.utc)
-    )
-    db.add(initial_log)
+        await db.commit()
+        await db.refresh(new_rest)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create restaurant atomically: {str(e)}"
+        )
 
-    await db.commit()
-    await db.refresh(new_rest)
-
-    # Realtime notification to Platform Admin and Global Bus (non-blocking)
-    asyncio.create_task(ws_manager.broadcast_global({
-        "type": "RestaurantRegistrationSubmitted",
-        "restaurantId": rest_id,
-        "restaurantName": new_rest.name,
-        "publicSlug": public_slug,
-        "domain": domain_url,
-        "ownerEmail": new_rest.owner_email,
-        "ownerName": new_rest.owner_name,
-        "businessType": new_rest.business_type,
-        "lifecycleStatus": new_rest.lifecycle_status,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }))
+    # Realtime notification to Platform Admin if created directly in PENDING_APPROVAL
+    if new_rest.lifecycle_status == "PENDING_APPROVAL":
+        asyncio.create_task(ws_manager.broadcast_to_platform_admin({
+            "type": "RestaurantRegistrationSubmitted",
+            "restaurantId": rest_id,
+            "restaurant_id": rest_id,
+            "restaurantName": new_rest.name,
+            "publicSlug": public_slug,
+            "domain": domain_url,
+            "ownerEmail": new_rest.owner_email,
+            "ownerName": new_rest.owner_name,
+            "businessType": new_rest.business_type,
+            "lifecycleStatus": new_rest.lifecycle_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }))
 
     return new_rest
 
@@ -407,11 +329,24 @@ async def get_owner_restaurants(
     if not target_email and not target_uid:
         return []
 
+    # Find restaurant IDs user has membership for
+    mem_conditions = []
+    if target_uid:
+        mem_conditions.append(RestaurantMembership.user_uid == target_uid)
+    if target_email:
+        mem_conditions.append(func.lower(RestaurantMembership.user_email) == target_email)
+
+    mem_ids_stmt = select(RestaurantMembership.restaurant_id).where(or_(*mem_conditions))
+    mem_ids_res = await db.execute(mem_ids_stmt)
+    mem_rest_ids = mem_ids_res.scalars().all()
+
     conditions = []
     if target_email:
         conditions.append(func.lower(Restaurant.owner_email) == target_email)
     if target_uid:
         conditions.append(Restaurant.owner_uid == target_uid)
+    if mem_rest_ids:
+        conditions.append(Restaurant.id.in_(mem_rest_ids))
 
     query = select(Restaurant).where(
         or_(*conditions),
@@ -635,3 +570,130 @@ async def update_workspace_modules(
         "hasBilling": rest.has_billing,
         "hasTables": rest.has_tables,
     }
+
+
+class SubmitRestaurantSchema(BaseModel):
+    name: Optional[str] = None
+    restaurantName: Optional[str] = None
+    cuisine: Optional[str] = None
+    businessType: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    totalTablesCount: Optional[int] = None
+    enabledModules: Optional[List[str]] = None
+
+
+@router.post("/{restaurant_id}/submit")
+async def submit_restaurant(
+    restaurant_id: str,
+    payload: Optional[SubmitRestaurantSchema] = None,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Submits a restaurant application for Platform Admin review.
+    Transitions lifecycle_status from DRAFT (or REJECTED upon resubmission) to PENDING_APPROVAL.
+    Notifies Platform Admin in real-time over the dedicated admin channel.
+    """
+    query = select(Restaurant).where(Restaurant.id == restaurant_id)
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+
+    if not rest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{restaurant_id}' not found."
+        )
+
+    # Idempotent: If already PENDING_APPROVAL, return current state
+    if rest.lifecycle_status == "PENDING_APPROVAL":
+        return rest
+
+    # Reject submission if already approved and LIVE
+    if rest.lifecycle_status == "LIVE" or rest.is_approved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Restaurant is already approved and LIVE. Cannot resubmit."
+        )
+
+    # Only DRAFT and REJECTED states can transition to PENDING_APPROVAL
+    if rest.lifecycle_status not in ("DRAFT", "REJECTED"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot submit restaurant from lifecycle status '{rest.lifecycle_status}'."
+        )
+
+    prev_status = rest.lifecycle_status
+    rest.lifecycle_status = "PENDING_APPROVAL"
+    rest.is_approved = False
+    rest.submitted_at = datetime.now(timezone.utc)
+    rest.rejection_reason = None
+    rest.requested_changes = None
+
+    # Apply any updated application details if provided in submit payload
+    if payload:
+        new_name = payload.restaurantName or payload.name
+        if new_name:
+            rest.name = new_name.strip()
+        if payload.cuisine:
+            rest.cuisine = payload.cuisine.strip()
+        if payload.businessType:
+            rest.business_type = payload.businessType.strip()
+        if payload.address:
+            rest.address = payload.address.strip()
+        if payload.phone:
+            rest.phone = payload.phone.strip()
+        if payload.email:
+            rest.email = payload.email.strip()
+        if payload.enabledModules:
+            rest.enabled_modules = payload.enabledModules
+
+    # Record Lifecycle History in PostgreSQL
+    db.add(RestaurantLifecycleLog(
+        id=f"log-{rest.id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        restaurant_id=rest.id,
+        event_type="SUBMITTED",
+        previous_status=prev_status,
+        new_status="PENDING_APPROVAL",
+        reason="Application submitted for platform approval" if prev_status == "DRAFT" else "Application resubmitted after addressing feedback",
+        performed_by=caller.email or rest.owner_email or "Owner",
+        performed_at=datetime.now(timezone.utc)
+    ))
+
+    await db.commit()
+    await db.refresh(rest)
+
+    # Realtime notification to Platform Admin over dedicated admin channel
+    asyncio.create_task(ws_manager.broadcast_to_platform_admin({
+        "type": "RestaurantRegistrationSubmitted",
+        "restaurantId": rest.id,
+        "restaurant_id": rest.id,
+        "restaurantName": rest.name,
+        "publicSlug": rest.public_slug or rest.slug,
+        "domain": rest.domain,
+        "ownerEmail": rest.owner_email,
+        "ownerName": rest.owner_name,
+        "businessType": rest.business_type,
+        "lifecycleStatus": "PENDING_APPROVAL",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }))
+
+    # Realtime notification to Restaurant room for owner live updates
+    asyncio.create_task(ws_manager.broadcast_to_restaurant(
+        restaurant_id=rest.id,
+        message={
+            "type": "RestaurantStatusUpdated",
+            "restaurantId": rest.id,
+            "restaurant_id": rest.id,
+            "lifecycleStatus": "PENDING_APPROVAL",
+            "isApproved": False,
+            "is_approved": False,
+            "rejectionReason": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    ))
+
+    return rest
+

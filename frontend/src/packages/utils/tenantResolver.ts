@@ -200,8 +200,9 @@ export function getRestaurantPublicDomain(
 
 /**
  * Generates customer QR code or direct menu URL pointing to tenant public domain.
- * Formats: https://<slug>.dinely.food/customer?table=<tableNumber>&tableId=<tableId>
- * Guaranteed to resolve and load on all iOS Safari and Android camera QR scans worldwide.
+ * Formats: https://<slug>.dinely.food/customer?table=01
+ * Strict canonical Dinely QR architecture:
+ * restaurant_id + table_id -> clean 2-digit table URL: https://<slug>.dinely.food/customer?table=01
  */
 export function getRestaurantCustomerUrl(
   slugOrRest?: string | { publicSlug?: string; slug?: string; id?: string; domain?: string } | null,
@@ -213,9 +214,24 @@ export function getRestaurantCustomerUrl(
     base = base.slice(0, -1);
   }
 
-  const params = new URLSearchParams();
-  if (tableNumber) params.set('table', tableNumber);
-  if (tableId) params.set('tableId', tableId);
-  const query = params.toString();
-  return `${base}/customer${query ? `?${query}` : ''}`;
+  // Extract clean 2-digit table number if tableNumber or tableId is provided
+  let cleanTable: string | undefined = undefined;
+  if (tableNumber) {
+    const digits = tableNumber.match(/\d+/);
+    if (digits) {
+      cleanTable = digits[0].padStart(2, '0');
+    } else {
+      cleanTable = tableNumber.trim();
+    }
+  } else if (tableId) {
+    const digits = tableId.match(/\d+/g);
+    if (digits && digits.length > 0) {
+      cleanTable = digits[digits.length - 1].padStart(2, '0');
+    }
+  }
+
+  if (cleanTable) {
+    return `${base}/customer?table=${encodeURIComponent(cleanTable)}`;
+  }
+  return `${base}/customer`;
 }

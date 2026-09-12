@@ -44,7 +44,8 @@ export type RealTimeEventType =
   | 'menu_item_availability_changed'
   | 'MenuItemCreated'
   | 'MenuItemUpdated'
-  | 'MenuItemDeleted';
+  | 'MenuItemDeleted'
+  | 'RECONNECTED';
 
 
 export interface RealTimeEventPayload {
@@ -236,6 +237,7 @@ class RealTimeEventBus {
 
       this.ws.onopen = () => {
         console.log('[WS_CONNECTED] Scoped to restaurant:', restaurantId, 'role:', role);
+        const wasReconnecting = this.reconnectAttempts > 0;
         this.setStatus('CONNECTED');
         this.reconnectAttempts = 0;
 
@@ -245,6 +247,14 @@ class RealTimeEventBus {
             this.ws.send('ping');
           }
         }, 20000);
+
+        if (wasReconnecting) {
+          this.notifyListeners({
+            type: 'RECONNECTED',
+            restaurantId,
+            timestamp: new Date().toISOString(),
+          }, false);
+        }
       };
 
       this.ws.onmessage = (msgEvent) => {

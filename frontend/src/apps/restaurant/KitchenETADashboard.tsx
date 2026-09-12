@@ -98,8 +98,8 @@ const playKitchenChime = (type: 'NEW_ORDER' | 'OVERDUE' | 'BUMP') => {
 };
 
 interface KitchenETADashboardProps {
-  orders: Order[];
-  onRefreshOrders: () => void;
+  orders?: Order[];
+  onRefreshOrders?: () => void;
   activeRole?: 'KITCHEN' | 'WAITER' | 'OWNER';
   onLogout?: () => void;
 }
@@ -257,11 +257,21 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       if (event.type === 'TableMerged') {
         showToast(`🔗 Large Gathering Table Merge: ${event.data?.mergedGroupLabel || 'Tables Combined'}`, 'info');
       }
+      if (event.type === 'RECONNECTED') {
+        fetchFreshOrders();
+      }
+    });
+
+    const unsubStatus = realtimeBus.subscribeStatus((status) => {
+      if (status === 'CONNECTED') {
+        fetchFreshOrders();
+      }
     });
 
     return () => {
       clearInterval(pollInterval);
       unsubscribe();
+      unsubStatus();
     };
   }, [isMuted]);
 

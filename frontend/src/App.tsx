@@ -88,7 +88,7 @@ function AppContent() {
 
         const isArchived =
           rest.lifecycleStatus === 'ARCHIVED' ||
-          rest.status === 'ARCHIVED' ||
+          (rest.status as string) === 'ARCHIVED' ||
           rest.lifecycleStatus === 'DEACTIVATED';
         if (isArchived) {
           setTenantResolutionState('NOT_FOUND');
@@ -96,7 +96,7 @@ function AppContent() {
         }
 
         const isSuspended =
-          rest.lifecycleStatus === 'SUSPENDED' || rest.status === 'SUSPENDED';
+          rest.lifecycleStatus === 'SUSPENDED' || (rest.status as string) === 'SUSPENDED';
         if (isSuspended) {
           setResolvedTenant(rest);
           setTenantResolutionState('SUSPENDED');
@@ -786,10 +786,38 @@ function AppContent() {
     }
 
     if (cleanPath.startsWith('/admin')) {
-      if (checkWorkspaceAccess('admin')) {
-        return <PlatformApp onLogout={() => handleLogout('/')} />;
+      const adminUser = api.getCurrentUser('ADMIN');
+      const effectiveUser = adminUser || (currentUser?.role === 'PLATFORM_ADMIN' ? currentUser : null);
+      const effectiveEmail = (effectiveUser?.email || '').trim().toLowerCase();
+      const isAuthorizedAdmin = effectiveUser && effectiveUser.role === 'PLATFORM_ADMIN' && effectiveEmail === 'ayan090912@gmail.com';
+
+      // If completely unauthenticated, direct to dedicated Platform Admin login
+      if (!effectiveUser && !currentUser) {
+        return (
+          <RoleLoginPage
+            portal="admin"
+            onNavigate={navigateTo}
+            onLoginSuccess={(_, user) => {
+              setCurrentUser(user);
+              navigateTo('/admin/dashboard');
+            }}
+          />
+        );
       }
-      return <NotFoundPage onNavigate={navigateTo} />;
+
+      // If authenticated and authorized, render Platform Control Plane
+      if (isAuthorizedAdmin) {
+        return <PlatformApp onLogout={() => handleLogout('/admin/login')} />;
+      }
+
+      // Authenticated with non-admin Google account or restaurant owner identity -> 403 Forbidden
+      return (
+        <AccessDeniedScreen
+          resourceName="Dinely Platform Administration"
+          requiredRole="PLATFORM_ADMIN (Primary Authorized Account)"
+          onBack={() => handleLogout('/admin/login')}
+        />
+      );
     }
 
     // 8. Operations Center Screen

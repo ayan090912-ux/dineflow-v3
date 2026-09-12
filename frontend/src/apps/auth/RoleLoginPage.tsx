@@ -172,7 +172,10 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
 
     try {
       const googleUser = await signInPlatformAdminWithGoogle();
-      const idToken = googleUser.idToken || googleUser.email;
+      const idToken = googleUser.idToken;
+      if (!idToken) {
+        throw new Error('Google authentication failed to produce a valid verification token.');
+      }
       const res = await api.loginPlatformAdmin(idToken, googleUser.email);
 
       setSuccessMessage(`Platform Administrator verified. Loading Control Plane...`);
@@ -183,12 +186,12 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       }, 400);
     } catch (err: any) {
       setIsAdminGoogleLoading(false);
-      const msg = err.message || '';
-      if (msg.includes('403') || msg.includes('not authorized') || msg.includes('Access denied')) {
-        setErrorMessage('Access denied. This Google account is not authorized for Dinely Platform Administration.');
-      } else {
-        setErrorMessage(msg || 'Platform Admin authentication failed. Please try again.');
-      }
+      try {
+        const { signOutFirebase } = await import('../../packages/auth/firebase');
+        await signOutFirebase();
+      } catch (_) {}
+      // Generic authorization failure message as mandated
+      setErrorMessage('Your account is not authorized for Platform Admin.');
     }
   };
 
@@ -306,22 +309,22 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
           )}
 
           {/* Platform Admin Dedicated Google Auth */}
-          {portal === 'admin' && (
-            <div className="mb-5">
+          {portal === 'admin' ? (
+            <div className="py-2">
               <button
                 type="button"
                 onClick={handleAdminGoogleAuth}
-                disabled={isLoading || isAdminGoogleLoading}
-                className="w-full flex items-center justify-center gap-3 rounded-full py-3.5 px-5 bg-white hover:bg-white/95 text-slate-900 font-medium text-[14px] transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg disabled:opacity-60 disabled:cursor-not-allowed border-none"
+                disabled={isAdminGoogleLoading}
+                className="w-full flex items-center justify-center gap-3 rounded-full py-4 px-6 bg-white hover:bg-white/95 text-slate-900 font-medium text-[15px] transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-xl disabled:opacity-60 disabled:cursor-not-allowed border-none"
               >
                 {isAdminGoogleLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin text-slate-700" />
-                    <span>Verifying Admin Access...</span>
+                    <Loader2 className="h-5 w-5 animate-spin text-slate-700" />
+                    <span>Verifying Administrator Identity...</span>
                   </>
                 ) : (
                   <>
-                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                    <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
                       <path
                         fill="#4285F4"
                         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -339,79 +342,72 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                       />
                     </svg>
-                    <span>Continue with Admin Google ID</span>
+                    <span>Continue with Google</span>
                   </>
                 )}
               </button>
-
-              <div className="relative my-5 flex items-center justify-center">
-                <div className="w-full border-t border-white/[0.10]" />
-                <span className="absolute bg-[#14161b] px-3 text-[11.5px] text-white/45 uppercase tracking-wider font-mono rounded-full border border-white/[0.08]">
-                  or master admin credentials
-                </span>
-              </div>
             </div>
-          )}
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
-                {config.identifierLabel}
-              </label>
-              <input
-                type="text"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={config.identifierPlaceholder}
-                required
-                className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
+          ) : (
+            /* Staff Form for Kitchen, Waiter, Bar, Inventory */
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  {config.identifierLabel}
+                </label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder={config.identifierPlaceholder}
                   required
-                  className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all pr-10"
+                  className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer bg-transparent border-none"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isLoading || isAdminGoogleLoading}
-              className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-full py-3.5 px-6 text-[14px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg shadow-black/60 border border-white/[0.16] disabled:opacity-50"
-              style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin text-white/70" />
-                  <span>Authenticating...</span>
-                </>
-              ) : (
-                <>
-                  <span>Authenticate Terminal</span>
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-          </form>
+              <div>
+                <label className="block text-[12.5px] font-medium text-white/80 mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full rounded-xl bg-white/[0.05] border border-white/[0.12] focus:border-white/[0.35] focus:bg-white/[0.08] px-4 py-3 text-white placeholder:text-white/35 text-[14px] outline-none transition-all pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer bg-transparent border-none"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-full py-3.5 px-6 text-[14px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-lg shadow-black/60 border border-white/[0.16] disabled:opacity-50"
+                style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-white/70" />
+                    <span>Authenticating...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Authenticate Terminal</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
 
           {/* Security & Isolation Notice */}
           <div className="mt-6 pt-4 border-t border-white/[0.08] text-center">

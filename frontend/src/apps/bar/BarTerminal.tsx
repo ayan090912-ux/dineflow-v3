@@ -99,12 +99,21 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
             playNotificationSound();
           }
         }
+      } else if (event.type === 'RECONNECTED') {
+        loadBarOrders(false);
+      }
+    });
+
+    const unsubStatus = realtimeBus.subscribeStatus((status) => {
+      if (status === 'CONNECTED') {
+        loadBarOrders(false);
       }
     });
 
     return () => {
       clearInterval(pollInterval);
       unsubscribe();
+      unsubStatus();
     };
   }, [soundEnabled]);
 

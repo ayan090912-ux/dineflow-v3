@@ -8,12 +8,34 @@ from app.core.security.firebase import verify_firebase_id_token, set_platform_ad
 
 security_scheme = HTTPBearer(auto_error=False)
 
-# Strict explicit allowlist for Dinely Platform Administrator access
-PLATFORM_ADMIN_ALLOWED_EMAILS = [
-    "ayan090912@gmail.com",
-    "ayanamity7@gmail.com",
-    "ayanamity7",
-]
+# Dynamic allowlist for Dinely Platform Administrator access
+def get_platform_admin_allowed_emails() -> List[str]:
+    settings = get_settings()
+    emails = settings.get_platform_admin_emails()
+    if not emails:
+        emails = ["ayan090912@gmail.com"]
+    return [e.lower() for e in emails]
+
+PLATFORM_ADMIN_ALLOWED_EMAILS = get_platform_admin_allowed_emails()
+
+
+async def is_platform_admin_in_db(email: str) -> bool:
+    """Check if the given email is registered as an active platform admin in the database."""
+    if not email:
+        return False
+    try:
+        from app.core.database.connection import get_db_session
+        from app.modules.auth.models import PlatformAdmin
+        from sqlalchemy import select
+        async with get_db_session() as session:
+            stmt = select(PlatformAdmin).where(
+                PlatformAdmin.email == email.strip().lower(),
+                PlatformAdmin.is_active == True
+            )
+            res = await session.execute(stmt)
+            return res.scalar_one_or_none() is not None
+    except Exception:
+        return False
 
 
 class RBACError(HTTPException):
@@ -64,12 +86,17 @@ async def get_current_firebase_admin(
     if not uid:
         raise AuthenticationError("Token payload missing valid user identity (UID).")
 
-    # 2. Strict Allowlist Comparison
-    allowed_list = [e.lower() for e in PLATFORM_ADMIN_ALLOWED_EMAILS]
-    if settings.PLATFORM_ADMIN_EMAIL:
-        allowed_list.append(settings.PLATFORM_ADMIN_EMAIL.strip().lower())
+    # 2. Dynamic Allowlist & Database Comparison
+    allowed_list = get_platform_admin_allowed_emails()
+    is_email_authorized = email in allowed_list
+    if not is_email_authorized and email:
+        is_email_authorized = await is_platform_admin_in_db(email)
 
-    is_authorized = email in allowed_list or (settings.PLATFORM_ADMIN_FIREBASE_UID and uid == settings.PLATFORM_ADMIN_FIREBASE_UID)
+    is_uid_authorized = False
+    if settings.PLATFORM_ADMIN_FIREBASE_UID:
+        is_uid_authorized = (uid == settings.PLATFORM_ADMIN_FIREBASE_UID)
+
+    is_authorized = is_email_authorized or is_uid_authorized
 
     # Strongest Security Boundary Check: Reject any other email or account attempting admin access
     if not is_authorized:
