@@ -2,9 +2,18 @@ import asyncio
 import json
 import base64
 import time
+import socket
 from datetime import datetime, timezone
 import httpx
 import pytest
+
+# Ensure reliable IPv4 socket resolution across Windows environments
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_getaddrinfo(*args, **kwargs):
+    res = _orig_getaddrinfo(*args, **kwargs)
+    ipv4 = [r for r in res if r[0] == socket.AF_INET]
+    return ipv4 if ipv4 else res
+socket.getaddrinfo = _ipv4_getaddrinfo
 
 # PRODUCTION BACKEND URL
 BASE_URL = "https://dineflow-v3.onrender.com/api/v1"
