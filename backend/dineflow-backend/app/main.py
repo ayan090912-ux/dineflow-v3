@@ -29,6 +29,47 @@ async def ensure_db_schema_columns(conn):
     if "postgres" not in str(conn.engine.url).lower():
         return
 
+    create_table_statements = [
+        """CREATE TABLE IF NOT EXISTS restaurant_lifecycle_logs (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            event_type VARCHAR(50) NOT NULL,
+            previous_status VARCHAR(50),
+            new_status VARCHAR(50) NOT NULL,
+            reason TEXT,
+            performed_by VARCHAR(255),
+            performed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+        );""",
+        """CREATE TABLE IF NOT EXISTS restaurant_domains (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            hostname VARCHAR(255) UNIQUE NOT NULL,
+            domain VARCHAR(255),
+            domain_type VARCHAR(50) DEFAULT 'SUBDOMAIN' NOT NULL,
+            verification_status VARCHAR(50) DEFAULT 'VERIFIED' NOT NULL,
+            is_primary BOOLEAN DEFAULT TRUE NOT NULL,
+            is_verified BOOLEAN DEFAULT TRUE NOT NULL,
+            verified_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );""",
+        """CREATE TABLE IF NOT EXISTS restaurant_memberships (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            user_uid VARCHAR(255) NOT NULL,
+            user_email VARCHAR(255) NOT NULL,
+            role VARCHAR(50) DEFAULT 'OWNER' NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_restaurant_membership_user UNIQUE (restaurant_id, user_uid)
+        );""",
+    ]
+    for stmt in create_table_statements:
+        try:
+            await conn.execute(text(stmt))
+        except Exception as e:
+            print("[SCHEMA INIT NOTICE] Table create error:", e)
+
     # Ensure baseline data integrity for legacy records (idempotent)
     baseline_sync_statements = [
         """INSERT INTO restaurant_memberships (id, restaurant_id, user_uid, user_email, role)
@@ -61,11 +102,12 @@ async def _background_startup_init():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Launch startup migration tasks asynchronously in background so uvicorn binds to port immediately
-    bg_task = asyncio.create_task(_background_startup_init())
+    # Ensure database migrations and tables are initialized synchronously before serving requests
+    try:
+        await _background_startup_init()
+    except Exception as e:
+        print("[STARTUP LIFESPAN NOTICE] Error running startup init:", e)
     yield
-    if not bg_task.done():
-        bg_task.cancel()
 
 
 app = FastAPI(
