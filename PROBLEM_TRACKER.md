@@ -26,6 +26,10 @@
 | **ISSUE-014** | `restaurants[0]` Fallback Anti-Pattern in UI | **P0** | Frontend Multi-Tenancy | **VERIFIED** | FIXED |
 | **ISSUE-015** | Non-Transactional Restaurant Creation Wizard | **P1** | Backend Restaurant Service | **VERIFIED** | FIXED |
 | **ISSUE-016** | Hardcoded Platform Admin Email Whitelist in Router | **P1** | Platform Admin Module | **VERIFIED** | FIXED |
+| **ISSUE-017** | Stale Unapproved Local Cache Leak in Tenant Resolution | **P0** | Frontend Multi-Tenancy & Tenant Resolver | **VERIFIED** | FIXED |
+| **ISSUE-018** | Production Synthetic Token Fallback in Google Auth | **P0** | Frontend Auth & Security | **VERIFIED** | FIXED |
+| **ISSUE-019** | Realtime WebSocket Auto-Refresh & Infinite Disconnect Storms | **P1** | Frontend Realtime Event Bus | **VERIFIED** | FIXED |
+| **ISSUE-020** | Cloud Run Deployment Blocked on Unlinked GCP Billing Account | **P0** | Cloud Infrastructure / GCP Migration | **BLOCKED** | PENDING_USER_ACTION |
 
 ---
 
@@ -242,3 +246,54 @@
 - **Regression Check:** All 18 tests in `tests/test_admin_security.py` passing; full pytest suite 109 passing.
 - **Evidence:** Automated tests passed in 6.61s (`test_17` and `test_18` verified).
 - **Final Status:** FIXED
+
+---
+
+### ISSUE-017: Stale Unapproved Local Cache Leak in Tenant Resolution
+- **Severity:** P0
+- **Component:** Frontend Multi-Tenancy (`packages/api/client.ts`, `App.tsx`)
+- **Root Cause:** When public customer routes resolved a tenant slug, transient network timeouts or fallback returns read unapproved `PENDING_APPROVAL` records from browser `localStorage`, causing live approved venues to erroneously render the "Opening Soon!" screen.
+- **Current Status:** VERIFIED
+- **Fix:** (1) Hardened `resolveRestaurantBySlug` in `client.ts` so unapproved local cache is never returned to public visitors (`isApproved === true` or `lifecycleStatus === 'LIVE'` required); (2) Unapproved records return `null` forcing explicit `NotFoundPage` rather than false "Opening Soon".
+- **Test:** `npx tsx src/tests/regression_incident_suite.test.ts` (Tests 1 & 2 pass).
+- **Regression Check:** Verified server state overrides client cache across all subdomains.
+- **Evidence:** Test 1 and Test 2 verified in regression incident suite with 100% pass rate.
+- **Final Status:** FIXED
+
+---
+
+### ISSUE-018: Production Synthetic Token Fallback in Google Auth
+- **Severity:** P0
+- **Component:** Frontend Auth & Security (`packages/api/client.ts`)
+- **Root Cause:** Line 787 of `client.ts` contained `effectiveAccessToken = googleData.idToken || df_jwt_google_${user.id}_${Date.now()}`, allowing mock tokens to be accepted in production when real Google authentication tokens failed to hydrate.
+- **Current Status:** VERIFIED
+- **Fix:** Eradicated synthetic `df_jwt_google_` generation in production runtime; throws explicit fatal `Error('Valid Google Firebase ID token is required for authentication.')` unless running under explicit offline test environment (`NODE_ENV === 'test'`).
+- **Test:** Validated typecheck and incident regression suite.
+- **Regression Check:** Real Google login flow enforces cryptographic Firebase token.
+- **Evidence:** Clean typecheck and clean regression suite run.
+- **Final Status:** FIXED
+
+---
+
+### ISSUE-019: Realtime WebSocket Auto-Refresh & Infinite Disconnect Storms
+- **Severity:** P1
+- **Component:** Frontend Realtime Event Bus (`packages/api/realtime.ts`)
+- **Root Cause:** WebSocket closures due to token expiration (close code 1008 from backend) triggered endless immediate reconnections with the same expired token stored in `localStorage`, flooding connection logs and burning battery/network.
+- **Current Status:** VERIFIED
+- **Fix:** (1) In `ws.onclose`, added automated token refresh on code 1008 using `getValidFirebaseIdToken(true)`; (2) Implemented bounded retry ceiling (maximum 4 immediate attempts on persistent 1008) before halting reconnection; (3) Preserved token redaction in all logging strings.
+- **Test:** Typecheck and regression suite pass.
+- **Regression Check:** Exponential backoff bounded to max 8000ms.
+- **Evidence:** Tested with regression suite; zero token leaks.
+- **Final Status:** FIXED
+
+---
+
+### ISSUE-020: Cloud Run Deployment Blocked on Unlinked GCP Billing Account
+- **Severity:** P0
+- **Component:** Cloud Infrastructure / GCP Migration (`dinely-cd6cd`)
+- **Root Cause:** Google Cloud project `dinely-cd6cd` (Project #`99267644103`) has `billingEnabled: false`. Attempting to enable required APIs (`run.googleapis.com`, `artifactregistry.googleapis.com`) fails with `FAILED_PRECONDITION: Billing account for project is not found`.
+- **Current Status:** BLOCKED
+- **Action Required:** User must link or activate a valid billing account in Google Cloud Console (`https://console.cloud.google.com/billing/linkedaccount?project=dinely-cd6cd`).
+- **Safety Guarantee:** Render production deployment (`https://dineflow-v3.onrender.com`) and Neon database remain 100% active and untouched as the production fallback.
+- **Final Status:** PENDING_USER_ACTION
+

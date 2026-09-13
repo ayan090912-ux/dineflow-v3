@@ -1,5 +1,6 @@
 // Production Real-Time Event Bus & WebSocket Synchronization for Dinely Cloud
 // Connects to production FastAPI WebSocket server with event deduplication, scoped channels, and auto-reconnection
+import { getValidFirebaseIdToken } from '../auth/firebase';
 
 export type RealTimeEventType =
   | 'OrderCreated'
@@ -303,13 +304,37 @@ class RealTimeEventBus {
         }
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = async (event: CloseEvent) => {
         this.setStatus('DISCONNECTED');
         if (this.pingInterval) clearInterval(this.pingInterval);
 
+        // If closed with code 1008 (Unauthorized / token expired), attempt fresh Firebase token refresh
+        if (event.code === 1008 && typeof window !== 'undefined') {
+          try {
+            const freshToken = await getValidFirebaseIdToken(true);
+            if (freshToken) {
+              localStorage.setItem('dinely_auth_token', freshToken);
+              if (this.currentRole === 'PLATFORM_ADMIN' || this.currentRole === 'ADMIN') {
+                localStorage.setItem('dinely_platform_admin_id_token', freshToken);
+                sessionStorage.setItem('dinely_admin_token', freshToken);
+              }
+            }
+          } catch (tokErr) {
+            console.warn('[WS_TOKEN_REFRESH_FAILED]:', tokErr);
+          }
+        }
+
         this.reconnectAttempts++;
+
+        // Bound maximum reconnect attempts if continuously rejected with 1008
+        if (event.code === 1008 && this.reconnectAttempts > 4) {
+          console.warn('[WS_UNAUTHORIZED_CEILING] Halting automatic WebSocket reconnection due to persistent auth rejection (code 1008).');
+          this.setStatus('DISCONNECTED');
+          return;
+        }
+
         const backoffMs = Math.min(1000 * Math.pow(1.4, Math.min(this.reconnectAttempts, 6)) + Math.random() * 300, 8000);
-        console.log(`[WS_DISCONNECTED] Reconnecting attempt #${this.reconnectAttempts} in ${Math.round(backoffMs)}ms...`);
+        console.log(`[WS_DISCONNECTED] Reconnecting attempt #${this.reconnectAttempts} in ${Math.round(backoffMs)}ms... (code: ${event.code})`);
         this.setStatus('RECONNECTING');
 
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);

@@ -784,10 +784,18 @@ export class DinelyApiClient {
       restaurant = null;
     }
 
+    if (!googleData.idToken) {
+      // In production runtime, missing Google ID token is a fatal auth failure
+      const isTestEnv = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+      if (!isTestEnv) {
+        throw new Error('Valid Google Firebase ID token is required for authentication.');
+      }
+    }
+
     const effectiveAccessToken = googleData.idToken || `df_jwt_google_${user.id}_${Date.now()}`;
     const tokens: AuthTokens = {
       accessToken: effectiveAccessToken,
-      refreshToken: `df_ref_google_${user.id}_${Date.now()}`,
+      refreshToken: googleData.idToken ? `df_ref_${user.id}` : `df_ref_google_${user.id}_${Date.now()}`,
       expiresIn: 86400,
       tokenType: 'Bearer',
     };
@@ -2862,7 +2870,7 @@ export class DinelyApiClient {
     );
 
     // If local cache is LIVE / approved, it may be used as resilient offline fallback
-    if (local && (local.isApproved || local.lifecycleStatus === 'LIVE')) {
+    if (local && (local.isApproved || local.lifecycleStatus === 'LIVE' || local.lifecycleStatus === 'APPROVED')) {
       return this.ensureRestaurantDefaults(local);
     }
 
@@ -2879,7 +2887,8 @@ export class DinelyApiClient {
       throw err;
     }
 
-    return local ? this.ensureRestaurantDefaults(local) : null;
+    // Authoritative Single Source of Truth: Never return unapproved local cache as public tenant fallback
+    return null;
   }
 
   async resolveRestaurantFromHostname(hostname?: string): Promise<Restaurant | null> {
