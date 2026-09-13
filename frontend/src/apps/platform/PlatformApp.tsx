@@ -430,13 +430,13 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           {/* Admin Branding */}
           <div className="mb-8 px-2 space-y-1">
             <DinelyLogo size="md" />
-            <p className="text-[11px] text-white/40 font-mono">admin.dinely.com</p>
+            <p className="text-[11px] text-white/40 font-mono">dinely.food/admin</p>
           </div>
 
           {/* Navigation Links */}
           <nav className="space-y-1">
             {[
-              { id: 'dashboard', label: 'Platform Metrics', icon: <BarChart3 className="w-4 h-4" /> },
+              { id: 'dashboard', label: 'Overview', icon: <BarChart3 className="w-4 h-4" /> },
               {
                 id: 'pending',
                 label: 'Pending Approvals',
@@ -445,8 +445,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               },
               { id: 'restaurants', label: 'All Restaurants', icon: <Utensils className="w-4 h-4" /> },
               { id: 'orgs', label: 'Tenant Organizations', icon: <Building2 className="w-4 h-4" /> },
-              { id: 'tickets', label: 'Support Tickets', icon: <LifeBuoy className="w-4 h-4" /> },
-              { id: 'audit', label: 'Security Audit Logs', icon: <ShieldAlert className="w-4 h-4" /> },
+              { id: 'tickets', label: 'Support', icon: <LifeBuoy className="w-4 h-4" /> },
+              { id: 'audit', label: 'Security Audit', icon: <ShieldAlert className="w-4 h-4" /> },
             ].map((item) => (
               <button
                 key={item.id}

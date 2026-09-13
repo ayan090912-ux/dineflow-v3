@@ -30,6 +30,7 @@
 | **ISSUE-018** | Production Synthetic Token Fallback in Google Auth | **P0** | Frontend Auth & Security | **VERIFIED** | FIXED |
 | **ISSUE-019** | Realtime WebSocket Auto-Refresh & Infinite Disconnect Storms | **P1** | Frontend Realtime Event Bus | **VERIFIED** | FIXED |
 | **ISSUE-020** | Cloud Run Deployment Blocked on Unlinked GCP Billing Account | **P0** | Cloud Infrastructure / GCP Migration | **BLOCKED** | PENDING_USER_ACTION |
+| **ISSUE-021** | Obsolete Demo and Test Restaurants in Production Database | **P0** | Database & Data Hygiene | **VERIFIED** | FIXED |
 
 ---
 
@@ -296,4 +297,16 @@
 - **Action Required:** User must link or activate a valid billing account in Google Cloud Console (`https://console.cloud.google.com/billing/linkedaccount?project=dinely-cd6cd`).
 - **Safety Guarantee:** Render production deployment (`https://dineflow-v3.onrender.com`) and Neon database remain 100% active and untouched as the production fallback.
 - **Final Status:** PENDING_USER_ACTION
+
+---
+
+### ISSUE-021: Obsolete Demo and Test Restaurants in Production Database
+- **Severity:** P0
+- **Component:** Database & Data Hygiene (`restaurants`, `restaurant_domains`, `tables`, `orders`)
+- **Root Cause:** Database accumulated legacy prototype records (`dineflow`), hardcoded demo entities (`CAFE.CO`, `THE DUNK`), and automated integration test fixtures (`Trattoria Alpha`, `Bistro Beta`) with `@example.com` dummy owners.
+- **Current Status:** VERIFIED
+- **Fix:** (1) Executed complete database forensic audit; (2) Classified every restaurant row in `PRODUCTION_DATA_CLEANUP_PLAN.md`; (3) Exported 100% full recovery backup in `scripts/cleanup_backup_data.json` and documented manifest in `CLEANUP_BACKUP_MANIFEST.md`; (4) Executed controlled transactional cleanup with savepoints, purging all 33 confirmed obsolete records and associated orphaned child entities (tables, domains, orders, sessions, menus) with zero foreign key violations.
+- **Test:** Dry-run validation followed by live transactional execution; remaining count: 0 obsolete restaurants, 0 orphan domains.
+- **Regression Check:** Pytest suite (118 passed), incident regression suite (14 passed), npm typecheck (0 errors), npm build (clean).
+- **Final Status:** FIXED
 
