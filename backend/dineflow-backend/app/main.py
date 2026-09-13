@@ -124,9 +124,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Middleware
+from app.core.middlewares.security_headers import SecurityHeadersMiddleware
+from app.core.middlewares.payload_limit import PayloadLimitMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+# Middleware stack (executed in reverse registration order)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(PayloadLimitMiddleware)
+
 is_prod_env = (settings.ENVIRONMENT or "").strip().lower() == "production"
 cors_origins = settings.CORS_ORIGINS
 
@@ -144,6 +152,44 @@ app.add_middleware(
     allow_headers=["*"],
     max_age=86400,
 )
+# Outermost middleware to ensure all responses receive production security headers
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Global Safe Error Handlers (Sanitizes production error output)
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    headers = getattr(exc, "headers", None) or {}
+    if correlation_id:
+        headers["X-Correlation-ID"] = correlation_id
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "status_code": exc.status_code, "correlation_id": correlation_id},
+        headers=headers
+    )
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    # Log sanitized error message server-side with correlation ID
+    print(f"[UNHANDLED_EXCEPTION] correlation_id={correlation_id} error={str(exc)[:200]}")
+    
+    if settings.DEBUG:
+        # In debug mode, provide detailed exception message
+        detail_msg = f"Internal Server Error: {str(exc)}"
+    else:
+        # In production, strictly sanitize error messages to prevent leakage
+        detail_msg = "An internal server error occurred. Please try again later."
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": detail_msg,
+            "status_code": 500,
+            "correlation_id": correlation_id
+        },
+        headers={"X-Correlation-ID": correlation_id} if correlation_id else None
+    )
 
 
 

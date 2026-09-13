@@ -68,8 +68,8 @@ async function runRegressionSuite() {
     isApproved: false,
     status: 'CLOSED',
   };
-  client.restaurants = [staleRest as any];
-  client.saveDatabase();
+  (client as any).restaurants = [staleRest as any];
+  (client as any).saveDatabase();
 
   // Mock server response returning LIVE
   const originalFetch = global.fetch;
@@ -99,7 +99,7 @@ async function runRegressionSuite() {
   assert.strictEqual(resolved.isApproved, true, 'Server state isApproved=true must override stale false');
   
   // Verify local cache was updated with server truth
-  const cached = client.restaurants.find((r) => r.id === 'rest-the-fly');
+  const cached = (client as any).restaurants.find((r: any) => r.id === 'rest-the-fly');
   assert.strictEqual(cached?.lifecycleStatus, 'LIVE', 'Local cache must be updated to LIVE');
   console.log('  ✓ PASSED: Backend LIVE state strictly overrides stale localStorage cache');
 
@@ -109,8 +109,8 @@ async function runRegressionSuite() {
   // ---------------------------------------------------------------
   console.log('\n[TEST 2] backend LIVE + Render timeout with stale PENDING_APPROVAL');
   // Reset cache to PENDING
-  client.restaurants = [{ ...staleRest } as any];
-  client.saveDatabase();
+  (client as any).restaurants = [{ ...staleRest } as any];
+  (client as any).saveDatabase();
 
   // Mock network timeout/abort
   global.fetch = (async () => {
@@ -342,7 +342,7 @@ async function runRegressionSuite() {
   // TEST 14: Tenant cache invalidation on lifecycle change
   // ---------------------------------------------------------------
   console.log('\n[TEST 14] Tenant cache invalidation on approval');
-  client.restaurants = [
+  (client as any).restaurants = [
     {
       id: 'rest-fresh-test',
       name: 'Fresh Test Kitchen',
@@ -352,7 +352,7 @@ async function runRegressionSuite() {
       status: 'CLOSED',
     } as any,
   ];
-  client.saveDatabase();
+  (client as any).saveDatabase();
 
   global.fetch = (async (url: string) => {
     if (url.includes('/admin/restaurants/approve')) {
@@ -366,7 +366,7 @@ async function runRegressionSuite() {
   }) as any;
 
   await client.approveRestaurant('rest-fresh-test');
-  const approvedCached = client.restaurants.find((r) => r.id === 'rest-fresh-test');
+  const approvedCached = (client as any).restaurants.find((r: any) => r.id === 'rest-fresh-test');
   assert.strictEqual(approvedCached?.lifecycleStatus, 'LIVE', 'Cache must be immediately updated to LIVE');
   assert.strictEqual(approvedCached?.isApproved, true, 'Cache isApproved must be updated to true');
   console.log('  ✓ PASSED: Tenant cache invalidation synchronously updates to LIVE on approval');

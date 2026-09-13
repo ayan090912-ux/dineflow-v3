@@ -30,6 +30,9 @@ class OrderItemInputSchema(BaseModel):
 
 class CreateOrderSchema(BaseModel):
     restaurantId: str
+    id: Optional[str] = None
+    idempotencyKey: Optional[str] = None
+    clientOrderId: Optional[str] = None
     tableId: Optional[str] = None
     tableNumber: Optional[str] = "Table 01"
     tableSessionId: Optional[str] = None
@@ -251,7 +254,16 @@ async def create_order(
         order_num = f"#ORD-{daily_seq}"
 
         now_utc = datetime.now(timezone.utc)
-        order_id = f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
+        candidate_order_id = payload.id or payload.idempotencyKey or payload.clientOrderId
+        if candidate_order_id:
+            res_existing = await db.execute(select(Order).where(Order.id == candidate_order_id))
+            existing_ord = res_existing.scalar_one_or_none()
+            if existing_ord:
+                print(f"[ORDER_IDEMPOTENCY_HIT] Returning existing order {candidate_order_id}")
+                return format_order_response(existing_ord)
+            order_id = candidate_order_id
+        else:
+            order_id = f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
 
         print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={restaurant.id} table_id={tbl_id} session_id={session_id}")
 

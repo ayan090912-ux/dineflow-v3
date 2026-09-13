@@ -2,7 +2,7 @@ import uuid
 import json
 import asyncio
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from fastapi import WebSocket
 
 ADMIN_CHANNEL = "__platform_admin__"
@@ -23,18 +23,53 @@ def normalize_role(role: Optional[str]) -> str:
         return "CUSTOMER"
     return r
 
+MAX_TOTAL_CONNECTIONS = 500
+MAX_CONNECTIONS_PER_IP = 10
+RECONNECT_WINDOW_SECONDS = 5
+MAX_RECONNECTS_PER_WINDOW = 5
+
 class ConnectionManager:
     def __init__(self):
-        # Stores connected clients: [{websocket, restaurant_id, role, normalized_role, table_session_id}]
+        # Stores connected clients: [{websocket, restaurant_id, role, normalized_role, table_session_id, client_ip}]
         self.active_connections: List[Dict[str, Any]] = []
+        # Key: client_ip -> list of connection timestamps
+        self.connect_attempts: Dict[str, List[float]] = {}
         self._lock = asyncio.Lock()
+
+    async def can_connect(self, client_ip: str) -> Tuple[bool, str]:
+        """Verify client connection quota and reconnect storm rate."""
+        now = datetime.now(timezone.utc).timestamp()
+        async with self._lock:
+            # 1. Total connection limit
+            if len(self.active_connections) >= MAX_TOTAL_CONNECTIONS:
+                return False, "Server WebSocket connection limit reached"
+
+            # 2. Per-IP connection quota (skip localhost check for local tests if needed)
+            if client_ip not in ("testclient", "unknown"):
+                ip_conns = sum(1 for c in self.active_connections if c.get("client_ip") == client_ip)
+                if ip_conns >= MAX_CONNECTIONS_PER_IP:
+                    return False, f"Maximum connection quota ({MAX_CONNECTIONS_PER_IP}) reached for this IP"
+
+            # 3. Rapid reconnect storm protection
+            attempts = self.connect_attempts.get(client_ip, [])
+            # Prune attempts older than window
+            window_start = now - RECONNECT_WINDOW_SECONDS
+            attempts = [t for t in attempts if t > window_start]
+            if len(attempts) >= MAX_RECONNECTS_PER_WINDOW:
+                self.connect_attempts[client_ip] = attempts
+                return False, "Reconnect storm rate exceeded. Please wait before reconnecting."
+
+            attempts.append(now)
+            self.connect_attempts[client_ip] = attempts
+            return True, ""
 
     async def connect(
         self,
         websocket: WebSocket,
         restaurant_id: str,
         role: str = "CUSTOMER",
-        table_session_id: Optional[str] = None
+        table_session_id: Optional[str] = None,
+        client_ip: Optional[str] = None
     ):
         await websocket.accept()
         raw_role = (role or "CUSTOMER").upper()
@@ -52,6 +87,7 @@ class ConnectionManager:
                 "role": raw_role,
                 "normalized_role": norm_role,
                 "table_session_id": table_session_id,
+                "client_ip": client_ip,
             }
             self.active_connections.append(conn_info)
             print(

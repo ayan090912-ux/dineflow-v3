@@ -22,6 +22,16 @@ async def websocket_endpoint(
     - broadcast_global() / broadcast_to_platform_admin() only reaches admin connections.
     - Privileged roles (PLATFORM_ADMIN, OWNER, WAITER, KITCHEN, BAR) must provide a valid token.
     """
+    client_ip = (
+        websocket.headers.get("cf-connecting-ip")
+        or websocket.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or (websocket.client.host if websocket.client else "unknown")
+    )
+    can_proceed, err_msg = await ws_manager.can_connect(client_ip)
+    if not can_proceed:
+        await websocket.close(code=1008, reason=err_msg)
+        return
+
     raw_role = (role or "CUSTOMER").strip().upper()
     privileged_roles = {"PLATFORM_ADMIN", "PLATFORM", "OWNER", "RESTAURANT_OWNER", "WAITER", "KITCHEN", "BAR", "MANAGER", "INVENTORY"}
 
@@ -109,6 +119,7 @@ async def websocket_endpoint(
         restaurant_id=effective_rest_id,
         role=verified_role,
         table_session_id=table_session_id,
+        client_ip=client_ip,
     )
     try:
         while True:
