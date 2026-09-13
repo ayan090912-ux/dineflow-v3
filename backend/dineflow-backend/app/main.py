@@ -131,9 +131,9 @@ is_prod_env = (settings.ENVIRONMENT or "").strip().lower() == "production"
 cors_origins = settings.CORS_ORIGINS
 
 if is_prod_env:
-    origin_regex = r"^https://([a-zA-Z0-9-]+\.)*(dinely\.food|web\.app|firebaseapp\.com|onrender\.com)$"
+    origin_regex = r"^https://([a-zA-Z0-9-]+\.)*(dinely\.food|web\.app|firebaseapp\.com|onrender\.com|run\.app)$"
 else:
-    origin_regex = r"https://.*dinely\.food|https://.*onrender\.com|http://.*"
+    origin_regex = r"https://.*dinely\.food|https://.*onrender\.com|https://.*run\.app|http://.*"
 
 app.add_middleware(
     CORSMiddleware,
