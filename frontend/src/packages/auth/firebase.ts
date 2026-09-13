@@ -88,22 +88,71 @@ export async function signInPlatformAdminWithGoogle(): Promise<GoogleAuthResult>
   return signInWithGooglePopup(true);
 }
 
-export async function getFirebaseIdToken(forceRefresh: boolean = false): Promise<string | null> {
-  const user = firebaseAuth.currentUser;
+/**
+ * Waits for Firebase Auth to complete initial asynchronous hydration from IndexedDB.
+ */
+export async function ensureFirebaseAuthReady(): Promise<any> {
+  if (typeof window === 'undefined') return null;
+  if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
+  try {
+    if (typeof (firebaseAuth as any).authStateReady === 'function') {
+      await (firebaseAuth as any).authStateReady();
+      return firebaseAuth.currentUser;
+    }
+  } catch (e) {
+    console.warn('authStateReady check failed:', e);
+  }
+  return new Promise((resolve) => {
+    let resolved = false;
+    const unsub = firebaseAuth.onAuthStateChanged((u) => {
+      if (!resolved) {
+        resolved = true;
+        unsub();
+        resolve(u);
+      }
+    });
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        unsub();
+        resolve(firebaseAuth.currentUser);
+      }
+    }, 2500);
+  });
+}
+
+/**
+ * Retrieves a verified, fresh cryptographic Firebase ID token.
+ * Awaits auth hydration if needed, and supports force-refresh for expired tokens.
+ */
+export async function getValidFirebaseIdToken(forceRefresh: boolean = false): Promise<string | null> {
+  let user = firebaseAuth.currentUser;
+  if (!user) {
+    user = await ensureFirebaseAuthReady();
+  }
   if (!user) return null;
   try {
     return await user.getIdToken(forceRefresh);
   } catch (e) {
-    console.warn('Failed to get Firebase ID token:', e);
+    console.warn('Failed to get fresh Firebase ID token:', e);
     return null;
   }
+}
+
+export async function getFirebaseIdToken(forceRefresh: boolean = false): Promise<string | null> {
+  return getValidFirebaseIdToken(forceRefresh);
 }
 
 export async function signOutFirebase(): Promise<void> {
   try {
     await firebaseSignOut(firebaseAuth);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('dinely_platform_admin_id_token');
+      sessionStorage.removeItem('dinely_admin_token');
+      localStorage.removeItem('dinely_auth_token');
+      sessionStorage.removeItem('dinely_auth_token');
+    }
   } catch (e) {
     console.warn('Firebase SignOut Warning:', e);
   }
 }
-

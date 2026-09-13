@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  AlertCircle,
   Building2,
   Utensils,
   CreditCard,
@@ -53,6 +54,7 @@ import {
   DinelyLogo,
 } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
+import { ensureFirebaseAuthReady } from '../../packages/auth/firebase';
 import { Organization, Restaurant, AuditLog } from '../../packages/types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -72,6 +74,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [queueState, setQueueState] = useState<'LOADING' | 'LOADED_EMPTY' | 'LOADED_WITH_DATA' | 'AUTH_ERROR' | 'AUTHORIZATION_ERROR' | 'NETWORK_ERROR' | 'SERVER_ERROR'>('LOADING');
+  const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(null);
 
   // Modals state
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
@@ -152,20 +156,49 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
   const loadData = async () => {
     try {
+      await ensureFirebaseAuthReady();
+      setQueueState((prev) => (prev === 'LOADING' || prev === 'AUTH_ERROR' ? 'LOADING' : prev));
+
       const [s, orgs, allRests, logs, orders] = await Promise.all([
-        api.getPlatformStats().catch(() => null),
-        api.getOrganizations().catch(() => []),
-        api.getPlatformRestaurants().catch(() => []),
+        api.getPlatformStats().catch((e) => { console.warn('Platform stats notice:', e); return null; }),
+        api.getOrganizations().catch((e) => { console.warn('Platform orgs notice:', e); return []; }),
+        api.getPlatformRestaurants(), // AUTHORITATIVE: Never silently swallow errors
         api.getAuditLogs().catch(() => []),
         api.getOrders().catch(() => []),
       ]);
+
       if (s) setStats(s);
       if (orgs) setOrganizations(orgs);
-      if (allRests) setAllRestaurants(allRests);
+      if (allRests) {
+        setAllRestaurants(allRests);
+        const pending = allRests.filter(
+          (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
+        );
+        if (pending.length === 0) {
+          setQueueState('LOADED_EMPTY');
+        } else {
+          setQueueState('LOADED_WITH_DATA');
+        }
+      }
       if (logs) setAuditLogs(logs);
       if (orders) setAllOrders(orders);
-    } catch (e) {
-      console.warn('PlatformApp loadData warning:', e);
+      setQueueErrorMessage(null);
+    } catch (e: any) {
+      console.error('PlatformApp loadData authoritative error:', e);
+      const status = e?.statusCode || (e?.message && e.message.includes('401') ? 401 : (e?.message && e.message.includes('403') ? 403 : 0));
+      if (status === 401) {
+        setQueueState('AUTH_ERROR');
+        setQueueErrorMessage('Platform Admin session expired or unauthorized. Please sign in with administrator credentials.');
+      } else if (status === 403) {
+        setQueueState('AUTHORIZATION_ERROR');
+        setQueueErrorMessage('Access Forbidden (403): Your account does not have Platform Administrator authorization.');
+      } else if (e?.isNetworkError || (e?.message && (e.message.includes('Network') || e.message.includes('timed out')))) {
+        setQueueState('NETWORK_ERROR');
+        setQueueErrorMessage('Network failure connecting to Platform Admin backend. The cloud server may be waking up.');
+      } else {
+        setQueueState('SERVER_ERROR');
+        setQueueErrorMessage(e?.message || 'Server error loading pending applications.');
+      }
     }
   };
 
@@ -662,7 +695,33 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                     <Badge variant="warning">{pendingRestaurants.length} Pending</Badge>
                   </div>
                   <div className="space-y-2.5">
-                    {pendingRestaurants.map((rest) => (
+                    {queueState === 'LOADING' && (
+                      <div className="text-center py-8 text-white/50 text-xs flex items-center justify-center gap-2">
+                        <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                        <span>Syncing approval queue...</span>
+                      </div>
+                    )}
+                    {queueState === 'AUTH_ERROR' && (
+                      <div className="text-center py-6 text-rose-300 text-xs">
+                        <ShieldAlert className="w-6 h-6 text-rose-400 mx-auto mb-1" />
+                        <p className="font-semibold">Authentication Required</p>
+                        <p className="text-[10px] text-white/40 mt-1">Sign in as Platform Admin</p>
+                      </div>
+                    )}
+                    {queueState === 'NETWORK_ERROR' && (
+                      <div className="text-center py-6 text-amber-300 text-xs">
+                        <AlertTriangle className="w-6 h-6 text-amber-400 mx-auto mb-1" />
+                        <p className="font-semibold">Connection Timeout</p>
+                        <button onClick={loadData} className="text-[10px] text-amber-400 underline mt-1">Retry Connection</button>
+                      </div>
+                    )}
+                    {queueState === 'LOADED_EMPTY' && (
+                      <div className="text-center py-12 text-white/40 text-xs">
+                        <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-60" />
+                        <p>All restaurant applications reviewed.</p>
+                      </div>
+                    )}
+                    {queueState === 'LOADED_WITH_DATA' && pendingRestaurants.map((rest) => (
                       <div
                         key={rest.id}
                         className="p-3 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between gap-2"
@@ -691,12 +750,6 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         </Button>
                       </div>
                     ))}
-                    {pendingRestaurants.length === 0 && (
-                      <div className="text-center py-12 text-white/40 text-xs">
-                        <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-60" />
-                        <p>All restaurant applications reviewed.</p>
-                      </div>
-                    )}
                   </div>
                 </div>
               </Card>
@@ -716,7 +769,65 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {pendingRestaurants.map((rest) => (
+              {queueState === 'LOADING' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-white/[0.08] text-white/60 space-y-3">
+                  <RefreshCw className="w-8 h-8 text-amber-400 mx-auto animate-spin" />
+                  <p className="text-sm font-semibold text-white">Hydrating Platform Admin Authentication & Syncing Queue...</p>
+                  <p className="text-xs text-white/40">Verifying administrator tokens with backend control plane</p>
+                </div>
+              )}
+
+              {queueState === 'AUTH_ERROR' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
+                  <ShieldAlert className="w-10 h-10 text-rose-400 mx-auto" />
+                  <p className="text-base font-semibold text-white">Administrator Authentication Required</p>
+                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Session expired or invalid. Please sign in again.'}</p>
+                  <Button variant="brand" size="sm" onClick={() => { window.location.href = '/admin/login'; }} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold">
+                    Sign In as Administrator
+                  </Button>
+                </div>
+              )}
+
+              {queueState === 'AUTHORIZATION_ERROR' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
+                  <Ban className="w-10 h-10 text-rose-400 mx-auto" />
+                  <p className="text-base font-semibold text-white">Access Forbidden (403)</p>
+                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Your Google account is not registered as a Platform Administrator.'}</p>
+                </div>
+              )}
+
+              {queueState === 'NETWORK_ERROR' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-amber-500/30 text-amber-200 space-y-3 p-6">
+                  <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
+                  <p className="text-base font-semibold text-white">Connection Error</p>
+                  <p className="text-xs text-amber-200/80 max-w-md mx-auto">{queueErrorMessage || 'Unable to connect to backend server. Render may be waking up.'}</p>
+                  <Button variant="outline" size="sm" onClick={loadData} className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10" icon={<RefreshCw className="w-4 h-4" />}>
+                    Retry Connection
+                  </Button>
+                </div>
+              )}
+
+              {queueState === 'SERVER_ERROR' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
+                  <AlertCircle className="w-10 h-10 text-rose-400 mx-auto" />
+                  <p className="text-base font-semibold text-white">Server Error</p>
+                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Failed to load applications from database.'}</p>
+                  <Button variant="outline" size="sm" onClick={loadData} className="border-white/20 text-white hover:bg-white/10" icon={<RefreshCw className="w-4 h-4" />}>
+                    Retry
+                  </Button>
+                </div>
+              )}
+
+              {queueState === 'LOADED_EMPTY' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-white/[0.08] text-white/40">
+                  <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3 opacity-60" />
+                  <p className="text-sm font-semibold text-white">No Pending Applications</p>
+                  <p className="text-xs text-white/40 mt-1">All onboarding launch applications have been processed.</p>
+                </div>
+              )}
+
+              {queueState === 'LOADED_WITH_DATA' && pendingRestaurants.map((rest) => (
+
                 <Card key={rest.id} className="bg-[#0e1117] border-white/[0.08] p-5 space-y-4 shadow-lg rounded-xl">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -815,15 +926,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                     </Button>
                   </div>
                 </Card>
+              
               ))}
-
-              {pendingRestaurants.length === 0 && (
-                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-white/[0.08] text-white/40">
-                  <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3 opacity-60" />
-                  <p className="text-sm font-semibold text-white">No Pending Applications</p>
-                  <p className="text-xs text-white/40 mt-1">All onboarding launch applications have been processed.</p>
-                </div>
-              )}
             </div>
           </div>
         )}

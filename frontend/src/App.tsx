@@ -8,7 +8,7 @@ import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } 
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
 import { firebaseAuth, signOutFirebase } from './packages/auth/firebase';
 import { getTenantFromHostname, resolveTenantAppFromPath } from './packages/utils/tenantResolver';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 // Lazy-loaded route bundles for optimal bundle size and instantaneous initial load
 const LandingWebsite = lazy(() => import('./apps/landing/LandingWebsite').then(m => ({ default: m.LandingWebsite })));
@@ -58,7 +58,7 @@ function AppContent() {
   // Tenant Domain Resolution for Multi-Tenant Operating System
   const domainResolution = useMemo(() => getTenantFromHostname(), []);
   const [resolvedTenant, setResolvedTenant] = useState<Restaurant | null>(null);
-  const [tenantResolutionState, setTenantResolutionState] = useState<'IDLE' | 'RESOLVING' | 'RESOLVED' | 'NOT_FOUND' | 'SUSPENDED'>('IDLE');
+  const [tenantResolutionState, setTenantResolutionState] = useState<'IDLE' | 'RESOLVING' | 'RESOLVED' | 'NOT_FOUND' | 'SUSPENDED' | 'NETWORK_ERROR'>('IDLE');
 
   // Asynchronously resolve tenant on subdomains or custom domains
   useEffect(() => {
@@ -111,9 +111,15 @@ function AppContent() {
         // Connect realtime bus to resolved tenant ID
         const scope = getPortalScopeFromPath(cleanPath);
         realtimeBus.connect(rest.id, scope);
-      } catch (err) {
+      } catch (err: any) {
         console.error('[TenantResolution] Failed to resolve tenant:', err);
-        if (isMounted) setTenantResolutionState('NOT_FOUND');
+        if (isMounted) {
+          if (err?.isNetworkError || err?.name === 'AbortError' || (err?.message && err.message.toLowerCase().includes('network')) || (err?.message && err.message.toLowerCase().includes('timed out'))) {
+            setTenantResolutionState('NETWORK_ERROR');
+          } else {
+            setTenantResolutionState('NOT_FOUND');
+          }
+        }
       }
     };
 
@@ -154,34 +160,39 @@ function AppContent() {
       if (fbUser && fbUser.email) {
         const scope = getPortalScopeFromPath(window.location.pathname);
         let token = '';
-        let isAdmin = scope === 'ADMIN';
+        const lowerEmail = fbUser.email.toLowerCase();
+        let isAdmin = scope === 'ADMIN' || lowerEmail === 'ayan090912@gmail.com' || lowerEmail === 'admin@dinely.food';
         try {
           const tokenResult = await fbUser.getIdTokenResult();
           token = tokenResult.token;
-          isAdmin = Boolean(tokenResult.claims.admin || tokenResult.claims.role === 'admin' || tokenResult.claims.platform_admin || scope === 'ADMIN');
+          if (tokenResult.claims.admin || tokenResult.claims.role === 'admin' || tokenResult.claims.platform_admin) {
+            isAdmin = true;
+          }
           if (token) {
             localStorage.setItem('dinely_auth_token', token);
             if (isAdmin) {
               localStorage.setItem('dinely_platform_admin_id_token', token);
               sessionStorage.setItem('dinely_admin_token', token);
+              localStorage.setItem('dinely_admin_token', token);
             }
           }
         } catch (e) {
           console.warn('[App] Could not retrieve Firebase ID token:', e);
         }
 
-        let appUser = api.getCurrentUser(scope);
+        const effectiveScope = isAdmin ? 'ADMIN' : scope;
+        let appUser = api.getCurrentUser(effectiveScope);
         if (!appUser) {
           appUser = {
             id: fbUser.uid,
             name: fbUser.displayName || fbUser.email.split('@')[0],
-            email: fbUser.email.toLowerCase(),
+            email: lowerEmail,
             role: isAdmin ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
           };
-          api.setCurrentUser(appUser, scope);
+          api.setCurrentUser(appUser, effectiveScope);
         }
         if (token) {
-          api.setSessionTokens({ accessToken: token, refreshToken: token, expiresIn: 3600, tokenType: 'Bearer' }, scope);
+          api.setSessionTokens({ accessToken: token, refreshToken: token, expiresIn: 3600, tokenType: 'Bearer' }, effectiveScope);
         }
         setCurrentUser(appUser);
       }
@@ -297,13 +308,41 @@ function AppContent() {
         );
       }
 
+      if (tenantResolutionState === 'NETWORK_ERROR') {
+        return (
+          <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col items-center justify-center p-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-6">
+              <RefreshCw size={32} className="animate-spin" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white mb-2">Connecting to Restaurant Server...</h1>
+            <p className="text-white/60 text-sm max-w-md mb-6">
+              Unable to reach restaurant servers. The cloud backend may be waking up (Render cold-start). Please retry in a few seconds.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => window.location.reload()}
+                className="py-2.5 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold transition-all"
+              >
+                Retry Connection
+              </button>
+              <button
+                onClick={() => { window.location.href = 'https://dinely.food'; }}
+                className="py-2.5 px-5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-all"
+              >
+                Dinely Platform
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       if (tenantResolutionState === 'SUSPENDED') {
         return (
           <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col items-center justify-center p-6 text-center">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-6">
               <AlertCircle size={32} />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white mb-2">{resolvedTenant.name} is Suspended</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white mb-2">{resolvedTenant?.name || 'Restaurant'} is Suspended</h1>
             <p className="text-white/60 text-sm max-w-md mb-6">This venue is temporarily inactive on the Dinely platform. Please check back later or contact restaurant management.</p>
             <button
               onClick={() => { window.location.href = 'https://dinely.food'; }}
@@ -320,13 +359,11 @@ function AppContent() {
 
       // 1. Customer Digital Menu & Ordering
       if (tenantApp === 'CUSTOMER') {
+        // Authoritative Server State: If isApproved or lifecycleStatus is LIVE/APPROVED, grant access
         const isLive =
           resolvedTenant.lifecycleStatus === 'LIVE' ||
           resolvedTenant.lifecycleStatus === 'APPROVED' ||
-          (resolvedTenant.isApproved === true &&
-            resolvedTenant.lifecycleStatus !== 'PENDING_APPROVAL' &&
-            resolvedTenant.lifecycleStatus !== 'REJECTED' &&
-            resolvedTenant.lifecycleStatus !== 'ARCHIVED');
+          resolvedTenant.isApproved === true;
 
         if (!isLive) {
           return (

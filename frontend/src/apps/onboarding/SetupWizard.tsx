@@ -362,6 +362,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         email: user.email,
         ownerName: user.name || user.firstName || user.email.split('@')[0],
         ownerEmail: user.email,
+        ownerUid: user.id || (user as any).uid || (user as any).googleUid,
       });
 
       // 2. Submit application for Platform Admin Approval

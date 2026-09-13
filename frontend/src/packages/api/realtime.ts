@@ -230,7 +230,7 @@ class RealTimeEventBus {
     this.setStatus(this.reconnectAttempts > 0 ? 'RECONNECTING' : 'CONNECTING');
 
     const wsUrl = getWebSocketUrl(restaurantId, role, tableSessionId);
-    console.log('[WS_CONNECTING] URL:', wsUrl);
+    console.log('[WS_CONNECTING] URL:', wsUrl.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]'));
 
     try {
       this.ws = new WebSocket(wsUrl);

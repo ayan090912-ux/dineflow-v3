@@ -38,7 +38,7 @@ import {
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
 export { realtimeBus } from './realtime';
-import { signOutFirebase, firebaseAuth } from '../auth/firebase';
+import { signOutFirebase, firebaseAuth, ensureFirebaseAuthReady, getValidFirebaseIdToken } from '../auth/firebase';
 import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
 import { getTenantFromHostname, getRestaurantPublicDomain, getRestaurantCustomerUrl } from '../utils/tenantResolver';
 
@@ -584,6 +584,11 @@ export class DinelyApiClient {
         sessionStorage.setItem(storageKey, payload);
         if (window.localStorage) {
           localStorage.setItem(storageKey, payload);
+        }
+        if (scope === 'ADMIN' && tokens?.accessToken) {
+          localStorage.setItem('dinely_platform_admin_id_token', tokens.accessToken);
+          sessionStorage.setItem('dinely_admin_token', tokens.accessToken);
+          localStorage.setItem('dinely_admin_token', tokens.accessToken);
         }
       }
     } catch (e) {
@@ -1200,15 +1205,112 @@ export class DinelyApiClient {
     return { user: invUser, tokens, employee: emp, restaurant: rest };
   }
 
+
+  /**
+   * Authoritative Platform Admin HTTP execution harness.
+   * Ensures Firebase Auth hydration, acquires fresh ID token, handles single 401 retry,
+   * and NEVER converts 401/403/500 or network errors into an empty success array.
+   */
+  async executeAdminRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    await ensureFirebaseAuthReady();
+    const apiBase = getApiBaseUrl();
+    const url = endpoint.startsWith('http') ? endpoint : `${apiBase}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+    let token = await getValidFirebaseIdToken(false);
+    if (!token && typeof window !== 'undefined') {
+      token = this.currentTokensByScope['ADMIN']?.accessToken ||
+              localStorage.getItem('dinely_platform_admin_id_token') ||
+              sessionStorage.getItem('dinely_admin_token') ||
+              localStorage.getItem('dinely_admin_token') ||
+              localStorage.getItem('dinely_auth_token');
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (networkErr: any) {
+      clearTimeout(timeoutId);
+      const isTimeout = networkErr.name === 'AbortError';
+      const err = new Error(
+        isTimeout
+          ? 'Platform Admin API request timed out. Backend may be waking up (cold start).'
+          : (networkErr.message || 'Network error connecting to Platform Admin backend.')
+      );
+      (err as any).statusCode = 0;
+      (err as any).isNetworkError = true;
+      throw err;
+    }
+
+    // Token refresh on 401: exactly ONE retry with forceRefresh=true
+    if (res.status === 401) {
+      try {
+        const freshToken = await getValidFirebaseIdToken(true);
+        if (freshToken && freshToken !== token) {
+          headers['Authorization'] = `Bearer ${freshToken}`;
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('dinely_platform_admin_id_token', freshToken);
+            sessionStorage.setItem('dinely_admin_token', freshToken);
+            localStorage.setItem('dinely_admin_token', freshToken);
+          }
+          const retryRes = await fetch(url, { ...options, headers });
+          if (retryRes.ok) {
+            return await retryRes.json();
+          }
+          res = retryRes;
+        }
+      } catch (refreshErr) {
+        console.warn('[executeAdminRequest] Token refresh attempt failed:', refreshErr);
+      }
+    }
+
+    if (!res.ok) {
+      let errMsg = `Platform Admin request failed (HTTP ${res.status})`;
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.detail || errJson.message || errMsg;
+      } catch {
+        const text = await res.text().catch(() => '');
+        if (text) errMsg = `${errMsg}: ${text.slice(0, 120)}`;
+      }
+      const err = new Error(errMsg);
+      (err as any).statusCode = res.status;
+      throw err;
+    }
+
+    return await res.json();
+  }
+
   getAuthHeader(scope?: PortalScope): Record<string, string> {
     const targetScope = scope || getPortalScopeFromPath();
     let token: string | null = null;
 
     if (targetScope === 'ADMIN') {
+      if (!this.currentTokensByScope['ADMIN']) {
+        this.restoreSession('ADMIN');
+      }
       token = this.currentTokensByScope['ADMIN']?.accessToken ||
               (typeof window !== 'undefined' ? (
                 localStorage.getItem('dinely_platform_admin_id_token') ||
-                sessionStorage.getItem('dinely_admin_token')
+                sessionStorage.getItem('dinely_admin_token') ||
+                localStorage.getItem('dinely_admin_token') ||
+                localStorage.getItem('dinely_auth_token')
               ) : null);
     } else {
       token = this.currentTokensByScope[targetScope]?.accessToken ||
@@ -1752,27 +1854,15 @@ export class DinelyApiClient {
   // --- Platform Admin Control Plane APIs ---
 
   async getPlatformStats() {
-    const apiBase = getApiBaseUrl();
-    const headers = this.getAuthHeader('ADMIN');
-    const res = await fetch(`${apiBase}/admin/stats`, { headers });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => 'Server error');
-      throw new Error(`Failed to load authoritative platform stats (${res.status}): ${errText}`);
-    }
-    return await res.json();
+    return await this.executeAdminRequest('/admin/stats');
   }
 
   async getOrganizations() {
     try {
-      const apiBase = getApiBaseUrl();
-      const headers = this.getAuthHeader('ADMIN');
-      const res = await fetch(`${apiBase}/admin/organizations`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
-      }
+      const data = await this.executeAdminRequest<any[]>('/admin/organizations');
+      if (Array.isArray(data) && data.length > 0) return data;
     } catch (e) {
-      console.warn('Backend getOrganizations failed:', e);
+      console.warn('Backend getOrganizations notice:', e);
     }
     const rests = await this.getPlatformRestaurants();
     return rests.map((r) => ({
@@ -2020,69 +2110,24 @@ export class DinelyApiClient {
   }
 
   async getPlatformRestaurants(): Promise<Restaurant[]> {
-    try {
-      const apiBase = getApiBaseUrl();
-      let headers = this.getAuthHeader('ADMIN');
-      let res = await fetch(`${apiBase}/admin/restaurants`, { headers });
-      if (res.status === 401 && typeof window !== 'undefined' && firebaseAuth.currentUser) {
-        try {
-          const freshToken = await firebaseAuth.currentUser.getIdToken(true);
-          if (freshToken) {
-            localStorage.setItem('dinely_platform_admin_id_token', freshToken);
-            sessionStorage.setItem('dinely_admin_token', freshToken);
-            headers = { ...headers, Authorization: `Bearer ${freshToken}` };
-            res = await fetch(`${apiBase}/admin/restaurants`, { headers });
-          }
-        } catch (tokErr) {
-          console.warn('Could not refresh Firebase token for getPlatformRestaurants:', tokErr);
-        }
-      }
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          return data.map((r: any) => ({
-            id: r.id,
-            orgId: r.org_id || 'org-dinely',
-            name: r.name,
-            slug: r.slug || r.name.toLowerCase().replace(/\s+/g, '-'),
-            cuisine: r.cuisine || 'Multi-Cuisine',
-            businessType: r.businessType || r.business_type || 'RESTAURANT',
-            hasBar: r.hasBar !== false && r.has_bar !== false,
-            hasTables: r.hasTables !== false && r.has_tables !== false,
-            hasKitchen: r.hasKitchen !== false && r.has_kitchen !== false,
-            hasWaiter: r.hasWaiter !== false && r.has_waiter !== false,
-            hasInventory: r.hasInventory !== false && r.has_inventory !== false,
-            hasBilling: r.hasBilling !== false && r.has_billing !== false,
-            enabledModules: r.enabledModules || r.enabled_modules,
-            orderNumberPrefix: r.orderNumberPrefix || r.order_number_prefix || '#ORD',
-            address: r.address || '',
-            phone: r.phone || '',
-            email: r.email || '',
-            ownerName: r.ownerName || r.owner_name || '',
-            ownerEmail: r.ownerEmail || r.owner_email || '',
-            ownerUid: r.ownerUid || r.owner_uid || '',
-            domain: r.domain || '',
-            isApproved: Boolean(r.isApproved || r.is_approved),
-            status: r.status || 'OPEN',
-            lifecycleStatus: (r.lifecycleStatus || r.lifecycle_status || (r.isApproved ? 'LIVE' : 'PENDING_APPROVAL')) as RestaurantLifecycleStatus,
-            rejectionReason: r.rejectionReason || r.rejection_reason,
-            requestedChanges: r.requestedChanges || r.requested_changes,
-            approvedAt: r.approvedAt || r.approved_at,
-            approvedBy: r.approvedBy || r.approved_by,
-            submittedAt: r.submittedAt || r.submitted_at || r.createdAt || r.created_at,
-            rating: r.rating || 5.0,
-            activeOrdersCount: 0,
-            tablesCount: r.tablesCount || r.tables_count || 8,
-            currency: r.currency || 'INR (₹)',
-            taxPercentage: r.taxPercentage || r.tax_percentage || 5.0,
-            theme: r.theme || r.theme_json,
-          }));
-        }
-      }
-    } catch (e) {
-      console.warn('API fetch for getPlatformRestaurants failed:', e);
+    const data = await this.executeAdminRequest<any[]>('/admin/restaurants');
+    if (!Array.isArray(data)) {
+      throw new Error('Platform Admin API returned invalid restaurant collection format.');
     }
-    return this.restaurants.filter((r) => !r.isDeleted);
+    const backendRestaurants = data.map((r: any) => this.mapBackendRestaurant(r));
+    
+    // Synchronize local cache with authoritative server records
+    backendRestaurants.forEach((fresh) => {
+      const idx = this.restaurants.findIndex((r) => r.id === fresh.id);
+      if (idx >= 0) {
+        this.restaurants[idx] = { ...this.restaurants[idx], ...fresh };
+      } else {
+        this.restaurants.push(fresh);
+      }
+    });
+    this.saveDatabase();
+
+    return backendRestaurants;
   }
 
   async approveRestaurant(restaurantId: string) {
@@ -2147,15 +2192,25 @@ export class DinelyApiClient {
     }
 
     const resJson = await res.json();
+    // Authoritative cache invalidation across all local stores
+    const now = new Date().toISOString();
+    this.restaurants = this.restaurants.map((r) => {
+      if (r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase())) {
+        return {
+          ...r,
+          isApproved: true,
+          status: 'OPEN',
+          lifecycleStatus: 'LIVE',
+          approvedAt: now,
+          rejectionReason: undefined,
+          requestedChanges: undefined,
+        };
+      }
+      return r;
+    });
+    this.saveDatabase();
     const rest = this.restaurants.find((r) => r.id === restaurantId || (restaurantId && r.id.toLowerCase() === restaurantId.toLowerCase()));
     if (rest) {
-      const now = new Date().toISOString();
-      rest.isApproved = true;
-      rest.status = 'OPEN';
-      rest.lifecycleStatus = 'LIVE';
-      rest.approvedAt = now;
-      rest.rejectionReason = undefined;
-      rest.requestedChanges = undefined;
 
       // Ensure associated owner user is linked to this restaurant
       const user = this.users.find(
@@ -2759,8 +2814,10 @@ export class DinelyApiClient {
     if (!slug || !slug.trim()) return null;
     const cleanSlug = slug.trim().toLowerCase();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    let fetchError: any = null;
     let explicitNotFound = false;
+
     try {
       const apiBase = getApiBaseUrl();
       const res = await fetch(`${apiBase}/restaurants/public/resolve?slug=${encodeURIComponent(cleanSlug)}`, {
@@ -2782,14 +2839,20 @@ export class DinelyApiClient {
         }
       } else if (res.status === 404) {
         explicitNotFound = true;
+      } else {
+        fetchError = new Error(`Server returned HTTP ${res.status} resolving restaurant slug "${cleanSlug}".`);
       }
-    } catch (e) {
+    } catch (e: any) {
       clearTimeout(timeoutId);
+      fetchError = e;
       console.warn('API resolveRestaurantBySlug failed:', e);
     }
+
     if (explicitNotFound) {
       return null;
     }
+
+    // Check local cache ONLY if authoritative remote is temporarily unreachable
     const local = this.restaurants.find(
       (r) =>
         !r.isDeleted &&
@@ -2797,6 +2860,25 @@ export class DinelyApiClient {
           (r.slug && r.slug.toLowerCase() === cleanSlug) ||
           r.id === cleanSlug)
     );
+
+    // If local cache is LIVE / approved, it may be used as resilient offline fallback
+    if (local && (local.isApproved || local.lifecycleStatus === 'LIVE')) {
+      return this.ensureRestaurantDefaults(local);
+    }
+
+    // CRITICAL: If remote fetch failed due to network/timeout, NEVER return stale PENDING_APPROVAL cache.
+    // Instead throw network error so UI can display connection retry screen instead of "Opening Soon".
+    if (fetchError) {
+      const isTimeout = fetchError.name === 'AbortError';
+      const err = new Error(
+        isTimeout
+          ? `Restaurant resolution timed out for "${cleanSlug}". Backend cold start may be in progress.`
+          : `Network failure connecting to restaurant "${cleanSlug}".`
+      );
+      (err as any).isNetworkError = true;
+      throw err;
+    }
+
     return local ? this.ensureRestaurantDefaults(local) : null;
   }
 
@@ -2807,7 +2889,8 @@ export class DinelyApiClient {
     const resolution = getTenantFromHostname(cleanHost);
     const apiBase = getApiBaseUrl();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    let fetchError: any = null;
     let explicitNotFound = false;
 
     try {
@@ -2835,9 +2918,12 @@ export class DinelyApiClient {
         }
       } else if (res.status === 404) {
         explicitNotFound = true;
+      } else {
+        fetchError = new Error(`Server returned HTTP ${res.status} resolving hostname "${cleanHost}".`);
       }
-    } catch (e) {
+    } catch (e: any) {
       clearTimeout(timeoutId);
+      fetchError = e;
       console.warn('API resolveRestaurantFromHostname failed:', e);
     }
 
@@ -2848,8 +2934,15 @@ export class DinelyApiClient {
     if (resolution.slug) {
       return this.resolveRestaurantBySlug(resolution.slug);
     }
+
+    if (fetchError) {
+      (fetchError as any).isNetworkError = true;
+      throw fetchError;
+    }
+
     return null;
   }
+
 
   async updateRestaurantDetails(restaurantId: string, updates: Partial<Restaurant>) {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
