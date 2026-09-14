@@ -32,6 +32,7 @@ async def websocket_endpoint(
     )
     can_proceed, err_msg = await ws_manager.can_connect(client_ip)
     if not can_proceed:
+        await websocket.accept()
         await websocket.close(code=1008, reason=err_msg)
         return
 
@@ -90,6 +91,7 @@ async def websocket_endpoint(
                 is_admin_verified = False
 
         if not is_admin_verified:
+            await websocket.accept()
             close_reason = "Token expired" if token_expired else "Unauthorized Platform Admin subscription"
             await websocket.close(code=1008, reason=close_reason)
             return
@@ -131,6 +133,7 @@ async def websocket_endpoint(
                     is_verified = False
 
         if not is_verified:
+            await websocket.accept()
             close_reason = "Token expired" if token_expired else f"Unauthorized {raw_role} subscription for restaurant {effective_rest_id}"
             await websocket.close(code=1008, reason=close_reason)
             return

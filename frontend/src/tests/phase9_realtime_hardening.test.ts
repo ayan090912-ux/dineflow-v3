@@ -113,11 +113,27 @@ function connectChannel(channel: string, token?: string, timeoutMs: number = 800
       }
     });
 
-    ws.on('error', (err) => {
+    ws.on('unexpected-response', (req, res) => {
+      client.closeCode = res.statusCode === 403 ? 1008 : res.statusCode;
+      client.closeReason = res.statusMessage || 'Unauthorized';
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        reject(err);
+        resolve(client);
+      }
+    });
+
+    ws.on('error', (err: any) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        if (err.message?.includes('403')) {
+          client.closeCode = 1008;
+          client.closeReason = err.message;
+          resolve(client);
+        } else {
+          reject(err);
+        }
       }
     });
   });
