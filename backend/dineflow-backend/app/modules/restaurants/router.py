@@ -11,7 +11,7 @@ from sqlalchemy import select, func, or_
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import require_tenant_owner_or_admin, get_caller_context, CallerContext
 from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain, RestaurantMembership
-from app.core.tenant.resolver import resolve_public_tenant, resolve_tenant, TenantResolutionMode
+from app.core.tenant.resolver import resolve_public_tenant, resolve_tenant, TenantResolutionMode, resolve_owner_tenant
 from app.modules.restaurants.tenant_resolver import resolve_public_tenant_from_host
 from app.modules.tables.models import Table
 from app.modules.websocket.manager import ws_manager
@@ -103,19 +103,9 @@ async def resolve_public_restaurant(
     slug: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
-    if hostname:
-        ctx = await resolve_public_tenant(db=db, hostname=hostname, allow_platform_root=True)
-        if ctx is None:
-            return {"isPlatformDomain": True, "message": "Platform root context"}
-        return ctx.raw_restaurant
-
-    target_slug = slug
-    if not target_slug:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant subdomain or slug not specified"
-        )
-    ctx = await resolve_public_tenant(db=db, slug=target_slug)
+    ctx = await resolve_public_tenant(db=db, hostname=hostname, slug=slug, allow_platform_root=True)
+    if ctx is None:
+        return {"isPlatformDomain": True, "message": "Platform root context"}
     return ctx.raw_restaurant
 
 @router.get("/public/slug/{slug}")
@@ -394,6 +384,21 @@ async def get_restaurant(restaurant_id: str, db: AsyncSession = Depends(get_db))
             detail=f"Restaurant '{restaurant_id}' not found."
         )
     return rest
+
+@router.get("/{restaurant_id}/owner-context")
+async def get_restaurant_owner_context(
+    restaurant_id: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    ctx = await resolve_owner_tenant(
+        db=db,
+        user_uid=caller.uid or "",
+        target_restaurant_id=restaurant_id,
+        user_email=caller.email,
+        is_admin=caller.is_admin
+    )
+    return ctx
 
 @router.put("/{restaurant_id}")
 async def update_restaurant(

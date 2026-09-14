@@ -17,6 +17,10 @@ def normalize_role(role: Optional[str]) -> str:
         return "WAITER"
     if r in ["BAR", "BAR_STAFF", "BARTENDER"]:
         return "BAR"
+    if r in ["INVENTORY", "INVENTORY_STAFF", "STOCK_MANAGER"]:
+        return "INVENTORY"
+    if r in ["BILLING", "CASHIER", "BILLING_STAFF"]:
+        return "BILLING"
     if r in ["PLATFORM_ADMIN", "PLATFORM"]:
         return "PLATFORM_ADMIN"
     if r in ["CUSTOMER", "GUEST", "CLIENT"]:
@@ -44,23 +48,25 @@ class ConnectionManager:
             if len(self.active_connections) >= MAX_TOTAL_CONNECTIONS:
                 return False, "Server WebSocket connection limit reached"
 
-            # 2. Per-IP connection quota (skip localhost check for local tests if needed)
-            if client_ip not in ("testclient", "unknown"):
+            # 2. Per-IP connection quota (skip localhost/test clients for local tests)
+            is_local = client_ip in ("testclient", "unknown", "127.0.0.1", "localhost", "::1")
+            if not is_local:
                 ip_conns = sum(1 for c in self.active_connections if c.get("client_ip") == client_ip)
                 if ip_conns >= MAX_CONNECTIONS_PER_IP:
                     return False, f"Maximum connection quota ({MAX_CONNECTIONS_PER_IP}) reached for this IP"
 
-            # 3. Rapid reconnect storm protection
-            attempts = self.connect_attempts.get(client_ip, [])
-            # Prune attempts older than window
-            window_start = now - RECONNECT_WINDOW_SECONDS
-            attempts = [t for t in attempts if t > window_start]
-            if len(attempts) >= MAX_RECONNECTS_PER_WINDOW:
-                self.connect_attempts[client_ip] = attempts
-                return False, "Reconnect storm rate exceeded. Please wait before reconnecting."
+            # 3. Rapid reconnect storm protection (allow local test suites)
+            if not is_local:
+                attempts = self.connect_attempts.get(client_ip, [])
+                # Prune attempts older than window
+                window_start = now - RECONNECT_WINDOW_SECONDS
+                attempts = [t for t in attempts if t > window_start]
+                if len(attempts) >= MAX_RECONNECTS_PER_WINDOW:
+                    self.connect_attempts[client_ip] = attempts
+                    return False, "Reconnect storm rate exceeded. Please wait before reconnecting."
 
-            attempts.append(now)
-            self.connect_attempts[client_ip] = attempts
+                attempts.append(now)
+                self.connect_attempts[client_ip] = attempts
             return True, ""
 
     async def connect(

@@ -1,4 +1,5 @@
 import uuid
+import logging
 from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
@@ -9,6 +10,8 @@ from sqlalchemy import select, or_
 from app.core.database.connection import get_db
 from app.modules.tables.models import Table, TableSession
 from app.core.tenant.qr import generate_canonical_qr_url
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -23,8 +26,8 @@ async def _get_restaurant_public_slug(restaurant_id: str, db: AsyncSession) -> s
         rest_obj = res_rest.scalar_one_or_none()
         if rest_obj:
             return rest_obj.public_slug or rest_obj.slug or rest_obj.id
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[_get_restaurant_public_slug] Failed to query public slug for restaurant '{restaurant_id}': {e}")
     return restaurant_id
 
 async def _get_valid_restaurant_ids(restaurant_id: Optional[str], db: AsyncSession) -> list[str]:
@@ -46,8 +49,8 @@ async def _get_valid_restaurant_ids(restaurant_id: Optional[str], db: AsyncSessi
                 valid.append(rest_obj.slug)
             if rest_obj.public_slug and rest_obj.public_slug not in valid:
                 valid.append(rest_obj.public_slug)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[_get_valid_restaurant_ids] Failed to query restaurant IDs for restaurant '{restaurant_id}': {e}")
     return valid
 
 def _extract_clean_table_number(table_number: Optional[str], table_id: Optional[str] = None) -> str:
@@ -378,10 +381,61 @@ async def create_table_session(
             payload={"table_id": resolved_tbl_id, "table_number": resolved_tbl_num, "status": "OCCUPIED", "session_id": new_sess.id},
             target_audience=["WAITER", "CUSTOMER", "OWNER"]
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(
+            f"[create_table_session] Realtime WebSocket broadcast failed for restaurant '{tbl.restaurant_id or canonical_rest_id}', "
+            f"table '{resolved_tbl_id}' (table_number '{resolved_tbl_num}'): {e}. Table session is safely persisted in DB.",
+            exc_info=True
+        )
 
     return new_sess
+
+@router.get("/{restaurant_id}/tables/{table_id}")
+async def get_table(
+    restaurant_id: str,
+    table_id: str,
+    table_number: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Direct single table retrieval with strict multi-tenant cross-verification:
+    - If table belongs to another restaurant: 403 Forbidden
+    - If table does not exist: 404 Not Found
+    """
+    valid_rest_ids = await _get_valid_restaurant_ids(restaurant_id, db)
+    if not valid_rest_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Restaurant '{restaurant_id}' not found."
+        )
+
+    # 1. Match table in this restaurant
+    query_tbl = select(Table).where(
+        (Table.restaurant_id.in_(valid_rest_ids)) &
+        _get_table_match_filter(table_id, table_number)
+    )
+    res_tbl = await db.execute(query_tbl)
+    tbl = res_tbl.scalar_one_or_none()
+
+    if not tbl:
+        # Cross-tenant security check: does this table exist in another restaurant?
+        query_other = select(Table).where(_get_table_match_filter(table_id, table_number))
+        res_other = await db.execute(query_other)
+        other_tbl = res_other.scalars().first()
+        if other_tbl and other_tbl.restaurant_id not in valid_rest_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Table '{table_id}' does not belong to restaurant '{restaurant_id}'."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Table '{table_id}' not found in restaurant '{restaurant_id}'."
+        )
+
+    pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
+    clean_table = _extract_clean_table_number(tbl.table_number, tbl.id)
+    tbl.qr_code_url = generate_canonical_qr_url(pub_slug, clean_table, tbl.id)
+    return tbl
 
 class CloseTableSessionSchema(BaseModel):
     table_session_id: Optional[str] = None

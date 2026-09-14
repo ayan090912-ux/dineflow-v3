@@ -90,12 +90,13 @@ async def resolve_public_tenant(
 
         # Detect platform domain
         if clean_host in PLATFORM_DOMAINS:
-            if allow_platform_root:
-                return None
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Platform root domain requested without tenant context."
-            )
+            if not slug:
+                if allow_platform_root:
+                    return None
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Platform root domain requested without tenant context."
+                )
 
         # Extract subdomain slug if ending in .dinely.food or .localhost
         if clean_host.endswith(".dinely.food"):

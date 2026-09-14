@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,6 +12,8 @@ from app.core.security.tenant_auth import get_caller_context, CallerContext, req
 from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.restaurants.models import Restaurant
 from app.modules.websocket.manager import ws_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -105,13 +108,24 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
 
     req_dict = format_request_dict(new_req)
 
-    # Realtime Broadcast to Waiter and Owner terminals (non-blocking)
-    asyncio.create_task(ws_manager.broadcast_event(
-        restaurant_id=payload.restaurantId,
-        event_type="service_request_created",
-        payload=req_dict,
-        target_audience=["WAITER", "OWNER"]
-    ))
+    # Realtime Broadcast to Waiter and Owner terminals (non-blocking with error logging)
+    async def _safe_broadcast():
+        try:
+            await ws_manager.broadcast_event(
+                restaurant_id=payload.restaurantId,
+                event_type="service_request_created",
+                payload=req_dict,
+                target_audience=["WAITER", "OWNER"]
+            )
+        except Exception as e:
+            logger.error(
+                f"[create_customer_request] WebSocket broadcast failed for request '{req_id}' "
+                f"(restaurant: '{payload.restaurantId}', table: '{payload.tableNumber}'): {e}. "
+                f"Request remains persisted in PostgreSQL as PENDING for terminal polling fallback.",
+                exc_info=True
+            )
+
+    asyncio.create_task(_safe_broadcast())
 
     return req_dict
 

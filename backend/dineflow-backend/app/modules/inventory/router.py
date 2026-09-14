@@ -17,6 +17,7 @@ from app.modules.inventory.schemas import (
     SupplierResponse,
 )
 from app.modules.restaurants.models import Restaurant
+from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
 
@@ -141,7 +142,17 @@ async def create_inventory_item(
     db.add(new_item)
     await db.commit()
     await db.refresh(new_item)
-    return _format_item_response(new_item)
+    resp = _format_item_response(new_item)
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=actual_id,
+            event_type="inventory_updated",
+            payload=resp,
+            target_audience=["INVENTORY", "OWNER", "KITCHEN", "BAR"]
+        )
+    except Exception:
+        pass
+    return resp
 
 
 @router.patch("/restaurants/{restaurant_id}/inventory/{item_id}")
@@ -197,7 +208,17 @@ async def update_inventory_item(
 
     await db.commit()
     await db.refresh(item)
-    return _format_item_response(item)
+    resp = _format_item_response(item)
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=item.restaurant_id,
+            event_type="inventory_updated",
+            payload=resp,
+            target_audience=["INVENTORY", "OWNER", "KITCHEN", "BAR"]
+        )
+    except Exception:
+        pass
+    return resp
 
 
 @router.post("/restaurants/{restaurant_id}/inventory/{item_id}/adjust")
@@ -230,7 +251,17 @@ async def adjust_inventory_quantity(
 
     await db.commit()
     await db.refresh(item)
-    return _format_item_response(item)
+    resp = _format_item_response(item)
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=item.restaurant_id,
+            event_type="inventory_updated",
+            payload=resp,
+            target_audience=["INVENTORY", "OWNER", "KITCHEN", "BAR"]
+        )
+    except Exception:
+        pass
+    return resp
 
 
 @router.delete("/restaurants/{restaurant_id}/inventory/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

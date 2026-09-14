@@ -17,6 +17,9 @@ from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
 
+# Session-scoped billing router (mounted at /api/v1 to expose /billing/sessions/{session_id}/bill)
+session_bill_router = APIRouter()
+
 # ----------------- SCHEMAS -----------------
 
 class BillingConfigUpdateSchema(BaseModel):
@@ -64,6 +67,16 @@ class QrUploadSchema(BaseModel):
     qrDataUrl: str
     merchantName: Optional[str] = None
     upiId: Optional[str] = None
+
+class BillSessionRequestSchema(BaseModel):
+    restaurantId: Optional[str] = None
+    tableId: Optional[str] = None
+    tableNumber: Optional[str] = None
+    paymentMethod: Optional[str] = "CASH"
+    discountPercentage: Optional[float] = 0.0
+    discountAmount: Optional[float] = 0.0
+    serviceChargePercentage: Optional[float] = None
+    orderType: Optional[str] = "DINE_IN"
 
 # ----------------- HELPERS -----------------
 
