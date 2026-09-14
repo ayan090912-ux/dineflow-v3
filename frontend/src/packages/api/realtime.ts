@@ -91,14 +91,23 @@ export interface RealTimeEventPayload {
 
 type EventListener = (event: RealTimeEventPayload) => void;
 
-function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableSessionId?: string): string {
+function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableSessionId?: string, explicitToken?: string, explicitChannel?: string): string {
   let wsProto = 'wss:';
   let host = 'dineflow-v3.onrender.com';
 
-  const token = typeof window !== 'undefined'
-    ? (localStorage.getItem('dinely_auth_token') || sessionStorage.getItem('dinely_admin_token') || localStorage.getItem('dinely_platform_admin_id_token') || '')
-    : '';
+  const token = explicitToken || (typeof window !== 'undefined'
+    ? (localStorage.getItem('dinely_platform_admin_id_token') || sessionStorage.getItem('dinely_admin_token') || localStorage.getItem('dinely_auth_token') || '')
+    : '');
   const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
+
+  const cleanRest = (restaurantId || 'global').trim();
+  const cleanRole = (role || 'CUSTOMER').trim().toUpperCase();
+  const canonicalChannel = explicitChannel || (
+    cleanRole === 'PLATFORM_ADMIN' || cleanRest.toLowerCase() === 'platform:admin'
+      ? 'platform:admin'
+      : `restaurant:${cleanRest}:${cleanRole.toLowerCase()}`
+  );
+  const channelQuery = `&channel=${encodeURIComponent(canonicalChannel)}`;
 
   if (typeof window !== 'undefined') {
     const loc = window.location;
@@ -108,15 +117,22 @@ function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableS
       h === 'localhost' ||
       h === '127.0.0.1' ||
       h === '0.0.0.0' ||
+      h.endsWith('.localhost') ||
+      h.includes('localhost') ||
       /^192\.168\./.test(h) ||
       /^10\./.test(h);
 
     if (isDev) {
-      return `${wsProto}//${h}:8000/api/v1/ws?restaurant_id=${encodeURIComponent(restaurantId)}&role=${encodeURIComponent(role)}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
+      const devHost = (h.endsWith('.localhost') || h.includes('localhost')) ? '127.0.0.1' : h;
+      return `${wsProto}//${devHost}:8000/api/v1/ws?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
     }
   }
 
-  return `wss://${host}/api/v1/ws?restaurant_id=${encodeURIComponent(restaurantId)}&role=${encodeURIComponent(role)}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
+  if (typeof process !== 'undefined' && process.env?.VITE_WS_URL) {
+    return `${process.env.VITE_WS_URL}?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
+  }
+
+  return `wss://dineflow-v3.onrender.com/api/v1/ws?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
 }
 
 export type ConnectionStatusType = 'CONNECTED' | 'CONNECTING' | 'RECONNECTING' | 'DISCONNECTED';
@@ -131,11 +147,15 @@ class RealTimeEventBus {
   private status: ConnectionStatusType = 'DISCONNECTED';
   private currentRestaurantId: string | null = null;
   private currentRole: string = 'CUSTOMER';
+  private currentChannel: string | null = null;
   private currentTableSessionId: string | null = null;
+  private currentExplicitToken: string | null = null;
   private reconnectTimer: any = null;
   private pingInterval: any = null;
 
   private reconnectAttempts: number = 0;
+  private consecutiveAuthFailures: number = 0;
+  private tokenRefreshProvider: (() => Promise<string | null>) | null = null;
 
   constructor() {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -192,7 +212,11 @@ class RealTimeEventBus {
     });
   }
 
-  public connect(restaurantId: string, role: string = 'CUSTOMER', tableSessionId?: string) {
+  public setTokenRefreshProvider(provider: () => Promise<string | null>) {
+    this.tokenRefreshProvider = provider;
+  }
+
+  public connect(restaurantId: string, role: string = 'CUSTOMER', tableSessionId?: string, explicitToken?: string, channel?: string) {
     if (!restaurantId) return;
 
     if (
@@ -200,6 +224,8 @@ class RealTimeEventBus {
       this.currentRestaurantId === restaurantId &&
       this.currentRole === role &&
       this.currentTableSessionId === tableSessionId &&
+      (!explicitToken || this.currentExplicitToken === explicitToken) &&
+      (!channel || this.currentChannel === channel) &&
       this.ws.readyState === WebSocket.OPEN
     ) {
       return;
@@ -210,6 +236,10 @@ class RealTimeEventBus {
     this.currentRestaurantId = restaurantId;
     this.currentRole = role;
     this.currentTableSessionId = tableSessionId || null;
+    this.currentChannel = channel || null;
+    if (explicitToken !== undefined) {
+      this.currentExplicitToken = explicitToken;
+    }
 
     // Strict Tenant Isolation: Scope in-browser BroadcastChannel to this tenant only
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -230,17 +260,18 @@ class RealTimeEventBus {
 
     this.setStatus(this.reconnectAttempts > 0 ? 'RECONNECTING' : 'CONNECTING');
 
-    const wsUrl = getWebSocketUrl(restaurantId, role, tableSessionId);
+    const wsUrl = getWebSocketUrl(restaurantId, role, tableSessionId, this.currentExplicitToken || undefined, this.currentChannel || undefined);
     console.log('[WS_CONNECTING] URL:', wsUrl.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]'));
 
     try {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('[WS_CONNECTED] Scoped to restaurant:', restaurantId, 'role:', role);
+        console.log('[WS_CONNECTED] Scoped to restaurant:', restaurantId, 'role:', role, 'channel:', this.currentChannel || 'auto');
         const wasReconnecting = this.reconnectAttempts > 0;
         this.setStatus('CONNECTED');
         this.reconnectAttempts = 0;
+        this.consecutiveAuthFailures = 0;
 
         if (this.pingInterval) clearInterval(this.pingInterval);
         this.pingInterval = setInterval(() => {
@@ -308,27 +339,51 @@ class RealTimeEventBus {
         this.setStatus('DISCONNECTED');
         if (this.pingInterval) clearInterval(this.pingInterval);
 
-        // If closed with code 1008 (Unauthorized / token expired), attempt fresh Firebase token refresh
-        if (event.code === 1008 && typeof window !== 'undefined') {
-          try {
-            const freshToken = await getValidFirebaseIdToken(true);
-            if (freshToken) {
-              localStorage.setItem('dinely_auth_token', freshToken);
-              if (this.currentRole === 'PLATFORM_ADMIN' || this.currentRole === 'ADMIN') {
-                localStorage.setItem('dinely_platform_admin_id_token', freshToken);
-                sessionStorage.setItem('dinely_admin_token', freshToken);
+        // If closed with code 1008 (Unauthorized / token expired), attempt token refresh
+        if (event.code === 1008) {
+          this.consecutiveAuthFailures++;
+
+          // Attempt token refresh via provider first, then Firebase
+          if (this.tokenRefreshProvider) {
+            try {
+              const refreshed = await this.tokenRefreshProvider();
+              if (refreshed) {
+                this.currentExplicitToken = refreshed;
               }
+            } catch (err) {
+              console.warn('[WS_TOKEN_REFRESH_FAILED]:', err);
             }
-          } catch (tokErr) {
-            console.warn('[WS_TOKEN_REFRESH_FAILED]:', tokErr);
+          } else if (typeof window !== 'undefined') {
+            try {
+              const freshToken = await getValidFirebaseIdToken(true);
+              if (freshToken) {
+                this.currentExplicitToken = freshToken;
+                localStorage.setItem('dinely_auth_token', freshToken);
+                if (this.currentRole === 'PLATFORM_ADMIN' || this.currentRole === 'ADMIN') {
+                  localStorage.setItem('dinely_platform_admin_id_token', freshToken);
+                  sessionStorage.setItem('dinely_admin_token', freshToken);
+                }
+              }
+            } catch (tokErr) {
+              console.warn('[WS_TOKEN_REFRESH_FAILED]:', tokErr);
+            }
           }
+
+          // Strict infinite reconnect loop prevention: halt on persistent auth rejection
+          if (this.consecutiveAuthFailures >= 3) {
+            console.warn('[WS_AUTH_HALTED] Halting WebSocket reconnection: authentication failed 3 consecutive times (code 1008). No infinite reconnect loop.');
+            this.setStatus('DISCONNECTED');
+            return;
+          }
+        } else {
+          this.consecutiveAuthFailures = 0;
         }
 
         this.reconnectAttempts++;
 
-        // Bound maximum reconnect attempts if continuously rejected with 1008
-        if (event.code === 1008 && this.reconnectAttempts > 4) {
-          console.warn('[WS_UNAUTHORIZED_CEILING] Halting automatic WebSocket reconnection due to persistent auth rejection (code 1008).');
+        // Bound maximum reconnect attempts across all network errors
+        if (this.reconnectAttempts > 8) {
+          console.warn('[WS_RECONNECT_CEILING] Halting automatic WebSocket reconnection due to maximum attempts reached.');
           this.setStatus('DISCONNECTED');
           return;
         }
@@ -340,13 +395,19 @@ class RealTimeEventBus {
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = setTimeout(() => {
           if (this.currentRestaurantId) {
-            this.connect(this.currentRestaurantId, this.currentRole, this.currentTableSessionId || undefined);
+            this.connect(
+              this.currentRestaurantId,
+              this.currentRole,
+              this.currentTableSessionId || undefined,
+              this.currentExplicitToken || undefined,
+              this.currentChannel || undefined
+            );
           }
         }, backoffMs);
       };
 
       this.ws.onerror = (err) => {
-        console.warn('[WS_ERROR]:', err);
+        console.warn('[WS_ERROR]: Network or socket issue encountered');
       };
     } catch (e) {
       console.error('[WS_INIT_FAILED]:', e);

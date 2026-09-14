@@ -5,8 +5,9 @@ from typing import Optional
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Sensitive query parameter keys to sanitize from log paths
-SENSITIVE_PARAM_REGEX = re.compile(r"(token|jwt|secret|key|password|auth)=([^&]+)", re.IGNORECASE)
+# Sensitive parameter keys and Bearer tokens to sanitize from log paths and error messages
+SENSITIVE_PARAM_REGEX = re.compile(r"((?:id_|access_|refresh_)?token|jwt|bearer|secret|api_?key|password|auth(?:orization)?|passcode|pin)=([^&]+)", re.IGNORECASE)
+BEARER_TOKEN_REGEX = re.compile(r"Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*", re.IGNORECASE)
 
 def sanitize_url_path(url_path: str, query_string: str) -> str:
     if not query_string:
@@ -53,6 +54,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             # Sanitize exception message to prevent leaking credentials
             exc_str = str(exc)
             exc_str_safe = SENSITIVE_PARAM_REGEX.sub(r"\1=[REDACTED]", exc_str)
+            exc_str_safe = BEARER_TOKEN_REGEX.sub("Bearer [REDACTED]", exc_str_safe)
             log_data = {
                 "correlation_id": correlation_id,
                 "method": request.method,

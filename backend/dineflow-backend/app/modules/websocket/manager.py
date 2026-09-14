@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from fastapi import WebSocket
 
-ADMIN_CHANNEL = "__platform_admin__"
+ADMIN_CHANNEL = "platform:admin"
+LEGACY_ADMIN_CHANNEL = "__platform_admin__"
 
 def normalize_role(role: Optional[str]) -> str:
     r = (role or "CUSTOMER").strip().upper()
@@ -26,6 +27,27 @@ def normalize_role(role: Optional[str]) -> str:
     if r in ["CUSTOMER", "GUEST", "CLIENT"]:
         return "CUSTOMER"
     return r
+
+def format_channel(restaurant_id: str, role: str) -> str:
+    """Format canonical channel name (e.g. restaurant:A:kitchen or platform:admin)."""
+    clean_rest = str(restaurant_id or "").strip()
+    norm_role = normalize_role(role)
+    if norm_role == "PLATFORM_ADMIN" or clean_rest.lower() in ("global", ADMIN_CHANNEL, LEGACY_ADMIN_CHANNEL):
+        return ADMIN_CHANNEL
+    return f"restaurant:{clean_rest}:{norm_role.lower()}"
+
+def parse_channel(channel: str) -> Tuple[str, str]:
+    """Parse canonical channel into (restaurant_id, role)."""
+    ch = (channel or "").strip().lower()
+    if ch in (ADMIN_CHANNEL, "platform_admin", "admin", "__platform_admin__"):
+        return (ADMIN_CHANNEL, "PLATFORM_ADMIN")
+    if ch.startswith("restaurant:"):
+        parts = ch.split(":")
+        if len(parts) >= 3:
+            return (parts[1], parts[2].upper())
+        elif len(parts) == 2:
+            return (parts[1], "CUSTOMER")
+    return ("global", "CUSTOMER")
 
 MAX_TOTAL_CONNECTIONS = 500
 MAX_CONNECTIONS_PER_IP = 10
@@ -75,16 +97,21 @@ class ConnectionManager:
         restaurant_id: str,
         role: str = "CUSTOMER",
         table_session_id: Optional[str] = None,
-        client_ip: Optional[str] = None
+        client_ip: Optional[str] = None,
+        channel: Optional[str] = None,
     ):
         await websocket.accept()
         raw_role = (role or "CUSTOMER").upper()
         norm_role = normalize_role(raw_role)
-        # Platform admins connect with restaurant_id="global" or "__platform_admin__"
-        if norm_role == "PLATFORM_ADMIN" or restaurant_id in ("global", ADMIN_CHANNEL):
+        # Platform admins connect with restaurant_id="global", "platform:admin", or "__platform_admin__"
+        if norm_role == "PLATFORM_ADMIN" or restaurant_id in ("global", ADMIN_CHANNEL, LEGACY_ADMIN_CHANNEL):
             effective_rest_id = ADMIN_CHANNEL
         else:
             effective_rest_id = str(restaurant_id).strip()
+
+        canonical_channel = format_channel(effective_rest_id, norm_role)
+        if channel and channel.strip():
+            canonical_channel = channel.strip().lower()
 
         async with self._lock:
             conn_info = {
@@ -92,13 +119,14 @@ class ConnectionManager:
                 "restaurant_id": effective_rest_id,
                 "role": raw_role,
                 "normalized_role": norm_role,
+                "channel": canonical_channel,
                 "table_session_id": table_session_id,
                 "client_ip": client_ip,
             }
             self.active_connections.append(conn_info)
             print(
-                f"[WS_CONNECT] restaurant_id={effective_rest_id} raw_role={raw_role} "
-                f"norm_role={norm_role} total_clients={len(self.active_connections)}"
+                f"[WS_CONNECT] channel={canonical_channel} restaurant_id={effective_rest_id} "
+                f"role={norm_role} total_clients={len(self.active_connections)}"
             )
 
     async def disconnect(self, websocket: WebSocket):
@@ -147,26 +175,35 @@ class ConnectionManager:
         target_audience: Optional[List[str]] = None,
     ):
         """
-        Send an event to all connections scoped to a specific restaurant_id.
-        This enforces strict tenant isolation — NO cross-tenant bleed.
+        Send an event to all connections scoped to a specific restaurant_id channel.
+        This enforces strict tenant isolation — NEVER broadcast restaurant events globally or to platform:admin.
         """
+        if not restaurant_id or str(restaurant_id).lower() in ("global", ADMIN_CHANNEL, LEGACY_ADMIN_CHANNEL):
+            raise ValueError(f"Operational restaurant events must carry a valid tenant restaurant_id, got: '{restaurant_id}'")
+
         json_str = self._make_event(event_type, restaurant_id, payload)
         target_rest = str(restaurant_id).lower().strip()
 
         async with self._lock:
-            # Strict tenant scope: exact restaurant_id match only
+            # Strict tenant scope: exact restaurant_id match only (and NEVER platform admin channel)
             target_conns = [
                 c for c in self.active_connections
                 if str(c.get("restaurant_id", "")).lower().strip() == target_rest
+                and c.get("channel") != ADMIN_CHANNEL
+                and c.get("normalized_role") != "PLATFORM_ADMIN"
             ]
             if target_audience:
                 allowed_roles = [normalize_role(r) for r in target_audience]
                 # Owners always receive operational broadcasts within their tenant
                 if "OWNER" not in allowed_roles:
                     allowed_roles.append("OWNER")
+
+                allowed_channels = {format_channel(target_rest, r) for r in allowed_roles}
                 target_conns = [
                     c for c in target_conns
-                    if c["normalized_role"] in allowed_roles or c["role"] in allowed_roles
+                    if c.get("channel") in allowed_channels
+                    or c.get("normalized_role") in allowed_roles
+                    or c.get("role") in allowed_roles
                 ]
 
             print(
@@ -197,7 +234,8 @@ class ConnectionManager:
         async with self._lock:
             admin_conns = [
                 c for c in self.active_connections
-                if c.get("restaurant_id") == ADMIN_CHANNEL
+                if c.get("channel") == ADMIN_CHANNEL
+                or c.get("restaurant_id") in (ADMIN_CHANNEL, LEGACY_ADMIN_CHANNEL)
                 or c.get("normalized_role") == "PLATFORM_ADMIN"
             ]
             print(
@@ -209,10 +247,18 @@ class ConnectionManager:
 
     async def broadcast_global(self, message: dict):
         """
-        Sends to Platform Admin channel only — NOT to restaurant tenants.
-        Use broadcast_event() or broadcast_to_restaurant() for tenant events.
-        This prevents cross-tenant data bleed while keeping admin informed.
+        Never broadcast restaurant events globally.
+        Restaurant events must use broadcast_event() with a scoped restaurant_id.
+        broadcast_global is restricted strictly to Platform Admin system announcements.
         """
+        # Enforce security guardrail: reject any payload carrying tenant or operational data
+        has_restaurant_scope = any(
+            k in message for k in ("restaurant_id", "restaurantId", "table_id", "tableId", "order_id", "orderId", "bill_id", "billId")
+        )
+        if has_restaurant_scope:
+            print("[WS_SECURITY_VIOLATION] Attempted global broadcast of restaurant operational event. BLOCKED.")
+            return
+
         await self.broadcast_to_platform_admin(message)
 
 
