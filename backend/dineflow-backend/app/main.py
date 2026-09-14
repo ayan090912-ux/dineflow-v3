@@ -95,6 +95,24 @@ async def ensure_db_schema_columns(conn):
         except Exception:
             pass
 
+    # Ensure schema columns for bills and orders
+    schema_patch_statements = [
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS tax_breakdown_json JSON;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS items_snapshot_json JSON;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS orders_snapshot_json JSON;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_verified_by VARCHAR(100);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS round_off_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_breakdown_json JSON;",
+    ]
+    for stmt in schema_patch_statements:
+        try:
+            await conn.execute(text(stmt))
+        except Exception as e:
+            print("[SCHEMA INIT NOTICE] Column patch error:", e)
+
 
 
 async def _background_startup_init():
