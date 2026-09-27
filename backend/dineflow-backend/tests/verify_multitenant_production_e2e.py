@@ -36,7 +36,39 @@ async def run_audit():
         await conn.run_sync(Base.metadata.create_all)
 
     transport = ASGITransport(app=fastapi_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(transport=transport, base_url="http://test") as raw_client:
+        class RobustClient:
+            def __init__(self, inner):
+                self.inner = inner
+
+            async def request(self, method, url, **kwargs):
+                for attempt in range(6):
+                    res = await self.inner.request(method, url, **kwargs)
+                    if res.status_code == 429:
+                        wait_sec = 3
+                        try:
+                            wait_sec = int(res.json().get("retry_after_seconds", 3))
+                        except Exception:
+                            pass
+                        print(f" [HTTP 429 Rate limited on {url}] Waiting {wait_sec + 1}s (attempt {attempt+1}/6)...")
+                        await asyncio.sleep(wait_sec + 1)
+                        continue
+                    return res
+                return res
+
+            async def get(self, url, **kwargs):
+                return await self.request("GET", url, **kwargs)
+
+            async def post(self, url, **kwargs):
+                return await self.request("POST", url, **kwargs)
+
+            async def put(self, url, **kwargs):
+                return await self.request("PUT", url, **kwargs)
+
+            async def delete(self, url, **kwargs):
+                return await self.request("DELETE", url, **kwargs)
+
+        client = RobustClient(raw_client)
         # -------------------------------------------------------------
         # STEP 1: ONBOARD TENANT 1A & 1B (Owner 1: Rajesh owns 2 restaurants)
         # -------------------------------------------------------------
@@ -218,14 +250,14 @@ async def run_audit():
             app_settings.JWT_ACCESS_SECRET_KEY,
             algorithm=app_settings.JWT_ALGORITHM
         )
-        headers_1 = {"Authorization": f"Bearer {token_1}"}
+        headers_1 = {"Authorization": f"Bearer {token_1}", "X-Forwarded-For": "203.0.113.11"}
 
         token_2 = jose_jwt.encode(
             {"sub": owner2_uid, "email": owner2_email, "role": "OWNER", "restaurant_id": t2_id},
             app_settings.JWT_ACCESS_SECRET_KEY,
             algorithm=app_settings.JWT_ALGORITHM
         )
-        headers_2 = {"Authorization": f"Bearer {token_2}"}
+        headers_2 = {"Authorization": f"Bearer {token_2}", "X-Forwarded-For": "203.0.113.22"}
 
         # Cross-Tenant Rejection Test: Owner 1 attempting to mutate Tenant 2 must be rejected with 403
         cross_res = await client.post(f"/api/v1/restaurants/{t2_id}/categories", json={"name": "Hacked Category", "sortOrder": 99}, headers=headers_1)
