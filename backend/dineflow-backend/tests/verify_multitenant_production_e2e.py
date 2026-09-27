@@ -437,6 +437,7 @@ async def run_audit():
         # Grant Owner 1 role 'STAFF' in Tenant 2
         async with AsyncSessionLocal() as db_session:
             new_mem = RestaurantMembership(
+                id=f"mem-{uuid.uuid4().hex}",
                 restaurant_id=t2_id,
                 user_uid=owner1_uid,
                 user_email=owner1_email,
