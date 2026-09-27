@@ -184,8 +184,8 @@ async def run_audit():
         assert t1_id not in [r["id"] for r in my2_rests]
 
         # Verify Canonical Tenant Domains & Switching
-        rest_1a_slug = next(r["publicSlug"] or r["slug"] for r in my1_rests if r["id"] == t1_id)
-        rest_1b_slug = next(r["publicSlug"] or r["slug"] for r in my1_rests if r["id"] == t1b_id)
+        rest_1a_slug = next(r.get("public_slug") or r.get("publicSlug") or r.get("slug") for r in my1_rests if r["id"] == t1_id)
+        rest_1b_slug = next(r.get("public_slug") or r.get("publicSlug") or r.get("slug") for r in my1_rests if r["id"] == t1b_id)
         assert rest_1a_slug != rest_1b_slug, "Tenant slugs must be distinct"
         print(f" -> Owner 1 Switching: https://{rest_1a_slug}.dinely.food/restaurant/dashboard <-> https://{rest_1b_slug}.dinely.food/restaurant/dashboard")
         print(" -> Multi-restaurant ownership & switching verified: Owner 1 owns 2 outlets; Owner 2 owns 1 outlet.")
