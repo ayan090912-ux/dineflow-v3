@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: ./backend/dineflow-backend
+      dockerfile: Dockerfile
+    container_name: dinely_backend
+    restart: always
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_SYNC=${DATABASE_URL_SYNC}
+      - DB_POOL_SIZE=20
+      - DB_MAX_OVERFLOW=10
+      - JWT_ACCESS_SECRET_KEY=${JWT_ACCESS_SECRET_KEY}
+      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY}
+      - FIREBASE_PROJECT_ID=dinely-cd6cd
+      - AWS_REGION=ap-south-1
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-dinely-production-uploads}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - dinely_net
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dinely_web
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - dinely_net
+
+networks:
+  dinely_net:
+    driver: bridge

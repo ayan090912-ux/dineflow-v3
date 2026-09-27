@@ -422,3 +422,65 @@ async def resolve_tenant(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unsupported tenant resolution mode: {mode}"
         )
+
+
+async def resolve_canonical_restaurant(
+    restaurant_id_or_slug: Optional[str],
+    db: AsyncSession
+) -> Restaurant:
+    """
+    Given an identifier that could be a restaurant UUID, slug, or public_slug,
+    resolves and returns the canonical Restaurant model object.
+    If not found or inactive, raises HTTP 404.
+    """
+    if not restaurant_id_or_slug or not str(restaurant_id_or_slug).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Valid restaurant_id or slug is required."
+        )
+    clean_id = str(restaurant_id_or_slug).strip()
+
+    # 1. Direct ID lookup
+    stmt = select(Restaurant).where(
+        Restaurant.id == clean_id,
+        Restaurant.deleted_at.is_(None)
+    ).limit(1)
+    res = await db.execute(stmt)
+    rest = res.scalar_one_or_none()
+    if rest:
+        return rest
+
+    # 2. Case-insensitive lookup by slug, public_slug, or lower id
+    clean_lower = clean_id.lower()
+    stmt_slug = select(Restaurant).where(
+        Restaurant.deleted_at.is_(None),
+        or_(
+            func.lower(Restaurant.public_slug) == clean_lower,
+            func.lower(Restaurant.slug) == clean_lower,
+            func.lower(Restaurant.id) == clean_lower
+        )
+    ).order_by(
+        Restaurant.is_approved.desc(),
+        Restaurant.created_at.desc()
+    ).limit(1)
+    res_slug = await db.execute(stmt_slug)
+    rest = res_slug.scalar_one_or_none()
+    if rest:
+        return rest
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Restaurant '{clean_id}' not found."
+    )
+
+
+async def resolve_canonical_restaurant_id(
+    restaurant_id_or_slug: Optional[str],
+    db: AsyncSession
+) -> str:
+    """
+    Returns the canonical Restaurant.id (UUID) for a given restaurant ID or slug.
+    """
+    rest = await resolve_canonical_restaurant(restaurant_id_or_slug, db)
+    return rest.id
+

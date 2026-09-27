@@ -229,7 +229,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     };
 
     fetchFreshOrders();
-    const pollInterval = setInterval(fetchFreshOrders, 5000);
+    const pollInterval = setInterval(fetchFreshOrders, 12000);
 
     const handledEventIds = new Set<string>();
 

@@ -62,21 +62,42 @@ export async function signInWithGooglePopup(forceRefreshIdToken: boolean = false
     console.error('Firebase Google Sign-In Error:', error);
 
     if (error.code === 'auth/popup-closed-by-user') {
-      throw new Error('Google sign-in popup was closed before completing authentication.');
+      const cancelErr = new Error('Google sign-in popup was closed before completing authentication.');
+      (cancelErr as any).code = 'auth/popup-closed-by-user';
+      (cancelErr as any).isCancelled = true;
+      throw cancelErr;
     } else if (error.code === 'auth/popup-blocked') {
-      throw new Error('Google sign-in popup was blocked by your browser. Please allow popups for this domain.');
+      const blockErr = new Error('Google sign-in popup was blocked by your browser. Please allow popups for this domain.');
+      (blockErr as any).code = 'auth/popup-blocked';
+      throw blockErr;
     } else if (error.code === 'auth/cancelled-popup-request') {
-      throw new Error('Sign-in process cancelled.');
+      const cancelErr = new Error('Sign-in process cancelled.');
+      (cancelErr as any).code = 'auth/cancelled-popup-request';
+      (cancelErr as any).isCancelled = true;
+      throw cancelErr;
+    } else if (error.code === 'auth/network-request-failed' || error.message?.toLowerCase().includes('network') || error.message?.toLowerCase().includes('failed to fetch')) {
+      const netErr = new Error('Network failure: Unable to reach Google authentication service. Please check your internet connection.');
+      (netErr as any).code = 'auth/network-request-failed';
+      (netErr as any).isNetworkError = true;
+      throw netErr;
     } else if (error.code === 'auth/account-exists-with-different-credential') {
-      throw new Error('An account already exists with the same email address using a different login method.');
+      const accErr = new Error('An account already exists with the same email address using a different login method.');
+      (accErr as any).code = error.code;
+      throw accErr;
     } else if (error.code === 'auth/unauthorized-domain' || error.message?.includes('unauthorized-domain')) {
       const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-      throw new Error(`Firebase Auth Domain Error: '${currentHost}' is not authorized in Firebase Console. Please add '${currentHost}' under Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
+      const domErr = new Error(`Firebase Auth Domain Error: '${currentHost}' is not authorized in Firebase Console. Please add '${currentHost}' under Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
+      (domErr as any).code = 'auth/unauthorized-domain';
+      throw domErr;
     } else if (error.code === 'auth/api-key-not-valid' || error.message?.includes('api-key-not-valid')) {
-      throw new Error('Firebase API key is missing or invalid in frontend/.env (VITE_FIREBASE_API_KEY). Please set a valid Firebase Web API key from Firebase Console.');
+      const keyErr = new Error('Firebase API key is missing or invalid in frontend/.env (VITE_FIREBASE_API_KEY). Please set a valid Firebase Web API key from Firebase Console.');
+      (keyErr as any).code = 'auth/api-key-not-valid';
+      throw keyErr;
     }
 
-    throw new Error(error.message || 'Google Authentication failed. Please try again.');
+    const genErr = new Error(error.message || 'Google Authentication failed. Please try again.');
+    (genErr as any).code = error.code || 'auth/unknown';
+    throw genErr;
   }
 }
 
@@ -143,16 +164,23 @@ export async function getFirebaseIdToken(forceRefresh: boolean = false): Promise
   return getValidFirebaseIdToken(forceRefresh);
 }
 
+import { authStateMachine, AuthState, AuthStateMachineData, AuthErrorDetails } from './authStateMachine';
+export { authStateMachine, type AuthState, type AuthStateMachineData, type AuthErrorDetails };
+
 export async function signOutFirebase(): Promise<void> {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('dinely_platform_admin_id_token');
+    sessionStorage.removeItem('dinely_admin_token');
+    localStorage.removeItem('dinely_admin_token');
+    localStorage.removeItem('dinely_auth_token');
+    sessionStorage.removeItem('dinely_auth_token');
+  }
   try {
     await firebaseSignOut(firebaseAuth);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('dinely_platform_admin_id_token');
-      sessionStorage.removeItem('dinely_admin_token');
-      localStorage.removeItem('dinely_auth_token');
-      sessionStorage.removeItem('dinely_auth_token');
-    }
   } catch (e) {
     console.warn('Firebase SignOut Warning:', e);
+  } finally {
+    authStateMachine.logout();
   }
 }
+

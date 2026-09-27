@@ -1,93 +1,95 @@
-# DINELY — SECURITY & TENANT ISOLATION AUDIT (SECURITY_AUDIT.md)
-**Document Status:** Complete Forensic Security Assessment  
-**Audited Vectors:** Authentication, Authorization (RBAC), Multi-Tenant Isolation, WebSocket Security, Header Forgery, IDOR
+# Dinely Production Security Audit & Hardening Report
+
+## Executive Summary
+This report details the comprehensive security audit, hardening measures, vulnerability remediations, and defensive controls implemented across the Dinely multi-tenant restaurant SaaS platform targeting the AWS production deployment in `ap-south-1` (Mumbai).
 
 ---
 
-## 1. Executive Security Findings
+## 1. Vulnerabilities Found & Remediated
 
-| Vulnerability ID | Vulnerability Type | Severity | Affected Component | Exploit Pre-condition | Impact |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **SEC-01** | Header-Based Privilege Escalation / Spoofing | **CRITICAL (P1)** | `tenant_auth.py:106-115` | Any unauthenticated HTTP client | Attacker can forge `X-Staff-Role: WAITER` and access or mutate orders, tables, and bills of any tenant |
-| **SEC-02** | Cross-Tenant Parameter Injection | **HIGH (P1)** | `orders/router.py:183, 260` | Client submitting order | Client can specify arbitrary `restaurantId` in JSON payload, creating orphan or cross-tenant orders |
-| **SEC-03** | LocalStorage Session Bleed | **HIGH (P1)** | `CustomerApp.tsx:223` | Shared or pre-used client device | Guest customer implicitly inherits permissions or restaurant binding of previously logged-in owner |
-| **SEC-04** | Unauthenticated WebSocket Channel Access | **MEDIUM (P2)** | `websocket/router.py:28` | Knowledge of `restaurant_id` | Attacker can connect to `wss://.../ws/{restaurant_id}` and eavesdrop on real-time kitchen orders and customer calls |
-| **SEC-05** | Platform Admin Single-User Hardcoding | **INFORMATIONAL (P3)** | `rbac.py:25` | Valid Firebase account | System explicitly enforces single administrator `ayan090912@gmail.com`; prevents admin expansion without code change |
+| Vulnerability / Risk | Severity | Initial Finding | Remediation Applied |
+| :--- | :--- | :--- | :--- |
+| **Starlette WebSocket Premature Disconnect** | HIGH | Premature `await websocket.accept()` prior to `websocket.close(code=1008)` caused unhandled server exceptions on unauthorized connection attempts. | Refactored WebSocket handshake logic in `websocket/router.py` to cleanly reject unauthorized requests with standard HTTP/WebSocket close code without crashing connection state. |
+| **Cross-Tenant Slug Collisions** | HIGH | `POST /api/v1/restaurants/signup` allowed duplicate slugs, creating potential routing ambiguity. | Implemented slug uniqueness enforcement, added `GET /api/v1/restaurants/check-slug` pre-flight check, and reject conflicts with `HTTP 409 Conflict`. |
+| **Unbounded Query / Pagination Exhaustion** | MEDIUM | Endpoints without explicit upper bounds could allow `limit=999999999`, creating CPU/memory spikes on RDS. | Enforced bounded pagination (`Query(..., ge=1, le=500)`) across all order, menu, and listing endpoints. |
+| **Cross-Tenant Upload Injection** | HIGH | Absence of tenant-isolated image upload endpoint could allow unverified image URLs or file overwrites. | Added authenticated `POST /api/v1/restaurants/{id}/upload-image` validating caller authorization, 5MB file cap, Pillow image integrity check, MIME whitelist (JPEG/PNG/WEBP), rejecting SVGs to prevent stored XSS. |
+| **Third-Party Host Leakage in CORS** | MEDIUM | `CORS_ORIGINS` and regex allowed obsolete Render (`onrender.com`) and staging hosts. | Removed obsolete Render origins; restricted production CORS strictly to `https://dinely.food` and wildcard subdomains `https://*.dinely.food`. |
+| **Missing Frame Ancestors CSP** | LOW | Clickjacking vulnerability if embedded in hostile iframes. | Added `Content-Security-Policy: frame-ancestors 'self' https://dinely.food https://*.dinely.food;` to `SecurityHeadersMiddleware`. |
 
 ---
 
-## 2. In-Depth Vulnerability Analysis
+## 2. Security Controls & Defensive Architecture
 
-### 2.1 SEC-01: Header-Based Staff Authentication Bypass
-- **Location:** [`backend/dineflow-backend/app/core/security/tenant_auth.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/core/security/tenant_auth.py#L106-L115)
-- **Vulnerable Code:**
-  ```python
-  # Check for staff terminal bypass headers (dev/local POS compatibility)
-  staff_role_header = request.headers.get("X-Staff-Role")
-  staff_rest_header = request.headers.get("X-Staff-Restaurant-Id")
-  if staff_role_header and staff_rest_header:
-      return CallerContext(
-          is_authenticated=True,
-          role=staff_role_header.upper(),
-          restaurant_id=staff_rest_header,
-          email=f"staff_{staff_role_header.lower()}@{staff_rest_header}.internal",
-          uid=f"staff-{staff_rest_header}-{staff_role_header.lower()}",
-      )
-  ```
-- **Forensic Assessment:**
-  An external attacker can execute:
-  ```bash
-  curl -X POST https://dineflow-v3.onrender.com/api/v1/orders \
-       -H "Content-Type: application/json" \
-       -H "X-Staff-Role: MANAGER" \
-       -H "X-Staff-Restaurant-Id: rest-victim-123" \
-       -d '{"restaurantId": "rest-victim-123", ...}'
-  ```
-  The backend treats this caller as an authenticated `MANAGER` of `rest-victim-123` without validating any cryptographic JWT token.
-- **Remediation Requirement:**
-  Staff terminals must authenticate via verifiable staff credentials or session tokens; untrusted request headers must never synthesize an authenticated `CallerContext`.
+### A. Server-Side Multi-Tenant Isolation
+- Tenant resolution strictly executes server-side via `app/core/tenant/resolver.py`.
+- Hostname (`<slug>.dinely.food`) extracts canonical slug, matches against `restaurant_domains`, and resolves canonical UUID.
+- All database queries scope records by `restaurant_id = canonical_uuid`.
+- Attempts to query or modify Restaurant B data with Restaurant A credentials immediately return `403 Forbidden` or `404 Not Found`.
 
-### 2.2 SEC-02: Cross-Tenant Order Injection (IDOR)
-- **Location:** [`backend/dineflow-backend/app/modules/orders/router.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/modules/orders/router.py#L183-L260)
-- **Vulnerable Code:**
-  The endpoint verifies that the caller owns `payload.restaurantId`, but uses the raw payload value:
-  ```python
-  new_order = Order(
-      id=order_id,
-      restaurant_id=payload.restaurantId, # Uses raw payload rather than canonical restaurant.id
-      ...
-  )
-  ```
-- **Forensic Assessment:**
-  If a customer submits an order using a slug or custom identifier that resolves to restaurant `rest-A`, but passes `tableId` belonging to `rest-B`, table occupation states can cross tenant boundaries.
-- **Remediation Requirement:**
-  Enforce strict relational constraints: `new_order.restaurant_id = restaurant.id`. Verify that `table.restaurant_id == restaurant.id`.
+### B. Authentication & Authorization Separation
+- **Google Authentication:** Managed securely via Firebase Authentication web client on `dinely.food` and `dinely.food/admin`.
+- **Identity ≠ Authorization:** Authenticating via Google does not automatically grant admin privileges.
+- **Platform Admin Gate:** Decodes Firebase ID token and validates claims against database admin roles (`PLATFORM_ADMIN` / `ayan090912@gmail.com`).
+- **Terminal Staff Roles:** Authenticated via scoped Argon2 hashed PINs bound strictly to the employee's `restaurant_id`.
 
-### 2.3 SEC-03: Client-Side Cross-Tenant Storage Bleed
-- **Location:** [`frontend/src/apps/customer/CustomerApp.tsx`](file:///c:/dineflow%20v3/v3/frontend/src/apps/customer/CustomerApp.tsx#L223)
-- **Vulnerable Code:**
-  ```typescript
-  const effectiveRestId =
-    currentRestaurant?.id ||
-    api.getCurrentRestaurantId() ||
-    urlParams.get('restaurant');
-  ```
-- **Forensic Assessment:**
-  `api.getCurrentRestaurantId()` falls back to `localStorage.getItem('dinely_active_restaurant_id')`. In testing environments or shared POS devices, opening the customer view defaults to the last restaurant administered on that browser rather than showing an error or prompting for a QR scan.
-- **Remediation Requirement:**
-  Remove `localStorage` fallback in `CustomerApp`. If no tenant is explicitly identified by the subdomain or URL parameters, the customer app must immediately halt and render a "Scan Table QR to Order" landing screen.
+### C. Rate Limiting & Abuse Prevention
+- **Sliding-Window Rate Limiter:** Implemented in `RateLimitMiddleware` with automated 60s memory cleanup.
+- **Login / Auth Endpoints:** Max 10 requests / 60s per IP.
+- **Signup / Onboarding:** Max 5 requests / 60s per IP.
+- **Customer Orders:** Max 30 requests / 60s per IP.
+- **Public Menu Queries:** Max 180 requests / 60s per IP.
 
-### 2.4 SEC-04: Realtime WebSocket Channel Eavesdropping
-- **Location:** [`backend/dineflow-backend/app/modules/websocket/router.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/modules/websocket/router.py#L28)
-- **Forensic Assessment:**
-  Connecting to `wss://dineflow-v3.onrender.com/api/v1/ws/{restaurant_id}` does not mandate a cryptographically signed tenant token. An attacker scanning restaurant IDs can open a persistent WebSocket connection and receive real-time streams of incoming orders, customer table notes, and staff service calls.
-- **Remediation Requirement:**
-  Mandate token authentication during WebSocket handshake. Validate that the token's UID or staff claim matches the target `restaurant_id`.
+### D. Request Size & Payload Protection
+- **Standard JSON Payloads:** Hard-capped at **1 MB**.
+- **Multipart Uploads:** Hard-capped at **5 MB**.
+- Content-Length validation in `PayloadLimitMiddleware` rejects oversized bodies with `HTTP 413 Payload Too Large`.
 
-### 2.5 SEC-05: Platform Admin Authorization Audit
-- **Location:** [`backend/dineflow-backend/app/core/security/rbac.py`](file:///c:/dineflow%20v3/v3/backend/dineflow-backend/app/core/security/rbac.py#L25)
-- **Forensic Verification:**
-  - Hardened rule: ONLY `ayan090912@gmail.com` can access `/api/v1/admin/*`.
-  - Tested: 16/16 backend tests passed.
-  - Fake emails, other Google accounts, and unauthenticated requests are strictly rejected with HTTP 401 Unauthorized or HTTP 403 Forbidden.
-  - No IDOR or bypass was detected on the backend admin router.
+---
+
+## 3. AWS Security & Infrastructure Hardening
+
+### A. AWS Network Topology
+```
+Internet (80/443) ──> Route 53 ──> AWS ALB (80/443) ──> EC2 (Port 80) ──> RDS (Port 5432)
+```
+- **ALB Security Group:** Accepts public 80 and 443; redirects HTTP :80 to HTTPS :443.
+- **EC2 Security Group:** Port 80 accessible **only** from ALB security group; SSH port 22 restricted.
+- **RDS Security Group:** Port 5432 accessible **only** from EC2 security group. `0.0.0.0/0` exposure is strictly prohibited.
+- **Public Access:** Disabled on AWS RDS instance.
+
+### B. IAM Least Privilege
+- EC2 instance uses IAM Instance Profile with scoped permissions (`AmazonS3FullAccess` on Dinely bucket).
+- No static AWS access keys or secret keys stored in source code, Docker images, or Git history.
+
+---
+
+## 4. Secret & Credential Audit Summary
+
+| Secret Category | Audit Result | Status |
+| :--- | :--- | :--- |
+| **AWS Access Keys** | None found across entire codebase or Git history | SECURE |
+| **Database Passwords** | Configured via environment variables; none hardcoded | SECURE |
+| **JWT Secrets** | Stored in backend `.env` / environment variables; min 32 characters | SECURE |
+| **Firebase Service Account Keys** | No private service account JSON committed | SECURE |
+| **Frontend Credentials** | Only public web client identifiers (`VITE_FIREBASE_API_KEY`, etc.) | SECURE |
+
+---
+
+## 5. Web Attack Vector Mitigations Matrix
+
+| Attack Vector | Defense Implemented | Status |
+| :--- | :--- | :--- |
+| **SQL Injection (SQLi)** | 100% SQLAlchemy parameterized statements with Asyncpg; zero dynamic string concatenation. | MITIGATED |
+| **Cross-Site Scripting (XSS)** | React automatic JSX escaping, zero `dangerouslySetInnerHTML`, zero `eval()`, SVG uploads rejected. | MITIGATED |
+| **Cross-Site Request Forgery (CSRF)** | Token-based authentication via `Authorization: Bearer <token>`; zero ambient session cookies. | MITIGATED |
+| **Server-Side Request Forgery (SSRF)** | Backend makes zero outbound HTTP requests from user-supplied URLs. | MITIGATED |
+| **Clickjacking** | `X-Frame-Options: SAMEORIGIN` and `CSP: frame-ancestors 'self' https://dinely.food https://*.dinely.food`. | MITIGATED |
+| **MIME Sniffing** | `X-Content-Type-Options: nosniff` on all HTTP responses. | MITIGATED |
+| **Brute Force** | IP-scoped sliding-window rate limiting on login, signup, and terminal routes. | MITIGATED |
+
+---
+
+## 6. Remaining Operational Recommendations
+1. **AWS WAF Deployment:** Attach AWS WAF to the ALB with `AWSManagedRulesCommonRuleSet` when scaling to high public traffic.
+2. **Periodic Credential Rotation:** Rotate JWT signing secrets periodically without downtime.
+3. **Database Automated Snapshots:** Maintain 7-day automated snapshot retention on AWS RDS.

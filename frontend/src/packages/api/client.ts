@@ -38,7 +38,7 @@ import {
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
 export { realtimeBus } from './realtime';
-import { signOutFirebase, firebaseAuth, ensureFirebaseAuthReady, getValidFirebaseIdToken } from '../auth/firebase';
+import { signOutFirebase, firebaseAuth, ensureFirebaseAuthReady, getValidFirebaseIdToken, authStateMachine } from '../auth/firebase';
 import { matchTableNumber, formatStandardTableNumber } from '../utils/tableUtils';
 import { getTenantFromHostname, getRestaurantPublicDomain, getRestaurantCustomerUrl } from '../utils/tenantResolver';
 
@@ -117,9 +117,13 @@ export function getPortalScopeFromPath(pathname?: string): PortalScope {
 }
 
 export function getApiBaseUrl(): string {
+  if (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL) {
+    const envVal = process.env.VITE_API_BASE_URL.trim();
+    if (envVal && !envVal.includes('onrender.com')) return envVal;
+  }
   if (typeof import.meta !== 'undefined') {
     const envUrl = (import.meta.env?.VITE_API_BASE_URL || import.meta.env?.VITE_API_URL || '').trim();
-    if (envUrl) return envUrl;
+    if (envUrl && !envUrl.includes('onrender.com')) return envUrl;
   }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
@@ -127,16 +131,20 @@ export function getApiBaseUrl(): string {
       host === 'localhost' ||
       host === '127.0.0.1' ||
       host === '0.0.0.0' ||
+      host.endsWith('.localhost') ||
+      host.includes('localhost') ||
       /^192\.168\./.test(host) ||
       /^10\./.test(host) ||
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
 
     if (isDevHost) {
       const protocol = window.location.protocol;
-      return `${protocol}//${host}:8000/api/v1`;
+      const apiHost = (host.endsWith('.localhost') || host.includes('localhost')) ? 'localhost' : host;
+      return `${protocol}//${apiHost}:8000/api/v1`;
     }
 
-    return `https://dineflow-v3.onrender.com/api/v1`;
+    // In AWS production, all requests to dinely.food and *.dinely.food are proxied via Nginx on /api/v1
+    return '/api/v1';
   }
   return 'http://localhost:8000/api/v1';
 }
@@ -605,115 +613,20 @@ export class DinelyApiClient {
     return this.users.some((u) => u.email.toLowerCase() === normalized);
   }
 
-  async registerOwner(data: {
-    name: string;
-    email: string;
-    phone: string;
-    password: string;
-  }) {
-    await delay(300);
-    const normalizedEmail = data.email.trim().toLowerCase();
-
-    // Verify email uniqueness
-    const existing = this.users.find((u) => u.email.toLowerCase() === normalizedEmail);
-    if (existing) {
-      throw new Error('An account with this email address already exists. Please sign in instead.');
-    }
-
-    const userId = `usr-owner-${Date.now()}`;
-    const newUser: User = {
-      id: userId,
-      firstName: data.name.split(' ')[0] || 'Owner',
-      lastName: data.name.split(' ')[1] || '',
-      name: data.name,
-      email: normalizedEmail,
-      phone: data.phone,
-      role: 'RESTAURANT_OWNER',
-      isEmailVerified: true,
-      password: data.password,
-    };
-
-    const tokens: AuthTokens = {
-      accessToken: `df_jwt_${userId}_${Date.now()}`,
-      refreshToken: `df_ref_${userId}_${Date.now()}`,
-      expiresIn: 86400,
-      tokenType: 'Bearer',
-    };
-
-    newUser.tokens = tokens;
-    this.users.unshift(newUser);
-    this.saveSession(newUser, tokens);
-
-    this.auditLogs.unshift({
-      id: `log-${Date.now()}`,
-      actor: data.name,
-      action: 'Registered New Restaurant Owner Account',
-      target: normalizedEmail,
-      timestamp: 'Just now',
-      ipAddress: '127.0.0.1',
-      status: 'SUCCESS',
-    });
-
-    this.saveDatabase();
-    return { user: newUser, tokens };
+  async registerOwner(_data: { name: string; email: string; phone?: string; password?: string }): Promise<{ user: User; tokens: AuthTokens }> {
+    throw new Error('Direct password registration is not supported. Dinely Phase 3 requires Firebase Google Authentication as the identity source.');
   }
 
-  async loginOwner(email: string, password?: string) {
-    await delay(350);
+  async loginOwner(email: string, password?: string): Promise<{ user: User; tokens: AuthTokens; restaurant?: Restaurant | null }> {
+    await delay(200);
     const normalizedEmail = email.trim().toLowerCase();
 
-    let user = this.users.find((u) => u.email.toLowerCase() === normalizedEmail);
-
-    // If user does not exist, check if this is the default admin
-    if (!user && normalizedEmail === 'admin@dinely.com') {
+    // If user is Platform Admin, delegate to dedicated Platform Admin verification
+    if (normalizedEmail === 'admin@dinely.com' || normalizedEmail === 'ayan090912@gmail.com') {
       return this.loginPlatformAdmin(email, password);
     }
 
-    if (!user) {
-      throw new Error('No registered account found for this email address. Please sign up or sign in using Google.');
-    }
-
-    if (password && user.password && user.password !== password) {
-      throw new Error('Invalid password. Please check your credentials and try again.');
-    }
-
-    let restaurant = this.restaurants.find(
-      (r) => !r.isDeleted && (r.id === user?.restaurantId || r.ownerEmail?.toLowerCase() === normalizedEmail)
-    );
-
-    if (restaurant && restaurant.lifecycleStatus === 'SUSPENDED') {
-      throw new Error('Your restaurant account has been suspended by Platform Admin. Access is temporarily disabled.');
-    }
-
-    if (restaurant && restaurant.isDeleted) {
-      throw new Error('This restaurant account has been permanently removed by Platform Admin.');
-    }
-
-    const tokens: AuthTokens = {
-      accessToken: `df_jwt_${user.id}_${Date.now()}`,
-      refreshToken: `df_ref_${user.id}_${Date.now()}`,
-      expiresIn: 86400,
-      tokenType: 'Bearer',
-    };
-
-    user.tokens = tokens;
-    if (restaurant) {
-      user.restaurantId = restaurant.id;
-    }
-
-    this.saveSession(user, tokens, restaurant?.id || null);
-
-    this.auditLogs.unshift({
-      id: `log-${Date.now()}`,
-      actor: user.name,
-      action: 'Authenticated Restaurant Owner Session',
-      target: restaurant?.name || 'Owner Portal',
-      timestamp: 'Just now',
-      ipAddress: '127.0.0.1',
-      status: 'SUCCESS',
-    });
-
-    return { user, tokens, restaurant };
+    throw new Error('Direct password login is not supported. Dinely Phase 3 requires Firebase Google Authentication as the identity source.');
   }
 
   async authenticateWithGoogle(googleData: {
@@ -723,8 +636,18 @@ export class DinelyApiClient {
     photoURL?: string;
     idToken?: string;
   }) {
-    await delay(300);
+    await delay(200);
     const normalizedEmail = googleData.email.trim().toLowerCase();
+
+    if (!googleData.idToken) {
+      throw new Error('Valid Google Firebase ID token is required for authentication.');
+    }
+
+    // Account switching: if previous session belongs to another user, clear it completely
+    const previousUser = this.getCurrentUser('OWNER');
+    if (previousUser && (previousUser.id !== googleData.googleUid && previousUser.email.toLowerCase() !== normalizedEmail)) {
+      this.clearAllAuthSessions();
+    }
 
     // 1. Search existing user by googleUid or email
     let user = this.users.find(
@@ -762,6 +685,22 @@ export class DinelyApiClient {
       this.users.unshift(user);
     }
 
+    // Strict Token Rule: NEVER generate df_jwt_* or fake tokens. Sole identity is verified Firebase ID token.
+    const effectiveAccessToken = googleData.idToken;
+    const tokens: AuthTokens = {
+      accessToken: effectiveAccessToken,
+      refreshToken: effectiveAccessToken,
+      expiresIn: 3600,
+      tokenType: 'Bearer',
+    };
+
+    user.tokens = tokens;
+    this.currentTokensByScope['OWNER'] = tokens;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dinely_auth_token', effectiveAccessToken);
+      sessionStorage.setItem('dinely_auth_token', effectiveAccessToken);
+    }
+
     // 2. Query Neon PostgreSQL for all restaurants associated with this owner Google account
     const ownerRestaurants = await this.getOwnerRestaurants(normalizedEmail, googleData.googleUid);
 
@@ -784,23 +723,6 @@ export class DinelyApiClient {
       restaurant = null;
     }
 
-    if (!googleData.idToken) {
-      // In production runtime, missing Google ID token is a fatal auth failure
-      const isTestEnv = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
-      if (!isTestEnv) {
-        throw new Error('Valid Google Firebase ID token is required for authentication.');
-      }
-    }
-
-    const effectiveAccessToken = googleData.idToken || `df_jwt_google_${user.id}_${Date.now()}`;
-    const tokens: AuthTokens = {
-      accessToken: effectiveAccessToken,
-      refreshToken: googleData.idToken ? `df_ref_${user.id}` : `df_ref_google_${user.id}_${Date.now()}`,
-      expiresIn: 86400,
-      tokenType: 'Bearer',
-    };
-
-    user.tokens = tokens;
     if (restaurant) {
       user.restaurantId = restaurant.id;
       this.currentRestaurantId = restaurant.id;
@@ -808,10 +730,13 @@ export class DinelyApiClient {
     }
 
     this.saveSession(user, tokens, restaurant?.id || null);
-    if (googleData.idToken && typeof window !== 'undefined') {
-      localStorage.setItem('dinely_auth_token', googleData.idToken);
-      sessionStorage.setItem('dinely_auth_token', googleData.idToken);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dinely_auth_token', effectiveAccessToken);
+      sessionStorage.setItem('dinely_auth_token', effectiveAccessToken);
     }
+
+    // Synchronize authoritative state machine
+    authStateMachine.setAuthenticated(user, effectiveAccessToken);
 
     this.auditLogs.unshift({
       id: `log-${Date.now()}`,
@@ -1215,31 +1140,69 @@ export class DinelyApiClient {
 
 
   /**
-   * Authoritative Platform Admin HTTP execution harness.
-   * Ensures Firebase Auth hydration, acquires fresh ID token, handles single 401 retry,
-   * and NEVER converts 401/403/500 or network errors into an empty success array.
+   * Authoritative Protected API HTTP execution harness adhering to Dinely Phase 3 Token Rule:
+   * 1. Obtain current valid Firebase ID token before request.
+   * 2. If expired (401 response):
+   *    -> refresh (forceRefresh = true)
+   *    -> retry ONCE
+   * 3. If refresh fails or retry returns 401:
+   *    -> clear session (local/session storage + memory)
+   *    -> require login (dispatch 'dinely_auth_required' & authStateMachine.handleSessionExpired())
+   * 4. NEVER generate df_jwt_*, fake tokens, or mock production tokens.
    */
-  async executeAdminRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async executeProtectedRequest<T = any>(
+    endpoint: string,
+    options: RequestInit = {},
+    scope?: PortalScope
+  ): Promise<T> {
     await ensureFirebaseAuthReady();
+    const targetScope = scope || getPortalScopeFromPath();
     const apiBase = getApiBaseUrl();
     const url = endpoint.startsWith('http') ? endpoint : `${apiBase}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
 
     let token = await getValidFirebaseIdToken(false);
     if (!token && typeof window !== 'undefined') {
-      token = this.currentTokensByScope['ADMIN']?.accessToken ||
-              localStorage.getItem('dinely_platform_admin_id_token') ||
-              sessionStorage.getItem('dinely_admin_token') ||
-              localStorage.getItem('dinely_admin_token') ||
-              localStorage.getItem('dinely_auth_token');
+      if (targetScope === 'ADMIN') {
+        token = localStorage.getItem('dinely_platform_admin_id_token') ||
+                sessionStorage.getItem('dinely_admin_token') ||
+                localStorage.getItem('dinely_admin_token') ||
+                localStorage.getItem('dinely_auth_token');
+      } else {
+        token = localStorage.getItem('dinely_auth_token') ||
+                this.currentTokensByScope[targetScope]?.accessToken ||
+                this.currentTokensByScope['OWNER']?.accessToken || null;
+      }
+    }
+
+    // Strict purge of any legacy synthetic tokens
+    if (token && (token.startsWith('df_jwt_') || token.startsWith('df_ref_'))) {
+      token = null;
+    }
+
+    if (!token) {
+      this.clearAllAuthSessions();
+      authStateMachine.handleSessionExpired();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('dinely_auth_required', { detail: { reason: 'UNAUTHENTICATED' } }));
+      }
+      const unauthErr = new Error('Authentication required: No valid Firebase ID token found. Please log in.');
+      (unauthErr as any).statusCode = 401;
+      throw unauthErr;
     }
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {}),
+      Authorization: `Bearer ${token}`,
     };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (typeof window !== 'undefined') {
+      const resolution = getTenantFromHostname();
+      if (resolution.isTenantSubdomain && resolution.slug) {
+        headers['X-Tenant-Domain'] = resolution.hostname;
+        headers['X-Tenant-Slug'] = resolution.slug;
+        headers['X-Forwarded-Host'] = resolution.hostname;
+      }
     }
 
     const controller = new AbortController();
@@ -1258,38 +1221,81 @@ export class DinelyApiClient {
       const isTimeout = networkErr.name === 'AbortError';
       const err = new Error(
         isTimeout
-          ? 'Platform Admin API request timed out. Backend may be waking up (cold start).'
-          : (networkErr.message || 'Network error connecting to Platform Admin backend.')
+          ? 'API request timed out. Backend may be waking up (cold start).'
+          : (networkErr.message || 'Network error connecting to backend.')
       );
       (err as any).statusCode = 0;
       (err as any).isNetworkError = true;
       throw err;
     }
 
-    // Token refresh on 401: exactly ONE retry with forceRefresh=true
+    // Token Rule: If expired (401), refresh -> retry ONCE
     if (res.status === 401) {
+      let freshToken: string | null = null;
       try {
-        const freshToken = await getValidFirebaseIdToken(true);
-        if (freshToken && freshToken !== token) {
-          headers['Authorization'] = `Bearer ${freshToken}`;
-          if (typeof window !== 'undefined') {
+        freshToken = await getValidFirebaseIdToken(true);
+      } catch (refreshErr) {
+        console.warn('[executeProtectedRequest] Token refresh attempt failed:', refreshErr);
+      }
+
+      if (freshToken) {
+        // Update stored token
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('dinely_auth_token', freshToken);
+          sessionStorage.setItem('dinely_auth_token', freshToken);
+          if (targetScope === 'ADMIN') {
             localStorage.setItem('dinely_platform_admin_id_token', freshToken);
             sessionStorage.setItem('dinely_admin_token', freshToken);
             localStorage.setItem('dinely_admin_token', freshToken);
           }
-          const retryRes = await fetch(url, { ...options, headers });
-          if (retryRes.ok) {
-            return await retryRes.json();
-          }
-          res = retryRes;
         }
-      } catch (refreshErr) {
-        console.warn('[executeAdminRequest] Token refresh attempt failed:', refreshErr);
+        if (this.currentTokensByScope[targetScope]) {
+          this.currentTokensByScope[targetScope].accessToken = freshToken;
+        }
+        headers['Authorization'] = `Bearer ${freshToken}`;
+
+        // Retry ONCE
+        let retryRes: Response;
+        try {
+          retryRes = await fetch(url, { ...options, headers });
+        } catch (retryNetErr: any) {
+          const err = new Error(retryNetErr.message || 'Network error on retry request.');
+          (err as any).statusCode = 0;
+          (err as any).isNetworkError = true;
+          throw err;
+        }
+
+        if (retryRes.ok) {
+          return await retryRes.json();
+        }
+
+        if (retryRes.status === 401) {
+          // Refresh retry still 401 -> clear session -> require login
+          this.clearAllAuthSessions();
+          authStateMachine.handleSessionExpired();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('dinely_auth_required', { detail: { reason: 'REFRESH_FAILED' } }));
+          }
+          const expiredErr = new Error('Session expired and token refresh was rejected. Please log in again.');
+          (expiredErr as any).statusCode = 401;
+          throw expiredErr;
+        }
+        res = retryRes;
+      } else {
+        // Refresh returned null / failed -> clear session -> require login
+        this.clearAllAuthSessions();
+        authStateMachine.handleSessionExpired();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('dinely_auth_required', { detail: { reason: 'REFRESH_FAILED' } }));
+        }
+        const expiredErr = new Error('Session expired and could not be refreshed. Please log in again.');
+        (expiredErr as any).statusCode = 401;
+        throw expiredErr;
       }
     }
 
     if (!res.ok) {
-      let errMsg = `Platform Admin request failed (HTTP ${res.status})`;
+      let errMsg = `Request failed (HTTP ${res.status})`;
       try {
         const errJson = await res.json();
         errMsg = errJson.detail || errJson.message || errMsg;
@@ -1303,6 +1309,54 @@ export class DinelyApiClient {
     }
 
     return await res.json();
+  }
+
+  /**
+   * Clears all active tokens, sessions, in-memory caches, and resets state machine.
+   */
+  clearAllAuthSessions() {
+    this.currentUser = null;
+    (['ADMIN', 'OWNER', 'KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF', 'CUSTOMER'] as PortalScope[]).forEach((s) => {
+      delete this.currentUsersByScope[s];
+      delete this.currentTokensByScope[s];
+      if (typeof window !== 'undefined') {
+        const sessionKey = SESSION_KEYS[s];
+        const tokenKey = TOKEN_KEYS[s];
+        if (sessionKey) {
+          localStorage.removeItem(sessionKey);
+          sessionStorage.removeItem(sessionKey);
+        }
+        if (tokenKey) {
+          localStorage.removeItem(tokenKey);
+          sessionStorage.removeItem(tokenKey);
+        }
+        const userKey = `dinely_user_${s.toLowerCase()}`;
+        localStorage.removeItem(userKey);
+        sessionStorage.removeItem(userKey);
+      }
+    });
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('dinely_auth_token');
+      sessionStorage.removeItem('dinely_auth_token');
+      localStorage.removeItem('dinely_platform_admin_id_token');
+      sessionStorage.removeItem('dinely_admin_token');
+      localStorage.removeItem('dinely_active_restaurant_id');
+      localStorage.removeItem('dinely_restaurant_id');
+      sessionStorage.removeItem('dinely_active_restaurant_id');
+      sessionStorage.removeItem('dinely_restaurant_id');
+    }
+    try {
+      signOutFirebase();
+    } catch (_) {}
+    authStateMachine.logout();
+  }
+
+  /**
+   * Authoritative Platform Admin HTTP execution harness.
+   * Delegates to executeProtectedRequest with ADMIN scope.
+   */
+  async executeAdminRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return this.executeProtectedRequest<T>(endpoint, options, 'ADMIN');
   }
 
   getAuthHeader(scope?: PortalScope): Record<string, string> {
@@ -1326,6 +1380,10 @@ export class DinelyApiClient {
               (typeof window !== 'undefined' ? (
                 localStorage.getItem('dinely_auth_token')
               ) : null);
+    }
+
+    if (token && (token.startsWith('df_jwt_') || token.startsWith('df_ref_'))) {
+      token = null;
     }
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -1640,55 +1698,23 @@ export class DinelyApiClient {
         lifecycleStatus: 'DRAFT',
       };
 
-      let res = await fetch(`${apiBase}/restaurants`, {
+      const backendRest = await this.executeProtectedRequest<any>('/restaurants', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders,
-        },
         body: JSON.stringify(createPayload),
-      });
+      }, 'OWNER');
 
-      if (res.status === 401 && typeof window !== 'undefined' && firebaseAuth.currentUser) {
-        try {
-          const freshToken = await firebaseAuth.currentUser.getIdToken(true);
-          if (freshToken) {
-            localStorage.setItem('dinely_auth_token', freshToken);
-            sessionStorage.setItem('dinely_auth_token', freshToken);
-            authHeaders = { ...authHeaders, Authorization: `Bearer ${freshToken}` };
-            res = await fetch(`${apiBase}/restaurants`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...authHeaders,
-              },
-              body: JSON.stringify(createPayload),
-            });
-          }
-        } catch (tokErr) {
-          console.warn('Could not refresh Firebase token for createRestaurant:', tokErr);
+      if (backendRest && backendRest.id) {
+        newRest.id = backendRest.id;
+        newRest.slug = backendRest.slug || newRest.slug;
+        newRest.publicSlug = backendRest.public_slug || backendRest.slug || newRest.slug;
+        newRest.domain = (backendRest.domain && !backendRest.domain.includes('.dinely.app') && !backendRest.domain.includes('dinely.food/customer?tenant='))
+          ? backendRest.domain
+          : getRestaurantPublicDomain(newRest.publicSlug);
+        newRest.lifecycleStatus = (backendRest.lifecycle_status || 'DRAFT') as RestaurantLifecycleStatus;
+        newRest.isApproved = Boolean(backendRest.is_approved);
+        if (newRest.theme) {
+          newRest.theme.restaurantId = backendRest.id;
         }
-      }
-
-      if (res.ok) {
-        const backendRest = await res.json();
-        if (backendRest && backendRest.id) {
-          newRest.id = backendRest.id;
-          newRest.slug = backendRest.slug || newRest.slug;
-          newRest.publicSlug = backendRest.public_slug || backendRest.slug || newRest.slug;
-          newRest.domain = (backendRest.domain && !backendRest.domain.includes('.dinely.app') && !backendRest.domain.includes('dinely.food/customer?tenant='))
-            ? backendRest.domain
-            : getRestaurantPublicDomain(newRest.publicSlug);
-          newRest.lifecycleStatus = (backendRest.lifecycle_status || 'DRAFT') as RestaurantLifecycleStatus;
-          newRest.isApproved = Boolean(backendRest.is_approved);
-          if (newRest.theme) {
-            newRest.theme.restaurantId = backendRest.id;
-          }
-        }
-      } else {
-        const errText = await res.text().catch(() => '');
-        console.error('Backend createRestaurant failed with status:', res.status, errText);
-        throw new Error(`Failed to create restaurant in production database (${res.status}): ${errText}`);
       }
     } catch (e: any) {
       console.error('Backend createRestaurant error:', e);
@@ -1789,49 +1815,20 @@ export class DinelyApiClient {
           totalTablesCount: setupData.totalTablesCount || existing.tablesCount,
         };
 
-        let res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(existing.id)}/submit`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders,
+        const updated = await this.executeProtectedRequest<any>(
+          `/restaurants/${encodeURIComponent(existing.id)}/submit`,
+          {
+            method: 'POST',
+            body: JSON.stringify(submitPayload),
           },
-          body: JSON.stringify(submitPayload),
-        });
-
-        if (res.status === 401 && typeof window !== 'undefined' && firebaseAuth.currentUser) {
-          try {
-            const freshToken = await firebaseAuth.currentUser.getIdToken(true);
-            if (freshToken) {
-              localStorage.setItem('dinely_auth_token', freshToken);
-              sessionStorage.setItem('dinely_auth_token', freshToken);
-              authHeaders = { ...authHeaders, Authorization: `Bearer ${freshToken}` };
-              res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(existing.id)}/submit`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...authHeaders,
-                },
-                body: JSON.stringify(submitPayload),
-              });
-            }
-          } catch (tokErr) {
-            console.warn('Could not refresh Firebase token for submitRestaurantLaunch:', tokErr);
-          }
-        }
-
-        if (res.ok) {
-          const updated = await res.json();
-          if (updated) {
-            existing.lifecycleStatus = (updated.lifecycle_status || 'PENDING_APPROVAL') as RestaurantLifecycleStatus;
-            existing.isApproved = Boolean(updated.is_approved);
-            existing.submittedAt = updated.submitted_at || now;
-            existing.rejectionReason = undefined;
-            existing.requestedChanges = undefined;
-          }
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          console.error('submitRestaurantLaunch failed on backend:', res.status, errData);
-          throw new Error(errData.detail || `Failed to submit application (${res.status})`);
+          'OWNER'
+        );
+        if (updated) {
+          existing.lifecycleStatus = (updated.lifecycle_status || 'PENDING_APPROVAL') as RestaurantLifecycleStatus;
+          existing.isApproved = Boolean(updated.is_approved);
+          existing.submittedAt = updated.submitted_at || now;
+          existing.rejectionReason = undefined;
+          existing.requestedChanges = undefined;
         }
       } catch (e: any) {
         console.warn('submitRestaurantLaunch backend sync notice:', e);
@@ -1981,30 +1978,26 @@ export class DinelyApiClient {
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     try {
-      const apiBase = getApiBaseUrl();
       const params = new URLSearchParams();
       if (email) params.append('owner_email', email);
       if (uid) params.append('owner_uid', uid);
 
-      const headers = this.getAuthHeader(scope);
-      const res = await fetch(`${apiBase}/restaurants/owner/my?${params.toString()}`, {
-        headers,
-        signal: controller.signal,
-      });
+      const data = await this.executeProtectedRequest<any[]>(
+        `/restaurants/owner/my?${params.toString()}`,
+        { signal: controller.signal },
+        scope
+      );
       clearTimeout(timeoutId);
 
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          const mappedList = data.map((r: any) => this.mapBackendRestaurant(r));
-          // Synchronize memory cache strictly with authoritative backend data
-          this.restaurants = [
-            ...this.restaurants.filter((ex) => !mappedList.some((m) => m.id === ex.id)),
-            ...mappedList,
-          ];
-          this.saveDatabase();
-          return mappedList;
-        }
+      if (Array.isArray(data)) {
+        const mappedList = data.map((r: any) => this.mapBackendRestaurant(r));
+        // Synchronize memory cache strictly with authoritative backend data
+        this.restaurants = [
+          ...this.restaurants.filter((ex) => !mappedList.some((m) => m.id === ex.id)),
+          ...mappedList,
+        ];
+        this.saveDatabase();
+        return mappedList;
       }
     } catch (e) {
       clearTimeout(timeoutId);
@@ -3427,7 +3420,6 @@ export class DinelyApiClient {
       if (res.ok) {
         const tables = await res.json();
         if (Array.isArray(tables)) {
-          const origin = getProductionOrigin();
           const mappedTables: Table[] = tables.map((t: any) => {
             const rawQr = t.qr_code_url || '';
             const rest = this.restaurants.find((r) => r.id === targetId);
@@ -3543,8 +3535,11 @@ export class DinelyApiClient {
     const tId = tableData.id || (targetRestId ? `tbl-${targetRestId}-${tblNum.toLowerCase().replace(/\s+/g, '_')}` : `tbl-${Date.now()}`);
 
     if (targetRestId) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       try {
         const apiBase = getApiBaseUrl();
+        const headers = this.getAuthHeader('OWNER');
         const payload = {
           id: tId,
           tableNumber: tblNum,
@@ -3553,12 +3548,13 @@ export class DinelyApiClient {
         };
         const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetRestId)}/tables`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(payload),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         if (res.ok) {
           const t = await res.json();
-          const origin = getProductionOrigin();
           const rawQr = t.qr_code_url || '';
           const rest = this.restaurants.find((r) => r.id === targetRestId);
           const slug = rest?.publicSlug || rest?.slug || targetRestId;
@@ -3580,9 +3576,13 @@ export class DinelyApiClient {
           else this.tables.push(mapped);
           this.saveDatabase();
           return mapped;
+        } else {
+          const errBody = await res.text();
+          console.warn(`Backend table creation returned status ${res.status}:`, errBody);
         }
       } catch (e) {
-        console.warn('API POST for createTable failed:', e);
+        clearTimeout(timeoutId);
+        console.warn('API POST for createTable failed or timed out:', e);
       }
     }
 
@@ -3617,12 +3617,18 @@ export class DinelyApiClient {
   async deleteTable(tableId: string, restaurantId?: string) {
     const targetRestId = this.resolveTenantRestaurantId(restaurantId);
     if (targetRestId) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       try {
         const apiBase = getApiBaseUrl();
         await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetRestId)}/tables/${encodeURIComponent(tableId)}`, {
           method: 'DELETE',
+          headers: this.getAuthHeader('OWNER'),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
       } catch (e) {
+        clearTimeout(timeoutId);
         console.warn('API DELETE for deleteTable failed:', e);
       }
     }
@@ -3775,8 +3781,36 @@ export class DinelyApiClient {
             sessionStartedAt: s.session_started_at || new Date().toISOString(),
           };
         }
+      } else if (res.status === 404) {
+        // Table exists in DB, but no active session yet -> Call POST mutation to start/claim session
+        const postRes = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(resolvedTblId)}/session${qParams}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (postRes.ok) {
+          const s = await postRes.json();
+          if (s && s.id) {
+            return {
+              id: s.id,
+              restaurantId: s.restaurant_id || restId,
+              tableId: s.table_id || resolvedTblId,
+              tableNumber: s.table_number || tableNumber || 'Table 01',
+              status: s.status || 'ACTIVE',
+              sessionStartedAt: s.session_started_at || new Date().toISOString(),
+            };
+          }
+        } else if (postRes.status === 403 || postRes.status === 404) {
+          const errData = await postRes.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Table does not exist or is not accessible');
+        }
+      } else if (res.status === 403) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Table does not belong to this restaurant');
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.message && (e.message.includes('belong') || e.message.includes('accessible') || e.message.includes('not exist'))) {
+        throw e;
+      }
       console.warn('API fetch for getOrCreateTableSession failed:', e);
     }
 

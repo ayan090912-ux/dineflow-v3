@@ -37,7 +37,7 @@ if "sqlite" not in db_url:
     if is_remote:
         connect_args["ssl"] = "require"
         if parsed.hostname and "neon.tech" in parsed.hostname:
-            endpoint_id = parsed.hostname.split('.')[0].replace('-pooler', '')
+            endpoint_id = parsed.hostname.split('.')[0]
             connect_args["server_settings"] = {"options": f"endpoint={endpoint_id}"}
 
     engine_kwargs.update({

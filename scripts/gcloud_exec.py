@@ -29,12 +29,10 @@ def get_token():
     return access_token
 
 if __name__ == '__main__':
-    token = get_token()
-    print(f"Obtained OAuth token: {token[:10]}... (len: {len(token)})")
-
     gcloud_path = os.path.expandvars(r'%LOCALAPPDATA%\Google\CloudSDK\google-cloud-sdk\bin\gcloud.cmd')
     env = os.environ.copy()
-    env['CLOUDSDK_AUTH_ACCESS_TOKEN'] = token
+    if 'CLOUDSDK_AUTH_ACCESS_TOKEN' in env:
+        del env['CLOUDSDK_AUTH_ACCESS_TOKEN']
 
     cmd = [gcloud_path] + sys.argv[1:]
     print("Running:", " ".join(cmd))

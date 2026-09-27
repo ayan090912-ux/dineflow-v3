@@ -6,7 +6,7 @@ import { api, getPortalScopeFromPath } from './packages/api/client';
 import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } from './packages/types';
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
-import { firebaseAuth, signOutFirebase } from './packages/auth/firebase';
+import { firebaseAuth, signOutFirebase, authStateMachine, type AuthState, type AuthErrorDetails } from './packages/auth/firebase';
 import { getTenantFromHostname, resolveTenantAppFromPath } from './packages/utils/tenantResolver';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -25,6 +25,7 @@ const RoleLoginPage = lazy(() => import('./apps/auth/RoleLoginPage').then(m => (
 const NotFoundPage = lazy(() => import('./apps/auth/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 const ModuleNotEnabledPage = lazy(() => import('./apps/auth/ModuleNotEnabledPage').then(m => ({ default: m.ModuleNotEnabledPage })));
 const SetupWizard = lazy(() => import('./apps/onboarding/SetupWizard').then(m => ({ default: m.SetupWizard })));
+const RestaurantSignupPage = lazy(() => import('./apps/onboarding/RestaurantSignupPage').then(m => ({ default: m.RestaurantSignupPage })));
 const PendingApprovalPage = lazy(() => import('./apps/onboarding/PendingApprovalPage').then(m => ({ default: m.PendingApprovalPage })));
 const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector').then(m => ({ default: m.WorkspaceSelector })));
 
@@ -53,7 +54,20 @@ function AppContent() {
   const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
   const [activeOwnerData, setActiveOwnerData] = useState<any>(null);
   const [kitchenOrders, setKitchenOrders] = useState<any[]>([]);
-  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [authState, setAuthState] = useState<AuthState>(() => authStateMachine.getState());
+  const [authError, setAuthError] = useState<AuthErrorDetails | null>(() => authStateMachine.getError());
+
+  // Subscribe to authoritative Auth State Machine
+  useEffect(() => {
+    const unsub = authStateMachine.subscribe((data) => {
+      setAuthState(data.state);
+      setAuthError(data.error);
+      if (data.user) {
+        setCurrentUser(data.user);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Tenant Domain Resolution for Multi-Tenant Operating System
   const domainResolution = useMemo(() => getTenantFromHostname(), []);
@@ -142,6 +156,16 @@ function AppContent() {
     setCurrentUser(user);
   }, []);
 
+  const navigateTo = useCallback((path: string, options?: { replace?: boolean }) => {
+    navigate(path, options);
+    const clean = getCleanPath(path);
+    setCurrentPath(path);
+    setCleanPath(clean);
+    const scope = getPortalScopeFromPath(path);
+    const user = api.getCurrentUser(scope);
+    setCurrentUser(user);
+  }, []);
+
   useEffect(() => {
     window.addEventListener('popstate', syncLocation);
     window.addEventListener('dinely_navigate', syncLocation);
@@ -154,53 +178,103 @@ function AppContent() {
     };
   }, [syncLocation]);
 
-  // Firebase Auth Observer: synchronizes Firebase state with application session
+  // Firebase Auth Observer: synchronizes Firebase state with application session & state machine
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (fbUser) => {
-      if (fbUser && fbUser.email) {
-        const scope = getPortalScopeFromPath(window.location.pathname);
-        let token = '';
-        const lowerEmail = fbUser.email.toLowerCase();
-        let isAdmin = scope === 'ADMIN' || lowerEmail === 'ayan090912@gmail.com' || lowerEmail === 'admin@dinely.food';
-        try {
-          const tokenResult = await fbUser.getIdTokenResult();
-          token = tokenResult.token;
-          if (tokenResult.claims.admin || tokenResult.claims.role === 'admin' || tokenResult.claims.platform_admin) {
-            isAdmin = true;
-          }
-          if (token) {
-            localStorage.setItem('dinely_auth_token', token);
-            if (isAdmin) {
-              localStorage.setItem('dinely_platform_admin_id_token', token);
-              sessionStorage.setItem('dinely_admin_token', token);
-              localStorage.setItem('dinely_admin_token', token);
+    // Watchdog safety guard: 4000ms maximum to guarantee NEVER infinite loading
+    const watchdog = setTimeout(() => {
+      if (authStateMachine.getState() === 'INITIALIZING') {
+        console.warn('[App] Watchdog: Firebase auth initialization timed out. Transitioning to UNAUTHENTICATED/ERROR.');
+        const existingToken = typeof window !== 'undefined' ? localStorage.getItem('dinely_auth_token') : null;
+        if (!existingToken) {
+          authStateMachine.setUnauthenticated();
+        } else {
+          authStateMachine.setError({
+            message: 'Authentication session timed out. Please check your network connection.',
+            code: 'auth/timeout',
+            isNetworkError: true,
+          });
+        }
+      }
+    }, 4000);
+
+    const unsubscribeAuth = onAuthStateChanged(
+      firebaseAuth,
+      async (fbUser) => {
+        clearTimeout(watchdog);
+        if (fbUser && fbUser.email) {
+          const scope = getPortalScopeFromPath(window.location.pathname);
+          let token = '';
+          const lowerEmail = fbUser.email.toLowerCase();
+          let isAdmin = scope === 'ADMIN' || lowerEmail === 'ayan090912@gmail.com' || lowerEmail === 'admin@dinely.food';
+          try {
+            const tokenResult = await fbUser.getIdTokenResult();
+            token = tokenResult.token;
+            if (tokenResult.claims.admin || tokenResult.claims.role === 'admin' || tokenResult.claims.platform_admin) {
+              isAdmin = true;
+            }
+            if (token) {
+              localStorage.setItem('dinely_auth_token', token);
+              if (isAdmin) {
+                localStorage.setItem('dinely_platform_admin_id_token', token);
+                sessionStorage.setItem('dinely_admin_token', token);
+                localStorage.setItem('dinely_admin_token', token);
+              }
+            }
+          } catch (e: any) {
+            console.warn('[App] Could not retrieve Firebase ID token:', e);
+            if (e?.code === 'auth/network-request-failed' || e?.message?.toLowerCase().includes('network')) {
+              authStateMachine.handleNetworkFailure();
+              return;
             }
           }
-        } catch (e) {
-          console.warn('[App] Could not retrieve Firebase ID token:', e);
-        }
 
-        const effectiveScope = isAdmin ? 'ADMIN' : scope;
-        let appUser = api.getCurrentUser(effectiveScope);
-        if (!appUser) {
-          appUser = {
-            id: fbUser.uid,
-            name: fbUser.displayName || fbUser.email.split('@')[0],
-            email: lowerEmail,
-            role: isAdmin ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
-          };
-          api.setCurrentUser(appUser, effectiveScope);
+          const effectiveScope = isAdmin ? 'ADMIN' : scope;
+          let appUser = api.getCurrentUser(effectiveScope);
+          if (!appUser) {
+            appUser = {
+              id: fbUser.uid,
+              name: fbUser.displayName || fbUser.email.split('@')[0],
+              email: lowerEmail,
+              role: isAdmin ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
+            };
+            api.setCurrentUser(appUser, effectiveScope);
+          }
+          if (token) {
+            api.setSessionTokens({ accessToken: token, refreshToken: token, expiresIn: 3600, tokenType: 'Bearer' }, effectiveScope);
+            authStateMachine.setAuthenticated(appUser, token);
+          } else {
+            authStateMachine.setUnauthenticated();
+          }
+          setCurrentUser(appUser);
+        } else {
+          authStateMachine.setUnauthenticated();
         }
-        if (token) {
-          api.setSessionTokens({ accessToken: token, refreshToken: token, expiresIn: 3600, tokenType: 'Bearer' }, effectiveScope);
-        }
-        setCurrentUser(appUser);
+      },
+      (error) => {
+        clearTimeout(watchdog);
+        console.error('[App] Firebase auth observer error:', error);
+        authStateMachine.setError({
+          message: error.message || 'Authentication error occurred.',
+          code: (error as any).code || 'auth/unknown',
+          isNetworkError: (error as any).code === 'auth/network-request-failed' || error.message?.toLowerCase().includes('network'),
+        });
       }
-      setIsInitializing(false);
-    });
+    );
 
-    return () => unsubscribeAuth();
-  }, []);
+    const handleAuthRequired = (e: any) => {
+      console.warn('[App] dinely_auth_required event received:', e?.detail?.reason);
+      setCurrentUser(null);
+      setCurrentRestaurant(null);
+      navigateTo('/restaurant/login');
+    };
+    window.addEventListener('dinely_auth_required', handleAuthRequired);
+
+    return () => {
+      clearTimeout(watchdog);
+      unsubscribeAuth();
+      window.removeEventListener('dinely_auth_required', handleAuthRequired);
+    };
+  }, [navigateTo]);
 
   // Fetch active restaurant details on mount or when restaurant ID changes (not on every sub-route)
   useEffect(() => {
@@ -260,16 +334,6 @@ function AppContent() {
     };
   }, [cleanPath, currentUser]);
 
-  const navigateTo = useCallback((path: string, options?: { replace?: boolean }) => {
-    navigate(path, options);
-    const clean = getCleanPath(path);
-    setCurrentPath(path);
-    setCleanPath(clean);
-    const scope = getPortalScopeFromPath(path);
-    const user = api.getCurrentUser(scope);
-    setCurrentUser(user);
-  }, []);
-
   const handleLogout = useCallback(async (redirectLoginPath: string = '/restaurant/login') => {
     const activeScope = getPortalScopeFromPath(cleanPath);
     await api.logout(activeScope);
@@ -316,7 +380,7 @@ function AppContent() {
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-white mb-2">Connecting to Restaurant Server...</h1>
             <p className="text-white/60 text-sm max-w-md mb-6">
-              Unable to reach restaurant servers. The cloud backend may be waking up (Render cold-start). Please retry in a few seconds.
+              Unable to reach restaurant servers. Please check your connection or retry in a few seconds.
             </p>
             <div className="flex items-center gap-3">
               <button
@@ -619,12 +683,45 @@ function AppContent() {
     }
 
     // 0.1. Guard protected routes while Firebase Auth initializes session
-    if (isInitializing && !['/', '/landing', '/home', '/about', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
+    if (authState === 'INITIALIZING' && !['/', '/landing', '/home', '/about', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
       return (
         <LoadingScreen
           status="Initializing secure session..."
           substatus="Validating multi-tenant authorization credentials"
         />
+      );
+    }
+
+    // 0.2. Explicit non-blocking error boundary for auth failures
+    if (authState === 'ERROR' && !['/', '/landing', '/home', '/about', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white text-center">
+          <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-4 text-rose-400">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Authentication Error</h2>
+          <p className="text-slate-400 max-w-md mb-6">
+            {authError?.message || 'Unable to communicate with the authentication service. Please verify your connection.'}
+          </p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => authStateMachine.setInitializing(4000)}
+              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-medium transition-colors shadow-lg flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry Connection
+            </button>
+            <button
+              onClick={() => {
+                authStateMachine.setUnauthenticated();
+                navigateTo('/restaurant/login');
+              }}
+              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium transition-colors"
+            >
+              Proceed to Sign In
+            </button>
+          </div>
+        </div>
       );
     }
 
@@ -680,7 +777,13 @@ function AppContent() {
       );
     }
 
-    if (cleanPath === '/signup' || cleanPath === '/register') {
+    if (cleanPath === '/signup' || cleanPath === '/onboard') {
+      return (
+        <RestaurantSignupPage onNavigate={navigateTo} />
+      );
+    }
+
+    if (cleanPath === '/register') {
       return (
         <AuthPage
           initialMode="register"
@@ -825,11 +928,9 @@ function AppContent() {
     if (cleanPath.startsWith('/admin')) {
       const adminUser = api.getCurrentUser('ADMIN');
       const effectiveUser = adminUser || (currentUser?.role === 'PLATFORM_ADMIN' ? currentUser : null);
-      const effectiveEmail = (effectiveUser?.email || '').trim().toLowerCase();
-      const isAuthorizedAdmin = effectiveUser && effectiveUser.role === 'PLATFORM_ADMIN' && effectiveEmail === 'ayan090912@gmail.com';
 
       // If completely unauthenticated, direct to dedicated Platform Admin login
-      if (!effectiveUser && !currentUser) {
+      if (!effectiveUser && !currentUser && !firebaseAuth.currentUser) {
         return (
           <RoleLoginPage
             portal="admin"
@@ -842,19 +943,10 @@ function AppContent() {
         );
       }
 
-      // If authenticated and authorized, render Platform Control Plane
-      if (isAuthorizedAdmin) {
-        return <PlatformApp onLogout={() => handleLogout('/admin/login')} />;
-      }
-
-      // Authenticated with non-admin Google account or restaurant owner identity -> 403 Forbidden
-      return (
-        <AccessDeniedScreen
-          resourceName="Dinely Platform Administration"
-          requiredRole="PLATFORM_ADMIN (Primary Authorized Account)"
-          onBack={() => handleLogout('/admin/login')}
-        />
-      );
+      // Render Platform Control Plane: PlatformApp strictly hydrates Firebase auth,
+      // acquires valid Firebase ID token, and verifies actual identity with backend
+      // (No frontend-only email checks). Any unauthorized user is denied via backend 403 / FORBIDDEN state.
+      return <PlatformApp onLogout={() => handleLogout('/admin/login')} />;
     }
 
     // 8. Operations Center Screen
@@ -1225,7 +1317,7 @@ function AppContent() {
 
     // 15. Exhaustive Fallback: Never render a blank screen!
     return <NotFoundPage onNavigate={navigateTo} />;
-  }, [cleanPath, currentUser, currentRestaurant, kitchenOrders, activeOwnerData, checkWorkspaceAccess, navigateTo, handleLogout, domainResolution, resolvedTenant, tenantResolutionState, isInitializing]);
+  }, [cleanPath, currentUser, currentRestaurant, kitchenOrders, activeOwnerData, checkWorkspaceAccess, navigateTo, handleLogout, domainResolution, resolvedTenant, tenantResolutionState, authState, authError]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">

@@ -4,6 +4,8 @@ from app.core.tenant.resolver import (
     ResolvedTenantContext,
     resolve_public_tenant,
     resolve_owner_tenant,
+    resolve_canonical_restaurant,
+    resolve_canonical_restaurant_id,
 )
 
 __all__ = [
@@ -12,4 +14,7 @@ __all__ = [
     "ResolvedTenantContext",
     "resolve_public_tenant",
     "resolve_owner_tenant",
+    "resolve_canonical_restaurant",
+    "resolve_canonical_restaurant_id",
 ]
+

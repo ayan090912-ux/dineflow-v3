@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
-import { signInWithGooglePopup, firebaseAuth } from '../../packages/auth/firebase';
+import { signInWithGooglePopup, firebaseAuth, authStateMachine } from '../../packages/auth/firebase';
 
 interface AuthPageProps {
   onLoginSuccess?: (ownerData: any) => void;
@@ -142,7 +142,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       await routeUserAfterAuth(googleUser.email, googleUser.uid);
     } catch (err: any) {
       console.error('[AuthPage] Google sign-in failed:', err);
-      setErrorMessage(err.message || 'Google authentication failed. Please try again.');
+      if (err.code === 'auth/popup-closed-by-user' || err.isCancelled) {
+        authStateMachine.handleGoogleCancellation();
+        setErrorMessage('Sign-in cancelled: The Google sign-in popup was closed before completing authentication. Click below to try again.');
+      } else if (err.code === 'auth/network-request-failed' || err.isNetworkError || err.message?.toLowerCase().includes('network')) {
+        authStateMachine.handleNetworkFailure();
+        setErrorMessage('Network connection failure: Unable to communicate with Google authentication servers. Please check your internet connection.');
+      } else {
+        authStateMachine.setError({
+          message: err.message || 'Google authentication failed.',
+          code: err.code || 'auth/unknown',
+        });
+        setErrorMessage(err.message || 'Google authentication failed. Please try again.');
+      }
     } finally {
       setIsGoogleLoading(false);
     }

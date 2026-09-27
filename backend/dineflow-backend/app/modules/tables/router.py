@@ -116,13 +116,19 @@ class CreateTableSchema(BaseModel):
 
 @router.get("/{restaurant_id}/tables")
 async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
-    query = select(Table).where(Table.restaurant_id == restaurant_id).order_by(Table.table_number)
+    try:
+        from app.core.tenant.resolver import resolve_canonical_restaurant_id
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    query = select(Table).where(Table.restaurant_id == canonical_id).order_by(Table.table_number)
     result = await db.execute(query)
     tables = result.scalars().all()
 
     # Query active table sessions for this restaurant to enforce single source of truth
     query_active_sessions = select(TableSession).where(
-        (TableSession.restaurant_id == restaurant_id) &
+        (TableSession.restaurant_id == canonical_id) &
         (TableSession.status == "ACTIVE")
     )
     res_sesses = await db.execute(query_active_sessions)
@@ -130,7 +136,7 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     active_session_map = {sess.table_id: sess.id for sess in active_sessions}
     active_session_num_map = {sess.table_number: sess.id for sess in active_sessions}
 
-    pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
+    pub_slug = await _get_restaurant_public_slug(canonical_id, db)
     for t in tables:
         clean_table = _extract_clean_table_number(t.table_number, t.id)
         t.qr_code_url = generate_canonical_qr_url(pub_slug, clean_table, t.id)
@@ -149,8 +155,14 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{restaurant_id}/active-sessions")
 async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        from app.core.tenant.resolver import resolve_canonical_restaurant_id
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
     query = select(TableSession).where(
-        (TableSession.restaurant_id == restaurant_id) &
+        (TableSession.restaurant_id == canonical_id) &
         (TableSession.status == "ACTIVE")
     ).order_by(TableSession.session_started_at.desc())
     result = await db.execute(query)
@@ -172,12 +184,19 @@ async def create_table(
     caller: CallerContext = Depends(require_tenant_owner_or_admin),
     db: AsyncSession = Depends(get_db)
 ):
+    target_rest_id = caller.restaurant_id or restaurant_id
+    try:
+        from app.core.tenant.resolver import resolve_canonical_restaurant_id
+        target_rest_id = await resolve_canonical_restaurant_id(target_rest_id, db)
+    except Exception:
+        pass
+
     t_num = (payload.tableNumber or payload.table_number or "Table 01").strip()
     clean_num = _extract_clean_table_number(t_num)
-    t_id = payload.id or f"tbl-{restaurant_id}-table_{clean_num}"
-    pub_slug = await _get_restaurant_public_slug(restaurant_id, db)
+    t_id = payload.id or f"tbl-{target_rest_id}-table_{clean_num}"
+    pub_slug = await _get_restaurant_public_slug(target_rest_id, db)
 
-    query = select(Table).where((Table.restaurant_id == restaurant_id) & ((Table.id == t_id) | (Table.table_number == t_num)))
+    query = select(Table).where((Table.restaurant_id == target_rest_id) & ((Table.id == t_id) | (Table.table_number == t_num)))
     result = await db.execute(query)
     existing = result.scalar_one_or_none()
 
@@ -193,7 +212,7 @@ async def create_table(
 
     new_tbl = Table(
         id=t_id,
-        restaurant_id=restaurant_id,
+        restaurant_id=target_rest_id,
         table_number=t_num,
         section=payload.section or "Main Hall",
         capacity=payload.capacity or 4,
@@ -213,8 +232,15 @@ async def delete_table(
     caller: CallerContext = Depends(require_tenant_owner_or_admin),
     db: AsyncSession = Depends(get_db)
 ):
+    target_rest_id = caller.restaurant_id or restaurant_id
+    try:
+        from app.core.tenant.resolver import resolve_canonical_restaurant_id
+        target_rest_id = await resolve_canonical_restaurant_id(target_rest_id, db)
+    except Exception:
+        pass
+
     query = select(Table).where(
-        (Table.restaurant_id == restaurant_id) &
+        (Table.restaurant_id == target_rest_id) &
         ((Table.id == table_id) | (Table.table_number == table_id))
     )
     result = await db.execute(query)

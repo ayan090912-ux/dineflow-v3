@@ -50,11 +50,15 @@ const PLATFORM_DOMAINS = new Set([
 ]);
 
 export function getTenantFromHostname(customHostname?: string): TenantDomainResolution {
-  if (typeof window === 'undefined') {
+  const hostname = (
+    customHostname ||
+    (typeof window !== 'undefined' ? window.location.hostname : '') ||
+    ''
+  ).toLowerCase().trim();
+
+  if (!hostname) {
     return { isTenantSubdomain: false, slug: null, hostname: '' };
   }
-
-  const hostname = (customHostname || window.location.hostname || '').toLowerCase().trim();
 
   // 1. Hostname is the public tenant identity - check subdomain FIRST
   // https://<slug>.dinely.food
@@ -84,7 +88,7 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
 
   // 2. Query parameter fallback ONLY for platform domains or local dev testing
   if (PLATFORM_DOMAINS.has(hostname) || hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-    const searchParams = new URLSearchParams(window.location.search);
+    const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const queryTenant = searchParams.get('tenant') || searchParams.get('restaurant_slug');
     if (queryTenant && queryTenant.trim()) {
       const slug = queryTenant.trim().toLowerCase();
@@ -166,7 +170,15 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p === '/customer' ||
     p.startsWith('/customer/') ||
     p === '/menu' ||
-    p.startsWith('/menu/')
+    p.startsWith('/menu/') ||
+    p === '/table' ||
+    p.startsWith('/table/') ||
+    p === '/t' ||
+    p.startsWith('/t/') ||
+    p === '/qr' ||
+    p.startsWith('/qr/') ||
+    p === '/order' ||
+    p.startsWith('/order/')
   ) {
     return 'CUSTOMER';
   }
@@ -209,10 +221,16 @@ export function getRestaurantCustomerUrl(
   tableNumber?: string,
   tableId?: string
 ): string {
-  let base = getRestaurantPublicDomain(slugOrRest);
-  if (base.endsWith('/')) {
-    base = base.slice(0, -1);
+  let slug = '';
+  if (typeof slugOrRest === 'object' && slugOrRest !== null) {
+    slug = slugOrRest.publicSlug || slugOrRest.slug || slugOrRest.id || '';
+  } else if (typeof slugOrRest === 'string') {
+    slug = slugOrRest;
   }
+  const cleanSlug = (slug || 'venue').toLowerCase().trim();
+  const base = (!cleanSlug || RESERVED_SUBDOMAINS.has(cleanSlug))
+    ? 'https://dinely.food'
+    : `https://${cleanSlug}.dinely.food`;
 
   // Extract clean 2-digit table number if tableNumber or tableId is provided
   let cleanTable: string | undefined = undefined;

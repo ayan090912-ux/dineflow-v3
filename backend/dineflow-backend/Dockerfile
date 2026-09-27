@@ -28,5 +28,5 @@ USER dinelyuser
 
 EXPOSE 8080
 
-# Run migrations and launch Uvicorn with graceful signal handling
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --proxy-headers"]
+# Run Uvicorn with graceful signal handling and dynamic PORT binding (0.0.0.0:$PORT)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --proxy-headers"]

@@ -11,4 +11,5 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'self' https://dinely.food https://*.dinely.food;"
         return response

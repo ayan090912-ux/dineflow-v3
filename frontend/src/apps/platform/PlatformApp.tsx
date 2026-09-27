@@ -54,10 +54,18 @@ import {
   DinelyLogo,
 } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
-import { ensureFirebaseAuthReady } from '../../packages/auth/firebase';
+import { ensureFirebaseAuthReady, firebaseAuth, getValidFirebaseIdToken } from '../../packages/auth/firebase';
 import { Organization, Restaurant, AuditLog } from '../../packages/types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
+export type AdminState =
+  | 'AUTHENTICATING'
+  | 'LOADING'
+  | 'SUCCESS'
+  | 'EMPTY'
+  | 'AUTH_ERROR'
+  | 'FORBIDDEN'
+  | 'NETWORK_ERROR';
 
 interface PlatformAppProps {
   onLogout?: () => void;
@@ -74,7 +82,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [queueState, setQueueState] = useState<'LOADING' | 'LOADED_EMPTY' | 'LOADED_WITH_DATA' | 'AUTH_ERROR' | 'AUTHORIZATION_ERROR' | 'NETWORK_ERROR' | 'SERVER_ERROR'>('LOADING');
+  const [queueState, setQueueState] = useState<AdminState>('AUTHENTICATING');
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(null);
 
   // Modals state
@@ -112,9 +120,98 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   };
 
   useEffect(() => {
-    // Connect Platform Admin to Global WebSocket events
-    realtimeBus.connect('global', 'ADMIN');
-    loadData();
+    let isMounted = true;
+    let wsConnected = false;
+    let pollInterval: any = null;
+
+    const hydrateAndLoad = async () => {
+      setQueueState('AUTHENTICATING');
+      setQueueErrorMessage(null);
+
+      try {
+        // 1. Firebase Auth Hydration
+        await ensureFirebaseAuthReady();
+        if (!isMounted) return;
+
+        // 2. Check currentUser
+        const user = firebaseAuth.currentUser;
+        if (!user) {
+          setQueueState('AUTH_ERROR');
+          setQueueErrorMessage('Platform Admin session expired or unauthorized. Please sign in with administrator credentials.');
+          return;
+        }
+
+        // 3. Valid Firebase ID Token
+        let idToken = await getValidFirebaseIdToken(false);
+        if (!idToken) {
+          idToken = await getValidFirebaseIdToken(true);
+        }
+        if (!idToken) {
+          setQueueState('AUTH_ERROR');
+          setQueueErrorMessage('Failed to acquire valid authentication token for administrator.');
+          return;
+        }
+
+        // 4. Backend verifies actual Firebase identity (No frontend-only email checks)
+        try {
+          await api.loginPlatformAdmin(idToken, user.email || undefined);
+        } catch (authErr: any) {
+          if (!isMounted) return;
+          console.error('[PlatformApp] Admin backend verification error:', authErr);
+          const status = authErr?.statusCode || (authErr?.message && authErr.message.includes('403') ? 403 : authErr?.message && authErr.message.includes('401') ? 401 : 0);
+          if (status === 401) {
+            // 401: Refresh token once and retry
+            try {
+              const freshToken = await getValidFirebaseIdToken(true);
+              if (freshToken) {
+                await api.loginPlatformAdmin(freshToken, user.email || undefined);
+                idToken = freshToken;
+              } else {
+                setQueueState('AUTH_ERROR');
+                setQueueErrorMessage('Administrator session unauthorized (401). Please sign in again.');
+                return;
+              }
+            } catch {
+              setQueueState('AUTH_ERROR');
+              setQueueErrorMessage('Administrator session unauthorized (401). Please sign in again.');
+              return;
+            }
+          } else if (status === 403 || authErr?.message?.includes('not authorized') || authErr?.message?.includes('Forbidden')) {
+            setQueueState('FORBIDDEN');
+            setQueueErrorMessage('Access Forbidden (403): Your account does not have Platform Administrator authorization.');
+            return;
+          } else {
+            setQueueState('NETWORK_ERROR');
+            setQueueErrorMessage(authErr?.message || 'Network failure connecting to Platform Admin backend.');
+            return;
+          }
+        }
+
+        if (!isMounted) return;
+
+        // 5. Connect Admin WebSocket with verified ID token
+        if (!wsConnected && idToken) {
+          realtimeBus.connect('global', 'PLATFORM_ADMIN', undefined, idToken);
+          wsConnected = true;
+        }
+
+        // 6. Transition to LOADING before fetching data
+        setQueueState('LOADING');
+        await loadData();
+
+        // 7. Setup Live sync polling only after successful auth
+        pollInterval = setInterval(() => {
+          if (isMounted) loadData();
+        }, 20000);
+      } catch (err: any) {
+        if (!isMounted) return;
+        console.error('[PlatformApp] Hydration error:', err);
+        setQueueState('NETWORK_ERROR');
+        setQueueErrorMessage(err?.message || 'Failed to initialize Platform Admin session.');
+      }
+    };
+
+    hydrateAndLoad();
 
     const unsub = realtimeBus.subscribe((event: any) => {
       if (event.type === 'RESTAURANT_APPROVED') {
@@ -143,21 +240,16 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       }
     });
 
-    // High-reliability live sync polling
-    const pollInterval = setInterval(() => {
-      loadData();
-    }, 8000);
-
     return () => {
+      isMounted = false;
       unsub();
-      clearInterval(pollInterval);
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, []);
 
   const loadData = async () => {
     try {
-      await ensureFirebaseAuthReady();
-      setQueueState((prev) => (prev === 'LOADING' || prev === 'AUTH_ERROR' ? 'LOADING' : prev));
+      setQueueState((prev) => (prev === 'SUCCESS' || prev === 'EMPTY' ? prev : 'LOADING'));
 
       const [s, orgs, allRests, logs, orders] = await Promise.all([
         api.getPlatformStats().catch((e) => { console.warn('Platform stats notice:', e); return null; }),
@@ -174,10 +266,11 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         const pending = allRests.filter(
           (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
         );
+        // ONLY SHOW EMPTY STATE FOR HTTP 200 + VALID EMPTY RESULT
         if (pending.length === 0) {
-          setQueueState('LOADED_EMPTY');
+          setQueueState('EMPTY');
         } else {
-          setQueueState('LOADED_WITH_DATA');
+          setQueueState('SUCCESS');
         }
       }
       if (logs) setAuditLogs(logs);
@@ -187,17 +280,31 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       console.error('PlatformApp loadData authoritative error:', e);
       const status = e?.statusCode || (e?.message && e.message.includes('401') ? 401 : (e?.message && e.message.includes('403') ? 403 : 0));
       if (status === 401) {
+        // 401: Refresh token once and retry
+        try {
+          const fresh = await getValidFirebaseIdToken(true);
+          if (fresh) {
+            const retryRests = await api.getPlatformRestaurants();
+            setAllRestaurants(retryRests);
+            const pending = retryRests.filter(
+              (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
+            );
+            if (pending.length === 0) {
+              setQueueState('EMPTY');
+            } else {
+              setQueueState('SUCCESS');
+            }
+            return;
+          }
+        } catch (_) {}
         setQueueState('AUTH_ERROR');
-        setQueueErrorMessage('Platform Admin session expired or unauthorized. Please sign in with administrator credentials.');
+        setQueueErrorMessage('Platform Admin session expired. Please sign in with administrator credentials.');
       } else if (status === 403) {
-        setQueueState('AUTHORIZATION_ERROR');
+        setQueueState('FORBIDDEN');
         setQueueErrorMessage('Access Forbidden (403): Your account does not have Platform Administrator authorization.');
-      } else if (e?.isNetworkError || (e?.message && (e.message.includes('Network') || e.message.includes('timed out')))) {
-        setQueueState('NETWORK_ERROR');
-        setQueueErrorMessage('Network failure connecting to Platform Admin backend. The cloud server may be waking up.');
       } else {
-        setQueueState('SERVER_ERROR');
-        setQueueErrorMessage(e?.message || 'Server error loading pending applications.');
+        setQueueState('NETWORK_ERROR');
+        setQueueErrorMessage(e?.message || 'Network failure connecting to Platform Admin backend.');
       }
     }
   };
@@ -695,6 +802,12 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                     <Badge variant="warning">{pendingRestaurants.length} Pending</Badge>
                   </div>
                   <div className="space-y-2.5">
+                    {queueState === 'AUTHENTICATING' && (
+                      <div className="text-center py-8 text-white/50 text-xs flex items-center justify-center gap-2">
+                        <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                        <span>Authenticating Platform Administrator...</span>
+                      </div>
+                    )}
                     {queueState === 'LOADING' && (
                       <div className="text-center py-8 text-white/50 text-xs flex items-center justify-center gap-2">
                         <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
@@ -708,20 +821,27 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         <p className="text-[10px] text-white/40 mt-1">Sign in as Platform Admin</p>
                       </div>
                     )}
+                    {queueState === 'FORBIDDEN' && (
+                      <div className="text-center py-6 text-rose-300 text-xs">
+                        <Ban className="w-6 h-6 text-rose-400 mx-auto mb-1" />
+                        <p className="font-semibold">Access Forbidden (403)</p>
+                        <p className="text-[10px] text-white/40 mt-1">Platform Admin authorization required</p>
+                      </div>
+                    )}
                     {queueState === 'NETWORK_ERROR' && (
                       <div className="text-center py-6 text-amber-300 text-xs">
                         <AlertTriangle className="w-6 h-6 text-amber-400 mx-auto mb-1" />
-                        <p className="font-semibold">Connection Timeout</p>
+                        <p className="font-semibold">Connection Error</p>
                         <button onClick={loadData} className="text-[10px] text-amber-400 underline mt-1">Retry Connection</button>
                       </div>
                     )}
-                    {queueState === 'LOADED_EMPTY' && (
+                    {queueState === 'EMPTY' && (
                       <div className="text-center py-12 text-white/40 text-xs">
                         <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-60" />
                         <p>All restaurant applications reviewed.</p>
                       </div>
                     )}
-                    {queueState === 'LOADED_WITH_DATA' && pendingRestaurants.map((rest) => (
+                    {queueState === 'SUCCESS' && pendingRestaurants.map((rest) => (
                       <div
                         key={rest.id}
                         className="p-3 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-between gap-2"
@@ -769,11 +889,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {queueState === 'AUTHENTICATING' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-white/[0.08] text-white/60 space-y-3">
+                  <RefreshCw className="w-8 h-8 text-amber-400 mx-auto animate-spin" />
+                  <p className="text-sm font-semibold text-white">Authenticating Platform Administrator...</p>
+                  <p className="text-xs text-white/40">Verifying administrator tokens with backend control plane</p>
+                </div>
+              )}
+
               {queueState === 'LOADING' && (
                 <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-white/[0.08] text-white/60 space-y-3">
                   <RefreshCw className="w-8 h-8 text-amber-400 mx-auto animate-spin" />
-                  <p className="text-sm font-semibold text-white">Hydrating Platform Admin Authentication & Syncing Queue...</p>
-                  <p className="text-xs text-white/40">Verifying administrator tokens with backend control plane</p>
+                  <p className="text-sm font-semibold text-white">Loading Applications Queue...</p>
+                  <p className="text-xs text-white/40">Retrieving pending restaurant applications from database</p>
                 </div>
               )}
 
@@ -788,7 +916,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 </div>
               )}
 
-              {queueState === 'AUTHORIZATION_ERROR' && (
+              {queueState === 'FORBIDDEN' && (
                 <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
                   <Ban className="w-10 h-10 text-rose-400 mx-auto" />
                   <p className="text-base font-semibold text-white">Access Forbidden (403)</p>
@@ -800,25 +928,14 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-amber-500/30 text-amber-200 space-y-3 p-6">
                   <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
                   <p className="text-base font-semibold text-white">Connection Error</p>
-                  <p className="text-xs text-amber-200/80 max-w-md mx-auto">{queueErrorMessage || 'Unable to connect to backend server. Render may be waking up.'}</p>
+                  <p className="text-xs text-amber-200/80 max-w-md mx-auto">{queueErrorMessage || 'Unable to connect to backend server.'}</p>
                   <Button variant="outline" size="sm" onClick={loadData} className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10" icon={<RefreshCw className="w-4 h-4" />}>
                     Retry Connection
                   </Button>
                 </div>
               )}
 
-              {queueState === 'SERVER_ERROR' && (
-                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
-                  <AlertCircle className="w-10 h-10 text-rose-400 mx-auto" />
-                  <p className="text-base font-semibold text-white">Server Error</p>
-                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Failed to load applications from database.'}</p>
-                  <Button variant="outline" size="sm" onClick={loadData} className="border-white/20 text-white hover:bg-white/10" icon={<RefreshCw className="w-4 h-4" />}>
-                    Retry
-                  </Button>
-                </div>
-              )}
-
-              {queueState === 'LOADED_EMPTY' && (
+              {queueState === 'EMPTY' && (
                 <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-white/[0.08] text-white/40">
                   <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3 opacity-60" />
                   <p className="text-sm font-semibold text-white">No Pending Applications</p>
@@ -826,7 +943,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 </div>
               )}
 
-              {queueState === 'LOADED_WITH_DATA' && pendingRestaurants.map((rest) => (
+              {queueState === 'SUCCESS' && pendingRestaurants.map((rest) => (
 
                 <Card key={rest.id} className="bg-[#0e1117] border-white/[0.08] p-5 space-y-4 shadow-lg rounded-xl">
                   <div className="flex items-start justify-between gap-3">
@@ -997,16 +1114,52 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       </Badge>
                     </div>
 
-                    <div className="text-xs space-y-1.5 text-white/70 bg-[#12151b] p-3 rounded-xl border border-white/[0.08]">
+                    <div className="text-xs space-y-2 text-white/70 bg-[#12151b] p-3.5 rounded-xl border border-white/[0.08]">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.06]">
+                        <span className="text-white/40 font-mono">Slug:</span>
+                        <span className="font-mono text-amber-400 font-semibold">{rest.publicSlug || rest.slug}</span>
+                      </div>
+                      <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.06]">
+                        <span className="text-white/40 font-mono">Domain:</span>
+                        <a
+                          href={`https://${rest.publicSlug || rest.slug}.dinely.food`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-emerald-400 hover:underline flex items-center gap-1 font-semibold truncate max-w-[200px]"
+                        >
+                          {rest.publicSlug || rest.slug}.dinely.food
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </div>
                       <p className="truncate"><span className="text-white/40">Owner:</span> {rest.ownerName || 'Owner'} ({rest.ownerEmail || rest.email})</p>
-                      <p className="font-mono text-[11px]"><span className="text-white/40">Type:</span> <span className="text-amber-400 font-semibold">{rest.businessType || (rest.features?.bar ? 'BAR' : 'RESTAURANT')}</span> · Bar: <span className={rest.hasBar ? "text-purple-400" : "text-white/40"}>{rest.hasBar ? 'YES' : 'NO'}</span> · Tables: <span className={rest.hasTables !== false ? "text-emerald-400" : "text-white/40"}>{rest.hasTables !== false ? 'YES' : 'NO'}</span></p>
-                      <p className="font-mono text-[11px]"><span className="text-white/40">Phone:</span> {rest.phone}</p>
-                      <p className="truncate font-mono text-[11px]"><span className="text-white/40">Customer URL:</span> {rest.publicSlug || rest.slug}.dinely.food</p>
+                      <p className="font-mono text-[11px]"><span className="text-white/40">Type:</span> <span className="text-amber-400 font-semibold">{rest.businessType || (rest.features?.bar ? 'BAR' : 'RESTAURANT')}</span> · Tables: <span className={rest.hasTables !== false ? "text-emerald-400" : "text-white/40"}>{rest.hasTables !== false ? 'YES' : 'NO'}</span></p>
+                      <p className="font-mono text-[11px] text-white/50"><span className="text-white/40">Created:</span> {rest.createdAt ? new Date(rest.createdAt).toLocaleDateString() : 'Active'}</p>
                     </div>
                   </div>
 
                   {/* Actions Bar */}
                   <div className="pt-3 border-t border-white/[0.08] space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href={`https://${rest.publicSlug || rest.slug}.dinely.food/restaurant/dashboard`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="py-1.5 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold flex items-center justify-center gap-1.5 border border-amber-500/30 transition-all"
+                      >
+                        <span>Dashboard</span>
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                      <a
+                        href={`https://${rest.publicSlug || rest.slug}.dinely.food/customer`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="py-1.5 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-white text-xs font-medium flex items-center justify-center gap-1.5 border border-white/[0.08] transition-all"
+                      >
+                        <span>Menu</span>
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
@@ -1018,7 +1171,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                           setViewDetailModal(true);
                         }}
                       >
-                        View Restaurant
+                        Audit Details
                       </Button>
 
                       <Button

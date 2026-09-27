@@ -118,7 +118,6 @@ class Settings(BaseSettings):
         "https://www.dinely.food",
         "https://dinely-cd6cd.web.app",
         "https://dinely-cd6cd.firebaseapp.com",
-        "https://dineflow-v3.onrender.com",
         "http://localhost:5173",
         "http://localhost:3000",
         "http://localhost:8000",
@@ -137,6 +136,11 @@ class Settings(BaseSettings):
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
     CLOUDINARY_API_KEY: Optional[str] = None
     CLOUDINARY_API_SECRET: Optional[str] = None
+
+    # AWS S3 Storage
+    AWS_REGION: str = "ap-south-1"
+    AWS_S3_BUCKET: Optional[str] = None
+    AWS_S3_CUSTOM_DOMAIN: Optional[str] = None
 
     # Payments
     RAZORPAY_KEY_ID: Optional[str] = None

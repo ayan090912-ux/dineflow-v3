@@ -109,7 +109,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
       const urlRestParam = urlParams?.get('restaurant') || urlParams?.get('restaurantId') || urlParams?.get('restId') || undefined;
       const urlTableIdParam = urlParams?.get('tableId') || undefined;
-      const urlTableNumParam = urlParams?.get('table') || urlParams?.get('tableNumber') || undefined;
+      let urlTableNumParam = urlParams?.get('table') || urlParams?.get('tableNumber') || undefined;
+      if (!urlTableNumParam && typeof window !== 'undefined') {
+        const match = window.location.pathname.match(/\/(?:table|t)\/([^/?#]+)/i);
+        if (match && match[1]) {
+          urlTableNumParam = decodeURIComponent(match[1]);
+        }
+      }
 
       // 1. Purge stale customer state when opening an explicit QR code URL
       if (typeof window !== 'undefined' && (urlRestParam || urlTableIdParam || urlTableNumParam)) {
@@ -211,8 +217,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
     const pathParts = pathname.split('/').filter(Boolean);
     let pathTableIdParam: string | undefined = undefined;
-    if (pathParts.length >= 2 && (pathParts[0] === 'qr' || pathParts[0] === 'customer' || pathParts[0] === 'order')) {
-      pathTableIdParam = pathParts.length >= 3 ? pathParts[2] : pathParts[1];
+    let pathTableNumParam: string | undefined = undefined;
+    if (pathParts.length >= 2) {
+      if (pathParts[0] === 'table' || pathParts[0] === 't') {
+        pathTableNumParam = decodeURIComponent(pathParts[1]);
+      } else if (pathParts[0] === 'qr' || pathParts[0] === 'customer' || pathParts[0] === 'order') {
+        pathTableIdParam = pathParts.length >= 3 ? pathParts[2] : pathParts[1];
+      }
     }
 
     const domainResolution = getTenantFromHostname();
@@ -222,7 +233,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       ? currentRestaurant.id
       : (explicitRestId || currentRestaurant?.id || urlRestParam || api.getCurrentRestaurantId() || undefined);
     const urlTableIdParam = explicitTableId || urlParams?.get('tableId') || pathTableIdParam || undefined;
-    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber');
+    const urlTableParam = urlParams?.get('table') || urlParams?.get('tableNumber') || pathTableNumParam;
     const rawTableStr = explicitTableNum || urlTableParam || (urlTableIdParam ? undefined : selectedTableNum);
 
     if (!restId) return;
@@ -567,13 +578,33 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const subtotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
   const totalCartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
 
+  const hasBarDivision = Boolean(currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR');
+
   // Filter Items
   const filteredItems = menuItems.filter((item) => {
-    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory !== undefined;
-    if (currentMenuTab === 'BAR' && !isBarItem) return false;
-    if (currentMenuTab === 'FOOD' && isBarItem) return false;
+    if (hasBarDivision) {
+      const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory !== undefined;
+      if (currentMenuTab === 'BAR' && !isBarItem) return false;
+      if (currentMenuTab === 'FOOD' && isBarItem) return false;
+    }
 
-    const matchesCat = activeCategory === 'all' || item.categoryId === activeCategory || item.barCategory === activeCategory;
+    let matchesCat = activeCategory === 'all';
+    if (!matchesCat) {
+      const activeClean = activeCategory.toLowerCase().trim();
+      const itemCatId = (item.categoryId || '').toLowerCase().trim();
+      const itemBarCat = (item.barCategory || '').toLowerCase().trim();
+      const matchingCategoryObj = foodCategories.find(
+        (c) => c.id.toLowerCase() === activeClean || c.name.toLowerCase() === activeClean
+      );
+      const catName = matchingCategoryObj ? matchingCategoryObj.name.toLowerCase() : '';
+      const catId = matchingCategoryObj ? matchingCategoryObj.id.toLowerCase() : '';
+
+      matchesCat =
+        itemCatId === activeClean ||
+        itemBarCat === activeClean ||
+        (catId !== '' && itemCatId === catId) ||
+        (catName !== '' && (itemCatId === catName || itemBarCat === catName));
+    }
 
     const isVegItem = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
     const matchesDietary =

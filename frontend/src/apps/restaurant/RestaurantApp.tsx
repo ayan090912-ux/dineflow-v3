@@ -79,7 +79,7 @@ import {
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
-import { api, getProductionOrigin } from '../../packages/api/client';
+import { api } from '../../packages/api/client';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../../packages/utils/tenantResolver';
 import { Order, MenuItem, Table, Employee, InventoryItem, Supplier, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation, Bill, PaymentMethod } from '../../packages/types';
 import { KitchenETADashboard } from './KitchenETADashboard';
@@ -248,6 +248,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   // Table Management & Reservation State
   const [selectedFloorplanSection, setSelectedFloorplanSection] = useState<string>('ALL');
   const [isCreateTableModalOpen, setIsCreateTableModalOpen] = useState(false);
+  const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [newTableData, setNewTableData] = useState({
     tableNumber: '',
     capacity: '4',
@@ -399,26 +400,35 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       addToast('error', 'Validation Error', 'Table Number is required.');
       return;
     }
-    const created = await api.createTable({
-      restaurantId: currentRestaurant?.id || api.getCurrentRestaurantId() || '',
-      tableNumber: newTableData.tableNumber,
-      capacity: parseInt(newTableData.capacity) || 4,
-      section: newTableData.section,
-      shape: newTableData.shape,
-      isVip: newTableData.isVip,
-    });
-    if (created) {
-      setTables((prev) => [...prev.filter((t) => t.id !== created.id), created]);
+    setIsCreatingTable(true);
+    try {
+      const created = await api.createTable({
+        restaurantId: currentRestaurant?.id || api.getCurrentRestaurantId() || '',
+        tableNumber: newTableData.tableNumber,
+        capacity: parseInt(newTableData.capacity) || 4,
+        section: newTableData.section,
+        shape: newTableData.shape,
+        isVip: newTableData.isVip,
+      });
+      if (created) {
+        setTables((prev) => [...prev.filter((t) => t.id !== created.id), created]);
+        addToast('success', 'Created ✓', `${newTableData.tableNumber} added to ${newTableData.section}.`);
+        setIsCreateTableModalOpen(false);
+        setNewTableData({
+          tableNumber: '',
+          capacity: '4',
+          section: 'Main Hall',
+          shape: 'RECTANGLE',
+          isVip: false,
+        });
+      } else {
+        addToast('error', 'Table Creation Failed', 'Could not create table. Please check network connection.');
+      }
+    } catch (e: any) {
+      addToast('error', 'Table Creation Error', e?.message || 'Failed to create table.');
+    } finally {
+      setIsCreatingTable(false);
     }
-    addToast('success', 'Table Created! 🪑', `${newTableData.tableNumber} added to ${newTableData.section}.`);
-    setIsCreateTableModalOpen(false);
-    setNewTableData({
-      tableNumber: '',
-      capacity: '4',
-      section: 'Main Hall',
-      shape: 'RECTANGLE',
-      isVip: false,
-    });
   };
 
   const handleUpdateTableDetails = async () => {
@@ -5028,8 +5038,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
           </div>
 
-          <Button variant="brand" className="w-full mt-2" onClick={handleCreateTable} icon={<Plus className="w-4 h-4" />}>
-            Create Table & Generate QR
+          <Button
+            variant="brand"
+            className="w-full mt-2"
+            onClick={handleCreateTable}
+            disabled={isCreatingTable}
+            icon={<Plus className="w-4 h-4" />}
+          >
+            {isCreatingTable ? 'Creating...' : 'Create Table & Generate QR'}
           </Button>
         </div>
       </Modal>

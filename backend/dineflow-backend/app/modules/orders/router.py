@@ -365,8 +365,14 @@ async def get_customer_orders(
     table_session_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
+    try:
+        from app.core.tenant.resolver import resolve_canonical_restaurant_id
+        canonical_rest_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_rest_id = restaurant_id
+
     query = select(Order).where(
-        (Order.restaurant_id == restaurant_id) &
+        (Order.restaurant_id == canonical_rest_id) &
         (Order.status != "CANCELLED")
     )
     if table_session_id:
@@ -374,7 +380,7 @@ async def get_customer_orders(
     elif table_id:
         from app.modules.tables.models import TableSession
         query_sess = select(TableSession).where(
-            (TableSession.restaurant_id == restaurant_id) &
+            (TableSession.restaurant_id == canonical_rest_id) &
             ((TableSession.table_id == table_id) | (TableSession.table_number == table_id)) &
             (TableSession.status == "ACTIVE")
         )
@@ -403,10 +409,17 @@ async def get_restaurant_orders(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        query = select(Order).where(Order.restaurant_id == restaurant_id)
+        target_rest_id = caller.restaurant_id or restaurant_id
+        try:
+            from app.core.tenant.resolver import resolve_canonical_restaurant_id
+            target_rest_id = await resolve_canonical_restaurant_id(target_rest_id, db)
+        except Exception:
+            pass
+
+        query = select(Order).where(Order.restaurant_id == target_rest_id)
         if active_only:
             query_sess = select(TableSession.id).where(
-                (TableSession.restaurant_id == restaurant_id) &
+                (TableSession.restaurant_id == target_rest_id) &
                 (TableSession.status == "ACTIVE")
             )
             res_sess = await db.execute(query_sess)

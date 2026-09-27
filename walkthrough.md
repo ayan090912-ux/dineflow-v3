@@ -49,7 +49,61 @@ Measurements taken against the live Render FastAPI backend & Neon PostgreSQL dat
 
 ---
 
-## 3. QR & Domain Isolation Verification
+## 3. Dinely Phase 9 & Phase 10 Verification Walkthrough
+
+### Phase 9: Realtime Hardening & Security Isolation
+- **Tenant-Scoped WebSocket Channels**: Enforced strict `restaurant:{restaurant_id}:{station}` routing.
+- **Admin Isolation**: Admin events restricted to `platform:admin`.
+- **Token Redaction**: Masked all Bearer tokens and sensitive query parameters in server-side logs.
+- **Circuit Breaker**: Implemented token refresh provider with infinite reconnect loop suppression.
+
+---
+
+### Phase 10: Render -> Cloud Run Migration Status
+
+#### 1. Database Invariant Preserved
+- **Neon PostgreSQL**: Zero changes made to Neon database (`ep-dry-frog-a1puvn2s-pooler.ap-southeast-1.aws.neon.tech`). No migrations or connection changes applied.
+
+#### 2. Cloud Run Guardrails & Container Readiness
+- **Dockerfile**:
+  - Validated `0.0.0.0` binding and dynamic `$PORT` handling (`PORT:-8080`).
+  - Production non-root user (`dinelyuser:10001`).
+  - Single-worker async Uvicorn startup with `--proxy-headers`.
+- **Cloud Run Deployment Guardrails**:
+  - `min-instances`: 0 (scale to zero when idle for cost minimization)
+  - `max-instances`: 3 (strict abuse prevention)
+  - `timeout`: 3600s (long-lived WebSocket session preservation)
+  - Region: `asia-southeast1` (Singapore, co-located with Neon AWS Singapore)
+
+#### 3. Staging Verification Test Suite Results
+Executed `phase10_cloud_run_staging.test.ts` covering all required criteria:
+```text
+=================================================================
+  DINELY PHASE 10 — CLOUD RUN STAGING VERIFICATION
+=================================================================
+  [1]  Health & Readiness (0.0.0.0 / $PORT / Neon) PASS
+  [2]  Login (Terminal Auth)                      PASS
+  [3]  Admin (Platform Root Context)              PASS
+  [4]  Restaurant Creation (Onboarding Flow)      PASS
+  [5]  Domain Resolution (Public Slug)            PASS
+  [6]  QR Code (Canonical URL Generation)         PASS
+  [7]  Customer Menu & Order Flow                 PASS
+  [8]  Kitchen Terminal Realtime Dispatch         PASS
+  [9]  Waiter Terminal Realtime Dispatch          PASS
+  [10] Bar Terminal Realtime Dispatch             PASS
+  [11] Inventory Terminal Realtime Dispatch       PASS
+  [12] Billing Terminal Realtime Dispatch         PASS
+  [13] WebSocket Multi-Channel Delivery           PASS
+=================================================================
+```
+
+#### 4. Rollback Readiness
+- **Render Production Service**: Remains 100% active, warm, and serving traffic at `https://dineflow-v3.onrender.com`.
+- **Cutover Policy**: Render will not be terminated or redirected until Cloud Run instance deployment is fully live and verified against the identical 13-stage test suite.
+
+---
+
+## 4. QR & Domain Isolation Verification
 
 ### Real Generated QR URL
 ```text

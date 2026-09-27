@@ -193,16 +193,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     };
   }, [currentRestaurantId]);
 
-  // Real-Time Granular Event-Driven State Dispatch (Zero-Latency, No Full Page Reloads)
+  // Task 6.4: Realtime Reliability & Dropped WebSocket Fallback Polling
+  // Aggressive adaptive interval (8s when WS is DISCONNECTED/RECONNECTING, 30s background safety when healthy)
   useEffect(() => {
-    loadData(false);
-
-    // Safety-net reconciliation sync (relaxed 60s interval to prevent UI freezing)
+    const pollIntervalMs = wsStatus === 'CONNECTED' ? 30000 : 8000;
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadData(true);
       }
-    }, 60000);
+    }, pollIntervalMs);
+
+    return () => clearInterval(pollInterval);
+  }, [wsStatus, currentRestaurantId]);
+
+  // Real-Time Granular Event-Driven State Dispatch (Zero-Latency, No Full Page Reloads)
+  useEffect(() => {
+    loadData(false);
 
     const handledEventIds = new Set<string>();
 
@@ -372,7 +378,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     });
 
     return () => {
-      clearInterval(pollInterval);
       unsubscribe();
     };
   }, [isAudioMuted, currentRestaurantId]);

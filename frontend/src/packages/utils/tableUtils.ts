@@ -3,8 +3,8 @@ export function matchTableNumber(a?: string, b?: string): boolean {
   const strA = String(a).trim().toLowerCase();
   const strB = String(b).trim().toLowerCase();
   if (strA === strB) return true;
-  const cleanA = strA.replace(/^table\s*/i, '');
-  const cleanB = strB.replace(/^table\s*/i, '');
+  const cleanA = strA.replace(/^(table|tbl)[\s_-]*/i, '');
+  const cleanB = strB.replace(/^(table|tbl)[\s_-]*/i, '');
   if (cleanA === cleanB) return true;
   const numA = parseInt(cleanA, 10);
   const numB = parseInt(cleanB, 10);
@@ -17,8 +17,8 @@ export function matchTableNumber(a?: string, b?: string): boolean {
 export function formatStandardTableNumber(input?: string): string {
   if (!input) return 'Table 01';
   const clean = String(input).trim();
-  if (clean.toUpperCase() === 'COUNTER') return 'COUNTER';
-  const num = parseInt(clean.replace(/^table\s*/i, ''), 10);
+  if (clean.toUpperCase() === 'COUNTER' || clean.toUpperCase() === 'PICKUP') return clean.toUpperCase();
+  const num = parseInt(clean.replace(/^(table|tbl)[\s_-]*/i, ''), 10);
   if (!isNaN(num)) {
     return `Table ${String(num).padStart(2, '0')}`;
   }

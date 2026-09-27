@@ -3,8 +3,9 @@ main = "src/index.js"
 compatibility_date = "2024-09-01"
 
 routes = [
-  { pattern = "*.dinely.food/*", zone_name = "dinely.food" }
+  { pattern = "*.dinely.food/*", zone_name = "dinely.food" },
+  { pattern = "dinely.food/*", zone_name = "dinely.food" }
 ]
 
 [vars]
-ORIGIN_HOST = "dinely-cd6cd.web.app"
+ORIGIN_HOST = "ec2-3-7-195-143.ap-south-1.compute.amazonaws.com"

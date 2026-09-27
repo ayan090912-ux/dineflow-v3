@@ -1,0 +1,25 @@
+name: Dinely Production 24/7 Keep-Alive
+
+on:
+  schedule:
+    # Runs every 10 minutes 24/7 to prevent Render container cold-starts
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-keep-alive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping Render Backend Health Endpoint
+        run: |
+          echo "Pinging Dinely Production Backend..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://dineflow-v3.onrender.com/health)
+          echo "Response HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Health probe failed or warming up. Trying readiness..."
+            curl -f https://dineflow-v3.onrender.com/readyz || true
+          else
+            echo "Dinely Backend is 100% warm, healthy, and operational."
+          fi

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
-import { api, getProductionOrigin } from '../api/client';
+import { api } from '../api/client';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../utils/tenantResolver';
 import { Card } from './Card';
 import { Button } from './Button';
@@ -177,7 +177,6 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   const safeRestName = (restaurantName || 'Dinely Restaurant').trim();
 
   // Requirement 1 & 3: Construct the EXACT Destination URL
-  const defaultOrigin = getProductionOrigin();
   const effectiveRestId =
     restaurantId ||
     (typeof window !== 'undefined' && localStorage

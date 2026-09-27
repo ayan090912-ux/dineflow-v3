@@ -38,12 +38,17 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             response.headers["X-Process-Time"] = f"{process_time:.4f}"
 
             # Redacted structured logging (Never logs tokens or secrets)
+            resolved_restaurant_id = getattr(request.state, "restaurant_id", None)
+            hostname = request.headers.get("x-forwarded-host") or request.headers.get("host")
             log_data = {
+                "request_id": correlation_id,
                 "correlation_id": correlation_id,
+                "hostname": hostname,
+                "resolved_restaurant_id": resolved_restaurant_id,
                 "method": request.method,
                 "path": safe_path,
                 "status_code": response.status_code,
-                "process_time": round(process_time, 4),
+                "duration_seconds": round(process_time, 4),
                 "client_ip": client_ip,
                 "user_agent": request.headers.get("user-agent")
             }

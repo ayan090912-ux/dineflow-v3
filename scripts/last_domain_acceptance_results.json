@@ -1,0 +1,16 @@
+{
+  "tenant_a": {
+    "id": "rest-1789290279546-153fe8",
+    "name": "Domain Test Restaurant 1789290279473",
+    "slug": "domain-test-restaurant-1789290279473",
+    "hostname": "domain-test-restaurant-1789290279473.dinely.food",
+    "domain": "https://domain-test-restaurant-1789290279473.dinely.food"
+  },
+  "tenant_b": {
+    "id": "rest-1789290279931-855f74",
+    "name": "Cafe Co 1789290279473",
+    "slug": "cafe-co-1789290279473",
+    "hostname": "cafe-co-1789290279473.dinely.food",
+    "domain": "https://cafe-co-1789290279473.dinely.food"
+  }
+}

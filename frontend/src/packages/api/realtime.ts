@@ -93,7 +93,7 @@ type EventListener = (event: RealTimeEventPayload) => void;
 
 function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableSessionId?: string, explicitToken?: string, explicitChannel?: string): string {
   let wsProto = 'wss:';
-  let host = 'dineflow-v3.onrender.com';
+  let host = 'dinely.food';
 
   const token = explicitToken || (typeof window !== 'undefined'
     ? (localStorage.getItem('dinely_platform_admin_id_token') || sessionStorage.getItem('dinely_admin_token') || localStorage.getItem('dinely_auth_token') || '')
@@ -126,13 +126,16 @@ function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableS
       const devHost = (h.endsWith('.localhost') || h.includes('localhost')) ? '127.0.0.1' : h;
       return `${wsProto}//${devHost}:8000/api/v1/ws?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
     }
+
+    // In AWS production, proxy WebSocket via same-origin host (e.g. wss://dinely.food/api/v1/ws or wss://<slug>.dinely.food/api/v1/ws)
+    return `${wsProto}//${loc.host}/api/v1/ws?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
   }
 
   if (typeof process !== 'undefined' && process.env?.VITE_WS_URL) {
     return `${process.env.VITE_WS_URL}?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
   }
 
-  return `wss://dineflow-v3.onrender.com/api/v1/ws?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
+  return `wss://dinely.food/api/v1/ws?restaurant_id=${encodeURIComponent(cleanRest)}&role=${encodeURIComponent(cleanRole)}${channelQuery}${tableSessionId ? `&table_session_id=${encodeURIComponent(tableSessionId)}` : ''}${tokenQuery}`;
 }
 
 export type ConnectionStatusType = 'CONNECTED' | 'CONNECTING' | 'RECONNECTING' | 'DISCONNECTED';

@@ -13,14 +13,26 @@ settings = get_settings()
 # Default rate limits per minute by category
 RATE_LIMIT_RULES: List[Tuple[str, str, int, int]] = [
     # (method, path_prefix, max_requests, window_seconds)
+    # 1. Strict Auth & Login (Brute Force Protection)
     ("POST", "/api/v1/auth/terminal-login", 10, 60),
     ("POST", "/api/v1/auth/staff/login", 10, 60),
     ("POST", "/api/v1/auth/platform/login", 10, 60),
+    ("POST", "/api/v1/auth/refresh", 20, 60),
+    # 2. Strict Onboarding / Signup Abuse Prevention
+    ("POST", "/api/v1/restaurants/signup", 5, 60),
+    ("GET", "/api/v1/restaurants/check-slug", 30, 60),
     ("POST", "/api/v1/restaurants", 5, 60),
-    ("POST", "/api/v1/orders", 20, 60),
-    ("POST", "/api/v1/customer-requests", 15, 60),
-    ("GET", "/api/v1/restaurants/public/resolve", 60, 60),
-    ("GET", "/api/v1/restaurants/public/slug", 60, 60),
+    # 3. Controlled Table & Floor Operations
+    ("POST", "/api/v1/tables", 20, 60),
+    # 4. Customer Operations (Tuned for legitimate patrons while mitigating floods)
+    ("POST", "/api/v1/orders", 30, 60),
+    ("POST", "/api/v1/customer-requests", 20, 60),
+    ("POST", "/api/v1/billing", 20, 60),
+    # 5. Public Tenant Resolution (Read-heavy)
+    ("GET", "/api/v1/restaurants/public/resolve", 120, 60),
+    ("GET", "/api/v1/restaurants/public/slug", 120, 60),
+    # 6. Menu Retrieval (Read-heavy)
+    ("GET", "/api/v1/menu", 180, 60),
 ]
 
 DEFAULT_RATE_LIMIT = (120, 60) # 120 req / 60s for general endpoints

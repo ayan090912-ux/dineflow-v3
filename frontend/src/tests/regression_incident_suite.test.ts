@@ -191,6 +191,8 @@ async function runRegressionSuite() {
   // TEST 6: Admin 403 handling
   // ---------------------------------------------------------------
   console.log('\n[TEST 6] Admin 403 handling');
+  memoryStore['dinely_platform_admin_id_token'] = testToken;
+  memoryStore['dinely_admin_token'] = testToken;
   global.fetch = (async () => {
     return {
       ok: false,
@@ -214,6 +216,8 @@ async function runRegressionSuite() {
   // TEST 7: Admin 500 handling
   // ---------------------------------------------------------------
   console.log('\n[TEST 7] Admin 500 handling');
+  memoryStore['dinely_platform_admin_id_token'] = testToken;
+  memoryStore['dinely_admin_token'] = testToken;
   global.fetch = (async () => {
     return {
       ok: false,
@@ -237,6 +241,8 @@ async function runRegressionSuite() {
   // TEST 8: Admin network failure
   // ---------------------------------------------------------------
   console.log('\n[TEST 8] Admin network failure');
+  memoryStore['dinely_platform_admin_id_token'] = testToken;
+  memoryStore['dinely_admin_token'] = testToken;
   global.fetch = (async () => {
     throw new TypeError('Failed to fetch: NetworkError when attempting to fetch resource.');
   }) as any;
@@ -255,6 +261,8 @@ async function runRegressionSuite() {
   // TEST 9 & 10: Admin empty queue vs non-empty queue
   // ---------------------------------------------------------------
   console.log('\n[TEST 9 & 10] Admin empty queue vs non-empty queue');
+  memoryStore['dinely_platform_admin_id_token'] = testToken;
+  memoryStore['dinely_admin_token'] = testToken;
   // Authenticated 200 with 0 pending
   global.fetch = (async (url: string) => {
     if (url.includes('/admin/restaurants')) {

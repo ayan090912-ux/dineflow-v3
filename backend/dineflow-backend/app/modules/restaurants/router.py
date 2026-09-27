@@ -3,7 +3,7 @@ import uuid
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional, Any, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, File, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -16,6 +16,7 @@ from app.modules.restaurants.tenant_resolver import resolve_public_tenant_from_h
 from app.modules.tables.models import Table
 from app.modules.websocket.manager import ws_manager
 from app.core.tenant.qr import generate_canonical_qr_url
+from app.core.storage.provider import get_storage_provider
 
 router = APIRouter()
 
@@ -97,13 +98,29 @@ class WorkspaceModulesSchema(BaseModel):
     hasBilling: Optional[bool] = None
     hasTables: Optional[bool] = None
 
+class RestaurantSignupSchema(BaseModel):
+    restaurantName: str
+    ownerName: str
+    email: str
+    password: Optional[str] = None
+    desiredSlug: Optional[str] = None
+    cuisine: Optional[str] = "Multi-Cuisine"
+    businessType: Optional[str] = "RESTAURANT"
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    ownerUid: Optional[str] = None
+
 @router.get("/public/resolve")
 async def resolve_public_restaurant(
+    request: Request,
     hostname: Optional[str] = Query(None),
     slug: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
-    ctx = await resolve_public_tenant(db=db, hostname=hostname, slug=slug, allow_platform_root=True)
+    eff_hostname = hostname
+    if not eff_hostname and not slug:
+        eff_hostname = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    ctx = await resolve_public_tenant(db=db, hostname=eff_hostname, slug=slug, allow_platform_root=True)
     if ctx is None:
         return {"isPlatformDomain": True, "message": "Platform root context"}
     return ctx.raw_restaurant
@@ -115,6 +132,331 @@ async def resolve_public_restaurant_by_slug(
 ):
     ctx = await resolve_public_tenant(db=db, slug=slug)
     return ctx.raw_restaurant
+
+
+@router.get("/check-slug")
+async def check_slug_availability(
+    slug: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import RESERVED_SUBDOMAINS
+    clean_slug = re.sub(r"[^a-z0-9\-]+", "-", slug.strip().lower()).strip("-")
+    if not clean_slug or clean_slug in RESERVED_SUBDOMAINS:
+        return {"available": False, "slug": clean_slug, "reason": "Reserved or invalid slug name"}
+
+    stmt = select(Restaurant.id).where(
+        or_(
+            func.lower(Restaurant.slug) == clean_slug,
+            func.lower(Restaurant.public_slug) == clean_slug
+        ),
+        Restaurant.deleted_at.is_(None)
+    )
+    res = await db.execute(stmt)
+    if res.scalar_one_or_none():
+        counter = 1
+        while True:
+            alt = f"{clean_slug}-{counter}"
+            alt_res = await db.execute(select(Restaurant.id).where(
+                or_(
+                    func.lower(Restaurant.slug) == alt,
+                    func.lower(Restaurant.public_slug) == alt
+                ),
+                Restaurant.deleted_at.is_(None)
+            ))
+            if not alt_res.scalar_one_or_none():
+                break
+            counter += 1
+        return {"available": False, "slug": clean_slug, "suggested": alt, "reason": "Slug is already registered"}
+
+    return {"available": True, "slug": clean_slug, "domain": f"{clean_slug}.dinely.food"}
+
+
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+async def signup_restaurant_tenant(
+    payload: RestaurantSignupSchema,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Atomic multi-tenant restaurant signup:
+    1. Validates and reserves unique slug & public_slug
+    2. Creates Restaurant record with LIVE status
+    3. Provisions primary RestaurantDomain for <slug>.dinely.food
+    4. Creates RestaurantMembership linking owner to tenant with OWNER role
+    5. Seeds default MenuCategories and starter MenuItems
+    6. Seeds default Tables (01-06) with tenant-scoped QR codes
+    7. Generates owner JWT access token
+    8. Returns tenant details and tenant dashboard URL
+    """
+    from app.modules.menu.models import MenuCategory, MenuItem
+    from app.core.security.jwt import create_access_token
+    from app.core.tenant.resolver import RESERVED_SUBDOMAINS
+
+    clean_name = payload.restaurantName.strip()
+    if not clean_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Restaurant name is required.")
+
+    clean_email = payload.email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Valid owner email is required.")
+
+    # 1. Determine unique slug
+    has_explicit_desired_slug = bool(payload.desiredSlug and payload.desiredSlug.strip())
+    base_slug = payload.desiredSlug.strip().lower() if has_explicit_desired_slug else clean_name.lower()
+    clean_slug = re.sub(r"[^a-z0-9\-]+", "-", base_slug).strip("-")
+    if not clean_slug or clean_slug in RESERVED_SUBDOMAINS:
+        if has_explicit_desired_slug:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"The slug '{base_slug}' is reserved or invalid. Please choose a different subdomain slug."
+            )
+        clean_slug = "venue"
+
+    # Check if explicit desired slug is already taken
+    check_stmt = select(Restaurant.id).where(
+        or_(
+            func.lower(Restaurant.slug) == clean_slug,
+            func.lower(Restaurant.public_slug) == clean_slug
+        ),
+        Restaurant.deleted_at.is_(None)
+    )
+    res_check = await db.execute(check_stmt)
+    if res_check.scalar_one_or_none():
+        if has_explicit_desired_slug:
+            counter = 1
+            while True:
+                alt = f"{clean_slug}-{counter}"
+                alt_res = await db.execute(select(Restaurant.id).where(
+                    or_(
+                        func.lower(Restaurant.slug) == alt,
+                        func.lower(Restaurant.public_slug) == alt
+                    ),
+                    Restaurant.deleted_at.is_(None)
+                ))
+                if not alt_res.scalar_one_or_none():
+                    break
+                counter += 1
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"The slug '{clean_slug}' is already taken. Suggested alternative: '{alt}'."
+            )
+        else:
+            counter = 1
+            while True:
+                candidate_slug = f"{clean_slug}-{counter}"
+                c_res = await db.execute(select(Restaurant.id).where(
+                    or_(
+                        func.lower(Restaurant.slug) == candidate_slug,
+                        func.lower(Restaurant.public_slug) == candidate_slug
+                    ),
+                    Restaurant.deleted_at.is_(None)
+                ))
+                if not c_res.scalar_one_or_none():
+                    clean_slug = candidate_slug
+                    break
+                counter += 1
+
+    public_slug = clean_slug
+    rest_id = f"rest-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
+    domain_url = f"https://{public_slug}.dinely.food"
+    user_uid = payload.ownerUid or f"owner-{uuid.uuid4().hex[:10]}"
+
+    b_type = (payload.businessType or "RESTAURANT").upper()
+    has_bar = (b_type == "BAR")
+    modules = ["kitchen", "waiter", "inventory", "billing"]
+    if has_bar:
+        modules.append("bar")
+
+    # 2. Create Restaurant
+    new_rest = Restaurant(
+        id=rest_id,
+        name=clean_name,
+        slug=public_slug,
+        public_slug=public_slug,
+        domain=domain_url,
+        cuisine=payload.cuisine or "Multi-Cuisine",
+        business_type=b_type,
+        has_bar=has_bar,
+        has_tables=True,
+        has_kitchen=True,
+        has_waiter=True,
+        has_inventory=True,
+        has_billing=True,
+        enabled_modules=modules,
+        order_number_prefix="#ORD",
+        phone=payload.phone or "",
+        email=clean_email,
+        address=payload.address or "",
+        owner_name=payload.ownerName.strip() or "Owner",
+        owner_email=clean_email,
+        owner_uid=user_uid,
+        currency="INR (₹)",
+        tax_percentage=5.0,
+        is_approved=True,
+        lifecycle_status="LIVE",
+        status="OPEN",
+        approved_at=datetime.now(timezone.utc),
+        approved_by="Dinely Auto Provisioner"
+    )
+    db.add(new_rest)
+
+    # 3. Create Primary Domain
+    new_dom = RestaurantDomain(
+        id=f"dom-{rest_id}-primary",
+        restaurant_id=rest_id,
+        hostname=f"{public_slug}.dinely.food",
+        domain=domain_url,
+        domain_type="SUBDOMAIN",
+        verification_status="VERIFIED",
+        is_primary=True,
+        is_verified=True,
+        verified_at=datetime.now(timezone.utc)
+    )
+    db.add(new_dom)
+
+    # 4. Create Membership
+    membership = RestaurantMembership(
+        id=f"mem-{rest_id}-{uuid.uuid4().hex[:8]}",
+        restaurant_id=rest_id,
+        user_uid=user_uid,
+        user_email=clean_email,
+        role="OWNER"
+    )
+    db.add(membership)
+
+    # 5. Seed default categories
+    cat_starters = MenuCategory(
+        id=f"cat-{rest_id}-1",
+        restaurant_id=rest_id,
+        name="Starters & Appetizers",
+        sort_order=1,
+        is_enabled=True
+    )
+    cat_mains = MenuCategory(
+        id=f"cat-{rest_id}-2",
+        restaurant_id=rest_id,
+        name="Main Course",
+        sort_order=2,
+        is_enabled=True
+    )
+    cat_desserts = MenuCategory(
+        id=f"cat-{rest_id}-3",
+        restaurant_id=rest_id,
+        name="Desserts",
+        sort_order=3,
+        is_enabled=True
+    )
+    cat_drinks = MenuCategory(
+        id=f"cat-{rest_id}-4",
+        restaurant_id=rest_id,
+        name="Beverages & Drinks",
+        sort_order=4,
+        is_enabled=True
+    )
+    db.add_all([cat_starters, cat_mains, cat_desserts, cat_drinks])
+
+    # 6. Seed starter menu items
+    starter_items = [
+        MenuItem(
+            id=f"item-{rest_id}-1",
+            restaurant_id=rest_id,
+            category_id=cat_starters.id,
+            name="Crispy Truffle Fries",
+            description="Hand-cut russet potatoes tossed in black truffle oil, rosemary, and parmesan.",
+            price=290.0,
+            image_url="https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=600",
+            is_available=True,
+            is_vegetarian=True,
+            dietary_type="VEG",
+            target_destination="KITCHEN",
+            is_alcoholic=False,
+            preparation_time_minutes=12
+        ),
+        MenuItem(
+            id=f"item-{rest_id}-2",
+            restaurant_id=rest_id,
+            category_id=cat_mains.id,
+            name="Signature Gourmet Burger",
+            description="Brioche bun, prime patty, aged cheddar, caramelized balsamic onions, and garlic aioli.",
+            price=480.0,
+            image_url="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600",
+            is_available=True,
+            is_vegetarian=False,
+            dietary_type="NON_VEG",
+            target_destination="KITCHEN",
+            is_alcoholic=False,
+            preparation_time_minutes=18
+        ),
+        MenuItem(
+            id=f"item-{rest_id}-3",
+            restaurant_id=rest_id,
+            category_id=cat_drinks.id,
+            name="Fresh Citrus Mint Cooler",
+            description="Chilled sparkling cooler infused with crushed fresh mint and Valencia orange.",
+            price=190.0,
+            image_url="https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=600",
+            is_available=True,
+            is_vegetarian=True,
+            dietary_type="VEG",
+            target_destination="BAR" if has_bar else "KITCHEN",
+            is_alcoholic=False,
+            preparation_time_minutes=6
+        )
+    ]
+    db.add_all(starter_items)
+
+    # 7. Seed starter tables (Tables 01 to 06)
+    for idx in range(1, 7):
+        clean_tbl = str(idx).zfill(2)
+        tbl_num = f"Table {clean_tbl}"
+        t_id = f"tbl-{rest_id}-table_{clean_tbl}"
+        tbl_obj = Table(
+            id=t_id,
+            restaurant_id=rest_id,
+            table_number=tbl_num,
+            section="Main Hall",
+            capacity=4,
+            status="AVAILABLE",
+            is_occupied=False,
+            qr_code_url=f"https://{public_slug}.dinely.food/customer?table={clean_tbl}&tableId={t_id}"
+        )
+        db.add(tbl_obj)
+
+    # 8. Create access token
+    owner_token = create_access_token(
+        subject=uuid.UUID(hex=uuid.uuid4().hex),
+        scope="owner",
+        extra_claims={
+            "sub": user_uid,
+            "uid": user_uid,
+            "email": clean_email,
+            "role": "RESTAURANT_OWNER",
+            "restaurant_id": rest_id
+        }
+    )
+
+    await db.commit()
+    await db.refresh(new_rest)
+
+    return {
+        "status": "success",
+        "message": f"Tenant '{new_rest.name}' provisioned successfully.",
+        "tenant": {
+            "id": new_rest.id,
+            "name": new_rest.name,
+            "slug": new_rest.slug,
+            "publicSlug": new_rest.public_slug,
+            "public_slug": new_rest.public_slug,
+            "domain": new_rest.domain,
+            "lifecycleStatus": new_rest.lifecycle_status,
+            "isApproved": new_rest.is_approved,
+            "currency": new_rest.currency,
+            "taxPercentage": new_rest.tax_percentage,
+            "enabledModules": new_rest.enabled_modules,
+        },
+        "token": owner_token,
+        "dashboardUrl": f"https://{public_slug}.dinely.food/restaurant/dashboard",
+        "customerMenuUrl": f"https://{public_slug}.dinely.food/customer"
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -713,4 +1055,86 @@ async def submit_restaurant(
     ))
 
     return rest
+
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("/{restaurant_id}/upload-image")
+async def upload_restaurant_image(
+    restaurant_id: str,
+    category: str = Query("menu", pattern="^(menu|branding|cover)$"),
+    file: UploadFile = File(...),
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Secure, tenant-isolated image upload endpoint.
+    - Validates caller authorization (cannot upload to other restaurants)
+    - Validates MIME type and image magic bytes (strictly rejects SVGs, scripts, executables)
+    - Enforces 5MB maximum file size
+    - Stores objects with tenant-isolated paths (restaurants/{restaurant_id}/{category}/{uuid}.webp)
+    """
+    # 1. Resolve canonical restaurant to verify existence & tenant match
+    from app.core.tenant.resolver import resolve_canonical_restaurant
+    rest = await resolve_canonical_restaurant(restaurant_id, db)
+    canonical_id = rest.id
+
+    # 2. Validate declared MIME type
+    content_type = (file.content_type or "").lower().strip()
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported image type '{content_type}'. Allowed types: JPEG, PNG, WEBP. SVG is disallowed for security."
+        )
+
+    # 3. Read content and enforce size bound
+    data = await file.read()
+    if len(data) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds maximum allowed size of 5 MB."
+        )
+
+    if len(data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty."
+        )
+
+    # 4. Verify image content with PIL to prevent decompression bombs & malicious polyglots
+    try:
+        from io import BytesIO
+        from PIL import Image
+        with Image.open(BytesIO(data)) as img:
+            img.verify()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Corrupted or invalid image content."
+        )
+
+    # 5. Generate secure random filename and tenant-isolated folder
+    ext = ALLOWED_IMAGE_TYPES[content_type]
+    safe_filename = f"{uuid.uuid4().hex}{ext}"
+    folder_path = f"restaurants/{canonical_id}/{category}"
+
+    # 6. Upload via configured storage provider (S3 in production)
+    storage = get_storage_provider()
+    public_url = await storage.upload(file_data=data, filename=safe_filename, folder=folder_path)
+
+    return {
+        "status": "success",
+        "url": public_url,
+        "filename": safe_filename,
+        "restaurant_id": canonical_id,
+        "category": category,
+        "size_bytes": len(data)
+    }
+
 

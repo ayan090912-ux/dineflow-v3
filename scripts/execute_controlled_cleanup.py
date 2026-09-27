@@ -2,7 +2,11 @@ import os
 import sys
 import psycopg2
 
-db_url = os.environ.get("DATABASE_URL_SYNC", "postgresql://postgres:postgres@localhost:5432/dineflow")
+db_url = os.environ.get("DATABASE_URL_SYNC") or os.environ.get("DATABASE_URL")
+if not db_url:
+    raise ValueError("DATABASE_URL_SYNC or DATABASE_URL environment variable is required.")
+if db_url.startswith("postgresql+asyncpg://"):
+    db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
 print(f"Connecting to database: {db_url.split('@')[-1] if '@' in db_url else db_url}")
 
 conn = psycopg2.connect(db_url)

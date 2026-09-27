@@ -138,6 +138,9 @@
 - **Task 6.3: Billing & Tax Calculation Settlement**
   - Wire frontend billing terminal to `billing/router.py`. Calculate GST/VAT and generate itemized receipts.
   - Settle bill and trigger table session release.
+- **Task 6.4: Realtime Reliability & Dropped WebSocket Fallback Testing (P1) [COMPLETED]**
+  - Tightened `WaiterTerminalOS.tsx` polling interval from 60s to aggressive adaptive interval (8s when WS is DISCONNECTED/RECONNECTING, 30s background safety).
+  - Automated regression test `src/tests/phase6_realtime_waiter_fallback.test.ts` added and passing 100% (6/6), verifying dropped WebSocket call persistence, adaptive interval tightening, and SLA <10s recovery.
 
 ---
 
