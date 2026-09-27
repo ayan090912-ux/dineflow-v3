@@ -302,9 +302,27 @@ async def run_audit():
         print(f" -> Menu Isolation verified: Tenant 1 menu contains {m1_names}; Tenant 2 menu contains {m2_names}.")
 
         # -------------------------------------------------------------
-        # STEP 8: CUSTOMER ORDERS & KITCHEN / BAR ROUTING ISOLATION
+        # STEP 8: CUSTOMER ORDERS, REALTIME WEBSOCKETS & KITCHEN/BAR ROUTING ISOLATION
         # -------------------------------------------------------------
-        print("\n[STEP 8] Creating active orders for Tenant 1 and Tenant 2...")
+        print("\n[STEP 8] Connecting tenant-scoped WebSockets and creating active orders...")
+        from app.modules.websocket.manager import manager
+        import json as json_lib
+
+        class MockWebSocket:
+            def __init__(self, name):
+                self.name = name
+                self.received = []
+            async def accept(self):
+                pass
+            async def send_text(self, text: str):
+                self.received.append(text)
+
+        ws_kitchen_1 = MockWebSocket("Tenant1_Kitchen")
+        ws_kitchen_2 = MockWebSocket("Tenant2_Kitchen")
+
+        await manager.connect(ws_kitchen_1, restaurant_id=t1_id, role="KITCHEN")
+        await manager.connect(ws_kitchen_2, restaurant_id=t2_id, role="KITCHEN")
+
         ord1_payload = {
             "restaurantId": t1_id,
             "tableNumber": "Table 01",
@@ -312,7 +330,9 @@ async def run_audit():
             "totalAmount": 840.00,
             "orderType": "DINE_IN"
         }
-        ord1 = (await client.post("/api/v1/orders", json=ord1_payload)).json()
+        ord1_res = await client.post("/api/v1/orders", json=ord1_payload)
+        assert ord1_res.status_code == 201, f"Failed placing order 1: {ord1_res.text}"
+        ord1 = ord1_res.json()
         ord1_id = ord1["id"]
 
         ord2_payload = {
@@ -322,12 +342,42 @@ async def run_audit():
             "totalAmount": 2550.00,
             "orderType": "DINE_IN"
         }
-        ord2 = (await client.post("/api/v1/orders", json=ord2_payload)).json()
+        ord2_res = await client.post("/api/v1/orders", json=ord2_payload)
+        assert ord2_res.status_code == 201, f"Failed placing order 2: {ord2_res.text}"
+        ord2 = ord2_res.json()
         ord2_id = ord2["id"]
 
-        # Fetch orders for Tenant 1 and Tenant 2
-        ords_1 = (await client.get(f"/api/v1/orders/restaurant/{t1_id}")).json()
-        ords_2 = (await client.get(f"/api/v1/orders/restaurant/{t2_id}")).json()
+        # Verify Realtime WebSocket Isolation: Tenant 1 Kitchen received ord1 but NOT ord2
+        t1_events = [json_lib.loads(msg) for msg in ws_kitchen_1.received if msg.startswith("{")]
+        t2_events = [json_lib.loads(msg) for msg in ws_kitchen_2.received if msg.startswith("{")]
+
+        assert any(e.get("data", {}).get("id") == ord1_id or ord1_id in str(e) for e in t1_events), "Tenant 1 Kitchen must receive Order 1"
+        assert not any(e.get("data", {}).get("id") == ord2_id or ord2_id in str(e) for e in t1_events), "Tenant 1 Kitchen must NEVER receive Order 2"
+
+        assert any(e.get("data", {}).get("id") == ord2_id or ord2_id in str(e) for e in t2_events), "Tenant 2 Kitchen must receive Order 2"
+        assert not any(e.get("data", {}).get("id") == ord1_id or ord1_id in str(e) for e in t2_events), "Tenant 2 Kitchen must NEVER receive Order 1"
+        print(" -> Realtime WebSocket Isolation verified: Kitchen events remain strictly tenant-scoped with zero cross-tenant leakage.")
+
+        await manager.disconnect(ws_kitchen_1)
+        await manager.disconnect(ws_kitchen_2)
+
+        # Cross-Tenant Orders Rejection Test
+        cross_ord_1 = await client.get(f"/api/v1/orders/restaurant/{t2_id}", headers=headers_1)
+        assert cross_ord_1.status_code == 403, f"Owner 1 must NOT access Tenant 2 orders! Got {cross_ord_1.status_code}"
+        print(" -> Verified: Owner 1 unauthorized access to Tenant 2 orders strictly rejected with 403 Forbidden.")
+
+        cross_ord_2 = await client.get(f"/api/v1/orders/restaurant/{t1_id}", headers=headers_2)
+        assert cross_ord_2.status_code == 403, f"Owner 2 must NOT access Tenant 1 orders! Got {cross_ord_2.status_code}"
+        print(" -> Verified: Owner 2 unauthorized access to Tenant 1 orders strictly rejected with 403 Forbidden.")
+
+        # Authorized Orders Access
+        ords_1_res = await client.get(f"/api/v1/orders/restaurant/{t1_id}", headers=headers_1)
+        assert ords_1_res.status_code == 200, f"Owner 1 failed reading own orders: {ords_1_res.text}"
+        ords_1 = ords_1_res.json()
+
+        ords_2_res = await client.get(f"/api/v1/orders/restaurant/{t2_id}", headers=headers_2)
+        assert ords_2_res.status_code == 200, f"Owner 2 failed reading own orders: {ords_2_res.text}"
+        ords_2 = ords_2_res.json()
 
         assert any(o["id"] == ord1_id for o in ords_1)
         assert not any(o["id"] == ord2_id for o in ords_1)
@@ -339,28 +389,82 @@ async def run_audit():
         # STEP 9: WAITER & SERVICE REQUESTS ISOLATION
         # -------------------------------------------------------------
         print("\n[STEP 9] Verifying Customer / Waiter Service Request isolation...")
-        req1 = (await client.post("/api/v1/customer-requests", json={
+        req1_res = await client.post("/api/v1/customer-requests", json={
             "restaurantId": t1_id,
             "tableNumber": "Table 01",
             "requestType": "WATER",
             "message": "Extra coastal drinking water"
-        })).json()
+        })
+        assert req1_res.status_code == 201, f"Failed placing req 1: {req1_res.text}"
+        req1 = req1_res.json()
 
-        req2 = (await client.post("/api/v1/customer-requests", json={
+        req2_res = await client.post("/api/v1/customer-requests", json={
             "restaurantId": t2_id,
             "tableNumber": "Table 03",
             "requestType": "BILL",
             "message": "Final bill for Sakura Table 03"
-        })).json()
+        })
+        assert req2_res.status_code == 201, f"Failed placing req 2: {req2_res.text}"
+        req2 = req2_res.json()
 
-        reqs_1 = (await client.get(f"/api/v1/customer-requests?restaurant_id={t1_id}")).json()
-        reqs_2 = (await client.get(f"/api/v1/customer-requests?restaurant_id={t2_id}")).json()
+        # Cross-Tenant Service Request Rejection Test
+        cross_req_1 = await client.get(f"/api/v1/customer-requests?restaurant_id={t2_id}", headers=headers_1)
+        assert cross_req_1.status_code == 403, f"Owner 1 must NOT access Tenant 2 requests! Got {cross_req_1.status_code}"
+        print(" -> Verified: Owner 1 unauthorized access to Tenant 2 requests strictly rejected with 403 Forbidden.")
+
+        # Authorized Service Requests Access
+        reqs_1_res = await client.get(f"/api/v1/customer-requests?restaurant_id={t1_id}", headers=headers_1)
+        assert reqs_1_res.status_code == 200, f"Owner 1 failed reading own requests: {reqs_1_res.text}"
+        reqs_1 = reqs_1_res.json()
+
+        reqs_2_res = await client.get(f"/api/v1/customer-requests?restaurant_id={t2_id}", headers=headers_2)
+        assert reqs_2_res.status_code == 200, f"Owner 2 failed reading own requests: {reqs_2_res.text}"
+        reqs_2 = reqs_2_res.json()
 
         assert any(r["id"] == req1["id"] for r in reqs_1)
         assert not any(r["id"] == req2["id"] for r in reqs_1)
         assert any(r["id"] == req2["id"] for r in reqs_2)
         assert not any(r["id"] == req1["id"] for r in reqs_2)
         print(" -> Waiter Requests Isolation verified: Requests never cross tenant boundaries.")
+
+        # -------------------------------------------------------------
+        # STEP 9B: DYNAMIC MEMBERSHIP ACCESS DELEGATION
+        # -------------------------------------------------------------
+        print("\n[STEP 9B] Verifying Restaurant Membership Delegation...")
+        from app.core.database.connection import AsyncSessionLocal
+        from app.modules.restaurants.models import RestaurantMembership
+
+        # Grant Owner 1 role 'STAFF' in Tenant 2
+        async with AsyncSessionLocal() as db_session:
+            new_mem = RestaurantMembership(
+                restaurant_id=t2_id,
+                user_uid=owner1_uid,
+                user_email=owner1_email,
+                role="STAFF"
+            )
+            db_session.add(new_mem)
+            await db_session.commit()
+
+        # Now Owner 1 CAN access Tenant 2 orders via valid membership
+        mem_access_res = await client.get(f"/api/v1/orders/restaurant/{t2_id}", headers=headers_1)
+        assert mem_access_res.status_code == 200, f"Owner 1 with membership must access Tenant 2 orders! Got {mem_access_res.status_code}"
+        print(" -> Verified: Owner 1 can access Tenant 2 orders only after valid membership was granted.")
+
+        # Revoke membership
+        async with AsyncSessionLocal() as db_session:
+            from sqlalchemy import delete
+            await db_session.execute(
+                delete(RestaurantMembership).where(
+                    (RestaurantMembership.restaurant_id == t2_id) &
+                    (RestaurantMembership.user_uid == owner1_uid)
+                )
+            )
+            await db_session.commit()
+
+        # Now Owner 1 is rejected again
+        revoked_res = await client.get(f"/api/v1/orders/restaurant/{t2_id}", headers=headers_1)
+        assert revoked_res.status_code == 403, f"Owner 1 must be rejected after membership revoked! Got {revoked_res.status_code}"
+        print(" -> Verified: Access revoked immediately when membership is deleted.")
 
         # -------------------------------------------------------------
         # STEP 10: BILLING, TAX & COMPLIANCE ISOLATION
