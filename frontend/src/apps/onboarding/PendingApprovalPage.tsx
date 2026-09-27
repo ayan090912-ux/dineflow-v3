@@ -19,6 +19,7 @@ import {
 import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant } from '../../packages/types';
 import { getTenantUrl } from '../../packages/utils/tenantResolver';
+import { Button, Card, Modal, Input, DinelyLogo } from '../../packages/ui';
 
 interface PendingApprovalPageProps {
   restaurantId?: string;

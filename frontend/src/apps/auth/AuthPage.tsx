@@ -15,6 +15,7 @@ import {
 import { api } from '../../packages/api/client';
 import { signInWithGooglePopup, firebaseAuth, authStateMachine } from '../../packages/auth/firebase';
 import { getTenantUrl } from '../../packages/utils/tenantResolver';
+import { DinelyLogo } from '../../packages/ui';
 
 interface AuthPageProps {
   onLoginSuccess?: (ownerData: any) => void;

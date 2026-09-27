@@ -16,6 +16,7 @@ import {
 import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant, User } from '../../packages/types';
 import { getRestaurantPublicDomain, getTenantUrl } from '../../packages/utils/tenantResolver';
+import { DinelyLogo } from '../../packages/ui';
 
 interface WorkspaceSelectorProps {
   user?: User | null;

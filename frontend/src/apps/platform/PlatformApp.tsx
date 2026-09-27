@@ -100,6 +100,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [isActionInProgress, setIsActionInProgress] = useState<string | null>(null);
   const [isPurging, setIsPurging] = useState(false);
   const [incomingAlert, setIncomingAlert] = useState<{ id: string; name: string; ownerEmail?: string } | null>(null);
+  const [authTrigger, setAuthTrigger] = useState(0);
 
   const playNotificationChime = () => {
     try {
@@ -126,7 +127,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       setQueueState('AUTHENTICATING');
       setQueueErrorMessage(null);
       await signInPlatformAdminWithGoogle();
-      await hydrateAndLoad();
+      setAuthTrigger((prev) => prev + 1);
     } catch (err: any) {
       if (err.isCancelled) {
         setQueueState('401');
@@ -267,7 +268,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       unsub();
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, []);
+  }, [authTrigger]);
 
   const loadData = async (isBackgroundPoll = false) => {
     try {
@@ -739,7 +740,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             <Button
               variant="outline"
               size="sm"
-              onClick={loadData}
+              onClick={() => loadData()}
               className="border-white/[0.08] text-white/70 hover:text-white hover:bg-white/[0.04] text-xs"
               icon={<RefreshCw className="w-3.5 h-3.5" />}
             >

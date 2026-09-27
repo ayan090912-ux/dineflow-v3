@@ -769,8 +769,7 @@ function AppContent() {
             <RoleLoginPage
               portal="restaurant"
               onNavigate={navigateTo}
-              onLoginSuccess={async (res) => {
-                const user = res?.user || res;
+              onLoginSuccess={async (_role, user) => {
                 if (user) setCurrentUser(user);
                 navigateTo(cleanPath || '/restaurant/dashboard');
               }}
