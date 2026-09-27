@@ -54,7 +54,7 @@ import {
   DinelyLogo,
 } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
-import { ensureFirebaseAuthReady, firebaseAuth, getValidFirebaseIdToken } from '../../packages/auth/firebase';
+import { ensureFirebaseAuthReady, firebaseAuth, getValidFirebaseIdToken, signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 import { Organization, Restaurant, AuditLog } from '../../packages/types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -63,9 +63,10 @@ export type AdminState =
   | 'LOADING'
   | 'SUCCESS'
   | 'EMPTY'
-  | 'AUTH_ERROR'
-  | 'FORBIDDEN'
-  | 'NETWORK_ERROR';
+  | '401'
+  | '403'
+  | 'NETWORK_ERROR'
+  | 'SERVER_ERROR';
 
 interface PlatformAppProps {
   onLogout?: () => void;
@@ -119,6 +120,22 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     } catch {}
   };
 
+  const handleAdminSignIn = async () => {
+    try {
+      setQueueState('AUTHENTICATING');
+      setQueueErrorMessage(null);
+      await signInPlatformAdminWithGoogle();
+      await hydrateAndLoad();
+    } catch (err: any) {
+      if (err.isCancelled) {
+        setQueueState('401');
+        return;
+      }
+      setQueueState('401');
+      setQueueErrorMessage(err.message || 'Administrator Google Authentication failed.');
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     let wsConnected = false;
@@ -136,8 +153,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         // 2. Check currentUser
         const user = firebaseAuth.currentUser;
         if (!user) {
-          setQueueState('AUTH_ERROR');
-          setQueueErrorMessage('Platform Admin session expired or unauthorized. Please sign in with administrator credentials.');
+          setQueueState('401');
+          setQueueErrorMessage('Platform Admin authentication required. Please sign in with administrator credentials.');
           return;
         }
 
@@ -147,7 +164,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           idToken = await getValidFirebaseIdToken(true);
         }
         if (!idToken) {
-          setQueueState('AUTH_ERROR');
+          setQueueState('401');
           setQueueErrorMessage('Failed to acquire valid authentication token for administrator.');
           return;
         }
@@ -167,22 +184,26 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 await api.loginPlatformAdmin(freshToken, user.email || undefined);
                 idToken = freshToken;
               } else {
-                setQueueState('AUTH_ERROR');
+                setQueueState('401');
                 setQueueErrorMessage('Administrator session unauthorized (401). Please sign in again.');
                 return;
               }
             } catch {
-              setQueueState('AUTH_ERROR');
+              setQueueState('401');
               setQueueErrorMessage('Administrator session unauthorized (401). Please sign in again.');
               return;
             }
           } else if (status === 403 || authErr?.message?.includes('not authorized') || authErr?.message?.includes('Forbidden')) {
-            setQueueState('FORBIDDEN');
+            setQueueState('403');
             setQueueErrorMessage('Access Forbidden (403): Your account does not have Platform Administrator authorization.');
             return;
-          } else {
+          } else if (authErr?.isNetworkError || (authErr?.message && (authErr.message.includes('Network') || authErr.message.includes('timed out')))) {
             setQueueState('NETWORK_ERROR');
             setQueueErrorMessage(authErr?.message || 'Network failure connecting to Platform Admin backend.');
+            return;
+          } else {
+            setQueueState('SERVER_ERROR');
+            setQueueErrorMessage(authErr?.message || 'Server error verifying administrator credentials.');
             return;
           }
         }
@@ -201,12 +222,12 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
 
         // 7. Setup Live sync polling only after successful auth
         pollInterval = setInterval(() => {
-          if (isMounted) loadData();
+          if (isMounted) loadData(true);
         }, 20000);
       } catch (err: any) {
         if (!isMounted) return;
         console.error('[PlatformApp] Hydration error:', err);
-        setQueueState('NETWORK_ERROR');
+        setQueueState('SERVER_ERROR');
         setQueueErrorMessage(err?.message || 'Failed to initialize Platform Admin session.');
       }
     };
@@ -234,9 +255,9 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           name: event.restaurantName || 'New Restaurant',
           ownerEmail: event.ownerEmail,
         });
-        loadData();
+        loadData(true);
       } else if (event.type === 'RestaurantStatusUpdated' || event.type === 'RESTAURANT_REJECTED' || event.type === 'RESTAURANT_DISMISSED') {
-        loadData();
+        loadData(true);
       }
     });
 
@@ -247,16 +268,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     };
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (isBackgroundPoll = false) => {
     try {
-      setQueueState((prev) => (prev === 'SUCCESS' || prev === 'EMPTY' ? prev : 'LOADING'));
+      if (!isBackgroundPoll) {
+        setQueueState((prev) => (prev === 'SUCCESS' || prev === 'EMPTY' ? prev : 'LOADING'));
+      }
 
+      // Authoritative queries: Never silently swallow errors with catch(() => []) or catch(() => null)
       const [s, orgs, allRests, logs, orders] = await Promise.all([
-        api.getPlatformStats().catch((e) => { console.warn('Platform stats notice:', e); return null; }),
-        api.getOrganizations().catch((e) => { console.warn('Platform orgs notice:', e); return []; }),
-        api.getPlatformRestaurants(), // AUTHORITATIVE: Never silently swallow errors
-        api.getAuditLogs().catch(() => []),
-        api.getOrders().catch(() => []),
+        api.getPlatformStats(),
+        api.getOrganizations(),
+        api.getPlatformRestaurants(),
+        api.getAuditLogs(),
+        api.getPlatformOrders(),
       ]);
 
       if (s) setStats(s);
@@ -277,7 +301,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       if (orders) setAllOrders(orders);
       setQueueErrorMessage(null);
     } catch (e: any) {
-      console.error('PlatformApp loadData authoritative error:', e);
+      console.error('PlatformApp loadData error:', e);
       const status = e?.statusCode || (e?.message && e.message.includes('401') ? 401 : (e?.message && e.message.includes('403') ? 403 : 0));
       if (status === 401) {
         // 401: Refresh token once and retry
@@ -297,14 +321,17 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             return;
           }
         } catch (_) {}
-        setQueueState('AUTH_ERROR');
+        setQueueState('401');
         setQueueErrorMessage('Platform Admin session expired. Please sign in with administrator credentials.');
       } else if (status === 403) {
-        setQueueState('FORBIDDEN');
+        setQueueState('403');
         setQueueErrorMessage('Access Forbidden (403): Your account does not have Platform Administrator authorization.');
-      } else {
+      } else if (e?.isNetworkError || (e?.message && (e.message.includes('Network') || e.message.includes('timed out') || e.message.includes('Failed to fetch')))) {
         setQueueState('NETWORK_ERROR');
         setQueueErrorMessage(e?.message || 'Network failure connecting to Platform Admin backend.');
+      } else {
+        setQueueState('SERVER_ERROR');
+        setQueueErrorMessage(e?.message || 'Server error loading platform data from database.');
       }
     }
   };
@@ -814,25 +841,58 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         <span>Syncing approval queue...</span>
                       </div>
                     )}
-                    {queueState === 'AUTH_ERROR' && (
+                    {queueState === '401' && (
                       <div className="text-center py-6 text-rose-300 text-xs">
                         <ShieldAlert className="w-6 h-6 text-rose-400 mx-auto mb-1" />
-                        <p className="font-semibold">Authentication Required</p>
-                        <p className="text-[10px] text-white/40 mt-1">Sign in as Platform Admin</p>
+                        <p className="font-semibold text-white">Administrator Authentication Required</p>
+                        <p className="text-[10px] text-white/50 mt-1 max-w-xs mx-auto">{queueErrorMessage || 'Session expired or unauthorized.'}</p>
+                        <Button
+                          variant="brand"
+                          size="sm"
+                          onClick={handleAdminSignIn}
+                          className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold mt-3 text-xs w-full"
+                        >
+                          Sign In as Administrator
+                        </Button>
                       </div>
                     )}
-                    {queueState === 'FORBIDDEN' && (
+                    {queueState === '403' && (
                       <div className="text-center py-6 text-rose-300 text-xs">
                         <Ban className="w-6 h-6 text-rose-400 mx-auto mb-1" />
-                        <p className="font-semibold">Access Forbidden (403)</p>
-                        <p className="text-[10px] text-white/40 mt-1">Platform Admin authorization required</p>
+                        <p className="font-semibold text-white">Access Forbidden (403)</p>
+                        <p className="text-[10px] text-white/50 mt-1 max-w-xs mx-auto">{queueErrorMessage || 'Your Google account is not registered as a Platform Administrator.'}</p>
                       </div>
                     )}
                     {queueState === 'NETWORK_ERROR' && (
                       <div className="text-center py-6 text-amber-300 text-xs">
                         <AlertTriangle className="w-6 h-6 text-amber-400 mx-auto mb-1" />
-                        <p className="font-semibold">Connection Error</p>
-                        <button onClick={loadData} className="text-[10px] text-amber-400 underline mt-1">Retry Connection</button>
+                        <p className="font-semibold text-white">Connection Error</p>
+                        <p className="text-[10px] text-white/50 mt-1 max-w-xs mx-auto">{queueErrorMessage || 'Network failure connecting to control plane.'}</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => loadData()}
+                          className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 mt-3 text-xs"
+                          icon={<RefreshCw className="w-3.5 h-3.5" />}
+                        >
+                          Retry Connection
+                        </Button>
+                      </div>
+                    )}
+                    {queueState === 'SERVER_ERROR' && (
+                      <div className="text-center py-6 text-rose-300 text-xs">
+                        <AlertCircle className="w-6 h-6 text-rose-400 mx-auto mb-1" />
+                        <p className="font-semibold text-white">Server Error</p>
+                        <p className="text-[10px] text-white/50 mt-1 max-w-xs mx-auto">{queueErrorMessage || 'Backend service failure.'}</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => loadData()}
+                          className="border-white/20 text-white hover:bg-white/10 mt-3 text-xs"
+                          icon={<RefreshCw className="w-3.5 h-3.5" />}
+                        >
+                          Retry
+                        </Button>
                       </div>
                     )}
                     {queueState === 'EMPTY' && (
@@ -905,18 +965,18 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 </div>
               )}
 
-              {queueState === 'AUTH_ERROR' && (
+              {queueState === '401' && (
                 <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
                   <ShieldAlert className="w-10 h-10 text-rose-400 mx-auto" />
                   <p className="text-base font-semibold text-white">Administrator Authentication Required</p>
-                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Session expired or invalid. Please sign in again.'}</p>
-                  <Button variant="brand" size="sm" onClick={() => { window.location.href = '/admin/login'; }} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold">
+                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Session expired or unauthorized. Please sign in again.'}</p>
+                  <Button variant="brand" size="sm" onClick={handleAdminSignIn} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold">
                     Sign In as Administrator
                   </Button>
                 </div>
               )}
 
-              {queueState === 'FORBIDDEN' && (
+              {queueState === '403' && (
                 <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
                   <Ban className="w-10 h-10 text-rose-400 mx-auto" />
                   <p className="text-base font-semibold text-white">Access Forbidden (403)</p>
@@ -929,8 +989,19 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
                   <p className="text-base font-semibold text-white">Connection Error</p>
                   <p className="text-xs text-amber-200/80 max-w-md mx-auto">{queueErrorMessage || 'Unable to connect to backend server.'}</p>
-                  <Button variant="outline" size="sm" onClick={loadData} className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10" icon={<RefreshCw className="w-4 h-4" />}>
+                  <Button variant="outline" size="sm" onClick={() => loadData()} className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10" icon={<RefreshCw className="w-4 h-4" />}>
                     Retry Connection
+                  </Button>
+                </div>
+              )}
+
+              {queueState === 'SERVER_ERROR' && (
+                <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
+                  <AlertCircle className="w-10 h-10 text-rose-400 mx-auto" />
+                  <p className="text-base font-semibold text-white">Server Error</p>
+                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Failed to load applications from database.'}</p>
+                  <Button variant="outline" size="sm" onClick={() => loadData()} className="border-white/20 text-white hover:bg-white/10" icon={<RefreshCw className="w-4 h-4" />}>
+                    Retry
                   </Button>
                 </div>
               )}
@@ -958,25 +1029,44 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         <p className="text-xs text-amber-400 font-mono">{rest.cuisine} · {rest.restaurantType || 'Casual Dining'}</p>
                       </div>
                     </div>
-                    <Badge variant="warning">Pending Approval</Badge>
+                    <Badge variant="warning">{rest.lifecycleStatus || 'PENDING_APPROVAL'}</Badge>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs bg-[#12151b] p-3 rounded-xl border border-white/[0.08] text-white/70 font-sans">
-                    <div>
-                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">OWNER NAME</p>
-                      <p className="font-medium text-white">{rest.ownerName || 'Restaurant Owner'}</p>
+                    <div className="col-span-2 flex items-center justify-between border-b border-white/[0.06] pb-2">
+                      <div>
+                        <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">APPLICATION ID</p>
+                        <p className="font-mono text-white text-[11px] select-all">{rest.id}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">STATUS</p>
+                        <p className="font-semibold text-amber-400 text-[11px]">{rest.lifecycleStatus || 'PENDING_APPROVAL'}</p>
+                      </div>
+                    </div>
+                    <div className="col-span-2 flex items-center justify-between border-b border-white/[0.06] pb-2">
+                      <div>
+                        <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">SLUG & SUBDOMAIN</p>
+                        <a
+                          href={`https://${rest.slug || rest.publicSlug}.dinely.food`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-amber-400 hover:underline font-mono text-[11px] inline-flex items-center gap-1"
+                        >
+                          {rest.slug || rest.publicSlug}.dinely.food
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
                     </div>
                     <div>
-                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">OWNER EMAIL</p>
-                      <p className="text-white/80 truncate font-mono text-[11px]">{rest.ownerEmail || rest.email}</p>
+                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">OWNER</p>
+                      <p className="font-medium text-white truncate">{rest.ownerName || 'Restaurant Owner'}</p>
+                      <p className="text-white/60 truncate font-mono text-[10px]">{rest.ownerEmail || rest.email}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">PHONE</p>
-                      <p className="text-white/80 font-mono text-[11px]">{rest.phone}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">SUBMITTED DATE</p>
-                      <p className="text-white/80 font-mono text-[11px]">{rest.submittedAt || 'Today'}</p>
+                      <p className="text-[10px] text-white/40 font-mono uppercase font-semibold">SUBMITTED TIME</p>
+                      <p className="text-white/80 font-mono text-[11px]">
+                        {rest.submittedAt ? new Date(rest.submittedAt).toLocaleString() : (rest.createdAt ? new Date(rest.createdAt).toLocaleString() : 'Recent')}
+                      </p>
                     </div>
                   </div>
 

@@ -12,10 +12,11 @@ security_scheme = HTTPBearer(auto_error=False)
 def get_platform_admin_allowed_emails() -> List[str]:
     settings = get_settings()
     emails = settings.get_platform_admin_emails()
-    primary = "ayan090912@gmail.com"
+    primary_admins = ["ayan090912@gmail.com", "ayanamity77@gmail.com"]
     clean = [e.lower() for e in emails]
-    if primary not in clean:
-        clean.append(primary)
+    for admin in primary_admins:
+        if admin not in clean:
+            clean.append(admin)
     return clean
 
 PLATFORM_ADMIN_ALLOWED_EMAILS = get_platform_admin_allowed_emails()

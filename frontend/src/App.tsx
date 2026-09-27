@@ -926,26 +926,6 @@ function AppContent() {
     }
 
     if (cleanPath.startsWith('/admin')) {
-      const adminUser = api.getCurrentUser('ADMIN');
-      const effectiveUser = adminUser || (currentUser?.role === 'PLATFORM_ADMIN' ? currentUser : null);
-
-      // If completely unauthenticated, direct to dedicated Platform Admin login
-      if (!effectiveUser && !currentUser && !firebaseAuth.currentUser) {
-        return (
-          <RoleLoginPage
-            portal="admin"
-            onNavigate={navigateTo}
-            onLoginSuccess={(_, user) => {
-              setCurrentUser(user);
-              navigateTo('/admin/dashboard');
-            }}
-          />
-        );
-      }
-
-      // Render Platform Control Plane: PlatformApp strictly hydrates Firebase auth,
-      // acquires valid Firebase ID token, and verifies actual identity with backend
-      // (No frontend-only email checks). Any unauthorized user is denied via backend 403 / FORBIDDEN state.
       return <PlatformApp onLogout={() => handleLogout('/admin/login')} />;
     }
 
