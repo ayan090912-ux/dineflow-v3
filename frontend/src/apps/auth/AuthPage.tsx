@@ -12,9 +12,9 @@ import {
   ArrowLeft,
   Loader2,
 } from 'lucide-react';
-import { DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { signInWithGooglePopup, firebaseAuth, authStateMachine } from '../../packages/auth/firebase';
+import { getTenantUrl } from '../../packages/utils/tenantResolver';
 
 interface AuthPageProps {
   onLoginSuccess?: (ownerData: any) => void;
@@ -69,7 +69,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           onlyRest.lifecycleStatus !== 'ARCHIVED';
 
         if (isLive) {
-          navigateTo('/restaurant/dashboard');
+          window.location.href = getTenantUrl(onlyRest, '/restaurant/dashboard');
         } else {
           navigateTo('/restaurant/pending-approval');
         }

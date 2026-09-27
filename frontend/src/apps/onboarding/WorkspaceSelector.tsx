@@ -13,9 +13,9 @@ import {
   MapPin,
   Grid,
 } from 'lucide-react';
-import { Button, Card, Badge, DinelyLogo } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant, User } from '../../packages/types';
+import { getRestaurantPublicDomain, getTenantUrl } from '../../packages/utils/tenantResolver';
 
 interface WorkspaceSelectorProps {
   user?: User | null;
@@ -367,6 +367,10 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
                         <span className="font-semibold text-slate-300 font-mono">
                           {rest.tablesCount || rest.indoorTablesCount || 10} Tables
                         </span>
+                      </div>
+                      <div className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5 truncate pt-1 border-t border-[#1e232e]/50">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                        <span className="truncate">{getRestaurantPublicDomain(rest).replace(/^https?:\/\//, '')}</span>
                       </div>
                     </div>
                   </div>

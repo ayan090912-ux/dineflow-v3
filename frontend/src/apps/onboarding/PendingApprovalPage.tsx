@@ -16,9 +16,9 @@ import {
   Phone,
   Grid,
 } from 'lucide-react';
-import { Button, Card, Badge, Modal, Input, DinelyLogo } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant } from '../../packages/types';
+import { getTenantUrl } from '../../packages/utils/tenantResolver';
 
 interface PendingApprovalPageProps {
   restaurantId?: string;
@@ -82,7 +82,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
   useEffect(() => {
     if (restaurant && (restaurant.isApproved || restaurant.lifecycleStatus === 'APPROVED' || restaurant.lifecycleStatus === 'LIVE' || restaurant.lifecycleStatus === 'ACTIVE')) {
       const timer = setTimeout(() => {
-        onNavigate('/restaurant/dashboard');
+        window.location.href = getTenantUrl(restaurant, '/restaurant/dashboard');
       }, 500);
       return () => clearTimeout(timer);
     }
@@ -121,7 +121,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     const rest = await api.getRestaurantDetails(restaurantId);
     setRestaurant(rest);
     if (rest && (rest.isApproved || rest.lifecycleStatus === 'APPROVED' || rest.lifecycleStatus === 'LIVE' || rest.lifecycleStatus === 'ACTIVE')) {
-      onNavigate('/restaurant/dashboard');
+      window.location.href = getTenantUrl(rest, '/restaurant/dashboard');
     }
     setTimeout(() => setIsRefreshing(false), 500);
   };
@@ -327,7 +327,7 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
           {isApproved ? (
             <Button
               variant="brand"
-              onClick={() => onNavigate('/restaurant/dashboard')}
+              onClick={() => { window.location.href = getTenantUrl(restaurant, '/restaurant/dashboard'); }}
               className="w-full sm:w-auto text-xs font-bold px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-950/60"
               icon={<ArrowRight className="w-4 h-4 ml-1" />}
             >

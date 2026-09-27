@@ -7,7 +7,7 @@ import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } from './packages/types';
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
 import { firebaseAuth, signOutFirebase, authStateMachine, type AuthState, type AuthErrorDetails } from './packages/auth/firebase';
-import { getTenantFromHostname, resolveTenantAppFromPath } from './packages/utils/tenantResolver';
+import { getTenantFromHostname, resolveTenantAppFromPath, getTenantUrl } from './packages/utils/tenantResolver';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 // Lazy-loaded route bundles for optimal bundle size and instantaneous initial load
@@ -34,6 +34,131 @@ function RouteLoadingFallback() {
     <LoadingScreen
       status="Loading workspace..."
       substatus="Optimizing and preparing interface resources"
+    />
+  );
+}
+
+/**
+ * Root Domain Redirector for Dinely Platform (https://dinely.food).
+ * Follows Architecture Section 5:
+ * A. If exactly 1 accessible restaurant exists: redirect to that restaurant's tenant domain.
+ * B. If multiple restaurants exist: show WorkspaceSelector (selection redirects to tenant domain).
+ * C. If no restaurant exists: show onboarding / create-restaurant.
+ * D. If unauthorized: show error.
+ */
+function PlatformTenantRedirector({
+  user,
+  targetPath,
+  onNavigate,
+  onLogout,
+}: {
+  user: User | null;
+  targetPath: string;
+  onNavigate: (path: string) => void;
+  onLogout: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const list = await api.getOwnerRestaurants(user?.email, user?.id);
+        if (!isMounted) return;
+
+        if (!list || list.length === 0) {
+          onNavigate('/wizard?mode=create');
+          return;
+        }
+
+        if (list.length === 1) {
+          const onlyRest = list[0];
+          const isLive =
+            onlyRest.lifecycleStatus === 'LIVE' ||
+            onlyRest.lifecycleStatus === 'APPROVED' ||
+            (onlyRest.isApproved === true &&
+              onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
+              onlyRest.lifecycleStatus !== 'REJECTED' &&
+              onlyRest.lifecycleStatus !== 'ARCHIVED' &&
+              onlyRest.lifecycleStatus !== 'SUSPENDED');
+
+          if (!isLive) {
+            onNavigate('/restaurant/pending-approval');
+            return;
+          }
+
+          const targetUrl = getTenantUrl(onlyRest, targetPath.startsWith('/restaurant') ? targetPath : '/restaurant/dashboard');
+          window.location.replace(targetUrl);
+          return;
+        }
+
+        setLoading(false);
+      } catch (err: any) {
+        if (!isMounted) return;
+        console.error('[PlatformTenantRedirector] Error resolving restaurants:', err);
+        setError(err?.message || 'Failed to resolve accessible restaurants.');
+        setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.email, user?.id, targetPath, onNavigate]);
+
+  if (loading) {
+    return (
+      <LoadingScreen
+        status="Resolving Tenant Workspace..."
+        substatus="Connecting your account to your canonical restaurant domain"
+      />
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white text-center">
+        <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-4 text-rose-400">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Workspace Resolution Error</h2>
+        <p className="text-slate-400 max-w-md mb-6">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-medium transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <WorkspaceSelector
+      user={user}
+      onSelectRestaurant={async (rest) => {
+        await api.switchActiveRestaurant(rest.id);
+        const isLive =
+          rest.lifecycleStatus === 'LIVE' ||
+          rest.lifecycleStatus === 'APPROVED' ||
+          (rest.isApproved === true &&
+            rest.lifecycleStatus !== 'PENDING_APPROVAL' &&
+            rest.lifecycleStatus !== 'REJECTED' &&
+            rest.lifecycleStatus !== 'ARCHIVED' &&
+            rest.lifecycleStatus !== 'SUSPENDED');
+
+        if (isLive) {
+          window.location.href = getTenantUrl(rest, targetPath.startsWith('/restaurant') ? targetPath : '/restaurant/dashboard');
+        } else {
+          onNavigate('/restaurant/pending-approval');
+        }
+      }}
+      onCreateNewRestaurant={() => onNavigate('/wizard?mode=create')}
+      onLogout={onLogout}
     />
   );
 }
@@ -352,6 +477,16 @@ function AppContent() {
   const renderRoute = useMemo(() => {
     // 0. Multi-Tenant Restaurant Operating System Routing (*.dinely.food or custom domains)
     if (domainResolution.isTenantSubdomain) {
+      // Platform Admin is NOT a tenant route: redirect to dinely.food
+      if (cleanPath.startsWith('/admin')) {
+        window.location.href = `https://dinely.food${cleanPath}`;
+        return (
+          <LoadingScreen
+            status="Redirecting to Platform Admin..."
+            substatus="Platform Admin operates on dinely.food"
+          />
+        );
+      }
       if (tenantResolutionState === 'RESOLVING') {
         return (
           <LoadingScreen
@@ -608,7 +743,11 @@ function AppContent() {
         const isAuthorizedStaff =
           currentUser.role === 'SUPER_ADMIN' ||
           (currentUser.restaurantId === resolvedTenant.id && ['BILLING', 'CASHIER', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
-          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+          (currentUser.email && (
+            resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() ||
+            (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase() ||
+            (resolvedTenant as any).owner_email?.toLowerCase() === currentUser.email.toLowerCase()
+          ));
 
         if (!isAuthorizedStaff) {
           return (
@@ -620,20 +759,20 @@ function AppContent() {
           );
         }
 
-        return <RestaurantApp onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
+        return <RestaurantApp activeRestaurant={resolvedTenant} onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
       }
 
       // 7. Settings / Tenant Management Dashboard
       if (tenantApp === 'SETTINGS') {
         if (!currentUser) {
           return (
-            <AuthPage
-              initialMode="login"
+            <RoleLoginPage
+              portal="restaurant"
               onNavigate={navigateTo}
               onLoginSuccess={async (res) => {
                 const user = res?.user || res;
                 if (user) setCurrentUser(user);
-                navigateTo('/settings');
+                navigateTo(cleanPath || '/restaurant/dashboard');
               }}
             />
           );
@@ -642,7 +781,11 @@ function AppContent() {
         const isAuthorizedOwner =
           currentUser.role === 'SUPER_ADMIN' ||
           (currentUser.restaurantId === resolvedTenant.id && ['OWNER', 'RESTAURANT_OWNER', 'MANAGER'].includes(currentUser.role)) ||
-          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+          (currentUser.email && (
+            resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() ||
+            (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase() ||
+            (resolvedTenant as any).owner_email?.toLowerCase() === currentUser.email.toLowerCase()
+          ));
 
         if (!isAuthorizedOwner) {
           return (
@@ -654,7 +797,7 @@ function AppContent() {
           );
         }
 
-        return <RestaurantApp onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
+        return <RestaurantApp activeRestaurant={resolvedTenant} onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
       }
 
       // 8. Auth inside tenant
@@ -889,7 +1032,7 @@ function AppContent() {
                 updated?.lifecycleStatus !== 'ARCHIVED' &&
                 updated?.lifecycleStatus !== 'SUSPENDED');
             if (isLive) {
-              navigateTo('/restaurant/dashboard');
+              window.location.href = getTenantUrl(updated, '/restaurant/dashboard');
             } else {
               navigateTo('/restaurant/pending-approval');
             }
@@ -929,63 +1072,42 @@ function AppContent() {
       return <PlatformApp onLogout={() => handleLogout('/admin/login')} />;
     }
 
-    // 8. Operations Center Screen
-    if (
-      cleanPath === '/operations' ||
-      cleanPath.startsWith('/operations/')
-    ) {
-      if (!checkWorkspaceAccess('operations')) {
-        return currentUser ? (
-          <NotFoundPage onNavigate={navigateTo} />
-        ) : (
-          <RoleLoginPage
-            portal="restaurant"
-            onNavigate={navigateTo}
-            onLoginSuccess={(_, user) => {
-              setCurrentUser(user);
-              navigateTo('/operations');
-            }}
-          />
-        );
-      }
-
-      if (
-        currentRestaurant &&
-        !currentRestaurant.isApproved &&
-        currentRestaurant.lifecycleStatus !== 'APPROVED' &&
-        currentRestaurant.lifecycleStatus !== 'LIVE' &&
-        currentRestaurant.lifecycleStatus !== 'ACTIVE' &&
-        currentUser?.role !== 'SUPER_ADMIN'
-      ) {
-        return (
-          <PendingApprovalPage
-            restaurantId={currentRestaurant.id}
-            onNavigate={navigateTo}
-            onLogout={() => handleLogout('/restaurant/login')}
-          />
-        );
-      }
-
-      return (
-        <RestaurantOperationsCenter
-          onLogout={() => handleLogout('/restaurant/login')}
-          onNavigate={navigateTo}
-        />
-      );
-    }
-
-    // 9. Restaurant OS / Owner Dashboard & Settings
+    // 8. Restaurant OS & Operational Terminals on PLATFORM DOMAIN (Root Domain Redirect)
+    // Section 1, 5, 8, 9: Restaurant management & operational terminal routes belong exclusively on tenant domains (https://<slug>.dinely.food).
+    // When visited on the platform domain (dinely.food), redirect to canonical tenant domain or workspace selector.
     if (
       cleanPath === '/restaurant' ||
       cleanPath.startsWith('/restaurant/') ||
       cleanPath === '/owner' ||
       cleanPath.startsWith('/owner/') ||
-      cleanPath === '/dashboard'
+      cleanPath === '/dashboard' ||
+      cleanPath === '/operations' ||
+      cleanPath.startsWith('/operations/') ||
+      cleanPath === '/kitchen' ||
+      cleanPath.startsWith('/kitchen/') ||
+      cleanPath === '/waiter' ||
+      cleanPath.startsWith('/waiter/') ||
+      cleanPath === '/bar' ||
+      cleanPath.startsWith('/bar/') ||
+      cleanPath === '/inventory' ||
+      cleanPath.startsWith('/inventory/') ||
+      cleanPath === '/billing' ||
+      cleanPath.startsWith('/billing/') ||
+      cleanPath === '/menu' ||
+      cleanPath.startsWith('/menu/') ||
+      cleanPath === '/floorplan' ||
+      cleanPath.startsWith('/floorplan/') ||
+      cleanPath === '/tables' ||
+      cleanPath.startsWith('/tables/') ||
+      cleanPath === '/staff' ||
+      cleanPath.startsWith('/staff/') ||
+      cleanPath === '/reports' ||
+      cleanPath.startsWith('/reports/') ||
+      cleanPath === '/settings' ||
+      cleanPath.startsWith('/settings/')
     ) {
-      if (!checkWorkspaceAccess('restaurant')) {
-        return currentUser ? (
-          <NotFoundPage onNavigate={navigateTo} />
-        ) : (
+      if (!currentUser) {
+        return (
           <RoleLoginPage
             portal="restaurant"
             onNavigate={navigateTo}
@@ -993,18 +1115,17 @@ function AppContent() {
               setCurrentUser(user);
               try {
                 const myRests = await api.getOwnerRestaurants(user?.email, user?.id);
-                if (myRests.length === 0) {
+                if (!myRests || myRests.length === 0) {
                   navigateTo('/wizard?mode=create');
                 } else if (myRests.length === 1) {
                   const onlyRest = myRests[0];
                   await api.switchActiveRestaurant(onlyRest.id);
-                  setCurrentRestaurant(onlyRest);
-                  if (
+                  const isLive =
                     onlyRest.isApproved !== false &&
                     onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
-                    onlyRest.lifecycleStatus !== 'REJECTED'
-                  ) {
-                    navigateTo('/restaurant/dashboard');
+                    onlyRest.lifecycleStatus !== 'REJECTED';
+                  if (isLive) {
+                    window.location.href = getTenantUrl(onlyRest, cleanPath.startsWith('/restaurant') ? cleanPath : '/restaurant/dashboard');
                   } else {
                     navigateTo('/restaurant/pending-approval');
                   }
@@ -1019,271 +1140,16 @@ function AppContent() {
         );
       }
 
-      if (!currentRestaurant) {
-        const storedRestId = api.getCurrentRestaurantId();
-        if (storedRestId) {
-          return (
-            <LoadingScreen
-              status="Loading restaurant workspace..."
-              substatus="Retrieving active venue configuration & operational data"
-              onRetry={() => {
-                const id = api.getCurrentRestaurantId();
-                if (id) {
-                  api.getRestaurantDetails(id).then((r) => {
-                    if (r) setCurrentRestaurant(r);
-                  }).catch(() => {});
-                }
-              }}
-              onChooseRestaurant={() => {
-                localStorage.removeItem('dinely_active_restaurant_id');
-                navigateTo('/workspace');
-              }}
-            />
-          );
-        }
-
-        return (
-          <WorkspaceSelector
-            user={currentUser}
-            onSelectRestaurant={async (rest) => {
-              await api.switchActiveRestaurant(rest.id);
-              const updated = (await api.getRestaurantDetails(rest.id)) || rest;
-              setCurrentRestaurant(updated);
-              const isLive =
-                updated?.lifecycleStatus === 'LIVE' ||
-                updated?.lifecycleStatus === 'APPROVED' ||
-                (updated?.isApproved === true &&
-                  updated?.lifecycleStatus !== 'PENDING_APPROVAL' &&
-                  updated?.lifecycleStatus !== 'REJECTED' &&
-                  updated?.lifecycleStatus !== 'ARCHIVED' &&
-                  updated?.lifecycleStatus !== 'SUSPENDED');
-              if (isLive) {
-                navigateTo('/restaurant/dashboard');
-              } else {
-                navigateTo('/restaurant/pending-approval');
-              }
-            }}
-            onCreateNewRestaurant={() => navigateTo('/wizard?mode=create')}
-            onLogout={() => handleLogout('/restaurant/login')}
-          />
-        );
-      }
-
-      const isLiveRestaurant =
-        currentRestaurant.lifecycleStatus === 'LIVE' ||
-        currentRestaurant.lifecycleStatus === 'APPROVED' ||
-        (currentRestaurant.isApproved === true &&
-          currentRestaurant.lifecycleStatus !== 'PENDING_APPROVAL' &&
-          currentRestaurant.lifecycleStatus !== 'REJECTED' &&
-          currentRestaurant.lifecycleStatus !== 'ARCHIVED' &&
-          currentRestaurant.lifecycleStatus !== 'SUSPENDED');
-
-      if (!isLiveRestaurant && currentUser?.role !== 'SUPER_ADMIN') {
-        return (
-          <PendingApprovalPage
-            restaurantId={currentRestaurant.id}
-            onNavigate={navigateTo}
-            onLogout={() => handleLogout('/restaurant/login')}
-          />
-        );
-      }
-
       return (
-        <RestaurantApp
-          activeRestaurant={currentRestaurant}
-          onEditSetup={() => navigateTo('/wizard')}
-          onLogout={() => handleLogout('/restaurant/login')}
+        <PlatformTenantRedirector
+          user={currentUser}
+          targetPath={cleanPath}
           onNavigate={navigateTo}
+          onLogout={() => handleLogout('/restaurant/login')}
         />
       );
     }
 
-    // 10. Kitchen Display System (KDS)
-    if (cleanPath === '/kitchen' || cleanPath.startsWith('/kitchen/')) {
-      if (!isModuleEnabled(currentRestaurant, 'kitchen')) {
-        return (
-          <ModuleNotEnabledPage
-            moduleName="Kitchen Display System (KDS)"
-            restaurant={currentRestaurant}
-            onNavigate={navigateTo}
-          />
-        );
-      }
-
-      if (!checkWorkspaceAccess('kitchen')) {
-        return currentUser ? (
-          <NotFoundPage onNavigate={navigateTo} />
-        ) : (
-          <RoleLoginPage
-            portal="kitchen"
-            onNavigate={navigateTo}
-            onLoginSuccess={(_, user) => {
-              setCurrentUser(user);
-              navigateTo('/kitchen/dashboard');
-            }}
-          />
-        );
-      }
-
-      if (
-        currentRestaurant &&
-        !currentRestaurant.isApproved &&
-        currentRestaurant.lifecycleStatus !== 'APPROVED' &&
-        currentRestaurant.lifecycleStatus !== 'LIVE' &&
-        currentRestaurant.lifecycleStatus !== 'ACTIVE' &&
-        currentUser?.role !== 'SUPER_ADMIN'
-      ) {
-        return (
-          <PendingApprovalPage
-            restaurantId={currentRestaurant.id}
-            onNavigate={navigateTo}
-            onLogout={() => handleLogout('/kitchen/login')}
-          />
-        );
-      }
-
-      return (
-        <KitchenETADashboard
-          orders={kitchenOrders}
-          onRefreshOrders={() => {
-            const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
-            if (restId) {
-              api.getOrders(restId).then(setKitchenOrders).catch(() => {});
-            }
-          }}
-          onLogout={() => handleLogout('/kitchen/login')}
-        />
-      );
-    }
-
-    // 11. Bar Terminal KDS
-    if (cleanPath === '/bar' || cleanPath.startsWith('/bar/')) {
-      if (!isModuleEnabled(currentRestaurant, 'bar')) {
-        return (
-          <ModuleNotEnabledPage
-            moduleName="Bar Terminal KDS"
-            restaurant={currentRestaurant}
-            onNavigate={navigateTo}
-          />
-        );
-      }
-
-      if (!checkWorkspaceAccess('bar')) {
-        return currentUser ? (
-          <NotFoundPage onNavigate={navigateTo} />
-        ) : (
-          <RoleLoginPage
-            portal="bar"
-            onNavigate={navigateTo}
-            onLoginSuccess={(_, user) => {
-              setCurrentUser(user);
-              navigateTo('/bar/dashboard');
-            }}
-          />
-        );
-      }
-
-      if (
-        currentRestaurant &&
-        !currentRestaurant.isApproved &&
-        currentRestaurant.lifecycleStatus !== 'APPROVED' &&
-        currentRestaurant.lifecycleStatus !== 'LIVE' &&
-        currentRestaurant.lifecycleStatus !== 'ACTIVE' &&
-        currentUser?.role !== 'SUPER_ADMIN'
-      ) {
-        return (
-          <PendingApprovalPage
-            restaurantId={currentRestaurant.id}
-            onNavigate={navigateTo}
-            onLogout={() => handleLogout('/bar/login')}
-          />
-        );
-      }
-
-      return <BarTerminal onLogout={() => handleLogout('/bar/login')} />;
-    }
-
-    // 12. Waiter Terminal OS
-    if (cleanPath === '/waiter' || cleanPath.startsWith('/waiter/')) {
-      if (!isModuleEnabled(currentRestaurant, 'waiter')) {
-        return (
-          <ModuleNotEnabledPage
-            moduleName="Waiter Terminal OS"
-            restaurant={currentRestaurant}
-            onNavigate={navigateTo}
-          />
-        );
-      }
-
-      if (!checkWorkspaceAccess('waiter')) {
-        return currentUser ? (
-          <NotFoundPage onNavigate={navigateTo} />
-        ) : (
-          <RoleLoginPage
-            portal="waiter"
-            onNavigate={navigateTo}
-            onLoginSuccess={(_, user) => {
-              setCurrentUser(user);
-              navigateTo('/waiter');
-            }}
-          />
-        );
-      }
-
-      if (
-        currentRestaurant &&
-        !currentRestaurant.isApproved &&
-        currentRestaurant.lifecycleStatus !== 'APPROVED' &&
-        currentRestaurant.lifecycleStatus !== 'LIVE' &&
-        currentRestaurant.lifecycleStatus !== 'ACTIVE' &&
-        currentUser?.role !== 'SUPER_ADMIN'
-      ) {
-        return (
-          <PendingApprovalPage
-            restaurantId={currentRestaurant.id}
-            onNavigate={navigateTo}
-            onLogout={() => handleLogout('/waiter/login')}
-          />
-        );
-      }
-
-      return <WaiterTerminalOS onLogout={() => handleLogout('/waiter/login')} />;
-    }
-
-    // 13. Inventory Terminal OS
-    if (cleanPath === '/inventory' || cleanPath.startsWith('/inventory/')) {
-      if (!isModuleEnabled(currentRestaurant, 'inventory')) {
-        return (
-          <ModuleNotEnabledPage
-            moduleName="Inventory OS"
-            restaurant={currentRestaurant}
-            onNavigate={navigateTo}
-          />
-        );
-      }
-
-      if (!checkWorkspaceAccess('inventory')) {
-        return currentUser ? (
-          <NotFoundPage onNavigate={navigateTo} />
-        ) : (
-          <RoleLoginPage
-            portal="inventory"
-            onNavigate={navigateTo}
-            onLoginSuccess={(_, user) => {
-              setCurrentUser(user);
-              navigateTo('/inventory/terminal');
-            }}
-          />
-        );
-      }
-
-      return (
-        <InventoryTerminalOS
-          onLogout={() => handleLogout('/inventory/login')}
-          activeRestaurantId={currentRestaurant?.id}
-        />
-      );
-    }
 
     // 14. Customer Mobile Ordering Web App (Deep Linking Support)
     if (

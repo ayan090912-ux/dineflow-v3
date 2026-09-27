@@ -56,6 +56,7 @@ import {
 import { api, realtimeBus } from '../../packages/api/client';
 import { ensureFirebaseAuthReady, firebaseAuth, getValidFirebaseIdToken, signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 import { Organization, Restaurant, AuditLog } from '../../packages/types';
+import { getTenantUrl } from '../../packages/utils/tenantResolver';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export type AdminState =
@@ -1212,7 +1213,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.06]">
                         <span className="text-white/40 font-mono">Domain:</span>
                         <a
-                          href={`https://${rest.publicSlug || rest.slug}.dinely.food`}
+                          href={getTenantUrl(rest, '')}
                           target="_blank"
                           rel="noreferrer"
                           className="font-mono text-emerald-400 hover:underline flex items-center gap-1 font-semibold truncate max-w-[200px]"
@@ -1231,7 +1232,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   <div className="pt-3 border-t border-white/[0.08] space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <a
-                        href={`https://${rest.publicSlug || rest.slug}.dinely.food/restaurant/dashboard`}
+                        href={getTenantUrl(rest, '/restaurant/dashboard')}
                         target="_blank"
                         rel="noreferrer"
                         className="py-1.5 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold flex items-center justify-center gap-1.5 border border-amber-500/30 transition-all"
@@ -1240,7 +1241,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                         <ExternalLink className="w-3 h-3 shrink-0" />
                       </a>
                       <a
-                        href={`https://${rest.publicSlug || rest.slug}.dinely.food/customer`}
+                        href={getTenantUrl(rest, '/customer')}
                         target="_blank"
                         rel="noreferrer"
                         className="py-1.5 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-white text-xs font-medium flex items-center justify-center gap-1.5 border border-white/[0.08] transition-all"

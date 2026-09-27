@@ -150,7 +150,7 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     return 'BILLING';
   }
 
-  // 7. Restaurant Settings / Tenant Dashboard
+  // 7. Restaurant Settings / Tenant Dashboard & Operational Management
   if (
     p === '/settings' ||
     p.startsWith('/settings/') ||
@@ -158,7 +158,17 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p === '/restaurant' ||
     p.startsWith('/restaurant/') ||
     p === '/owner' ||
-    p.startsWith('/owner/')
+    p.startsWith('/owner/') ||
+    p === '/menu' ||
+    p.startsWith('/menu/') ||
+    p === '/floorplan' ||
+    p.startsWith('/floorplan/') ||
+    p === '/tables' ||
+    p.startsWith('/tables/') ||
+    p === '/staff' ||
+    p.startsWith('/staff/') ||
+    p === '/reports' ||
+    p.startsWith('/reports/')
   ) {
     return 'SETTINGS';
   }
@@ -169,8 +179,6 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p === '/' ||
     p === '/customer' ||
     p.startsWith('/customer/') ||
-    p === '/menu' ||
-    p.startsWith('/menu/') ||
     p === '/table' ||
     p.startsWith('/table/') ||
     p === '/t' ||
@@ -208,6 +216,23 @@ export function getRestaurantPublicDomain(
     return `https://${cleanSlug}.dinely.food`;
   }
   return 'https://dinely.food';
+}
+
+/**
+ * ONE Canonical Tenant URL Generator for Dinely Multi-Tenant OS.
+ * Produces: https://<slug>.dinely.food/<path>
+ * Automatically handles object or string slug, ensures leading slash on path.
+ */
+export function getTenantUrl(
+  slugOrRest?: string | { publicSlug?: string; slug?: string; id?: string; domain?: string } | null,
+  path: string = ''
+): string {
+  const base = getRestaurantPublicDomain(slugOrRest);
+  if (!path || path === '/') {
+    return base;
+  }
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${cleanPath}`;
 }
 
 /**

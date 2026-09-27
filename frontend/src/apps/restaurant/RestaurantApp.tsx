@@ -80,7 +80,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api } from '../../packages/api/client';
-import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../../packages/utils/tenantResolver';
+import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl } from '../../packages/utils/tenantResolver';
 import { Order, MenuItem, Table, Employee, InventoryItem, Supplier, OrderStatus, MenuCategory, BarCategory, TableSession, BusinessDay, getFulfillmentStation, Bill, PaymentMethod } from '../../packages/types';
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
@@ -107,7 +107,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   onNavigate,
 }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'workspace_settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'workspace_settings'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
+      if (p.includes('/menu')) return 'menu';
+      if (p.includes('/floorplan') || p.includes('/tables')) return 'tables';
+      if (p.includes('/staff') || p.includes('/employees')) return 'staff';
+      if (p.includes('/inventory')) return 'inventory';
+      if (p.includes('/billing')) return 'billing';
+      if (p.includes('/orders')) return 'orders';
+      if (p.includes('/theme')) return 'theme';
+      if (p.includes('/waiter')) return 'waiter';
+      if (p.includes('/kitchen')) return 'kitchen';
+      if (p.includes('/bar')) return 'bar';
+      if (p.includes('/workspace_settings') || p.includes('/settings')) return 'workspace_settings';
+    }
+    return 'dashboard';
+  });
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -283,23 +299,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
 
   useEffect(() => {
-    if (activeRestaurant && (!currentRestaurant || currentRestaurant.id !== activeRestaurant.id)) {
-      setCurrentRestaurant(activeRestaurant);
-      if (activeRestaurant.theme) {
-        setTheme({
-          restaurantId: activeRestaurant.id,
-          restaurantName: activeRestaurant.name,
-          logo: activeRestaurant.theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
-          bannerUrl: activeRestaurant.theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-          primaryColor: activeRestaurant.theme.primaryColor || '#e11d48',
-          secondaryColor: activeRestaurant.theme.secondaryColor || '#475569',
-          accentColor: '#f59e0b',
-          backgroundColor: '#f8fafc',
-          textColor: '#0f172a',
-          fontFamily: 'sans',
-          borderRadius: 'lg',
-          currency: activeRestaurant.theme.currency || activeRestaurant.currency || 'INR (₹)',
-        });
+    if (activeRestaurant) {
+      api.switchActiveRestaurant(activeRestaurant.id).catch(() => {});
+      if (!currentRestaurant || currentRestaurant.id !== activeRestaurant.id) {
+        setCurrentRestaurant(activeRestaurant);
+        if (activeRestaurant.theme) {
+          setTheme({
+            restaurantId: activeRestaurant.id,
+            restaurantName: activeRestaurant.name,
+            logo: activeRestaurant.theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
+            bannerUrl: activeRestaurant.theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+            primaryColor: activeRestaurant.theme.primaryColor || '#e11d48',
+            secondaryColor: activeRestaurant.theme.secondaryColor || '#475569',
+            accentColor: '#f59e0b',
+            backgroundColor: '#f8fafc',
+            textColor: '#0f172a',
+            fontFamily: 'sans',
+            borderRadius: 'lg',
+            currency: activeRestaurant.theme.currency || activeRestaurant.currency || 'INR (₹)',
+          });
+        }
       }
     }
   }, [activeRestaurant]);
@@ -358,13 +377,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   });
 
   const handleSwitchRestaurant = async (restId: string) => {
-    const updatedRest = await api.switchActiveRestaurant(restId);
-    if (updatedRest) {
-      setCurrentRestaurant(updatedRest);
+    let targetRest = allMyRestaurants.find((r) => r.id === restId);
+    if (!targetRest) {
+      targetRest = (await api.getRestaurantDetails(restId).catch(() => null)) || null;
     }
-    await loadData();
-    setIsOutletModalOpen(false);
-    addToast('success', 'Switched Active Restaurant Outlet 🏪', `Now viewing operational dashboard for ${updatedRest?.name || 'selected venue'}.`);
+    if (targetRest) {
+      await api.switchActiveRestaurant(restId);
+      const targetUrl = getTenantUrl(targetRest, '/restaurant/dashboard');
+      window.location.href = targetUrl;
+    } else {
+      await api.switchActiveRestaurant(restId);
+      await loadData();
+      setIsOutletModalOpen(false);
+    }
   };
 
   const handleCreateBranch = async () => {
@@ -1641,8 +1666,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               variant="outline"
               size="sm"
               onClick={() => {
-                if (onNavigate) onNavigate('/workspace');
-                else window.location.href = '/workspace';
+                if (allMyRestaurants.length > 1) {
+                  setIsOutletModalOpen(true);
+                } else if (onNavigate) {
+                  onNavigate('/workspace');
+                } else {
+                  window.location.href = 'https://dinely.food/workspace';
+                }
               }}
               className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white hover:bg-[#181d27]"
               icon={<Store className="w-3.5 h-3.5 mr-1 text-orange-400" />}
