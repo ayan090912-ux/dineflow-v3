@@ -291,11 +291,10 @@ async def signup_restaurant_tenant(
         owner_uid=user_uid,
         currency="INR (₹)",
         tax_percentage=5.0,
-        is_approved=True,
-        lifecycle_status="LIVE",
-        status="OPEN",
-        approved_at=datetime.now(timezone.utc),
-        approved_by="Dinely Auto Provisioner"
+        is_approved=False,
+        lifecycle_status="PENDING_APPROVAL",
+        status="CLOSED",
+        submitted_at=datetime.now(timezone.utc),
     )
     db.add(new_rest)
 
@@ -436,6 +435,16 @@ async def signup_restaurant_tenant(
 
     await db.commit()
     await db.refresh(new_rest)
+
+    asyncio.create_task(ws_manager.broadcast_global({
+        "type": "APPLICATION_CREATED",
+        "restaurantId": new_rest.id,
+        "restaurant_id": new_rest.id,
+        "restaurantName": new_rest.name,
+        "ownerEmail": new_rest.owner_email,
+        "lifecycleStatus": "PENDING_APPROVAL",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }))
 
     return {
         "status": "success",
