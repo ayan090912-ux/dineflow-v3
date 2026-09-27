@@ -163,11 +163,35 @@ async def run_audit():
         print(f" -> Tables verified: Tenant 1 has {len(t1_tables)} tables; Tenant 2 has {len(t2_tables)} tables. Zero ID leakage.")
 
         # -------------------------------------------------------------
-        # STEP 7: MENU CATEGORIES & ITEMS ISOLATION
+        # STEP 7: MENU CATEGORIES & ITEMS ISOLATION (WITH STRICT OWNER AUTH)
         # -------------------------------------------------------------
         print("\n[STEP 7] Creating custom distinct menu items for Tenant 1 and Tenant 2...")
-        # Tenant 1 Categories & Items
-        cat1_res = await client.post(f"/api/v1/restaurants/{t1_id}/categories", json={"name": "Goan Curries", "sortOrder": 1})
+        from jose import jwt as jose_jwt
+        from app.core.config.settings import get_settings
+        app_settings = get_settings()
+
+        token_1 = jose_jwt.encode(
+            {"sub": "uid-firebase-rajesh-777", "email": "rajesh.nair@coastalspice.food", "role": "OWNER", "restaurant_id": t1_id},
+            app_settings.JWT_ACCESS_SECRET_KEY,
+            algorithm=app_settings.JWT_ALGORITHM
+        )
+        headers_1 = {"Authorization": f"Bearer {token_1}"}
+
+        token_2 = jose_jwt.encode(
+            {"sub": "uid-firebase-kenji-888", "email": "kenji.sato@neonsakura.tokyo", "role": "OWNER", "restaurant_id": t2_id},
+            app_settings.JWT_ACCESS_SECRET_KEY,
+            algorithm=app_settings.JWT_ALGORITHM
+        )
+        headers_2 = {"Authorization": f"Bearer {token_2}"}
+
+        # Cross-Tenant Rejection Test: Owner 1 attempting to mutate Tenant 2 must be rejected with 403
+        cross_res = await client.post(f"/api/v1/restaurants/{t2_id}/categories", json={"name": "Hacked Category", "sortOrder": 99}, headers=headers_1)
+        assert cross_res.status_code == 403, f"Cross-tenant category creation MUST be rejected with 403! Got {cross_res.status_code}"
+        print(" -> Verified: Cross-tenant category mutation strictly rejected with 403 Forbidden.")
+
+        # Tenant 1 Categories & Items (Authorized)
+        cat1_res = await client.post(f"/api/v1/restaurants/{t1_id}/categories", json={"name": "Goan Curries", "sortOrder": 1}, headers=headers_1)
+        assert cat1_res.status_code == 201, f"Failed creating cat 1: {cat1_res.text}"
         cat1_id = cat1_res.json()["id"]
         await client.post(f"/api/v1/restaurants/{t1_id}/menu", json={
             "categoryId": cat1_id,
@@ -175,10 +199,11 @@ async def run_audit():
             "price": 420.00,
             "isVegetarian": False,
             "targetDestination": "KITCHEN"
-        })
+        }, headers=headers_1)
 
-        # Tenant 2 Categories & Items
-        cat2_res = await client.post(f"/api/v1/restaurants/{t2_id}/categories", json={"name": "Sake & Cocktails", "sortOrder": 1})
+        # Tenant 2 Categories & Items (Authorized)
+        cat2_res = await client.post(f"/api/v1/restaurants/{t2_id}/categories", json={"name": "Sake & Cocktails", "sortOrder": 1}, headers=headers_2)
+        assert cat2_res.status_code == 201, f"Failed creating cat 2: {cat2_res.text}"
         cat2_id = cat2_res.json()["id"]
         await client.post(f"/api/v1/restaurants/{t2_id}/menu", json={
             "categoryId": cat2_id,
@@ -186,7 +211,7 @@ async def run_audit():
             "price": 850.00,
             "isVegetarian": True,
             "targetDestination": "BAR"
-        })
+        }, headers=headers_2)
 
         # Verify Menu isolation
         m1 = (await client.get(f"/api/v1/restaurants/{t1_id}/menu")).json()["items"]
@@ -266,19 +291,29 @@ async def run_audit():
         # STEP 10: BILLING, TAX & COMPLIANCE ISOLATION
         # -------------------------------------------------------------
         print("\n[STEP 10] Configuring and verifying Billing & Tax isolation...")
+        # Cross-Tenant Rejection Test: Owner 1 attempting to update Tenant 2 billing must fail with 403
+        cross_bill = await client.put(f"/api/v1/restaurants/{t2_id}/billing/config", json={
+            "legal_name": "Unauthorized Intrusion",
+            "gstin": "00XXXXX0000X0Z0",
+            "upi_id": "hacker@upi",
+            "upi_merchant_name": "Hacker"
+        }, headers=headers_1)
+        assert cross_bill.status_code == 403, f"Cross-tenant billing modification MUST be rejected with 403! Got {cross_bill.status_code}"
+        print(" -> Verified: Cross-tenant billing modification strictly rejected with 403 Forbidden.")
+
         await client.put(f"/api/v1/restaurants/{t1_id}/billing/config", json={
             "legal_name": "Coastal Spice Seafood LLP",
             "gstin": "30AAAAA1111A1Z5",
             "upi_id": "coastalspice@okaxis",
             "upi_merchant_name": "Coastal Spice Retreat"
-        })
+        }, headers=headers_1)
 
         await client.put(f"/api/v1/restaurants/{t2_id}/billing/config", json={
             "legal_name": "Neon Sakura Tokyo Kabushiki Gaisha",
             "gstin": "27BBBBB2222B2Z6",
             "upi_id": "neonsakura@upi",
             "upi_merchant_name": "Neon Sakura Lounge"
-        })
+        }, headers=headers_2)
 
         cfg1 = (await client.get(f"/api/v1/restaurants/{t1_id}/billing/config")).json()
         cfg2 = (await client.get(f"/api/v1/restaurants/{t2_id}/billing/config")).json()
