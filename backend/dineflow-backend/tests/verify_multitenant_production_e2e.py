@@ -214,14 +214,14 @@ async def run_audit():
         app_settings = get_settings()
 
         token_1 = jose_jwt.encode(
-            {"sub": "uid-firebase-rajesh-777", "email": "rajesh.nair@coastalspice.food", "role": "OWNER", "restaurant_id": t1_id},
+            {"sub": owner1_uid, "email": owner1_email, "role": "OWNER", "restaurant_id": t1_id},
             app_settings.JWT_ACCESS_SECRET_KEY,
             algorithm=app_settings.JWT_ALGORITHM
         )
         headers_1 = {"Authorization": f"Bearer {token_1}"}
 
         token_2 = jose_jwt.encode(
-            {"sub": "uid-firebase-kenji-888", "email": "kenji.sato@neonsakura.tokyo", "role": "OWNER", "restaurant_id": t2_id},
+            {"sub": owner2_uid, "email": owner2_email, "role": "OWNER", "restaurant_id": t2_id},
             app_settings.JWT_ACCESS_SECRET_KEY,
             algorithm=app_settings.JWT_ALGORITHM
         )
