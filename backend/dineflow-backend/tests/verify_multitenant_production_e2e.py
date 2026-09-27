@@ -305,7 +305,7 @@ async def run_audit():
         # STEP 8: CUSTOMER ORDERS, REALTIME WEBSOCKETS & KITCHEN/BAR ROUTING ISOLATION
         # -------------------------------------------------------------
         print("\n[STEP 8] Connecting tenant-scoped WebSockets and creating active orders...")
-        from app.modules.websocket.manager import manager
+        from app.modules.websocket.manager import ws_manager
         import json as json_lib
 
         class MockWebSocket:
@@ -320,8 +320,8 @@ async def run_audit():
         ws_kitchen_1 = MockWebSocket("Tenant1_Kitchen")
         ws_kitchen_2 = MockWebSocket("Tenant2_Kitchen")
 
-        await manager.connect(ws_kitchen_1, restaurant_id=t1_id, role="KITCHEN")
-        await manager.connect(ws_kitchen_2, restaurant_id=t2_id, role="KITCHEN")
+        await ws_manager.connect(ws_kitchen_1, restaurant_id=t1_id, role="KITCHEN")
+        await ws_manager.connect(ws_kitchen_2, restaurant_id=t2_id, role="KITCHEN")
 
         ord1_payload = {
             "restaurantId": t1_id,
@@ -358,8 +358,8 @@ async def run_audit():
         assert not any(e.get("data", {}).get("id") == ord1_id or ord1_id in str(e) for e in t2_events), "Tenant 2 Kitchen must NEVER receive Order 1"
         print(" -> Realtime WebSocket Isolation verified: Kitchen events remain strictly tenant-scoped with zero cross-tenant leakage.")
 
-        await manager.disconnect(ws_kitchen_1)
-        await manager.disconnect(ws_kitchen_2)
+        await ws_manager.disconnect(ws_kitchen_1)
+        await ws_manager.disconnect(ws_kitchen_2)
 
         # Cross-Tenant Orders Rejection Test
         cross_ord_1 = await client.get(f"/api/v1/orders/restaurant/{t2_id}", headers=headers_1)
