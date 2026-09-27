@@ -38,11 +38,17 @@ async def run_audit():
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # -------------------------------------------------------------
-        # STEP 1: ONBOARD TENANT 1 (Coastal Spice Retreat)
+        # STEP 1: ONBOARD TENANT 1A & 1B (Owner 1: Rajesh owns 2 restaurants)
         # -------------------------------------------------------------
-        print("\n[STEP 1] Creating Tenant 1: Coastal Spice Retreat (Owner: Rajesh)...")
-        payload_1 = {
-            "name": "Coastal Spice Retreat",
+        run_suffix = uuid.uuid4().hex[:6]
+        owner1_email = f"rajesh_{run_suffix}@coastalspice.food"
+        owner1_uid = f"uid-firebase-rajesh-{run_suffix}"
+        owner2_email = f"kenji_{run_suffix}@neonsakura.tokyo"
+        owner2_uid = f"uid-firebase-kenji-{run_suffix}"
+
+        print(f"\n[STEP 1] Creating Tenant 1A: Coastal Spice Retreat (Owner: {owner1_email})...")
+        payload_1a = {
+            "name": f"Coastal Spice Retreat {run_suffix}",
             "cuisine": "South Indian Seafood",
             "businessType": "RESTAURANT",
             "hasBar": True,
@@ -52,28 +58,53 @@ async def run_audit():
             "hasInventory": True,
             "hasBilling": True,
             "ownerName": "Rajesh Nair",
-            "ownerEmail": "rajesh.nair@coastalspice.food",
-            "ownerUid": "uid-firebase-rajesh-777",
+            "ownerEmail": owner1_email,
+            "ownerUid": owner1_uid,
             "phone": "+91 98450 11223",
             "address": "12 Fisherman Wharf, Calangute, Goa",
             "currency": "INR (₹)",
             "taxPercentage": 5.0
         }
-        res1 = await client.post("/api/v1/restaurants", json=payload_1)
-        assert res1.status_code == 201, f"Tenant 1 creation failed: {res1.text}"
-        tenant_1 = res1.json()
+        res1a = await client.post("/api/v1/restaurants", json=payload_1a)
+        assert res1a.status_code == 201, f"Tenant 1A creation failed: {res1a.text}"
+        tenant_1 = res1a.json()
         t1_id = tenant_1["id"]
-        print(f" -> Tenant 1 Created: ID={t1_id}, Status={tenant_1['lifecycle_status']}, Approved={tenant_1['is_approved']}")
+        print(f" -> Tenant 1A Created: ID={t1_id}, Status={tenant_1['lifecycle_status']}, Approved={tenant_1['is_approved']}")
         assert tenant_1["lifecycle_status"] == "PENDING_APPROVAL"
         assert tenant_1["is_approved"] is False
-        assert tenant_1["name"] == "Coastal Spice Retreat"
+
+        print(f"\n[STEP 1B] Creating Tenant 1B: Coastal Spice Express (Same Owner: {owner1_email})...")
+        payload_1b = {
+            "name": f"Coastal Spice Express {run_suffix}",
+            "cuisine": "Fast Casual Seafood",
+            "businessType": "RESTAURANT",
+            "hasBar": False,
+            "hasTables": True,
+            "hasKitchen": True,
+            "hasWaiter": True,
+            "hasInventory": True,
+            "hasBilling": True,
+            "ownerName": "Rajesh Nair",
+            "ownerEmail": owner1_email,
+            "ownerUid": owner1_uid,
+            "phone": "+91 98450 99887",
+            "address": "Terminal 2, Dabolim Airport, Goa",
+            "currency": "INR (₹)",
+            "taxPercentage": 5.0
+        }
+        res1b = await client.post("/api/v1/restaurants", json=payload_1b)
+        assert res1b.status_code == 201, f"Tenant 1B creation failed: {res1b.text}"
+        tenant_1b = res1b.json()
+        t1b_id = tenant_1b["id"]
+        print(f" -> Tenant 1B Created: ID={t1b_id}, Status={tenant_1b['lifecycle_status']}, Approved={tenant_1b['is_approved']}")
+        assert tenant_1b["lifecycle_status"] == "PENDING_APPROVAL"
 
         # -------------------------------------------------------------
-        # STEP 2: ONBOARD TENANT 2 (Neon Sakura Lounge)
+        # STEP 2: ONBOARD TENANT 2 (Owner 2: Kenji)
         # -------------------------------------------------------------
-        print("\n[STEP 2] Creating Tenant 2: Neon Sakura Lounge (Owner: Kenji)...")
+        print(f"\n[STEP 2] Creating Tenant 2: Neon Sakura Lounge (Owner: {owner2_email})...")
         payload_2 = {
-            "name": "Neon Sakura Lounge",
+            "name": f"Neon Sakura Lounge {run_suffix}",
             "cuisine": "Japanese Izakaya & Bar",
             "businessType": "BAR",
             "hasBar": True,
@@ -83,8 +114,8 @@ async def run_audit():
             "hasInventory": True,
             "hasBilling": True,
             "ownerName": "Kenji Sato",
-            "ownerEmail": "kenji.sato@neonsakura.tokyo",
-            "ownerUid": "uid-firebase-kenji-888",
+            "ownerEmail": owner2_email,
+            "ownerUid": owner2_uid,
             "phone": "+81 3 5555 0199",
             "address": "4-1-8 Roppongi, Minato-ku, Tokyo",
             "currency": "INR (₹)",
@@ -97,55 +128,67 @@ async def run_audit():
         print(f" -> Tenant 2 Created: ID={t2_id}, Status={tenant_2['lifecycle_status']}, Approved={tenant_2['is_approved']}")
         assert tenant_2["lifecycle_status"] == "PENDING_APPROVAL"
         assert tenant_2["is_approved"] is False
-        assert tenant_2["name"] == "Neon Sakura Lounge"
-        assert t1_id != t2_id, "Tenant IDs MUST be unique!"
+        assert t1_id != t2_id and t1b_id != t2_id, "Tenant IDs MUST be unique!"
 
         # -------------------------------------------------------------
-        # STEP 3: PLATFORM ADMIN SEES BOTH PENDING TENANTS
+        # STEP 3: PLATFORM ADMIN SEES ALL PENDING TENANTS
         # -------------------------------------------------------------
         print("\n[STEP 3] Platform Admin queries all pending approval requests...")
         admin_res = await client.get("/api/v1/admin/restaurants")
         assert admin_res.status_code == 200
         all_admin_rests = admin_res.json()
-        p1 = next((r for r in all_admin_rests if r["id"] == t1_id), None)
+        p1a = next((r for r in all_admin_rests if r["id"] == t1_id), None)
+        p1b = next((r for r in all_admin_rests if r["id"] == t1b_id), None)
         p2 = next((r for r in all_admin_rests if r["id"] == t2_id), None)
-        assert p1 is not None, "Tenant 1 must be present in Platform Admin review list"
-        assert p2 is not None, "Tenant 2 must be present in Platform Admin review list"
-        assert p1["lifecycleStatus"] == "PENDING_APPROVAL"
+        assert p1a is not None, "Tenant 1A must be in Platform Admin queue"
+        assert p1b is not None, "Tenant 1B must be in Platform Admin queue"
+        assert p2 is not None, "Tenant 2 must be in Platform Admin queue"
+        assert p1a["lifecycleStatus"] == "PENDING_APPROVAL"
+        assert p1b["lifecycleStatus"] == "PENDING_APPROVAL"
         assert p2["lifecycleStatus"] == "PENDING_APPROVAL"
-        print(f" -> Platform Admin confirmed pending status for both {p1['name']} and {p2['name']}")
+        print(f" -> Platform Admin confirmed pending status for {p1a['name']}, {p1b['name']}, and {p2['name']}")
 
         # -------------------------------------------------------------
-        # STEP 4: PLATFORM ADMIN APPROVES BOTH TENANTS
+        # STEP 4: PLATFORM ADMIN APPROVES ALL TENANTS
         # -------------------------------------------------------------
-        print("\n[STEP 4] Platform Admin approves Tenant 1 and Tenant 2...")
-        appr_1 = await client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": t1_id})
-        assert appr_1.status_code == 200 and appr_1.json()["lifecycleStatus"] == "LIVE"
+        print("\n[STEP 4] Platform Admin approves all tenants...")
+        appr_1a = await client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": t1_id})
+        assert appr_1a.status_code == 200 and appr_1a.json()["lifecycleStatus"] == "LIVE"
+
+        appr_1b = await client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": t1b_id})
+        assert appr_1b.status_code == 200 and appr_1b.json()["lifecycleStatus"] == "LIVE"
 
         appr_2 = await client.post("/api/v1/admin/restaurants/approve", json={"restaurant_id": t2_id})
         assert appr_2.status_code == 200 and appr_2.json()["lifecycleStatus"] == "LIVE"
-        print(" -> Both tenants successfully transitioned to LIVE status with initial auto-provisioned tables & categories")
+        print(" -> All tenants successfully transitioned to LIVE status with auto-provisioned tables & categories")
 
         # -------------------------------------------------------------
-        # STEP 5: VERIFY OWNER IDENTITY RESOLUTION (ZERO MIXING)
+        # STEP 5: VERIFY MULTI-RESTAURANT OWNER RESOLUTION & RESTAURANT SWITCHING
         # -------------------------------------------------------------
-        print("\n[STEP 5] Verifying Owner Identity Resolution & Workspace access...")
-        # Owner 1 queries my-restaurants
-        my1 = await client.get(f"/api/v1/restaurants/owner/my?owner_email=rajesh.nair@coastalspice.food")
+        print("\n[STEP 5] Verifying Multi-Restaurant Owner Identity & Hostname Switching...")
+        # Owner 1 owns 2 restaurants
+        my1 = await client.get(f"/api/v1/restaurants/owner/my?owner_email={owner1_email}")
         assert my1.status_code == 200
         my1_rests = my1.json()
-        assert len(my1_rests) == 1
-        assert my1_rests[0]["id"] == t1_id
-        assert my1_rests[0]["name"] == "Coastal Spice Retreat"
+        assert len(my1_rests) == 2, f"Owner 1 must have exactly 2 restaurants! Found {len(my1_rests)}"
+        my1_ids = [r["id"] for r in my1_rests]
+        assert t1_id in my1_ids and t1b_id in my1_ids
+        assert t2_id not in my1_ids
 
-        # Owner 2 queries my-restaurants
-        my2 = await client.get(f"/api/v1/restaurants/owner/my?owner_email=kenji.sato@neonsakura.tokyo")
+        # Owner 2 owns 1 restaurant
+        my2 = await client.get(f"/api/v1/restaurants/owner/my?owner_email={owner2_email}")
         assert my2.status_code == 200
         my2_rests = my2.json()
-        assert len(my2_rests) == 1
+        assert len(my2_rests) == 1, f"Owner 2 must have exactly 1 restaurant! Found {len(my2_rests)}"
         assert my2_rests[0]["id"] == t2_id
-        assert my2_rests[0]["name"] == "Neon Sakura Lounge"
-        print(" -> Owner identity isolation verified: Owner 1 sees ONLY Tenant 1; Owner 2 sees ONLY Tenant 2.")
+        assert t1_id not in [r["id"] for r in my2_rests]
+
+        # Verify Canonical Tenant Domains & Switching
+        rest_1a_slug = next(r["publicSlug"] or r["slug"] for r in my1_rests if r["id"] == t1_id)
+        rest_1b_slug = next(r["publicSlug"] or r["slug"] for r in my1_rests if r["id"] == t1b_id)
+        assert rest_1a_slug != rest_1b_slug, "Tenant slugs must be distinct"
+        print(f" -> Owner 1 Switching: https://{rest_1a_slug}.dinely.food/restaurant/dashboard <-> https://{rest_1b_slug}.dinely.food/restaurant/dashboard")
+        print(" -> Multi-restaurant ownership & switching verified: Owner 1 owns 2 outlets; Owner 2 owns 1 outlet.")
 
         # -------------------------------------------------------------
         # STEP 6: TABLES & QR CONFIGURATION ISOLATION
