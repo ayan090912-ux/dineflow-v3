@@ -560,6 +560,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
+      if (p === '/workspace' || p.startsWith('/workspace/')) {
+        window.history.replaceState(null, '', '/restaurant/dashboard');
+      }
+    }
+
     const restId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     if (restId) {
       realtimeBus.connect(restId, 'OWNER');

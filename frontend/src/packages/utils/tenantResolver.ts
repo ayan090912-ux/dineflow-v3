@@ -152,6 +152,9 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
 
   // 7. Restaurant Settings / Tenant Dashboard & Operational Management
   if (
+    p === '/workspace' ||
+    p.startsWith('/workspace/') ||
+    p === '/select-workspace' ||
     p === '/settings' ||
     p.startsWith('/settings/') ||
     p === '/dashboard' ||
@@ -159,8 +162,6 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p.startsWith('/restaurant/') ||
     p === '/owner' ||
     p.startsWith('/owner/') ||
-    p === '/menu' ||
-    p.startsWith('/menu/') ||
     p === '/floorplan' ||
     p.startsWith('/floorplan/') ||
     p === '/tables' ||
@@ -179,6 +180,8 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p === '/' ||
     p === '/customer' ||
     p.startsWith('/customer/') ||
+    p === '/menu' ||
+    p.startsWith('/menu/') ||
     p === '/table' ||
     p.startsWith('/table/') ||
     p === '/t' ||

@@ -1167,6 +1167,11 @@ export class DinelyApiClient {
       if (!token) {
         token = await getValidFirebaseIdToken(true);
       }
+      if (!token && typeof window !== 'undefined') {
+        token = localStorage.getItem('dinely_platform_admin_id_token') ||
+                sessionStorage.getItem('dinely_admin_token') ||
+                localStorage.getItem('dinely_admin_token') || null;
+      }
       if (!token) {
         const unauthErr = new Error('Administrator authentication required: No active Firebase session. Please sign in with administrator credentials.');
         (unauthErr as any).statusCode = 401;

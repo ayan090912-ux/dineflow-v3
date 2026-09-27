@@ -26,8 +26,13 @@ class TokenVerificationRequest(BaseModel):
 
 
 class RestaurantStatusAction(BaseModel):
-    restaurant_id: str
+    restaurant_id: Optional[str] = None
+    restaurantId: Optional[str] = None
     reason: Optional[str] = None
+
+    @property
+    def target_restaurant_id(self) -> str:
+        return (self.restaurant_id or self.restaurantId or "").strip()
 
 
 class UserStatusAction(BaseModel):
@@ -153,7 +158,7 @@ async def approve_restaurant(
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
     admin_email = admin_claims.get("email") or get_settings().PLATFORM_ADMIN_EMAIL or "admin@dinely.food"
-    clean_id = (action.restaurant_id or "").strip()
+    clean_id = action.target_restaurant_id
 
     query = select(Restaurant).where(
         or_(Restaurant.id == clean_id, func.lower(Restaurant.id) == func.lower(clean_id))
@@ -335,7 +340,7 @@ async def reject_restaurant(
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
     admin_email = admin_claims.get("email") or get_settings().PLATFORM_ADMIN_EMAIL or "admin@dinely.food"
-    clean_id = (action.restaurant_id or "").strip()
+    clean_id = action.target_restaurant_id
 
     query = select(Restaurant).where(
         or_(Restaurant.id == clean_id, func.lower(Restaurant.id) == func.lower(clean_id))
@@ -450,7 +455,7 @@ async def dismiss_restaurant(
     """
     admin_uid = admin_claims.get("uid") or admin_claims.get("user_id") or "admin"
     admin_email = admin_claims.get("email") or get_settings().PLATFORM_ADMIN_EMAIL or "admin@dinely.food"
-    clean_id = (action.restaurant_id or "").strip()
+    clean_id = action.target_restaurant_id
 
     query = select(Restaurant).where(
         or_(Restaurant.id == clean_id, func.lower(Restaurant.id) == func.lower(clean_id))
@@ -746,6 +751,10 @@ async def get_platform_stats(
     admin_claims: Dict[str, Any] = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
+    total_stmt = select(func.count(Restaurant.id)).where(Restaurant.deleted_at.is_(None))
+    total_res = await db.execute(total_stmt)
+    total_count = total_res.scalar() or 0
+
     live_stmt = select(func.count(Restaurant.id)).where(
         Restaurant.deleted_at.is_(None),
         Restaurant.lifecycle_status == "LIVE",
@@ -756,20 +765,36 @@ async def get_platform_stats(
 
     pending_stmt = select(func.count(Restaurant.id)).where(
         Restaurant.deleted_at.is_(None),
-        Restaurant.lifecycle_status == "PENDING_APPROVAL",
-        Restaurant.is_approved.is_(False)
+        Restaurant.lifecycle_status == "PENDING_APPROVAL"
     )
     pending_res = await db.execute(pending_stmt)
     pending_count = pending_res.scalar() or 0
+
+    rejected_stmt = select(func.count(Restaurant.id)).where(
+        Restaurant.deleted_at.is_(None),
+        Restaurant.lifecycle_status == "REJECTED"
+    )
+    rejected_res = await db.execute(rejected_stmt)
+    rejected_count = rejected_res.scalar() or 0
+
+    suspended_stmt = select(func.count(Restaurant.id)).where(
+        Restaurant.deleted_at.is_(None),
+        Restaurant.lifecycle_status == "SUSPENDED"
+    )
+    suspended_res = await db.execute(suspended_stmt)
+    suspended_count = suspended_res.scalar() or 0
 
     orders_stmt = select(func.count(Order.id))
     orders_res = await db.execute(orders_stmt)
     total_orders = orders_res.scalar() or 0
 
     return {
-        "activeTenants": max(1, live_count + pending_count),
+        "totalRestaurants": total_count,
+        "activeTenants": live_count,
         "liveRestaurants": live_count,
         "pendingApprovals": pending_count,
+        "rejectedRestaurants": rejected_count,
+        "suspendedRestaurants": suspended_count,
         "totalOrdersProcessed": total_orders,
         "systemUptimePercent": 99.99,
     }

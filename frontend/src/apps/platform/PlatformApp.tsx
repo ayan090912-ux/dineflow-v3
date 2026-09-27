@@ -368,6 +368,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       );
       showSuccess('Restaurant Approved & Activated Live.');
       closeModals();
+      await loadData(true);
     } catch (err: any) {
       setApprovalError(err.message || 'Failed to approve restaurant. Please retry.');
     } finally {
@@ -393,6 +394,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       await api.rejectRestaurant(id, reason);
       showSuccess('Application Declined. Owner notified.');
       closeModals();
+      await loadData(true);
     } catch (err: any) {
       setAllRestaurants(prevRestaurants);
       alert(`Rejection error: ${err.message || 'Failed to reject'}`);
@@ -412,6 +414,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       await api.requestChangesRestaurant(id, reason);
       showSuccess('Changes Requested. Owner notified.');
       closeModals();
+      await loadData(true);
     } catch (err: any) {
       alert(`Request error: ${err.message || 'Failed to request changes'}`);
     }
@@ -431,6 +434,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       await api.dismissRestaurant(id, reason);
       showSuccess('Application archived and safely removed from queue.');
       closeModals();
+      await loadData(true);
     } catch (err: any) {
       setAllRestaurants(prevRestaurants);
       alert(`Dismiss error: ${err.message || 'Failed to dismiss application'}`);
@@ -577,7 +581,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 id: 'pending',
                 label: 'Pending Approvals',
                 icon: <ClockIcon className="w-4 h-4 text-amber-400" />,
-                badge: pendingRestaurants.length > 0 ? pendingRestaurants.length : undefined,
+                badge: (stats?.pendingApprovals ?? pendingRestaurants.length) > 0 ? (stats?.pendingApprovals ?? pendingRestaurants.length) : undefined,
               },
               { id: 'restaurants', label: 'All Restaurants', icon: <Utensils className="w-4 h-4" /> },
               { id: 'orgs', label: 'Tenant Organizations', icon: <Building2 className="w-4 h-4" /> },
@@ -768,14 +772,14 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatsCard
                 title="Live Restaurants"
-                value={allRestaurants.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'LIVE' || r.isApproved)).length}
+                value={stats?.liveRestaurants ?? allRestaurants.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'LIVE' || r.isApproved)).length}
                 change={{ value: 'Online', isPositive: true }}
                 subtitle="operating cloud POS"
                 icon={<BarChart3 className="w-5 h-5 text-amber-400" />}
               />
               <StatsCard
                 title="Pending Approvals"
-                value={pendingRestaurants.length}
+                value={stats?.pendingApprovals ?? pendingRestaurants.length}
                 change={{ value: 'Action Needed', isPositive: false }}
                 subtitle="awaiting verification"
                 icon={<ClockIcon className="w-5 h-5 text-amber-500" />}
@@ -1554,6 +1558,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   size="sm"
                   className="bg-emerald-600 hover:bg-emerald-500 font-semibold text-white text-xs"
                   onClick={() => {
+                    setViewDetailModal(false);
                     setActionModal('APPROVE');
                   }}
                 >
@@ -1620,6 +1625,9 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                   placeholder="Enter detailed message for the restaurant owner..."
                   className="w-full bg-[#12151b] border border-white/[0.08] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-400/50"
                 />
+                {actionModal === 'REJECT' && !actionReason.trim() && (
+                  <p className="text-amber-400 font-mono text-[11px]">A rejection reason is required before submitting.</p>
+                )}
               </div>
             )}
 
