@@ -297,6 +297,7 @@ async def signup_restaurant_tenant(
         submitted_at=datetime.now(timezone.utc),
     )
     db.add(new_rest)
+    await db.flush()
 
     # 3. Create Primary Domain
     new_dom = RestaurantDomain(
@@ -352,6 +353,7 @@ async def signup_restaurant_tenant(
         is_enabled=True
     )
     db.add_all([cat_starters, cat_mains, cat_desserts, cat_drinks])
+    await db.flush()
 
     # 6. Seed starter menu items
     starter_items = [
