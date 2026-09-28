@@ -34,6 +34,10 @@ import {
   CustomerRequestType,
   CustomerRequestStatus,
   BillingConfig,
+  AdminStats,
+  AdminOrder,
+  AdminRestaurant,
+  AdminApplication,
 } from '../types';
 import { DEFAULT_THEME } from '../data/mockData';
 import { realtimeBus } from './realtime';
@@ -1875,35 +1879,72 @@ export class DinelyApiClient {
 
   // --- Platform Admin Control Plane APIs ---
 
-  async getPlatformStats() {
-    return await this.executeAdminRequest('/admin/stats');
+  async getPlatformStats(): Promise<AdminStats> {
+    const raw = await this.executeAdminRequest<any>('/admin/stats');
+    const s = (raw && typeof raw === 'object') ? raw : {};
+    return {
+      totalRestaurants: typeof s.totalRestaurants === 'number' ? s.totalRestaurants : (typeof s.total_restaurants === 'number' ? s.total_restaurants : 0),
+      activeTenants: typeof s.activeTenants === 'number' ? s.activeTenants : (typeof s.active_tenants === 'number' ? s.active_tenants : 0),
+      liveRestaurants: typeof s.liveRestaurants === 'number' ? s.liveRestaurants : (typeof s.live_restaurants === 'number' ? s.live_restaurants : 0),
+      pendingApprovals: typeof s.pendingApprovals === 'number' ? s.pendingApprovals : (typeof s.pending_approvals === 'number' ? s.pending_approvals : 0),
+      rejectedRestaurants: typeof s.rejectedRestaurants === 'number' ? s.rejectedRestaurants : (typeof s.rejected_restaurants === 'number' ? s.rejected_restaurants : 0),
+      suspendedRestaurants: typeof s.suspendedRestaurants === 'number' ? s.suspendedRestaurants : (typeof s.suspended_restaurants === 'number' ? s.suspended_restaurants : 0),
+      totalOrdersProcessed: typeof s.totalOrdersProcessed === 'number' ? s.totalOrdersProcessed : (typeof s.total_orders_processed === 'number' ? s.total_orders_processed : (typeof s.total_orders === 'number' ? s.total_orders : 0)),
+      systemUptimePercent: typeof s.systemUptimePercent === 'number' ? s.systemUptimePercent : (typeof s.system_uptime_percent === 'number' ? s.system_uptime_percent : 99.99),
+    };
   }
 
-  async getPlatformOrders(): Promise<any[]> {
-    return await this.executeAdminRequest<any[]>('/admin/orders');
+  async getPlatformOrders(): Promise<AdminOrder[]> {
+    const raw = await this.executeAdminRequest<any>('/admin/orders');
+    const data = Array.isArray(raw)
+      ? raw
+      : (raw && Array.isArray(raw.orders))
+      ? raw.orders
+      : (raw && Array.isArray(raw.data))
+      ? raw.data
+      : [];
+
+    return data.map((o: any) => ({
+      id: o.id || `ord-${Math.random().toString(36).slice(2, 8)}`,
+      restaurantId: o.restaurantId || o.restaurant_id || '',
+      tableNumber: o.tableNumber || o.table_number || '',
+      status: o.status || 'COMPLETED',
+      totalAmount: typeof o.totalAmount === 'number' ? o.totalAmount : (typeof o.total_amount === 'number' ? o.total_amount : 0),
+      createdAt: o.createdAt || o.created_at || new Date().toISOString(),
+    }));
   }
 
-  async getOrganizations() {
-    const data = await this.executeAdminRequest<any[]>('/admin/organizations');
-    if (Array.isArray(data)) return data;
-    return [];
+  async getOrganizations(): Promise<Organization[]> {
+    const raw = await this.executeAdminRequest<any>('/admin/organizations');
+    const data = Array.isArray(raw)
+      ? raw
+      : (raw && Array.isArray(raw.organizations))
+      ? raw.organizations
+      : (raw && Array.isArray(raw.data))
+      ? raw.data
+      : [];
+    return data;
   }
 
-  async getPlatformApplications(statusFilter?: string): Promise<Restaurant[]> {
+  async getPlatformApplications(statusFilter?: string): Promise<AdminApplication[]> {
     const query = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : '';
-    const data = await this.executeAdminRequest<any[]>(`/admin/applications${query}`);
-    if (Array.isArray(data)) {
-      return data.map((r) => this.mapBackendRestaurant(r));
-    }
-    return [];
+    const raw = await this.executeAdminRequest<any>(`/admin/applications${query}`);
+    const data = Array.isArray(raw)
+      ? raw
+      : (raw && Array.isArray(raw.applications))
+      ? raw.applications
+      : (raw && Array.isArray(raw.data))
+      ? raw.data
+      : [];
+    return data.map((r: any) => this.mapBackendRestaurant(r));
   }
 
-  async getPendingRestaurants() {
+  async getPendingRestaurants(): Promise<AdminRestaurant[]> {
     const all = await this.getPlatformRestaurants();
     return all.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || !r.isApproved));
   }
 
-  async getAllRestaurants() {
+  async getAllRestaurants(): Promise<AdminRestaurant[]> {
     return this.getPlatformRestaurants();
   }
 
@@ -2126,8 +2167,16 @@ export class DinelyApiClient {
     return this.restaurants.filter((r) => !r.isDeleted);
   }
 
-  async getPlatformRestaurants(): Promise<Restaurant[]> {
-    const data = await this.executeAdminRequest<any[]>('/admin/restaurants');
+  async getPlatformRestaurants(): Promise<AdminRestaurant[]> {
+    const raw = await this.executeAdminRequest<any>('/admin/restaurants');
+    const data = Array.isArray(raw)
+      ? raw
+      : (raw && Array.isArray(raw.restaurants))
+      ? raw.restaurants
+      : (raw && Array.isArray(raw.data))
+      ? raw.data
+      : null;
+
     if (!Array.isArray(data)) {
       throw new Error('Platform Admin API returned invalid restaurant collection format.');
     }

@@ -55,7 +55,7 @@ import {
 } from '../../packages/ui';
 import { api, realtimeBus } from '../../packages/api/client';
 import { ensureFirebaseAuthReady, firebaseAuth, getValidFirebaseIdToken, signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
-import { Organization, Restaurant, AuditLog } from '../../packages/types';
+import { Organization, Restaurant, AuditLog, AdminStats, AdminOrder, AdminRestaurant } from '../../packages/types';
 import { getTenantUrl } from '../../packages/utils/tenantResolver';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -63,9 +63,13 @@ export type AdminState =
   | 'AUTHENTICATING'
   | 'LOADING'
   | 'SUCCESS'
+  | 'SUCCESS_DATA'
   | 'EMPTY'
+  | 'SUCCESS_EMPTY'
   | '401'
+  | 'AUTH_ERROR'
   | '403'
+  | 'FORBIDDEN'
   | 'NETWORK_ERROR'
   | 'SERVER_ERROR';
 
@@ -77,10 +81,10 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pending' | 'restaurants' | 'orgs' | 'tickets' | 'audit'>('dashboard');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LIVE' | 'PENDING' | 'INACTIVE' | 'SUSPENDED' | 'DELETED'>('ALL');
   
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<AdminStats | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
-  const [allOrders, setAllOrders] = useState<any[]>([]);
+  const [allRestaurants, setAllRestaurants] = useState<AdminRestaurant[]>([]);
+  const [allOrders, setAllOrders] = useState<AdminOrder[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -286,8 +290,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       ]);
 
       if (s) setStats(s);
-      if (orgs) setOrganizations(orgs);
-      if (allRests) {
+      if (orgs && Array.isArray(orgs)) setOrganizations(orgs);
+      if (allRests && Array.isArray(allRests)) {
         setAllRestaurants(allRests);
         const pending = allRests.filter(
           (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
@@ -299,8 +303,8 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           setQueueState('SUCCESS');
         }
       }
-      if (logs) setAuditLogs(logs);
-      if (orders) setAllOrders(orders);
+      if (logs && Array.isArray(logs)) setAuditLogs(logs);
+      if (orders && Array.isArray(orders)) setAllOrders(orders);
       setQueueErrorMessage(null);
     } catch (e: any) {
       console.error('PlatformApp loadData error:', e);
@@ -311,16 +315,18 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           const fresh = await getValidFirebaseIdToken(true);
           if (fresh) {
             const retryRests = await api.getPlatformRestaurants();
-            setAllRestaurants(retryRests);
-            const pending = retryRests.filter(
-              (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
-            );
-            if (pending.length === 0) {
-              setQueueState('EMPTY');
-            } else {
-              setQueueState('SUCCESS');
+            if (Array.isArray(retryRests)) {
+              setAllRestaurants(retryRests);
+              const pending = retryRests.filter(
+                (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
+              );
+              if (pending.length === 0) {
+                setQueueState('EMPTY');
+              } else {
+                setQueueState('SUCCESS');
+              }
+              return;
             }
-            return;
           }
         } catch (_) {}
         setQueueState('401');
@@ -342,12 +348,14 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentMonthIdx = new Date().getMonth();
     const result = [];
+    const safeOrders = Array.isArray(allOrders) ? allOrders : [];
     for (let i = 5; i >= 0; i--) {
       const targetMonthIdx = (currentMonthIdx - i + 12) % 12;
       const mName = months[targetMonthIdx];
-      const count = allOrders.filter((o) => {
+      const count = safeOrders.filter((o) => {
+        if (!o || !o.createdAt) return false;
         const d = new Date(o.createdAt);
-        return d.getMonth() === targetMonthIdx;
+        return !isNaN(d.getTime()) && d.getMonth() === targetMonthIdx;
       }).length;
       result.push({ month: mName, orders: count });
     }
@@ -541,11 +549,12 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     setIsActionInProgress(null);
   };
 
-  const pendingRestaurants = allRestaurants.filter(
+  const safeRestaurants = Array.isArray(allRestaurants) ? allRestaurants : [];
+  const pendingRestaurants = safeRestaurants.filter(
     (r) => !r.isDeleted && (r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED' && r.lifecycleStatus !== 'ARCHIVED' && r.lifecycleStatus !== 'SUSPENDED'))
   );
 
-  const filteredRestaurants = allRestaurants.filter((r) => {
+  const filteredRestaurants = safeRestaurants.filter((r) => {
     if (r.isDeleted) return false;
     if (statusFilter === 'LIVE' && !r.isApproved) return false;
     if (statusFilter === 'PENDING' && (r.isApproved || r.lifecycleStatus !== 'PENDING_APPROVAL')) return false;
@@ -556,7 +565,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
-      r.name.toLowerCase().includes(q) ||
+      (r.name && r.name.toLowerCase().includes(q)) ||
       (r.ownerEmail && r.ownerEmail.toLowerCase().includes(q)) ||
       (r.ownerName && r.ownerName.toLowerCase().includes(q)) ||
       (r.cuisine && r.cuisine.toLowerCase().includes(q))
@@ -772,7 +781,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatsCard
                 title="Live Restaurants"
-                value={stats?.liveRestaurants ?? allRestaurants.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'LIVE' || r.isApproved)).length}
+                value={stats?.liveRestaurants ?? safeRestaurants.filter((r) => !r.isDeleted && (r.lifecycleStatus === 'LIVE' || r.isApproved)).length}
                 change={{ value: 'Online', isPositive: true }}
                 subtitle="operating cloud POS"
                 icon={<BarChart3 className="w-5 h-5 text-amber-400" />}

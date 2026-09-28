@@ -817,9 +817,27 @@ async def suspend_user(
 
 @router.get("/orders")
 async def get_platform_orders(
-    admin_claims: Dict[str, Any] = Depends(require_platform_admin)
-) -> Dict[str, Any]:
-    return {"total_orders": 1250, "platform_volume": 48500.00}
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    """
+    Authoritative Platform Admin endpoint listing recent platform orders.
+    Returns typed array of orders for metrics and charts.
+    """
+    stmt = select(Order).order_by(Order.created_at.desc()).limit(200)
+    result = await db.execute(stmt)
+    orders = result.scalars().all()
+    output = []
+    for o in orders:
+        output.append({
+            "id": o.id,
+            "restaurantId": o.restaurant_id,
+            "tableNumber": o.table_number,
+            "status": o.status,
+            "totalAmount": float(o.total_amount) if o.total_amount is not None else 0.0,
+            "createdAt": o.created_at.isoformat() if o.created_at else datetime.now(timezone.utc).isoformat(),
+        })
+    return output
 
 
 @router.get("/billing")

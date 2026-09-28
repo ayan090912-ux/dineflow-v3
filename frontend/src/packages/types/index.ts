@@ -788,3 +788,42 @@ export interface AuditLog {
   ipAddress: string;
   status: 'SUCCESS' | 'WARNING' | 'ERROR';
 }
+
+export interface AdminStats {
+  totalRestaurants: number;
+  activeTenants: number;
+  liveRestaurants: number;
+  pendingApprovals: number;
+  rejectedRestaurants: number;
+  suspendedRestaurants: number;
+  totalOrdersProcessed: number;
+  systemUptimePercent: number;
+}
+
+export interface AdminOrder {
+  id: string;
+  restaurantId: string;
+  tableNumber?: string;
+  status: string;
+  totalAmount: number;
+  createdAt: string;
+}
+
+export type AdminRestaurant = Restaurant;
+export type AdminApplication = Restaurant;
+
+export interface AdminApplicationResponse {
+  applications?: AdminApplication[];
+  restaurants?: AdminRestaurant[];
+  data?: AdminApplication[];
+}
+
+export interface AdminVerificationResult {
+  status: string;
+  authenticated: boolean;
+  uid: string;
+  email: string;
+  role: string;
+  custom_claims?: Record<string, any>;
+}
+
