@@ -172,6 +172,11 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
             payload_json = base64.urlsafe_b64decode(payload_b64).decode("utf-8")
             claims = json.loads(payload_json)
 
+            # Check expiration
+            exp = claims.get("exp")
+            if exp and time.time() > float(exp):
+                raise ValueError("Firebase ID token has expired")
+
             # Standardize claim fields
             uid = claims.get("user_id") or claims.get("sub") or claims.get("uid")
             email = claims.get("email")
