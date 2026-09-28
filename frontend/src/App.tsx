@@ -390,7 +390,12 @@ function AppContent() {
       console.warn('[App] dinely_auth_required event received:', e?.detail?.reason);
       setCurrentUser(null);
       setCurrentRestaurant(null);
-      navigateTo('/restaurant/login');
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+      if (currentPath.startsWith('/admin')) {
+        navigateTo('/admin/login');
+      } else {
+        navigateTo('/restaurant/login');
+      }
     };
     window.addEventListener('dinely_auth_required', handleAuthRequired);
 

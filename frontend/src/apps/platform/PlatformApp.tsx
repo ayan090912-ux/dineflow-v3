@@ -197,7 +197,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             }
           } else if (status === 403 || authErr?.message?.includes('not authorized') || authErr?.message?.includes('Forbidden')) {
             setQueueState('403');
-            setQueueErrorMessage('Access Forbidden (403): Your account does not have Platform Administrator authorization.');
+            setQueueErrorMessage('Access Forbidden (403): This Google account is not authorized for Platform Admin.');
             return;
           } else if (authErr?.isNetworkError || (authErr?.message && (authErr.message.includes('Network') || authErr.message.includes('timed out')))) {
             setQueueState('NETWORK_ERROR');
@@ -327,7 +327,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         setQueueErrorMessage('Platform Admin session expired. Please sign in with administrator credentials.');
       } else if (status === 403) {
         setQueueState('403');
-        setQueueErrorMessage('Access Forbidden (403): Your account does not have Platform Administrator authorization.');
+        setQueueErrorMessage('Access Forbidden (403): This Google account is not authorized for Platform Admin.');
       } else if (e?.isNetworkError || (e?.message && (e.message.includes('Network') || e.message.includes('timed out') || e.message.includes('Failed to fetch')))) {
         setQueueState('NETWORK_ERROR');
         setQueueErrorMessage(e?.message || 'Network failure connecting to Platform Admin backend.');
@@ -866,7 +866,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                       <div className="text-center py-6 text-rose-300 text-xs">
                         <Ban className="w-6 h-6 text-rose-400 mx-auto mb-1" />
                         <p className="font-semibold text-white">Access Forbidden (403)</p>
-                        <p className="text-[10px] text-white/50 mt-1 max-w-xs mx-auto">{queueErrorMessage || 'Your Google account is not registered as a Platform Administrator.'}</p>
+                        <p className="text-[10px] text-white/50 mt-1 max-w-xs mx-auto">{queueErrorMessage || 'This Google account is not authorized for Platform Admin.'}</p>
                       </div>
                     )}
                     {queueState === 'NETWORK_ERROR' && (
@@ -986,7 +986,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
                 <div className="col-span-2 text-center py-16 bg-[#0e1117] rounded-xl border border-rose-500/30 text-rose-300 space-y-3 p-6">
                   <Ban className="w-10 h-10 text-rose-400 mx-auto" />
                   <p className="text-base font-semibold text-white">Access Forbidden (403)</p>
-                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'Your Google account is not registered as a Platform Administrator.'}</p>
+                  <p className="text-xs text-rose-300/80 max-w-md mx-auto">{queueErrorMessage || 'This Google account is not authorized for Platform Admin.'}</p>
                 </div>
               )}
 

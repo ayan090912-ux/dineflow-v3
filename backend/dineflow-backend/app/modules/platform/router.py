@@ -11,6 +11,7 @@ from app.core.database.connection import get_db
 from app.core.security.rbac import require_platform_admin, get_current_firebase_admin
 from app.core.config.settings import get_settings
 from app.modules.admin.audit_service import AdminAuditLogger
+from app.modules.auth.models import PlatformAdmin
 from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, RestaurantDomain
 from app.modules.tables.models import Table
 from app.modules.orders.models import Order
@@ -41,16 +42,34 @@ class UserStatusAction(BaseModel):
 
 
 @router.post("/verify-token")
+@router.get("/verify-token")
+@router.post("/me")
+@router.get("/me")
 async def verify_platform_admin_token(
     request: Request,
     body: Optional[TokenVerificationRequest] = None,
-    admin_claims: Dict[str, Any] = Depends(get_current_firebase_admin)
+    admin_claims: Dict[str, Any] = Depends(get_current_firebase_admin),
+    db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
     """
     Verifies Firebase ID token and returns authenticated Platform Admin details and claims.
     """
     uid = admin_claims.get("uid") or admin_claims.get("user_id")
-    email = admin_claims.get("email")
+    email = (admin_claims.get("email") or "").strip().lower()
+
+    if email:
+        try:
+            stmt = select(PlatformAdmin).where(
+                PlatformAdmin.email == email,
+                PlatformAdmin.is_active == True
+            )
+            res = await db.execute(stmt)
+            admin_obj = res.scalar_one_or_none()
+            if admin_obj:
+                admin_obj.last_login_at = datetime.now(timezone.utc)
+                await db.commit()
+        except Exception:
+            pass
 
     AdminAuditLogger.log_action(
         admin_uid=uid,
@@ -70,6 +89,79 @@ async def verify_platform_admin_token(
             "role": admin_claims.get("role", "PLATFORM_ADMIN")
         }
     }
+
+
+@router.get("/applications")
+@router.get("/applications/pending")
+async def get_restaurant_applications(
+    status_filter: Optional[str] = None,
+    lifecycle_status: Optional[str] = None,
+    search: Optional[str] = None,
+    admin_claims: Dict[str, Any] = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    """
+    Authoritative applications queue endpoint for platform administrator.
+    Supports filtering by lifecycle_status or status_filter.
+    """
+    target_status = status_filter or lifecycle_status
+    stmt = select(Restaurant).where(Restaurant.deleted_at.is_(None))
+    if target_status:
+        stmt = stmt.where(Restaurant.lifecycle_status == target_status)
+    if search:
+        term = f"%{search.lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Restaurant.name).like(term),
+                func.lower(Restaurant.owner_name).like(term),
+                func.lower(Restaurant.owner_email).like(term),
+                func.lower(Restaurant.phone).like(term),
+            )
+        )
+    stmt = stmt.order_by(Restaurant.created_at.desc())
+    result = await db.execute(stmt)
+    rests = result.scalars().all()
+
+    output = []
+    for r in rests:
+        clean_slug = re.sub(r"[^a-z0-9]+", "-", (r.public_slug or r.slug or r.name or "restaurant").strip().lower()).strip("-") or "restaurant"
+        output.append({
+            "id": r.id,
+            "name": r.name,
+            "slug": clean_slug,
+            "publicSlug": clean_slug,
+            "public_slug": clean_slug,
+            "domain": f"https://{clean_slug}.dinely.food",
+            "cuisine": r.cuisine,
+            "businessType": r.business_type,
+            "ownerName": r.owner_name,
+            "ownerEmail": r.owner_email,
+            "ownerUid": r.owner_uid,
+            "phone": r.phone,
+            "email": r.email,
+            "address": r.address,
+            "lifecycleStatus": r.lifecycle_status or ("LIVE" if r.is_approved else "PENDING_APPROVAL"),
+            "isApproved": r.is_approved,
+            "status": r.status,
+            "enabledModules": r.enabled_modules,
+            "hasKitchen": r.has_kitchen,
+            "hasWaiter": r.has_waiter,
+            "hasBar": r.has_bar,
+            "hasInventory": r.has_inventory,
+            "hasBilling": r.has_billing,
+            "hasTables": r.has_tables,
+            "rejectionReason": r.rejection_reason,
+            "requestedChanges": r.requested_changes,
+            "dismissedAt": r.dismissed_at.isoformat() if r.dismissed_at else None,
+            "dismissedBy": r.dismissed_by,
+            "dismissReason": r.dismiss_reason,
+            "approvedAt": r.approved_at.isoformat() if r.approved_at else None,
+            "approvedBy": r.approved_by,
+            "submittedAt": r.submitted_at.isoformat() if r.submitted_at else (r.created_at.isoformat() if r.created_at else None),
+            "createdAt": r.created_at.isoformat() if r.created_at else None,
+            "theme": r.theme_json,
+        })
+    return output
 
 
 @router.get("/restaurants")
@@ -147,6 +239,7 @@ async def get_all_restaurants(
 
 
 @router.post("/restaurants/approve")
+@router.post("/approve")
 async def approve_restaurant(
     action: RestaurantStatusAction,
     request: Request,
@@ -329,6 +422,7 @@ async def approve_restaurant(
 
 
 @router.post("/restaurants/reject")
+@router.post("/reject")
 async def reject_restaurant(
     action: RestaurantStatusAction,
     request: Request,

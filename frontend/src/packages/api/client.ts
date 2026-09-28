@@ -788,10 +788,15 @@ export class DinelyApiClient {
 
     if (!response.ok) {
       if (response.status === 403) {
-        throw new Error('Your account is not authorized for Platform Admin.');
+        const authErr = new Error('This Google account is not authorized for Platform Admin.');
+        (authErr as any).statusCode = 403;
+        (authErr as any).isAuthorizationError = true;
+        throw authErr;
       }
       const errDetail = await response.json().catch(() => ({ detail: 'Unauthorized' }));
-      throw new Error(errDetail.detail || 'Authentication failed. Please verify your credentials.');
+      const unauthErr = new Error(errDetail.detail || 'Authentication failed. Please verify your credentials.');
+      (unauthErr as any).statusCode = response.status;
+      throw unauthErr;
     }
 
     const verified = await response.json();
@@ -1879,23 +1884,18 @@ export class DinelyApiClient {
   }
 
   async getOrganizations() {
-    try {
-      const data = await this.executeAdminRequest<any[]>('/admin/organizations');
-      if (Array.isArray(data) && data.length > 0) return data;
-    } catch (e) {
-      console.warn('Backend getOrganizations notice:', e);
+    const data = await this.executeAdminRequest<any[]>('/admin/organizations');
+    if (Array.isArray(data)) return data;
+    return [];
+  }
+
+  async getPlatformApplications(statusFilter?: string): Promise<Restaurant[]> {
+    const query = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : '';
+    const data = await this.executeAdminRequest<any[]>(`/admin/applications${query}`);
+    if (Array.isArray(data)) {
+      return data.map((r) => this.mapBackendRestaurant(r));
     }
-    const rests = await this.getPlatformRestaurants();
-    return rests.map((r) => ({
-      id: r.orgId || `org-${r.id}`,
-      name: `${r.name} Enterprise`,
-      slug: r.slug,
-      tier: 'ENTERPRISE' as const,
-      status: r.isApproved ? ('ACTIVE' as const) : ('PENDING' as const),
-      restaurantsCount: 1,
-      ownerEmail: r.ownerEmail || 'owner@dinely.food',
-      createdAt: r.submittedAt || new Date().toISOString(),
-    }));
+    return [];
   }
 
   async getPendingRestaurants() {

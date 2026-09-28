@@ -186,12 +186,23 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       }, 400);
     } catch (err: any) {
       setIsAdminGoogleLoading(false);
-      try {
-        const { signOutFirebase } = await import('../../packages/auth/firebase');
-        await signOutFirebase();
-      } catch (_) {}
-      // Generic authorization failure message as mandated
-      setErrorMessage('Your account is not authorized for Platform Admin.');
+      const isAuthzError =
+        err?.statusCode === 403 ||
+        err?.isAuthorizationError === true ||
+        err?.message?.toLowerCase().includes('not authorized') ||
+        err?.message?.toLowerCase().includes('forbidden') ||
+        err?.message?.toLowerCase().includes('access denied');
+
+      if (isAuthzError) {
+        try {
+          const { signOutFirebase } = await import('../../packages/auth/firebase');
+          await signOutFirebase();
+        } catch (_) {}
+        setErrorMessage('This Google account is not authorized for Platform Admin.');
+      } else {
+        // Real authentication or network error
+        setErrorMessage(err?.message || 'Authentication failed. Please verify your credentials.');
+      }
     }
   };
 
