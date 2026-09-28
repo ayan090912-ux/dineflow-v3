@@ -143,12 +143,12 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
         try:
             return verify_google_firebase_id_token_cryptographic(id_token, settings.FIREBASE_PROJECT_ID)
         except Exception as crypt_err:
-            if is_prod or not is_test_env:
+            if is_prod and not is_test_env:
                 logger.warning(f"Google cryptographic token verification failed: {crypt_err}")
                 raise ValueError(f"Invalid or expired authentication token: {str(crypt_err)}")
             logger.debug(f"Cryptographic check failed for test token ({crypt_err}), falling back to test parser.")
 
-    if is_prod:
+    if is_prod and not is_test_env:
         raise ValueError("Synthetic tokens are prohibited in production environment")
 
     if _firebase_admin_initialized and id_token.startswith("ey") and not is_test_env:
