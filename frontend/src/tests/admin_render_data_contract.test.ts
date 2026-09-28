@@ -123,10 +123,10 @@ async function runAdminDataContractSuite() {
     if (endpoint === '/admin/restaurants') {
       return [
         {
-          id: 'rest-aura-1',
-          name: 'Aura Fine Dine',
-          slug: 'aura-fine-dine',
-          publicSlug: 'aura-fine-dine',
+          id: 'rest-1790594544526-396022',
+          name: 'THE START',
+          slug: 'the-start',
+          publicSlug: 'the-start',
           isApproved: true,
           lifecycleStatus: 'LIVE',
           status: 'OPEN',
