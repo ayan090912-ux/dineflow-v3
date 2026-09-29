@@ -99,6 +99,12 @@ async function proxyToOrigin(request, url, originalHostname, tenantSlug, isCusto
     requestInit.body = request.body;
   }
 
+  // If this is a WebSocket upgrade, return fetch directly to pass 101 Switching Protocols without throwing RangeError in new Response()
+  const isWebSocket = (request.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
+  if (isWebSocket) {
+    return fetch(targetUrl.toString(), requestInit);
+  }
+
   try {
     const originResponse = await fetch(targetUrl.toString(), requestInit);
 
