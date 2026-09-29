@@ -48,7 +48,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
     }
 
     loadBarOrders(true);
-    const pollInterval = setInterval(() => loadBarOrders(false), 5000);
+    const pollInterval = setInterval(() => loadBarOrders(false), 30000);
 
     const handledEventIds = new Set<string>();
 
