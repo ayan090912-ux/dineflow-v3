@@ -31,11 +31,20 @@ async def test_complete_restaurant_acceptance_flow(monkeypatch):
         owner_headers = {"Authorization": f"Bearer firebase_token_owner::{test_uid}::{owner_email}"}
         other_headers = {"Authorization": f"Bearer firebase_token_owner::other_uid::{other_owner_email}"}
 
+        test_name = f"Acceptance Test {uuid.uuid4().hex[:6]}"
+        other_name = f"Other Tenant {uuid.uuid4().hex[:6]}"
+
         try:
+            # Clean any leftover acceptance test records
+            async with AsyncSessionLocal() as db:
+                await db.execute(text("DELETE FROM restaurant_domains WHERE hostname LIKE 'acceptance-test%' OR domain LIKE 'acceptance-test%';"))
+                await db.execute(text("DELETE FROM restaurants WHERE slug LIKE 'acceptance-test%' OR id LIKE 'rest-db3af160%';"))
+                await db.commit()
+
             # 1. Seed disposable test restaurant and verify resolution
             res_create = await client.post("/api/v1/restaurants", json={
                 "id": rest_id,
-                "name": "Acceptance Test Kitchen & Bar",
+                "name": test_name,
                 "ownerEmail": owner_email,
                 "ownerUid": test_uid,
                 "businessType": "BAR",
@@ -52,7 +61,7 @@ async def test_complete_restaurant_acceptance_flow(monkeypatch):
             # Seed other tenant for cross-tenant isolation testing
             res_other = await client.post("/api/v1/restaurants", json={
                 "id": other_rest_id,
-                "name": "Other Tenant Bistro",
+                "name": other_name,
                 "ownerEmail": other_owner_email,
                 "ownerUid": "other_uid",
                 "businessType": "RESTAURANT",
@@ -382,5 +391,6 @@ async def test_complete_restaurant_acceptance_flow(monkeypatch):
                 await db.execute(text(f"DELETE FROM menu_items WHERE restaurant_id = '{rest_id}';"))
                 await db.execute(text(f"DELETE FROM menu_categories WHERE restaurant_id = '{rest_id}';"))
                 await db.execute(text(f"DELETE FROM restaurant_memberships WHERE restaurant_id IN ('{rest_id}', '{other_rest_id}');"))
+                await db.execute(text(f"DELETE FROM restaurant_domains WHERE restaurant_id IN ('{rest_id}', '{other_rest_id}');"))
                 await db.execute(text(f"DELETE FROM restaurants WHERE id IN ('{rest_id}', '{other_rest_id}');"))
                 await db.commit()
