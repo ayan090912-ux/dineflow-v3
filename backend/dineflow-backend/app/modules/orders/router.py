@@ -347,8 +347,42 @@ async def create_order(
                 payload=resp_data,
                 target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]
             )
+            # Instantly update Active Tables across Owner, Waiter, and Customer terminals
+            if tbl_id or tbl_num:
+                table_evt_payload = {
+                    "restaurant_id": restaurant.id,
+                    "restaurantId": restaurant.id,
+                    "table_id": tbl_id,
+                    "tableId": tbl_id,
+                    "table_number": tbl_num,
+                    "tableNumber": tbl_num,
+                    "status": "OCCUPIED",
+                    "is_occupied": True,
+                    "isOccupied": True,
+                    "table_session_id": session_id,
+                    "tableSessionId": session_id,
+                    "order_id": order_id,
+                    "orderId": order_id,
+                    "order_number": order_num,
+                    "orderNumber": order_num,
+                    "total_amount": total,
+                    "totalAmount": total,
+                    "timestamp": now_utc.isoformat(),
+                }
+                await ws_manager.broadcast_event(
+                    restaurant_id=restaurant.id,
+                    event_type="table_updated",
+                    payload=table_evt_payload,
+                    target_audience=["WAITER", "OWNER", "CUSTOMER"]
+                )
+                await ws_manager.broadcast_event(
+                    restaurant_id=restaurant.id,
+                    event_type="table_status_updated",
+                    payload=table_evt_payload,
+                    target_audience=["WAITER", "OWNER", "CUSTOMER"]
+                )
         except Exception as ws_err:
-            print("[WS_BROADCAST_NOTICE] order_created:", ws_err)
+            print("[WS_BROADCAST_NOTICE] order_created / table_updated:", ws_err)
 
         return resp_data
     except HTTPException:

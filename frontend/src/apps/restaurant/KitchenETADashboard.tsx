@@ -163,10 +163,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   // Analytics State
   const [analytics, setAnalytics] = useState<any>(null);
 
-  // Sync initial prop orders
+  // Sync initial prop orders only when non-empty
   useEffect(() => {
-    if (initialOrders) {
-      setOrders(Array.isArray(initialOrders) ? initialOrders : []);
+    if (initialOrders && Array.isArray(initialOrders) && initialOrders.length > 0) {
+      setOrders(initialOrders);
     }
   }, [initialOrders]);
 

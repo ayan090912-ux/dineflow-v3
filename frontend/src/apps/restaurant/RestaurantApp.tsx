@@ -577,8 +577,55 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     const unsubscribe = realtimeBus.subscribe((event) => {
       if (event.type === 'order_created' || event.type === 'OrderCreated') {
         addToast('info', 'New Customer Order Received! 🛎️', `Table ${event.tableNumber || 'Guest'} placed an order`);
+        const tblNum = (event as any).tableNumber || (event as any).table_number;
+        const tblId = (event as any).tableId || (event as any).table_id;
+        const sessId = (event as any).tableSessionId || (event as any).table_session_id;
+        if (tblNum || tblId) {
+          setTables((prev) =>
+            prev.map((t) =>
+              (tblId && t.id === tblId) || (tblNum && (t.tableNumber === tblNum || (t as any).number === tblNum))
+                ? { ...t, status: 'OCCUPIED', isOccupied: true, activeSessionId: sessId || t.activeSessionId }
+                : t
+            )
+          );
+        }
         api.getOrders(restId).then(setOrders).catch(() => {});
         api.getActiveTableSessions(restId).then((sess) => setActiveSessions(sess || [])).catch(() => {});
+        api.getTables(restId).then((tbls) => {
+          if (tbls && tbls.length > 0) setTables(tbls);
+        }).catch(() => {});
+      } else if (
+        event.type === 'table_updated' ||
+        event.type === 'table_status_updated' ||
+        event.type === 'TableStatusUpdated' ||
+        event.type === 'TableStatusChanged'
+      ) {
+        const tblNum = (event as any).tableNumber || (event as any).table_number;
+        const tblId = (event as any).tableId || (event as any).table_id;
+        const isOcc = (event as any).isOccupied ?? (event as any).is_occupied ?? ((event as any).status === 'OCCUPIED');
+        const st = (event as any).status || (isOcc ? 'OCCUPIED' : 'AVAILABLE');
+        const sessId = (event as any).tableSessionId || (event as any).table_session_id;
+        if (tblNum || tblId) {
+          setTables((prev) =>
+            prev.map((t) =>
+              (tblId && t.id === tblId) || (tblNum && (t.tableNumber === tblNum || (t as any).number === tblNum))
+                ? { ...t, status: st, isOccupied: isOcc, activeSessionId: sessId || t.activeSessionId }
+                : t
+            )
+          );
+        }
+        api.getActiveTableSessions(restId).then((sess) => setActiveSessions(sess || [])).catch(() => {});
+        api.getTables(restId).then((tbls) => {
+          if (tbls && tbls.length > 0) setTables(tbls);
+        }).catch(() => {});
+      } else if (
+        event.type === 'order_status_updated' ||
+        event.type === 'order_ready' ||
+        event.type === 'OrderStatusUpdated' ||
+        event.type === 'KitchenStatusUpdated' ||
+        event.type === 'BarStatusUpdated'
+      ) {
+        api.getOrders(restId).then(setOrders).catch(() => {});
       } else if (event.type === 'service_request_created' || event.type === 'WaiterCalled') {
         addToast('warning', 'Waiter Assistance Call 🔔', `Table ${event.tableNumber || 'Guest'} requested support.`);
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
@@ -1843,11 +1890,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         </div>
                       </div>
                       <div className="text-2xl font-bold font-mono text-white tracking-tight">
-                        {tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length} <span className="text-sm font-normal text-slate-400">/ {tables.length}</span>
+                        {tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length} <span className="text-sm font-normal text-slate-400">/ {tables.length}</span>
                       </div>
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-400">Active Dining Sessions</span>
-                        <span className="text-purple-400 font-mono">{tables.length > 0 ? Math.round((tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length / tables.length) * 100) : 0}%</span>
+                        <span className="text-purple-400 font-mono">{tables.length > 0 ? Math.round((tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length / tables.length) * 100) : 0}%</span>
                       </div>
                     </div>
 
@@ -2216,7 +2263,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               <Card className="bg-slate-900 border-slate-800 p-3 space-y-1">
                 <span className="text-[10px] font-mono text-emerald-400 uppercase">Available</span>
                 <p className="text-xl font-black text-emerald-400">
-                  {tables.filter((t) => t.status === 'AVAILABLE').length}
+                  {tables.filter((t) => t.status !== 'OCCUPIED' && !t.isOccupied && !activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase())) && t.status !== 'RESERVED').length}
                 </p>
               </Card>
 
@@ -2237,7 +2284,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               <Card className="bg-slate-900 border-slate-800 p-3 space-y-1 col-span-2 sm:col-span-1">
                 <span className="text-[10px] font-mono text-rose-400 uppercase">Occupied</span>
                 <p className="text-xl font-black text-rose-400">
-                  {tables.filter((t) => activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length}
+                  {tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length}
                 </p>
               </Card>
 
@@ -2252,9 +2299,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 const activeSess = activeSessions.find(
                   (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
                 );
-                const isTableOccupied = Boolean(activeSess);
-                const tableOrders = activeSess ? orders.filter((o) => o.tableSessionId === activeSess.id) : [];
-                const sessionTotal = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+                const isTableOccupied = Boolean(activeSess) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
+                const tableOrders = orders.filter((o) =>
+                  (activeSess && o.tableSessionId === activeSess.id) ||
+                  o.tableId === tbl.id ||
+                  (o.tableNumber && o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
+                ).filter((o) => o.status !== 'CANCELLED');
+                const sessionTotal = tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
                 return (
                   <Card
@@ -2297,17 +2348,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                               : 'success'
                           }
                         >
-                          {isTableOccupied ? 'OCCUPIED' : tbl.status === 'OCCUPIED' ? 'AVAILABLE' : tbl.status}
+                          {isTableOccupied ? 'OCCUPIED' : tbl.status}
                         </Badge>
                       </div>
 
                       {/* Active Table Session Banner */}
-                      {activeSess && (
+                      {(activeSess || isTableOccupied) && (
                         <div className="mt-3 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs space-y-2 font-mono">
                           <div className="flex justify-between items-center">
                             <span className="font-bold text-amber-300 flex items-center gap-1.5">
                               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                              Session #{activeSess.id}
+                              {activeSess ? `Session #${activeSess.id}` : `Active Table #${tbl.tableNumber}`}
                             </span>
                             <span className="text-[10px] text-rose-300 font-bold bg-rose-900/60 px-2 py-0.5 rounded-md">
                               ● ACTIVE
@@ -2327,9 +2378,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                     restaurantId: currentRestaurant?.id,
                                     tableId: tbl.id,
                                     waiterName: currentUser?.name || 'Owner',
-                                    tableSessionId: activeSess.id,
+                                    tableSessionId: activeSess?.id,
                                   });
                                   addToast('success', 'Table Session Closed 🧹', `${tbl.tableNumber} is now AVAILABLE.`);
+                                  setTables((prev) =>
+                                    prev.map((t) => (t.id === tbl.id ? { ...t, status: 'AVAILABLE', isOccupied: false } : t))
+                                  );
+                                  if (activeSess) {
+                                    setActiveSessions((prev) => prev.filter((s) => s.id !== activeSess.id));
+                                  }
                                   await loadData();
                                 } catch (err: any) {
                                   addToast('error', 'Close Error', err.message || 'Failed to close table session.');

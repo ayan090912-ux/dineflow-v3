@@ -59,6 +59,18 @@ async def websocket_endpoint(
 
     token_expired = False
 
+    # Resolve slug/domain to canonical restaurant ID for tenant-scoped connections
+    if not is_admin_channel_request and effective_rest_id.lower() not in ("global", ADMIN_CHANNEL, LEGACY_ADMIN_CHANNEL, "public"):
+        try:
+            from app.core.database.connection import get_db_session
+            from app.core.tenant.resolver import resolve_canonical_restaurant_id
+            async with get_db_session() as db:
+                resolved_id = await resolve_canonical_restaurant_id(effective_rest_id, db)
+                if resolved_id:
+                    effective_rest_id = resolved_id
+        except Exception as resolve_err:
+            print(f"[WS_RESOLVE_NOTICE] Restaurant identifier '{effective_rest_id}' resolution: {resolve_err}")
+
     if is_admin_channel_request:
         is_admin_verified = False
         if token:
@@ -108,7 +120,7 @@ async def websocket_endpoint(
                 st = get_settings()
                 payload = jose_jwt.decode(token, st.JWT_ACCESS_SECRET_KEY, algorithms=[st.JWT_ALGORITHM])
                 token_rest_id = str(payload.get("restaurant_id", "")).strip()
-                if not token_rest_id or token_rest_id.lower() == effective_rest_id.lower():
+                if not token_rest_id or token_rest_id.lower() == effective_rest_id.lower() or token_rest_id.lower() == (restaurant_id or "").lower():
                     is_verified = True
                     verified_role = str(payload.get("role", raw_role)).upper()
             except ExpiredSignatureError:
@@ -116,15 +128,55 @@ async def websocket_endpoint(
             except Exception:
                 pass
 
-            # 2. Try Firebase ID token
+            # 2. Try Firebase ID token (owners, managers, admins)
             if not is_verified and not token_expired:
                 try:
                     from app.core.security.firebase import verify_firebase_id_token
+                    from app.core.security.rbac import get_platform_admin_allowed_emails
                     claims = verify_firebase_id_token(token)
-                    claim_rest = claims.get("restaurant_id") or claims.get("restaurantId")
-                    if not claim_rest or str(claim_rest).lower() == effective_rest_id.lower():
+                    email = (claims.get("email") or "").strip().lower()
+                    uid = claims.get("uid") or claims.get("user_id") or claims.get("sub")
+
+                    if email in get_platform_admin_allowed_emails():
                         is_verified = True
-                        verified_role = str(claims.get("role", raw_role)).upper()
+                    else:
+                        claim_rest = claims.get("restaurant_id") or claims.get("restaurantId")
+                        if claim_rest and (str(claim_rest).lower() == effective_rest_id.lower() or str(claim_rest).lower() == (restaurant_id or "").lower()):
+                            is_verified = True
+                            verified_role = str(claims.get("role", raw_role)).upper()
+                        else:
+                            # Authorize via restaurant ownership or membership in database
+                            try:
+                                from app.core.database.connection import get_db_session
+                                from app.modules.restaurants.models import Restaurant, RestaurantMembership
+                                from sqlalchemy import select, or_
+                                async with get_db_session() as db:
+                                    chk_stmt = select(Restaurant).where(
+                                        Restaurant.id == effective_rest_id,
+                                        Restaurant.deleted_at.is_(None),
+                                        or_(
+                                            Restaurant.owner_uid == uid,
+                                            Restaurant.owner_email == email
+                                        )
+                                    )
+                                    chk_res = await db.execute(chk_stmt)
+                                    if chk_res.scalar_one_or_none():
+                                        is_verified = True
+                                    else:
+                                        mem_stmt = select(RestaurantMembership).where(
+                                            RestaurantMembership.restaurant_id == effective_rest_id,
+                                            or_(
+                                                RestaurantMembership.user_uid == uid,
+                                                RestaurantMembership.user_email == email
+                                            )
+                                        )
+                                        mem_res = await db.execute(mem_stmt)
+                                        mem = mem_res.scalar_one_or_none()
+                                        if mem:
+                                            is_verified = True
+                                            verified_role = mem.role.upper()
+                            except Exception as db_err:
+                                print(f"[WS_MEMBERSHIP_CHECK_NOTICE]: {db_err}")
                 except Exception as fb_err:
                     if "expired" in str(fb_err).lower():
                         token_expired = True
@@ -139,7 +191,7 @@ async def websocket_endpoint(
     if verified_role != "PLATFORM_ADMIN" and effective_rest_id == ADMIN_CHANNEL:
         effective_rest_id = "public"
 
-    canonical_channel = target_channel or format_channel(effective_rest_id, verified_role)
+    canonical_channel = ADMIN_CHANNEL if is_admin_channel_request else format_channel(effective_rest_id, verified_role)
 
     await ws_manager.connect(
         websocket=websocket,

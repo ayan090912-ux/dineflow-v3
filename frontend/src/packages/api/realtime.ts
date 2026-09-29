@@ -95,13 +95,19 @@ function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableS
   let wsProto = 'wss:';
   let host = 'dinely.food';
 
+  const cleanRole = (role || 'CUSTOMER').trim().toUpperCase();
   const token = explicitToken || (typeof window !== 'undefined'
-    ? (localStorage.getItem('dinely_platform_admin_id_token') || sessionStorage.getItem('dinely_admin_token') || localStorage.getItem('dinely_auth_token') || '')
+    ? (
+        localStorage.getItem(`dinely_staff_token_${cleanRole.toLowerCase()}`) ||
+        localStorage.getItem('dinely_platform_admin_id_token') ||
+        sessionStorage.getItem('dinely_admin_token') ||
+        localStorage.getItem('dinely_auth_token') ||
+        ''
+      )
     : '');
   const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
 
   const cleanRest = (restaurantId || 'global').trim();
-  const cleanRole = (role || 'CUSTOMER').trim().toUpperCase();
   const canonicalChannel = explicitChannel || (
     cleanRole === 'PLATFORM_ADMIN' || cleanRest.toLowerCase() === 'platform:admin'
       ? 'platform:admin'

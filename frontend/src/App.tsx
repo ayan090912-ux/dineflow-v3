@@ -630,7 +630,7 @@ function AppContent() {
 
         return (
           <KitchenETADashboard
-            orders={kitchenOrders}
+            orders={kitchenOrders.length > 0 ? kitchenOrders : undefined}
             onRefreshOrders={() => {
               const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || resolvedTenant?.id || undefined;
               if (restId) api.getOrders(restId).then(setKitchenOrders).catch(() => {});

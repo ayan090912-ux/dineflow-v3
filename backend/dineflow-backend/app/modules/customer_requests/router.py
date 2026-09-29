@@ -66,11 +66,12 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     if not payload.tableNumber:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="tableNumber is required")
 
-    # Tenant verification
-    rest_chk = await db.execute(select(Restaurant).where(Restaurant.id == payload.restaurantId))
-    rest = rest_chk.scalar_one_or_none()
-    if rest and (rest.deleted_at is not None or rest.lifecycle_status == "ARCHIVED"):
+    from app.core.tenant.resolver import resolve_canonical_restaurant
+    rest = await resolve_canonical_restaurant(payload.restaurantId, db)
+    if not rest or rest.deleted_at is not None or rest.lifecycle_status == "ARCHIVED":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant is archived or inactive")
+
+    canonical_rest_id = rest.id
 
     now_utc = datetime.now(timezone.utc)
     req_id = f"req-{int(now_utc.timestamp() * 1000)}"
@@ -82,7 +83,7 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     if not session_id and (payload.tableId or payload.tableNumber):
         from app.modules.tables.models import TableSession
         query_sess = select(TableSession).where(
-            (TableSession.restaurant_id == payload.restaurantId) &
+            (TableSession.restaurant_id == canonical_rest_id) &
             ((TableSession.table_id == payload.tableId) | (TableSession.table_number == payload.tableNumber)) &
             (TableSession.status == "ACTIVE")
         )
@@ -93,7 +94,7 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
 
     new_req = CustomerRequestModel(
         id=req_id,
-        restaurant_id=payload.restaurantId,
+        restaurant_id=canonical_rest_id,
         table_id=payload.tableId,
         table_number=payload.tableNumber,
         request_type=req_type,
@@ -112,7 +113,7 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     async def _safe_broadcast():
         try:
             await ws_manager.broadcast_event(
-                restaurant_id=payload.restaurantId,
+                restaurant_id=canonical_rest_id,
                 event_type="service_request_created",
                 payload=req_dict,
                 target_audience=["WAITER", "OWNER"]
@@ -120,7 +121,7 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
         except Exception as e:
             logger.error(
                 f"[create_customer_request] WebSocket broadcast failed for request '{req_id}' "
-                f"(restaurant: '{payload.restaurantId}', table: '{payload.tableNumber}'): {e}. "
+                f"(restaurant: '{canonical_rest_id}', table: '{payload.tableNumber}'): {e}. "
                 f"Request remains persisted in PostgreSQL as PENDING for terminal polling fallback.",
                 exc_info=True
             )
@@ -139,7 +140,10 @@ async def get_customer_requests(
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == restaurant_id)
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    canonical_rest_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+
+    query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == canonical_rest_id)
     if status_filter:
         query = query.where(CustomerRequestModel.status == status_filter)
     elif active_only:

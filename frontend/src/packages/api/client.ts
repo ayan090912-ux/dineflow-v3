@@ -870,8 +870,38 @@ export class DinelyApiClient {
     return rest || null;
   }
 
-  async loginKitchen(identifier: string, password?: string) {
-    await delay(350);
+  async loginStaffTerminal(role: 'KITCHEN' | 'WAITER' | 'BAR' | 'INVENTORY', identifier: string, password?: string) {
+    await delay(200);
+    const targetRestId = this.getCurrentRestaurantId() || 'the-start';
+    const roleKey = role.toLowerCase();
+    let backendUser: any = null;
+    let backendToken: string | null = null;
+    let resolvedRest: any = null;
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/auth/terminal-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurant_id: targetRestId,
+          role: role,
+          passcode: password || '1234',
+          identifier: identifier || `${roleKey}_station`,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        backendToken = data.access_token || data.token || null;
+        backendUser = data.user;
+        if (data.restaurant_id) {
+          resolvedRest = await this.resolveStaffRestaurant(data.restaurant_id).catch(() => null);
+        }
+      }
+    } catch (e) {
+      console.warn(`Backend /auth/terminal-login failed for ${role}:`, e);
+    }
+
     const input = identifier.trim().toLowerCase();
     let emp = this.employees.find((e) => {
       if (e.isAccountDisabled) return false;
@@ -882,269 +912,75 @@ export class DinelyApiClient {
       return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
     });
 
-    if (!emp) {
-      throw new Error(`No active kitchen staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
+    if (!backendToken && !emp) {
+      throw new Error(`No active ${roleKey} staff account found for '${identifier}'. Please check credentials.`);
     }
 
-    if (password && emp.password && emp.password !== password) {
+    if (emp && password && emp.password && emp.password !== password) {
       throw new Error('Invalid password. Please check your credentials and try again.');
     }
 
-    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
-    if (!rest) {
-      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
-    }
+    const restId = (backendUser?.restaurantId || (emp ? emp.restaurantId : targetRestId)) || targetRestId;
+    const rest = resolvedRest || (await this.resolveStaffRestaurant(restId).catch(() => null));
 
-    emp.status = 'ON_CLOCK';
-    emp.lastLoginAt = new Date().toISOString();
-
-    let kitchenUser: User = {
-      id: `usr-${emp.id}`,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.phone,
-      role: 'CHEF',
-      restaurantId: emp.restaurantId,
-      orgId: rest ? rest.orgId : 'org-1',
-      isEmailVerified: true,
-    };
-
+    const finalToken = backendToken || `df_${roleKey}_jwt_${Date.now()}`;
     const tokens: AuthTokens = {
-      accessToken: `df_kitchen_jwt_${emp.id}_${Date.now()}`,
-      refreshToken: `df_kitchen_ref_${emp.id}_${Date.now()}`,
+      accessToken: finalToken,
+      refreshToken: finalToken,
       expiresIn: 86400,
       tokenType: 'Bearer',
     };
 
-    kitchenUser.tokens = tokens;
-    this.saveSession(kitchenUser, tokens, emp.restaurantId, 'KITCHEN');
+    const staffUser: User = {
+      id: backendUser?.id || (emp ? `usr-${emp.id}` : `usr-${roleKey}-${Date.now()}`),
+      name: backendUser?.name || (emp ? emp.name : `${role} Staff`),
+      email: backendUser?.email || (emp ? emp.email : `${roleKey}@dinely.internal`),
+      phone: emp?.phone || '',
+      role: (role === 'KITCHEN' ? 'CHEF' : role === 'BAR' ? 'BARTENDER' : role) as any,
+      restaurantId: restId,
+      orgId: rest ? rest.orgId : 'org-1',
+      isEmailVerified: true,
+      tokens,
+    };
+
+    if (emp) {
+      emp.status = 'ON_CLOCK';
+      emp.lastLoginAt = new Date().toISOString();
+    }
+
+    const portalScope = role as PortalScope;
+    this.saveSession(staffUser, tokens, restId, portalScope);
+    localStorage.setItem(`dinely_staff_token_${roleKey}`, finalToken);
+    localStorage.setItem('dinely_auth_token', finalToken);
     this.saveDatabase();
 
     realtimeBus.emit('StaffStatusUpdated' as any, {
-      employeeId: emp.id,
-      restaurantId: emp.restaurantId,
-      name: emp.name,
-      role: emp.role,
+      employeeId: staffUser.id,
+      restaurantId: restId,
+      name: staffUser.name,
+      role: staffUser.role,
       status: 'ON_CLOCK',
-      lastLoginAt: emp.lastLoginAt,
-      data: emp,
+      lastLoginAt: new Date().toISOString(),
+      data: staffUser,
     });
 
-    return { user: kitchenUser, tokens, employee: emp, restaurant: rest };
+    return { user: staffUser, tokens, employee: emp || staffUser, restaurant: rest };
+  }
+
+  async loginKitchen(identifier: string, password?: string) {
+    return this.loginStaffTerminal('KITCHEN', identifier, password);
   }
 
   async loginWaiter(identifier: string, password?: string) {
-    await delay(350);
-    const input = identifier.trim().toLowerCase();
-    let emp = this.employees.find((e) => {
-      if (e.isAccountDisabled) return false;
-      const eEmail = (e.email || '').toLowerCase();
-      const eId = (e.id || '').toLowerCase();
-      const eName = (e.name || '').toLowerCase();
-      const eFirstName = eName.split(' ')[0];
-      return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
-    });
-
-    if (!emp) {
-      throw new Error(`No active waiter staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
-    }
-
-    if (password && emp.password && emp.password !== password) {
-      throw new Error('Invalid password. Please check your credentials and try again.');
-    }
-
-    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
-    if (!rest) {
-      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
-    }
-
-    emp.status = 'ON_CLOCK';
-    emp.lastLoginAt = new Date().toISOString();
-
-    let waiterUser = this.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
-    if (!waiterUser) {
-      waiterUser = {
-        id: `usr-${emp.id}`,
-        name: emp.name,
-        email: emp.email,
-        phone: emp.phone,
-        role: 'WAITER',
-        restaurantId: emp.restaurantId,
-        orgId: rest ? rest.orgId : 'org-1',
-        isEmailVerified: true,
-      };
-      this.users.push(waiterUser);
-    } else {
-      waiterUser.role = 'WAITER';
-      waiterUser.restaurantId = emp.restaurantId;
-    }
-
-    const tokens: AuthTokens = {
-      accessToken: `df_waiter_jwt_${emp.id}_${Date.now()}`,
-      refreshToken: `df_waiter_ref_${emp.id}_${Date.now()}`,
-      expiresIn: 86400,
-      tokenType: 'Bearer',
-    };
-
-    waiterUser.tokens = tokens;
-    this.saveSession(waiterUser, tokens, emp.restaurantId, 'WAITER');
-    this.saveDatabase();
-
-    realtimeBus.emit('StaffStatusUpdated' as any, {
-      employeeId: emp.id,
-      restaurantId: emp.restaurantId,
-      name: emp.name,
-      role: emp.role,
-      status: 'ON_CLOCK',
-      lastLoginAt: emp.lastLoginAt,
-      data: emp,
-    });
-
-    return { user: waiterUser, tokens, employee: emp, restaurant: rest };
+    return this.loginStaffTerminal('WAITER', identifier, password);
   }
 
   async loginBar(identifier: string, password?: string) {
-    await delay(350);
-    const input = identifier.trim().toLowerCase();
-    let emp = this.employees.find((e) => {
-      if (e.isAccountDisabled) return false;
-      const eEmail = (e.email || '').toLowerCase();
-      const eId = (e.id || '').toLowerCase();
-      const eName = (e.name || '').toLowerCase();
-      const eFirstName = eName.split(' ')[0];
-      return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
-    });
-
-    if (!emp) {
-      throw new Error(`No active bar staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
-    }
-
-    if (password && emp.password && emp.password !== password) {
-      throw new Error('Invalid password. Please check your credentials and try again.');
-    }
-
-    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
-    if (!rest) {
-      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
-    }
-
-    if (rest && rest.hasBar === false) {
-      throw new Error(`Bar module is disabled for ${rest.name}.`);
-    }
-
-    emp.status = 'ON_CLOCK';
-    emp.lastLoginAt = new Date().toISOString();
-
-    let barUser = this.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
-    if (!barUser) {
-      barUser = {
-        id: `usr-${emp.id}`,
-        name: emp.name,
-        email: emp.email,
-        phone: emp.phone,
-        role: 'BARTENDER',
-        restaurantId: emp.restaurantId,
-        orgId: rest ? rest.orgId : 'org-1',
-        isEmailVerified: true,
-      };
-      this.users.push(barUser);
-    } else {
-      barUser.role = 'BARTENDER';
-      barUser.restaurantId = emp.restaurantId;
-    }
-
-    const tokens: AuthTokens = {
-      accessToken: `df_bar_jwt_${emp.id}_${Date.now()}`,
-      refreshToken: `df_bar_ref_${emp.id}_${Date.now()}`,
-      expiresIn: 86400,
-      tokenType: 'Bearer',
-    };
-
-    barUser.tokens = tokens;
-    this.saveSession(barUser, tokens, emp.restaurantId, 'BAR');
-    this.saveDatabase();
-
-    realtimeBus.emit('StaffStatusUpdated' as any, {
-      employeeId: emp.id,
-      restaurantId: emp.restaurantId,
-      name: emp.name,
-      role: emp.role,
-      status: 'ON_CLOCK',
-      lastLoginAt: emp.lastLoginAt,
-      data: emp,
-    });
-
-    return { user: barUser, tokens, employee: emp, restaurant: rest };
+    return this.loginStaffTerminal('BAR', identifier, password);
   }
 
   async loginInventory(identifier: string, password?: string) {
-    await delay(350);
-    const input = identifier.trim().toLowerCase();
-    let emp = this.employees.find((e) => {
-      if (e.isAccountDisabled) return false;
-      const eEmail = (e.email || '').toLowerCase();
-      const eId = (e.id || '').toLowerCase();
-      const eName = (e.name || '').toLowerCase();
-      const eFirstName = eName.split(' ')[0];
-      return eEmail === input || eId === input || eName === input || eFirstName === input || eName.includes(input);
-    });
-
-    if (!emp) {
-      throw new Error(`No active inventory staff account found for '${identifier}'. Ask your Restaurant Owner to add you in Staff Management.`);
-    }
-
-    if (password && emp.password && emp.password !== password) {
-      throw new Error('Invalid password. Please check your credentials and try again.');
-    }
-
-    const rest = await this.resolveStaffRestaurant(emp.restaurantId);
-    if (!rest) {
-      throw new Error(`Staff member's assigned restaurant (ID: ${emp.restaurantId}) could not be resolved or is not active.`);
-    }
-
-    emp.status = 'ON_CLOCK';
-    emp.lastLoginAt = new Date().toISOString();
-
-    let invUser = this.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
-    if (!invUser) {
-      invUser = {
-        id: `usr-${emp.id}`,
-        name: emp.name,
-        email: emp.email,
-        phone: emp.phone,
-        role: 'INVENTORY_MANAGER',
-        restaurantId: emp.restaurantId,
-        orgId: rest ? rest.orgId : 'org-1',
-        isEmailVerified: true,
-      };
-      this.users.push(invUser);
-    } else {
-      invUser.role = 'INVENTORY_MANAGER';
-      invUser.restaurantId = emp.restaurantId;
-    }
-
-    const tokens: AuthTokens = {
-      accessToken: `df_inventory_jwt_${emp.id}_${Date.now()}`,
-      refreshToken: `df_inventory_ref_${emp.id}_${Date.now()}`,
-      expiresIn: 86400,
-      tokenType: 'Bearer',
-    };
-
-    invUser.tokens = tokens;
-    this.saveSession(invUser, tokens, emp.restaurantId, 'INVENTORY');
-    this.saveDatabase();
-
-    realtimeBus.emit('StaffStatusUpdated' as any, {
-      employeeId: emp.id,
-      restaurantId: emp.restaurantId,
-      name: emp.name,
-      role: emp.role,
-      status: 'ON_CLOCK',
-      lastLoginAt: emp.lastLoginAt,
-      data: emp,
-    });
-
-    return { user: invUser, tokens, employee: emp, restaurant: rest };
+    return this.loginStaffTerminal('INVENTORY', identifier, password);
   }
 
 
@@ -3105,6 +2941,42 @@ export class DinelyApiClient {
     }
 
     this.saveDatabase();
+
+    const targetOrderId = parentOrder?.id || ticket.parentOrderId || ticketIdOrOrderId;
+    if (targetOrderId) {
+      try {
+        const updateBody: any = {};
+        if (ticket.station === 'KITCHEN') {
+          updateBody.kitchenStatus = status;
+          if (status === 'PREPARING' || status === 'ACCEPTED') updateBody.status = 'IN_KITCHEN';
+          if (status === 'READY') updateBody.status = 'READY';
+          if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
+        } else if (ticket.station === 'BAR') {
+          updateBody.barStatus = status;
+          if (status === 'READY') updateBody.status = 'READY';
+          if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
+        } else {
+          updateBody.status = status;
+        }
+
+        const apiBase = getApiBaseUrl();
+        const roleName = ticket.station || 'KITCHEN';
+        const token =
+          localStorage.getItem(`dinely_staff_token_${roleName.toLowerCase()}`) ||
+          localStorage.getItem('dinely_auth_token') ||
+          '';
+        fetch(`${apiBase}/orders/${encodeURIComponent(targetOrderId)}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(updateBody),
+        }).catch((err) => console.warn('[updateFulfillmentTicketStatus] PUT error:', err));
+      } catch (e) {
+        console.warn('[updateFulfillmentTicketStatus] Backend status persist:', e);
+      }
+    }
 
     realtimeBus.emit('FulfillmentTicketUpdated' as any, {
       ticketId: ticket.id,
