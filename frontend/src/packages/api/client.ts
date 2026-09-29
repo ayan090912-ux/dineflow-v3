@@ -2770,7 +2770,10 @@ export class DinelyApiClient {
 
     try {
       const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/orders/restaurant/${encodeURIComponent(targetId)}`);
+      const headers = this.getAuthHeader('OWNER');
+      const res = await fetch(`${apiBase}/orders/restaurant/${encodeURIComponent(targetId)}`, {
+        headers,
+      });
       if (res.ok) {
         const rawOrds = await res.json();
         if (Array.isArray(rawOrds)) {
@@ -2779,6 +2782,8 @@ export class DinelyApiClient {
           this.saveDatabase();
           return remoteOrds;
         }
+      } else {
+        console.warn(`[getOrders] API returned ${res.status} for restaurant ${targetId}`);
       }
     } catch (e) {
       console.warn('API fetch for getOrders failed:', e);
@@ -4450,7 +4455,8 @@ export class DinelyApiClient {
     if (params.toString()) url += `?${params.toString()}`;
 
     try {
-      const res = await fetch(url);
+      const headers = this.getAuthHeader('OWNER');
+      const res = await fetch(url, { headers });
       if (res.ok) {
         const items = await res.json();
         if (Array.isArray(items) && items.length > 0) {
