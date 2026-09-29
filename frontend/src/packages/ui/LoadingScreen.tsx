@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChefHat, RefreshCw, ArrowRight, ShieldCheck, Activity } from 'lucide-react';
-import { DinelyLogo } from './DinelyLogo';
+import { RefreshCw, ArrowRight } from 'lucide-react';
+import { DinelyLogoMark } from './DinelyLogo';
 import { Button } from './Button';
 
 export interface LoadingScreenProps {
@@ -10,114 +10,137 @@ export interface LoadingScreenProps {
   onRetry?: () => void;
   onChooseRestaurant?: () => void;
   timeoutSeconds?: number;
+  isError?: boolean;
+  errorMessage?: string;
 }
 
+/**
+ * Dinely Clean Minimal Tenant Loading Screen
+ * Designed to seamlessly blend with the primary Dinely Restaurant Dashboard UI:
+ * - Canvas Background: #0b0d11 (matches --color-bg-canvas)
+ * - Container & Accents: #12151b & #1e232e (matches --color-bg-surface & --color-border-subtle)
+ * - Static small brand icon, calm typography, and a single subtle animated indicator.
+ */
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   restaurantName,
-  status = 'Initializing Restaurant OS & Terminal Data...',
-  substatus = 'Synchronizing real-time telemetry, tickets & menu engine',
+  status,
+  substatus,
   onRetry,
   onChooseRestaurant,
-  timeoutSeconds = 6,
+  timeoutSeconds = 8,
+  isError = false,
+  errorMessage,
 }) => {
   const [showEscapeHatch, setShowEscapeHatch] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setElapsed((prev) => {
-        if (prev + 1 >= timeoutSeconds) {
-          setShowEscapeHatch(true);
-        }
-        return prev + 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timeoutSeconds]);
+    if (isError) return;
+    const timer = setTimeout(() => {
+      setShowEscapeHatch(true);
+    }, timeoutSeconds * 1000);
+    return () => clearTimeout(timer);
+  }, [timeoutSeconds, isError]);
+
+  const displayName = restaurantName?.trim();
+  const primaryTitle = isError ? 'Unable to open workspace' : 'Opening your workspace';
+  const subtitle = isError
+    ? errorMessage || 'Something went wrong while connecting to your restaurant.'
+    : displayName
+      ? `Connecting to ${displayName}...`
+      : substatus || status || 'Connecting to your restaurant...';
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans select-none">
-      {/* Ambient background glow orbs */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
-      <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col items-center justify-center p-6 select-none font-sans relative overflow-hidden">
+      {/* Subtle, calm ambient background depth matching the main restaurant dashboard */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-40"
+        style={{
+          background: 'radial-gradient(circle at 50% 45%, rgba(30, 41, 59, 0.35) 0%, transparent 60%)',
+        }}
+      />
 
-      {/* Main Glassmorphic Card */}
-      <div className="relative z-10 max-w-md w-full bg-[#0e121a]/90 backdrop-blur-2xl border border-[#1e2536] p-8 rounded-3xl shadow-2xl text-center space-y-6">
-        {/* Animated Brand Halo */}
-        <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
-          {/* Outer dual spinning pulse rings */}
-          <div className="absolute inset-0 rounded-full border-2 border-rose-500/20 border-t-rose-500 animate-spin" style={{ animationDuration: '1.2s' }} />
-          <div className="absolute inset-1 rounded-full border-2 border-indigo-500/20 border-b-indigo-400 animate-spin" style={{ animationDuration: '2s', animationDirection: 'reverse' }} />
-
-          {/* Central Logo Container */}
-          <div className="w-14 h-14 rounded-2xl bg-[#141924] border border-[#252e42] flex items-center justify-center shadow-inner">
-            <DinelyLogo size="sm" variant="icon" />
-          </div>
+      {/* Main Centered Minimal Container */}
+      <div className="relative z-10 max-w-sm w-full text-center flex flex-col items-center space-y-5 animate-fadeIn">
+        {/* Static Small Dinely Brand Mark Container */}
+        <div className="w-12 h-12 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center shadow-sm">
+          <DinelyLogoMark size={24} className="text-white" />
         </div>
 
-        {/* Text & Status Telemetry */}
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#141924] border border-[#232c3d] text-[11px] font-medium text-slate-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="truncate max-w-[200px]">{restaurantName || 'Dinely Operating System'}</span>
-          </div>
+        {/* Workspace & Tenant Typography */}
+        <div className="space-y-1.5 w-full">
+          {displayName && !isError && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#12151b] border border-[#1e232e] text-[11px] font-medium tracking-wide text-slate-300 mb-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="truncate max-w-[220px] uppercase font-semibold">{displayName}</span>
+            </div>
+          )}
 
-          <h2 className="text-base font-bold text-white tracking-tight">
-            {restaurantName ? `${restaurantName}` : 'Restaurant Workspace'}
-          </h2>
+          <h1 className="text-lg font-semibold text-white tracking-tight">
+            {primaryTitle}
+          </h1>
 
-          <p className="text-xs text-slate-400 font-mono tracking-tight flex items-center justify-center gap-1.5">
-            <Activity className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-            <span>{status}</span>
-          </p>
-
-          <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-            {substatus}
+          <p className="text-xs text-slate-400 font-normal leading-relaxed max-w-xs mx-auto">
+            {subtitle}
           </p>
         </div>
 
-        {/* Shimmer Progress Track */}
-        <div className="space-y-1.5 pt-1">
-          <div className="w-full h-1 bg-[#161c28] rounded-full overflow-hidden relative">
-            <div className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-rose-500 to-transparent rounded-full animate-[shimmer_1.8s_infinite]"
-                 style={{
-                   animation: 'shimmer 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-                 }}
+        {/* Single Subtle Loading Indicator (or Clean Retry Action in error state) */}
+        {!isError ? (
+          <div className="flex items-center justify-center gap-1.5 py-2" aria-label="Loading workspace">
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 animate-bounce motion-reduce:animate-none"
+              style={{ animationDuration: '1.2s', animationDelay: '0s' }}
+            />
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 animate-bounce motion-reduce:animate-none"
+              style={{ animationDuration: '1.2s', animationDelay: '0.15s' }}
+            />
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 animate-bounce motion-reduce:animate-none"
+              style={{ animationDuration: '1.2s', animationDelay: '0.3s' }}
             />
           </div>
-          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 px-1">
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-slate-400" /> Multi-Tenant Active
-            </span>
-            <span>{elapsed}s elapsed</span>
+        ) : (
+          <div className="pt-2">
+            {onRetry && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+                className="text-xs border-[#1e232e] bg-[#12151b] hover:bg-[#1a1e27] text-slate-200 px-4 py-2"
+                icon={<RefreshCw className="w-3.5 h-3.5" />}
+              >
+                Retry
+              </Button>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Escape hatch / Fallback controls if network is slow */}
-        {showEscapeHatch && (
-          <div className="pt-2 border-t border-[#1a2130] space-y-2 animate-fadeIn">
-            <p className="text-[11px] text-slate-400">Taking longer than expected to connect?</p>
+        {/* Subtle Escape Hatch (only shown if connection takes unusually long) */}
+        {!isError && showEscapeHatch && (
+          <div className="pt-4 border-t border-[#1e232e] w-full space-y-2.5 animate-fadeIn">
+            <p className="text-[11px] text-slate-400">Taking longer than expected?</p>
             <div className="flex items-center justify-center gap-2">
               {onRetry && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onRetry}
-                  className="text-xs border-[#252e42] bg-[#121622] hover:bg-[#1a2030] text-slate-200"
+                  className="text-xs border-[#1e232e] bg-[#12151b] hover:bg-[#1a1e27] text-slate-200 px-3 py-1.5"
                   icon={<RefreshCw className="w-3 h-3" />}
                 >
-                  Force Refresh
+                  Retry
                 </Button>
               )}
               {onChooseRestaurant && (
                 <Button
-                  variant="brand"
+                  variant="outline"
                   size="sm"
                   onClick={onChooseRestaurant}
-                  className="text-xs bg-rose-600 hover:bg-rose-500 text-white"
+                  className="text-xs border-[#1e232e] bg-[#12151b] hover:bg-[#1a1e27] text-slate-300 px-3 py-1.5"
                   icon={<ArrowRight className="w-3 h-3" />}
                 >
-                  Return to Outlets
+                  All Outlets
                 </Button>
               )}
             </div>

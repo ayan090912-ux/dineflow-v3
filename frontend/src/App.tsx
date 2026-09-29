@@ -32,8 +32,8 @@ const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector
 function RouteLoadingFallback() {
   return (
     <LoadingScreen
-      status="Loading workspace..."
-      substatus="Optimizing and preparing interface resources"
+      status="Opening your workspace"
+      substatus="Preparing workspace resources..."
     />
   );
 }
@@ -493,10 +493,12 @@ function AppContent() {
         );
       }
       if (tenantResolutionState === 'RESOLVING') {
+        const tenantDisplayName = domainResolution.restaurantName || (domainResolution.slug ? domainResolution.slug.toUpperCase().replace(/-/g, ' ') : undefined);
         return (
           <LoadingScreen
-            status="Connecting to Restaurant..."
-            substatus={`Resolving tenant ${domainResolution.slug || domainResolution.hostname}`}
+            restaurantName={tenantDisplayName}
+            status="Opening your workspace"
+            substatus={tenantDisplayName ? `Connecting to ${tenantDisplayName}...` : 'Connecting to your restaurant...'}
           />
         );
       }
@@ -842,8 +844,9 @@ function AppContent() {
     if (authState === 'INITIALIZING' && !['/', '/landing', '/home', '/about', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
       return (
         <LoadingScreen
-          status="Initializing secure session..."
-          substatus="Validating multi-tenant authorization credentials"
+          restaurantName={resolvedTenant?.name}
+          status="Opening your workspace"
+          substatus="Validating credentials..."
         />
       );
     }

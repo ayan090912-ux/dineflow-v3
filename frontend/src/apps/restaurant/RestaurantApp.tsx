@@ -1194,11 +1194,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   };
 
   if (viewState === 'INITIALIZING' || viewState === 'LOADING') {
+    const restName = activeRestaurant?.name || currentRestaurant?.name;
     return (
       <LoadingScreen
-        restaurantName={activeRestaurant?.name || currentRestaurant?.name}
-        status="Initializing Restaurant OS & Terminal Data..."
-        substatus="Connecting live Kitchen KDS hot line, orders and POS floorplan"
+        restaurantName={restName}
+        status="Opening your workspace"
+        substatus={restName ? `Connecting to ${restName}...` : 'Preparing your restaurant workspace...'}
         onRetry={() => loadData(true)}
         onChooseRestaurant={() => (onNavigate ? onNavigate('/workspace') : (window.location.href = '/workspace'))}
       />
