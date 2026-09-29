@@ -165,7 +165,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
   // Sync initial prop orders
   useEffect(() => {
-    setOrders(initialOrders);
+    if (initialOrders) {
+      setOrders(Array.isArray(initialOrders) ? initialOrders : []);
+    }
   }, [initialOrders]);
 
   // Clock tick & time updates
@@ -215,9 +217,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       api.getOrders(restId).then((freshOrders) => {
         if (!freshOrders) return;
         setOrders((prevOrders) => {
-          if (!isMuted && freshOrders.length > prevOrders.length) {
+          const currentList = Array.isArray(prevOrders) ? prevOrders : [];
+          if (!isMuted && freshOrders.length > currentList.length) {
             const hasNewPending = freshOrders.some(
-              (fo) => fo.status === 'PENDING' && !prevOrders.some((po) => po.id === fo.id)
+              (fo) => fo.status === 'PENDING' && !currentList.some((po) => po.id === fo.id)
             );
             if (hasNewPending) {
               playKitchenChime('NEW_ORDER');
@@ -430,7 +433,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const readyOrders = filteredOrders.filter((o) => o.kitchenStatus === 'READY' || (!o.kitchenStatus && o.status === 'READY'));
   const completedOrders = filteredOrders.filter((o) => o.kitchenStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'COMPLETED');
 
-  const overdueCount = orders.filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && getRemainingTime(o).isOverdue).length;
+  const overdueCount = (orders || []).filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && getRemainingTime(o).isOverdue).length;
 
   return (
     <div className="bg-[#0b0d11] text-slate-100 flex flex-col font-sans relative w-full rounded-2xl overflow-hidden border border-[#1e232e]">

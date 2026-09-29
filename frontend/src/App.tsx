@@ -452,7 +452,7 @@ function AppContent() {
   useEffect(() => {
     let isMounted = true;
     if (cleanPath.startsWith('/kitchen')) {
-      const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || undefined;
+      const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || resolvedTenant?.id || undefined;
       api.getOrders(restId).then((o) => {
         if (isMounted) setKitchenOrders(o || []);
       }).catch(() => {
@@ -462,7 +462,7 @@ function AppContent() {
     return () => {
       isMounted = false;
     };
-  }, [cleanPath, currentUser]);
+  }, [cleanPath, currentUser, resolvedTenant?.id]);
 
   const handleLogout = useCallback(async (redirectLoginPath: string = '/restaurant/login') => {
     const activeScope = getPortalScopeFromPath(cleanPath);
@@ -628,7 +628,16 @@ function AppContent() {
           );
         }
 
-        return <KitchenETADashboard onLogout={() => handleLogout('/login')} />;
+        return (
+          <KitchenETADashboard
+            orders={kitchenOrders}
+            onRefreshOrders={() => {
+              const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || resolvedTenant?.id || undefined;
+              if (restId) api.getOrders(restId).then(setKitchenOrders).catch(() => {});
+            }}
+            onLogout={() => handleLogout('/login')}
+          />
+        );
       }
 
       // 3. Waiter Terminal
