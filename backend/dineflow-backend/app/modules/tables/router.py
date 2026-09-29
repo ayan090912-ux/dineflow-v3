@@ -114,6 +114,15 @@ class CreateTableSchema(BaseModel):
     section: Optional[str] = "Main Hall"
     capacity: Optional[int] = 4
 
+class UpdateTableSchema(BaseModel):
+    tableNumber: Optional[str] = None
+    table_number: Optional[str] = None
+    section: Optional[str] = None
+    capacity: Optional[int] = None
+    status: Optional[str] = None
+    is_occupied: Optional[bool] = None
+    isOccupied: Optional[bool] = None
+
 @router.get("/{restaurant_id}/tables")
 async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     try:
@@ -224,6 +233,52 @@ async def create_table(
     await db.commit()
     await db.refresh(new_tbl)
     return new_tbl
+
+@router.put("/{restaurant_id}/tables/{table_id}")
+async def update_table(
+    restaurant_id: str,
+    table_id: str,
+    payload: UpdateTableSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    target_rest_id = caller.restaurant_id or restaurant_id
+    try:
+        from app.core.tenant.resolver import resolve_canonical_restaurant_id
+        target_rest_id = await resolve_canonical_restaurant_id(target_rest_id, db)
+    except Exception:
+        pass
+
+    query = select(Table).where(
+        (Table.restaurant_id == target_rest_id) &
+        ((Table.id == table_id) | (Table.table_number == table_id))
+    )
+    result = await db.execute(query)
+    tbl = result.scalar_one_or_none()
+    if not tbl:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
+
+    new_tnum = payload.tableNumber or payload.table_number
+    if new_tnum is not None:
+        tbl.table_number = new_tnum.strip()
+        pub_slug = await _get_restaurant_public_slug(target_rest_id, db)
+        clean_num = _extract_clean_table_number(tbl.table_number, tbl.id)
+        tbl.qr_code_url = generate_canonical_qr_url(pub_slug, clean_num, tbl.id)
+
+    if payload.section is not None:
+        tbl.section = payload.section
+    if payload.capacity is not None:
+        tbl.capacity = payload.capacity
+    if payload.status is not None:
+        tbl.status = payload.status
+    if payload.is_occupied is not None:
+        tbl.is_occupied = payload.is_occupied
+    elif payload.isOccupied is not None:
+        tbl.is_occupied = payload.isOccupied
+
+    await db.commit()
+    await db.refresh(tbl)
+    return tbl
 
 @router.delete("/{restaurant_id}/tables/{table_id}")
 async def delete_table(

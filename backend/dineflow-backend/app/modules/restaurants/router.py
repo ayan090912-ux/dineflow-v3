@@ -1149,3 +1149,121 @@ async def upload_restaurant_image(
     }
 
 
+class CreateStaffSchema(BaseModel):
+    email: str
+    role: str = "WAITER"
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+@router.get("/{restaurant_id}/staff")
+async def get_restaurant_staff(
+    restaurant_id: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(RestaurantMembership).where(RestaurantMembership.restaurant_id == canonical_id).order_by(RestaurantMembership.created_at.desc())
+    res = await db.execute(stmt)
+    members = res.scalars().all()
+    return [
+        {
+            "id": m.id,
+            "restaurantId": m.restaurant_id,
+            "email": m.user_email,
+            "name": m.user_email.split("@")[0].title() if m.user_email else "Staff Member",
+            "role": m.role,
+            "createdAt": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in members
+    ]
+
+@router.post("/{restaurant_id}/staff", status_code=status.HTTP_201_CREATED)
+async def create_restaurant_staff(
+    restaurant_id: str,
+    payload: CreateStaffSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    clean_email = payload.email.strip().lower()
+    clean_role = payload.role.strip().upper()
+    valid_roles = {"OWNER", "MANAGER", "WAITER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF"}
+    if clean_role not in valid_roles:
+        clean_role = "WAITER"
+
+    stmt = select(RestaurantMembership).where(
+        RestaurantMembership.restaurant_id == canonical_id,
+        func.lower(RestaurantMembership.user_email) == clean_email
+    )
+    res = await db.execute(stmt)
+    existing = res.scalar_one_or_none()
+    if existing:
+        existing.role = clean_role
+        await db.commit()
+        await db.refresh(existing)
+        return {
+            "id": existing.id,
+            "restaurantId": existing.restaurant_id,
+            "email": existing.user_email,
+            "name": payload.name or existing.user_email.split("@")[0].title(),
+            "role": existing.role,
+            "createdAt": existing.created_at.isoformat() if existing.created_at else None,
+        }
+
+    uid = f"usr-{uuid.uuid4().hex[:12]}"
+    new_mem = RestaurantMembership(
+        id=f"mem-{canonical_id}-{uuid.uuid4().hex[:8]}",
+        restaurant_id=canonical_id,
+        user_uid=uid,
+        user_email=clean_email,
+        role=clean_role,
+    )
+    db.add(new_mem)
+    await db.commit()
+    await db.refresh(new_mem)
+    return {
+        "id": new_mem.id,
+        "restaurantId": new_mem.restaurant_id,
+        "email": new_mem.user_email,
+        "name": payload.name or new_mem.user_email.split("@")[0].title(),
+        "role": new_mem.role,
+        "createdAt": new_mem.created_at.isoformat() if new_mem.created_at else None,
+    }
+
+@router.delete("/{restaurant_id}/staff/{membership_id}")
+async def delete_restaurant_staff(
+    restaurant_id: str,
+    membership_id: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(RestaurantMembership).where(
+        RestaurantMembership.restaurant_id == canonical_id,
+        RestaurantMembership.id == membership_id
+    )
+    res = await db.execute(stmt)
+    mem = res.scalar_one_or_none()
+    if not mem:
+        return {"status": "success", "message": "Membership already removed"}
+
+    await db.delete(mem)
+    await db.commit()
+    return {"status": "success", "message": "Staff member removed"}
+
+

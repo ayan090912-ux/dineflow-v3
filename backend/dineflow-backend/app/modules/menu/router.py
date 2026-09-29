@@ -23,6 +23,10 @@ class CreateMenuItemSchema(BaseModel):
     isAvailable: Optional[bool] = True
     isVegetarian: Optional[bool] = True
     targetDestination: Optional[str] = "KITCHEN"
+    isAlcoholic: Optional[bool] = False
+    dietaryType: Optional[str] = None
+    prepTimeMinutes: Optional[int] = 15
+    preparationTimeMinutes: Optional[int] = None
 
 class UpdateMenuItemSchema(BaseModel):
     name: Optional[str] = None
@@ -34,6 +38,37 @@ class UpdateMenuItemSchema(BaseModel):
     isAvailable: Optional[bool] = None
     isVegetarian: Optional[bool] = None
     targetDestination: Optional[str] = None
+    isAlcoholic: Optional[bool] = None
+    dietaryType: Optional[str] = None
+    prepTimeMinutes: Optional[int] = None
+    preparationTimeMinutes: Optional[int] = None
+
+def format_menu_item_response(item: MenuItem) -> dict:
+    return {
+        "id": item.id,
+        "restaurant_id": item.restaurant_id,
+        "restaurantId": item.restaurant_id,
+        "category_id": item.category_id,
+        "categoryId": item.category_id,
+        "name": item.name,
+        "description": item.description or "",
+        "price": item.price,
+        "image_url": item.image_url,
+        "imageUrl": item.image_url,
+        "image": item.image_url,
+        "is_available": item.is_available,
+        "isAvailable": item.is_available,
+        "is_vegetarian": item.is_vegetarian,
+        "isVegetarian": item.is_vegetarian,
+        "dietary_type": item.dietary_type,
+        "dietaryType": item.dietary_type,
+        "target_destination": item.target_destination,
+        "targetDestination": item.target_destination,
+        "is_alcoholic": item.is_alcoholic,
+        "isAlcoholic": item.is_alcoholic,
+        "preparation_time_minutes": item.preparation_time_minutes,
+        "prepTimeMinutes": item.preparation_time_minutes,
+    }
 
 from app.core.tenant.resolver import resolve_canonical_restaurant_id
 
@@ -102,33 +137,7 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     res_items = await db.execute(query_items)
     items = res_items.scalars().all()
 
-    formatted_items = []
-    for item in items:
-        formatted_items.append({
-            "id": item.id,
-            "restaurant_id": item.restaurant_id,
-            "restaurantId": item.restaurant_id,
-            "category_id": item.category_id,
-            "categoryId": item.category_id,
-            "name": item.name,
-            "description": item.description or "",
-            "price": item.price,
-            "image_url": item.image_url,
-            "imageUrl": item.image_url,
-            "image": item.image_url,
-            "is_available": item.is_available,
-            "isAvailable": item.is_available,
-            "is_vegetarian": item.is_vegetarian,
-            "isVegetarian": item.is_vegetarian,
-            "dietary_type": item.dietary_type,
-            "dietaryType": item.dietary_type,
-            "target_destination": item.target_destination,
-            "targetDestination": item.target_destination,
-            "is_alcoholic": item.is_alcoholic,
-            "isAlcoholic": item.is_alcoholic,
-            "preparation_time_minutes": item.preparation_time_minutes,
-            "prepTimeMinutes": item.preparation_time_minutes,
-        })
+    formatted_items = [format_menu_item_response(item) for item in items]
 
     return {
         "categories": categories,
@@ -184,6 +193,11 @@ async def create_menu_item(
     if dest not in ["KITCHEN", "BAR"]:
         dest = "KITCHEN"
 
+    is_veg = payload.isVegetarian if payload.isVegetarian is not None else True
+    diet_type = payload.dietaryType or ("VEG" if is_veg else "NON_VEG")
+    is_alc = payload.isAlcoholic or (dest == "BAR")
+    prep_time = payload.preparationTimeMinutes or payload.prepTimeMinutes or 15
+
     new_item = MenuItem(
         id=item_id,
         restaurant_id=target_rest_id,
@@ -193,13 +207,17 @@ async def create_menu_item(
         price=payload.price,
         image_url=img,
         is_available=payload.isAvailable if payload.isAvailable is not None else True,
-        is_vegetarian=payload.isVegetarian if payload.isVegetarian is not None else True,
-        dietary_type="VEG" if payload.isVegetarian else "NON_VEG",
+        is_vegetarian=is_veg,
+        dietary_type=diet_type,
         target_destination=dest,
+        is_alcoholic=is_alc,
+        preparation_time_minutes=prep_time,
     )
     db.add(new_item)
     await db.commit()
     await db.refresh(new_item)
+
+    resp_dict = format_menu_item_response(new_item)
 
     try:
         await ws_manager.broadcast_event(
@@ -217,7 +235,7 @@ async def create_menu_item(
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] menu_item_created:", ws_err)
 
-    return new_item
+    return resp_dict
 
 @router.put("/{restaurant_id}/menu/{item_id}")
 async def update_menu_item(
@@ -251,11 +269,21 @@ async def update_menu_item(
     if payload.isVegetarian is not None:
         item.is_vegetarian = payload.isVegetarian
         item.dietary_type = "VEG" if payload.isVegetarian else "NON_VEG"
+    if payload.dietaryType is not None:
+        item.dietary_type = payload.dietaryType
     if payload.targetDestination is not None:
         item.target_destination = payload.targetDestination
+    if payload.isAlcoholic is not None:
+        item.is_alcoholic = payload.isAlcoholic
+    if payload.preparationTimeMinutes is not None:
+        item.preparation_time_minutes = payload.preparationTimeMinutes
+    elif payload.prepTimeMinutes is not None:
+        item.preparation_time_minutes = payload.prepTimeMinutes
 
     await db.commit()
     await db.refresh(item)
+
+    resp_dict = format_menu_item_response(item)
 
     try:
         await ws_manager.broadcast_event(
@@ -274,7 +302,7 @@ async def update_menu_item(
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] menu_item_updated:", ws_err)
 
-    return item
+    return resp_dict
 
 @router.delete("/{restaurant_id}/menu/{item_id}")
 async def delete_menu_item(

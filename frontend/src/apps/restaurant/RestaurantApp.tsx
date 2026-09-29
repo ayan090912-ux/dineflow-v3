@@ -702,20 +702,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         });
       }
 
+      let menuLoadErr: string | null = null;
       const [o, m, t, e, i, sup, fc, bc, bDay, bHistory, activeSess, bList] = await Promise.all([
-        api.getOrders(rest.id).catch(() => []),
-        api.getMenuItems(rest.id).catch(() => []),
-        api.getTables(rest.id).catch(() => []),
-        api.getEmployees(rest.id).catch(() => []),
-        api.getInventory(rest.id).catch(() => []),
-        api.getSuppliers(rest.id).catch(() => []),
-        api.getCategories(rest.id).catch(() => []),
-        api.getBarCategories(rest.id).catch(() => []),
+        api.getOrders(rest.id).catch((err) => { console.error('[Orders] Load error:', err); return []; }),
+        api.getMenuItems(rest.id).catch((err) => {
+          console.error('[Menu] Load error:', err);
+          menuLoadErr = err?.message || 'Failed to load menu items';
+          return [];
+        }),
+        api.getTables(rest.id).catch((err) => { console.error('[Tables] Load error:', err); return []; }),
+        api.getEmployees(rest.id).catch((err) => { console.error('[Employees] Load error:', err); return []; }),
+        api.getInventory(rest.id).catch((err) => { console.error('[Inventory] Load error:', err); return []; }),
+        api.getSuppliers(rest.id).catch((err) => { console.error('[Suppliers] Load error:', err); return []; }),
+        api.getCategories(rest.id).catch((err) => { console.error('[Categories] Load error:', err); return []; }),
+        api.getBarCategories(rest.id).catch((err) => { console.error('[BarCats] Load error:', err); return []; }),
         api.getCurrentBusinessDay(rest.id).catch(() => null),
         api.getBusinessDayHistory(rest.id).catch(() => []),
         api.getActiveTableSessions(rest.id).catch(() => []),
         api.getBills(rest.id).catch(() => []),
       ]);
+
+      if (menuLoadErr) {
+        addToast('error', 'Menu Sync Notice', menuLoadErr);
+      }
 
       setOrders(o || []);
       setMenuItems(m || []);
