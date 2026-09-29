@@ -15,27 +15,27 @@ export interface StatsCardProps {
 
 export const StatsCard: React.FC<StatsCardProps> = ({ title, value, change, icon, subtitle }) => {
   return (
-    <Card hoverEffect className="relative overflow-hidden bg-[#0e1117] border border-white/[0.08] p-5 rounded-xl">
+    <Card hoverEffect className="relative overflow-hidden bg-[#12151b] border border-[#1e232e] p-5 rounded-xl shadow-xs">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[10px] font-mono font-medium text-white/50 uppercase tracking-wider">{title}</p>
-          <h3 className="text-2xl font-semibold font-mono text-white mt-1 tracking-tight">{value}</h3>
+          <p className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">{title}</p>
+          <h3 className="text-2xl font-bold font-mono text-white mt-1 tracking-tight">{value}</h3>
           {change && (
             <div className="flex items-center gap-1.5 mt-2">
               <span
                 className={`inline-flex items-center text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ${
-                  change.isPositive ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40' : 'bg-rose-950/40 text-rose-400 border border-rose-800/40'
+                  change.isPositive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25' : 'bg-rose-500/10 text-rose-400 border border-rose-500/25'
                 }`}
               >
                 {change.isPositive ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
                 {change.value}
               </span>
-              {subtitle && <span className="text-xs text-white/40">{subtitle}</span>}
+              {subtitle && <span className="text-xs text-slate-400">{subtitle}</span>}
             </div>
           )}
         </div>
         {icon && (
-          <div className="p-2.5 bg-[#12151b] border border-white/[0.08] rounded-xl text-white/70">
+          <div className="p-2.5 bg-[#181d27] border border-[#2d3545] rounded-xl text-slate-300">
             {icon}
           </div>
         )}

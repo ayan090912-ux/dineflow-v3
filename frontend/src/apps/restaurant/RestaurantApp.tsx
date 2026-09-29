@@ -1694,9 +1694,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-[#1e232e]">
           <div>
             <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-              <span>dinely.food</span>
+              <span className="text-emerald-400 font-semibold">DINELY</span>
               <span>/</span>
-              <span className="text-slate-300">{theme?.restaurantName || currentRestaurant?.name || 'restaurant'}</span>
+              <span className="text-slate-300">{theme?.restaurantName || currentRestaurant?.name || 'Restaurant'}</span>
+              <span>/</span>
+              <span className="text-slate-400 capitalize">{activeTab.replace('_', ' ')}</span>
             </div>
             <h2 className="text-xl font-bold text-white tracking-tight mt-1">
               {activeTab === 'dashboard' && 'Executive Overview'}
@@ -1712,9 +1714,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'theme' && 'Brand Identity & Styling'}
               {activeTab === 'workspace_settings' && 'Terminals & Settings'}
             </h2>
+            <p className="text-xs text-slate-400 mt-1">
+              {activeTab === 'dashboard' && 'Live performance metrics, revenue analytics, and station status across your restaurant.'}
+              {activeTab === 'orders' && 'Live chronological order stream from table QR codes, POS, and counter pickups.'}
+              {activeTab === 'kitchen' && 'Real-time kitchen order bump board, active cooking timers, and runner pass.'}
+              {activeTab === 'bar' && 'Craft beverage dispensing queue, mixology timers, and floor pass dispatch.'}
+              {activeTab === 'tables' && 'Interactive dining area floorplan, live table states, and printable QR standee cards.'}
+              {activeTab === 'menu' && 'Food & beverage catalog, category classifications, variants, and live availability toggles.'}
+              {activeTab === 'staff' && 'Employee profiles, shift schedules, role-based pin credentials, and clock-in status.'}
+              {activeTab === 'inventory' && 'Track kitchen and bar stock levels, minimum reorder thresholds, and suppliers.'}
+              {activeTab === 'billing' && 'Table checkouts, split bills, GST/tax management, and payment receipts.'}
+              {activeTab === 'business_day' && 'Shift register reconcile, cash float tracking, payment summaries, and daily Z-report closing.'}
+              {activeTab === 'theme' && "Customize your restaurant's digital storefront, logo, accent colors, and typography."}
+              {activeTab === 'workspace_settings' && 'Manage active operational modules, terminal access URLs, and branch configuration.'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             {activeTab === 'menu' && (
               <Button
                 variant="brand"
@@ -1724,6 +1740,39 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 className="text-xs"
               >
                 Add Menu Item
+              </Button>
+            )}
+            {activeTab === 'tables' && (
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => setIsCreateTableModalOpen(true)}
+                icon={<Plus className="w-3.5 h-3.5" />}
+                className="text-xs"
+              >
+                Create Table
+              </Button>
+            )}
+            {activeTab === 'staff' && (
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => setIsAddStaffModalOpen(true)}
+                icon={<UserPlus className="w-3.5 h-3.5" />}
+                className="text-xs"
+              >
+                Add Employee
+              </Button>
+            )}
+            {activeTab === 'inventory' && (
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => setIsAddInventoryModalOpen(true)}
+                icon={<Plus className="w-3.5 h-3.5" />}
+                className="text-xs"
+              >
+                Add Raw Material
               </Button>
             )}
             <Button
@@ -1739,7 +1788,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 }
               }}
               className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white hover:bg-[#181d27]"
-              icon={<Store className="w-3.5 h-3.5 mr-1 text-orange-400" />}
+              icon={<Store className="w-3.5 h-3.5 mr-1 text-slate-400" />}
             >
               Switch Restaurant
             </Button>
@@ -2165,7 +2214,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <QrCode className="w-5 h-5 text-sky-400" /> Business Counter QR Code & Pickup Ordering
+                  <QrCode className="w-5 h-5 text-emerald-400" /> Business Counter QR Code & Pickup Ordering
                 </h3>
                 <p className="text-xs text-slate-400">
                   Print or display this single QR code at your Food Truck or Stall counter for customer pickup orders.
@@ -2173,8 +2222,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
             </div>
 
-            <Card className="bg-slate-900 border-slate-800 p-8 max-w-xl mx-auto text-center space-y-6 shadow-2xl">
-              <div className="p-6 bg-slate-950 rounded-3xl border border-sky-500/30 inline-block shadow-inner">
+            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-xl mx-auto text-center space-y-6 shadow-xl">
+              <div className="p-6 bg-[#0e1117] rounded-2xl border border-[#1e232e] inline-block shadow-inner">
                 <QRCodeDisplay
                   url={getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}
                   tableNumber="COUNTER"
@@ -2187,17 +2236,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Badge variant="warning" className="px-3 py-1 text-xs font-mono font-bold">
+                <Badge variant="brand" className="px-3 py-1 text-xs font-mono font-bold">
                   COUNTER PICKUP QR
                 </Badge>
                 <h4 className="text-xl font-bold text-white">{currentRestaurant?.name || 'Food Truck'}</h4>
-                <p className="text-xs font-mono text-sky-300">{getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}</p>
+                <p className="text-xs font-mono text-emerald-400">{getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}</p>
                 <p className="text-xs text-slate-400 max-w-md mx-auto">
                   Customers scan this code to view your food menu, add items to cart, and place pickup orders with unique ticket numbers (e.g. #F1024).
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-slate-800 flex justify-center gap-3">
+              <div className="pt-4 border-t border-[#1e232e] flex justify-center gap-3">
                 <Button
                   variant="brand"
                   size="md"
@@ -2205,7 +2254,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     const cardEl = document.querySelector('.printable-card-wrapper') as HTMLElement || document.querySelector('.w-72.sm\\:w-80') as HTMLElement;
                     printQRCodeCard(cardEl?.outerHTML || '', currentRestaurant?.name || 'Food Truck', 'COUNTER');
                   }}
-                  className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold"
                   icon={<QrCode className="w-4 h-4" />}
                 >
                   Print Counter QR Sign
@@ -2221,7 +2269,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Grid className="w-5 h-5 text-rose-500" /> Dining Room Table Floorplan & Reservations
+                  <Grid className="w-5 h-5 text-emerald-400" /> Dining Room Table Floorplan & Reservations
                 </h3>
                 <p className="text-xs text-slate-400">
                   Create tables, edit capacities, merge tables for large gatherings, and reserve tables for guests.
@@ -2236,7 +2284,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     setSelectedTableIdsForMerge([]);
                     setIsMergeTablesModalOpen(true);
                   }}
-                  className="border-slate-700 text-slate-200 hover:bg-slate-800 text-xs"
+                  className="border-[#1e232e] bg-[#12151b] text-slate-200 hover:bg-[#181d27] text-xs"
                   icon={<Link className="w-3.5 h-3.5 text-amber-400" />}
                 >
                   Merge Tables for Gathering
@@ -2256,39 +2304,38 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
             {/* Floorplan Overview KPIs */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <Card className="bg-slate-900 border-slate-800 p-3 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
                 <span className="text-[10px] font-mono text-slate-400 uppercase">Total Tables</span>
-                <p className="text-xl font-black text-white">{tables.length}</p>
+                <p className="text-xl font-bold text-white font-mono">{tables.length}</p>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-3 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
                 <span className="text-[10px] font-mono text-emerald-400 uppercase">Available</span>
-                <p className="text-xl font-black text-emerald-400">
+                <p className="text-xl font-bold text-emerald-400 font-mono">
                   {tables.filter((t) => t.status !== 'OCCUPIED' && !t.isOccupied && !activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase())) && t.status !== 'RESERVED').length}
                 </p>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-3 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
                 <span className="text-[10px] font-mono text-amber-400 uppercase">Reserved</span>
-                <p className="text-xl font-black text-amber-400">
+                <p className="text-xl font-bold text-amber-400 font-mono">
                   {tables.filter((t) => t.status === 'RESERVED').length}
                 </p>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-3 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
                 <span className="text-[10px] font-mono text-sky-400 uppercase">Merged Groups</span>
-                <p className="text-xl font-black text-sky-400">
+                <p className="text-xl font-bold text-sky-400 font-mono">
                   {tables.filter((t) => t.isMerged).length}
                 </p>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-3 space-y-1 col-span-2 sm:col-span-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1 col-span-2 sm:col-span-1">
                 <span className="text-[10px] font-mono text-rose-400 uppercase">Occupied</span>
-                <p className="text-xl font-black text-rose-400">
+                <p className="text-xl font-bold text-rose-400 font-mono">
                   {tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length}
                 </p>
               </Card>
-
             </div>
 
             {/* Interactive Floorplan Table Grid */}
@@ -2311,14 +2358,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 return (
                   <Card
                     key={tbl.id}
-                    className={`bg-slate-900 border transition-all p-5 flex flex-col justify-between space-y-4 rounded-2xl ${
+                    className={`bg-[#12151b] border transition-all p-5 flex flex-col justify-between space-y-4 rounded-xl ${
                       isReserved
-                        ? 'border-amber-500/60 shadow-lg shadow-amber-950/20'
+                        ? 'border-amber-500/50 shadow-md shadow-amber-950/20'
                         : isMerged
-                        ? 'border-sky-500/60 shadow-lg shadow-sky-950/20'
+                        ? 'border-sky-500/50 shadow-md shadow-sky-950/20'
                         : isTableOccupied
-                        ? 'border-rose-500/40 shadow-lg shadow-rose-950/20'
-                        : 'border-slate-800'
+                        ? 'border-rose-500/40 shadow-md shadow-rose-950/20'
+                        : 'border-[#1e232e]'
                     }`}
                   >
                     <div>
@@ -2326,7 +2373,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="font-mono font-black text-white text-xl">{tbl.tableNumber}</h4>
+                            <h4 className="font-mono font-bold text-white text-xl">{tbl.tableNumber}</h4>
                             {tbl.isVip && (
                               <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500 text-slate-950">
                                 VIP
@@ -2355,7 +2402,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                       {/* Active Table Session Banner */}
                       {(activeSess || isTableOccupied) && (
-                        <div className="mt-3 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs space-y-2 font-mono">
+                        <div className="mt-3 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs space-y-2 font-mono">
                           <div className="flex justify-between items-center">
                             <span className="font-bold text-amber-300 flex items-center gap-1.5">
                               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -2393,7 +2440,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                   addToast('error', 'Close Error', err.message || 'Failed to close table session.');
                                 }
                               }}
-                              className="text-[10px] py-1 px-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                              className="text-[10px] py-1 px-2.5 font-bold"
                             >
                               CLOSE TABLE
                             </Button>
@@ -2403,7 +2450,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                       {/* Merged Banner */}
                       {isMerged && (
-                        <div className="mt-3 p-3 rounded-xl bg-sky-950/60 border border-sky-500/30 text-xs space-y-1">
+                        <div className="mt-3 p-3 rounded-xl bg-sky-950/40 border border-sky-500/30 text-xs space-y-1">
                           <p className="font-bold text-sky-300 flex items-center gap-1.5">
                             <Link className="w-3.5 h-3.5 text-sky-400" />
                             {tbl.mergedGroupLabel || `Merged Table Group`}
@@ -2425,7 +2472,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                       {/* Reservation Details Banner */}
                       {isReserved && tbl.reservationDetails && (
-                        <div className="mt-3 p-3 rounded-xl bg-amber-950/60 border border-amber-500/30 text-xs space-y-1">
+                        <div className="mt-3 p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs space-y-1">
                           <p className="font-bold text-amber-300 flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-amber-400" />
                             Reserved for {tbl.reservationDetails.reservedForName}
@@ -2442,10 +2489,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                           <div className="flex gap-1.5 pt-1">
                             <Button
-                              variant="secondary"
+                              variant="brand"
                               size="sm"
                               onClick={() => handleCheckInGuest(tbl.id, tbl.tableNumber, tbl.reservationDetails!.reservedForName)}
-                              className="text-[10px] py-1 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                              className="text-[10px] py-1 px-2.5 font-bold"
                               icon={<UserCheck className="w-3 h-3" />}
                             >
                               Check In Guest
@@ -2455,7 +2502,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                               variant="outline"
                               size="sm"
                               onClick={() => handleCancelReservation(tbl.id, tbl.tableNumber)}
-                              className="text-[10px] py-1 px-2 border-slate-700 text-rose-400 hover:bg-rose-500/10"
+                              className="text-[10px] py-1 px-2 border-[#1e232e] text-rose-400 hover:bg-rose-500/10"
                             >
                               Cancel
                             </Button>
@@ -2465,12 +2512,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </div>
 
                     {/* Quick Action Footer Controls */}
-                    <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-1 flex-wrap">
+                    <div className="pt-3 border-t border-[#1e232e] flex items-center justify-between gap-1 flex-wrap">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setSelectedTableQR(tbl)}
-                        className="text-xs text-rose-400 hover:text-rose-300 px-2 py-1"
+                        className="text-xs text-emerald-400 hover:text-emerald-300 px-2 py-1"
                         icon={<QrCode className="w-3.5 h-3.5" />}
                       >
                         QR Code
@@ -2526,7 +2573,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <UtensilsCrossed className="w-5 h-5 text-rose-500" /> Menu Catalog & Availability Engine
+                    <UtensilsCrossed className="w-5 h-5 text-emerald-400" /> Menu Catalog & Availability Engine
                   </h3>
                   <p className="text-xs text-slate-400">
                     {isBarEnabled
@@ -2537,16 +2584,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                 {/* Sub-Tab Switcher: Food Menu vs Bar Menu (Only rendered if Bar is enabled for venue) */}
                 {isBarEnabled && (
-                  <div className="flex items-center gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
+                  <div className="flex items-center gap-1.5 p-1 bg-[#0e1117] rounded-xl border border-[#1e232e]">
                     <button
                       onClick={() => {
                         setMenuCatalogMode('FOOD');
                         setSelectedMenuCategory('ALL');
                       }}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
                         activeCatalogMode === 'FOOD'
-                          ? 'bg-rose-600 text-white shadow-lg'
-                          : 'text-slate-400 hover:text-white'
+                          ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                          : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
                       }`}
                     >
                       <UtensilsCrossed className="w-3.5 h-3.5" />
@@ -2558,13 +2605,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         setMenuCatalogMode('BAR');
                         setSelectedMenuCategory('ALL');
                       }}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
                         activeCatalogMode === 'BAR'
-                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
-                          : 'text-slate-400 hover:text-white'
+                          ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                          : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
                       }`}
                     >
-                      <Wine className="w-3.5 h-3.5 text-amber-300" />
+                      <Wine className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Bar Menu</span>
                     </button>
                   </div>
@@ -2578,10 +2625,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       setCategoryModalMode(activeCatalogMode);
                       setIsManageCategoriesModalOpen(true);
                     }}
-                    className="border-slate-700 text-slate-200 hover:bg-slate-800 font-bold text-xs"
-                    icon={<Layers className="w-3.5 h-3.5 text-amber-400" />}
+                    className="text-xs"
+                    icon={<Layers className="w-3.5 h-3.5 text-slate-300" />}
                   >
-                    Manage Categories 🏷️
+                    Manage Categories
                   </Button>
 
                   {isBarEnabled && activeCatalogMode === 'BAR' && (
@@ -2589,8 +2636,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={handleBulkImportBarDrinks}
-                      className="border-purple-500/40 text-purple-300 hover:bg-purple-950/40 font-bold text-xs"
-                      icon={<Sparkles className="w-3.5 h-3.5" />}
+                      className="text-xs"
+                      icon={<Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
                     >
                       Bulk Import Craft Drinks
                     </Button>
@@ -2607,15 +2654,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       setIsAddItemModalOpen(true);
                     }}
                     icon={<Plus className="w-3.5 h-3.5" />}
-                    className={(isBarEnabled && activeCatalogMode === 'BAR') ? 'bg-purple-600 hover:bg-purple-500 font-bold' : ''}
+                    className="text-xs"
                   >
-                    {(isBarEnabled && activeCatalogMode === 'BAR') ? 'Add Bar Drink 🍸' : 'Add Food Item 🍽️'}
+                    {(isBarEnabled && activeCatalogMode === 'BAR') ? 'Add Bar Drink' : 'Add Food Item'}
                   </Button>
                 </div>
               </div>
 
             {/* Filter & Search Toolbar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0e1117] p-3 rounded-xl border border-[#1e232e]">
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
                 <div className="w-full sm:w-64">
                   <SearchInput
@@ -2626,19 +2673,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 </div>
 
                 {menuCatalogMode === 'FOOD' && (
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+                  <div className="flex items-center gap-1 bg-[#12151b] p-1 rounded-lg border border-[#1e232e] shrink-0">
                     <button
                       onClick={() => setDietaryFilter('ALL')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                        dietaryFilter === 'ALL' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                        dietaryFilter === 'ALL' ? 'bg-[#181d27] text-white border border-[#2d3545]' : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       All
                     </button>
                     <button
                       onClick={() => setDietaryFilter('VEG')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                        dietaryFilter === 'VEG' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40 shadow' : 'text-slate-400 hover:text-emerald-400'
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
+                        dietaryFilter === 'VEG' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25' : 'text-slate-400 hover:text-emerald-400'
                       }`}
                     >
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -2646,8 +2693,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </button>
                     <button
                       onClick={() => setDietaryFilter('NON_VEG')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                        dietaryFilter === 'NON_VEG' ? 'bg-rose-950 text-rose-300 border border-rose-500/40 shadow' : 'text-slate-400 hover:text-rose-400'
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
+                        dietaryFilter === 'NON_VEG' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/25' : 'text-slate-400 hover:text-rose-400'
                       }`}
                     >
                       <span className="w-2 h-2 rounded-full bg-rose-500" />
@@ -2658,13 +2705,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
 
               {/* Category Pills */}
-              <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
                 <button
                   onClick={() => setSelectedMenuCategory('ALL')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                     selectedMenuCategory === 'ALL'
-                      ? menuCatalogMode === 'BAR' ? 'bg-purple-600 text-white shadow' : 'bg-rose-600 text-white shadow'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                      : 'bg-[#12151b] border border-[#1e232e] text-slate-300 hover:text-white hover:bg-[#181d27]'
                   }`}
                 >
                   All {menuCatalogMode === 'BAR' ? 'Drinks' : 'Items'} ({filteredMenuItems.length})
@@ -2685,10 +2732,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <button
                       key={catName}
                       onClick={() => setSelectedMenuCategory(catName)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                         selectedMenuCategory === catName
-                          ? menuCatalogMode === 'BAR' ? 'bg-purple-600 text-white shadow' : 'bg-rose-600 text-white shadow'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                          : 'bg-[#12151b] border border-[#1e232e] text-slate-300 hover:text-white hover:bg-[#181d27]'
                       }`}
                     >
                       {catName} {count > 0 ? `(${count})` : ''}
@@ -2818,7 +2865,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-rose-500" /> Employee Roster & Shift Attendance
+                  <Users className="w-5 h-5 text-emerald-400" /> Employee Roster & Shift Attendance
                 </h3>
                 <p className="text-xs text-slate-400">Manage shift schedules, floor stations, hourly rates, and live clock-in status.</p>
               </div>
@@ -2834,33 +2881,33 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
             {/* Staff Stats KPI Row */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                 <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Staff</span>
-                <p className="text-2xl font-black text-white">{employees.length}</p>
+                <p className="text-2xl font-bold font-mono text-white">{employees.length}</p>
                 <span className="text-[10px] text-slate-500">Active roster count</span>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                 <span className="text-[11px] text-emerald-400 font-semibold uppercase flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Active In App Now
                 </span>
-                <p className="text-2xl font-black text-emerald-400">
+                <p className="text-2xl font-bold font-mono text-emerald-400">
                   {employees.filter((e) => e.status === 'ON_CLOCK').length}
                 </p>
                 <span className="text-[10px] text-emerald-400/80">Logged in & operating terminals</span>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                 <span className="text-[11px] text-amber-400 font-semibold uppercase">On Break</span>
-                <p className="text-2xl font-black text-amber-400">
+                <p className="text-2xl font-bold font-mono text-amber-400">
                   {employees.filter((e) => e.status === 'ON_BREAK').length}
                 </p>
                 <span className="text-[10px] text-slate-500">Scheduled break time</span>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                 <span className="text-[11px] text-slate-400 font-semibold uppercase">Offline (Off Clock)</span>
-                <p className="text-2xl font-black text-slate-400">
+                <p className="text-2xl font-bold font-mono text-slate-400">
                   {employees.filter((e) => e.status === 'OFF_CLOCK').length}
                 </p>
                 <span className="text-[10px] text-slate-500">Not logged in / off-duty</span>
@@ -2868,7 +2915,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
 
             {/* Staff Data Table */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="bg-[#12151b] border border-[#1e232e] rounded-xl overflow-hidden shadow-sm">
               <DataTable<Employee>
                 data={employees}
                 keyExtractor={(e) => e.id}
@@ -2906,7 +2953,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     header: 'Shift & Station',
                     render: (e) => (
                       <div className="space-y-1 py-1">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-amber-400 font-medium text-[11px] inline-flex items-center gap-1">
+                        <span className="px-2 py-0.5 rounded-md bg-[#0e1117] border border-[#1e232e] text-amber-400 font-medium text-[11px] inline-flex items-center gap-1">
                           <Clock className="w-3 h-3 text-amber-400 shrink-0" />
                           {e.shift || 'Evening (4PM - 12AM)'}
                         </span>
@@ -2928,7 +2975,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                               ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-sm shadow-emerald-500/20'
                               : e.status === 'ON_BREAK'
                               ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
-                              : 'bg-slate-800 border-slate-700 text-slate-400'
+                              : 'bg-[#181d27] border-[#2d3545] text-slate-400'
                           }`}
                           title="Click to toggle live status"
                         >
@@ -2978,7 +3025,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             setEditingStaff({ ...e });
                             setIsEditStaffModalOpen(true);
                           }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/60 text-[11px] font-semibold transition-all duration-150 shadow-sm active:scale-95 cursor-pointer group"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#181d27] hover:bg-[#222838] text-slate-200 hover:text-white border border-[#2d3545] text-[11px] font-semibold transition-all duration-150 shadow-xs cursor-pointer group"
                           title="Edit Staff Member Details"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
@@ -2987,7 +3034,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                         <button
                           onClick={() => handleOpenResetPasswordModal(e)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/25 text-[11px] font-semibold transition-all duration-150 shadow-sm active:scale-95 cursor-pointer group"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/25 text-[11px] font-semibold transition-all duration-150 shadow-xs cursor-pointer group"
                           title="Reset Staff Password"
                         >
                           <KeyRound className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
@@ -2996,7 +3043,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                         <button
                           onClick={() => handleDeleteStaff(e.id, e.name)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 hover:text-rose-200 border border-rose-500/30 text-[11px] font-semibold transition-all duration-150 shadow-sm active:scale-95 cursor-pointer group"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 hover:text-rose-200 border border-rose-500/30 text-[11px] font-semibold transition-all duration-150 shadow-xs cursor-pointer group"
                           title="Delete Staff Member"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
@@ -3017,7 +3064,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Package className="w-5 h-5 text-rose-500" /> Raw Materials & Inventory Control
+                  <Package className="w-5 h-5 text-emerald-400" /> Raw Materials & Inventory Control
                 </h3>
                 <p className="text-xs text-slate-400">Track kitchen and bar raw ingredients, stock levels, unit costs, low stock alerts, and verified vendors.</p>
               </div>
@@ -3026,7 +3073,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={() => setIsAddSupplierModalOpen(true)}
-                  className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                  className="border-[#1e232e] bg-[#12151b] text-slate-200 hover:bg-[#181d27]"
                   icon={<Users className="w-3.5 h-3.5 text-amber-400" />}
                 >
                   + Add Supplier
@@ -3044,27 +3091,27 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
             {/* Inventory KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                 <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Tracked Items</span>
-                <p className="text-2xl font-black text-white">{inventory.length}</p>
+                <p className="text-2xl font-bold font-mono text-white">{inventory.length}</p>
                 <span className="text-[10px] text-slate-500">
                   {inventory.filter((i) => i.station !== 'BAR').length} Kitchen • {inventory.filter((i) => i.station === 'BAR').length} Bar
                 </span>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                 <span className="text-[11px] text-rose-400 font-semibold uppercase flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" /> Low Stock Alerts
                 </span>
-                <p className="text-2xl font-black text-rose-400">
+                <p className="text-2xl font-bold font-mono text-rose-400">
                   {inventory.filter((i) => i.quantity <= i.minThreshold).length}
                 </p>
                 <span className="text-[10px] text-slate-500">At or below reorder threshold</span>
               </Card>
 
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                 <span className="text-[11px] text-emerald-400 font-semibold uppercase">Total Inventory Value</span>
-                <p className="text-2xl font-black text-emerald-400">
+                <p className="text-2xl font-bold font-mono text-emerald-400">
                   {formatCurrency(inventory.reduce((acc, item) => acc + item.quantity * item.costPerUnit, 0), theme.currency || 'INR (₹)')}
                 </p>
                 <span className="text-[10px] text-slate-500">Valued at current cost</span>
@@ -3072,64 +3119,64 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
               <Card
                 onClick={() => setInventorySubTab('SUPPLIERS')}
-                className="bg-slate-900 border-slate-800 hover:border-sky-500/50 cursor-pointer transition-all p-4 space-y-1 group"
+                className="bg-[#12151b] border-[#1e232e] hover:border-emerald-500/50 cursor-pointer transition-all p-4 space-y-1 group"
               >
-                <span className="text-[11px] text-sky-400 font-semibold uppercase flex items-center justify-between">
+                <span className="text-[11px] text-emerald-400 font-semibold uppercase flex items-center justify-between">
                   <span>Active Suppliers</span>
-                  <span className="text-[10px] text-sky-300 group-hover:underline">Manage →</span>
+                  <span className="text-[10px] text-emerald-300 group-hover:underline">Manage →</span>
                 </span>
-                <p className="text-2xl font-black text-sky-400">{suppliers.length}</p>
+                <p className="text-2xl font-bold font-mono text-white">{suppliers.length}</p>
                 <span className="text-[10px] text-slate-500">Click to view & add suppliers</span>
               </Card>
             </div>
 
             {/* Sub-Tabs: All Items, Kitchen Inventory, Bar Inventory, Suppliers Directory */}
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
+            <div className="flex items-center gap-2 border-b border-[#1e232e] pb-3 overflow-x-auto">
               <button
                 onClick={() => setInventorySubTab('ALL')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   inventorySubTab === 'ALL'
-                    ? 'bg-rose-600 text-white shadow'
-                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                    ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181d27]/50'
                 }`}
               >
-                <Package className="w-3.5 h-3.5" />
+                <Package className="w-3.5 h-3.5 text-emerald-400" />
                 <span>All Stock ({inventory.length})</span>
               </button>
 
               <button
                 onClick={() => setInventorySubTab('KITCHEN')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   inventorySubTab === 'KITCHEN'
-                    ? 'bg-amber-600 text-white shadow'
-                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                    ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181d27]/50'
                 }`}
               >
-                <Utensils className="w-3.5 h-3.5 text-amber-300" />
+                <Utensils className="w-3.5 h-3.5 text-amber-400" />
                 <span>Kitchen Inventory ({inventory.filter((i) => i.station !== 'BAR').length})</span>
               </button>
 
               <button
                 onClick={() => setInventorySubTab('BAR')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   inventorySubTab === 'BAR'
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                    ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181d27]/50'
                 }`}
               >
-                <Wine className="w-3.5 h-3.5 text-indigo-300" />
+                <Wine className="w-3.5 h-3.5 text-purple-400" />
                 <span>Bar Inventory ({inventory.filter((i) => i.station === 'BAR').length})</span>
               </button>
 
               <button
                 onClick={() => setInventorySubTab('SUPPLIERS')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   inventorySubTab === 'SUPPLIERS'
-                    ? 'bg-sky-600 text-white shadow'
-                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                    ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181d27]/50'
                 }`}
               >
-                <Users className="w-3.5 h-3.5 text-sky-300" />
+                <Users className="w-3.5 h-3.5 text-sky-400" />
                 <span>Suppliers Directory ({suppliers.length})</span>
               </button>
             </div>
@@ -3151,7 +3198,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {suppliers.map((sup) => (
-                    <Card key={sup.id} className="p-4 bg-slate-900 border-slate-800 rounded-2xl space-y-3">
+                    <Card key={sup.id} className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl space-y-3">
                       <div className="flex items-start justify-between">
                         <div>
                           <Badge variant="outline">{sup.supplyCategory || 'General'}</Badge>
@@ -3167,14 +3214,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         </button>
                       </div>
 
-                      <div className="space-y-1 text-xs text-slate-300 border-t border-slate-800 pt-2 font-mono">
+                      <div className="space-y-1 text-xs text-slate-300 border-t border-[#1e232e] pt-2 font-mono">
                         {sup.phone && <div>📞 {sup.phone}</div>}
                         {sup.email && <div className="truncate">✉️ {sup.email}</div>}
                         {sup.address && <div className="text-[11px] text-slate-400 truncate">📍 {sup.address}</div>}
                       </div>
 
                       {sup.notes && (
-                        <p className="text-[11px] text-slate-400 italic bg-slate-950 p-2 rounded-xl border border-slate-800">
+                        <p className="text-[11px] text-slate-400 italic bg-[#0e1117] p-2 rounded-xl border border-[#1e232e]">
                           "{sup.notes}"
                         </p>
                       )}
@@ -3184,7 +3231,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
             ) : (
               /* TAB CONTENT: RAW MATERIAL INVENTORY TABLE */
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="bg-[#12151b] border border-[#1e232e] rounded-xl overflow-hidden shadow-sm">
                 <DataTable<InventoryItem>
                   data={inventory.filter((i) => {
                     if (inventorySubTab === 'KITCHEN') return i.station !== 'BAR';
@@ -3232,14 +3279,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           <div className="flex items-center gap-1 ml-2">
                             <button
                               onClick={() => handleAdjustInventory(i.id, -1)}
-                              className="w-6 h-6 rounded-md bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 flex items-center justify-center transition-colors"
+                              className="w-6 h-6 rounded-md bg-[#181d27] border border-[#2d3545] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 flex items-center justify-center transition-colors"
                               title="Decrease 1 unit"
                             >
                               <Minus className="w-3 h-3" />
                             </button>
                             <button
                               onClick={() => handleAdjustInventory(i.id, 1)}
-                              className="w-6 h-6 rounded-md bg-slate-800 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-400 flex items-center justify-center transition-colors"
+                              className="w-6 h-6 rounded-md bg-[#181d27] border border-[#2d3545] hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-400 flex items-center justify-center transition-colors"
                               title="Increase 1 unit"
                             >
                               <Plus className="w-3 h-3" />
@@ -3316,16 +3363,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {activeTab === 'billing' && (
           <div className="space-y-6">
             {/* Header Title Banner */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1e232e] pb-5">
               <div className="space-y-1">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-950/40">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-sm">
                     <Receipt className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                    <h3 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                       <span>Restaurant Billing & Invoicing OS</span>
-                      <Badge variant="success" className="text-[10px] font-mono uppercase tracking-wider py-0.5">
+                      <Badge variant="brand" className="text-[10px] font-mono uppercase tracking-wider py-0.5">
                         Live POS
                       </Badge>
                     </h3>
@@ -3337,32 +3384,32 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
 
               {/* Segmented Subtab Pills */}
-              <div className="flex flex-wrap items-center gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-md">
+              <div className="flex flex-wrap items-center gap-1.5 bg-[#0e1117] p-1.5 rounded-xl border border-[#1e232e]">
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('terminal')}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     billingSubTab === 'terminal'
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/50'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#181d27]/60'
                   }`}
                 >
-                  <Utensils className="w-3.5 h-3.5" />
+                  <Utensils className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Live Tables & POS</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('invoices')}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     billingSubTab === 'invoices'
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/50'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#181d27]/60'
                   }`}
                 >
-                  <Receipt className="w-3.5 h-3.5" />
+                  <Receipt className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Invoices & History</span>
-                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${billingSubTab === 'invoices' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${billingSubTab === 'invoices' ? 'bg-[#222838] text-white' : 'bg-[#181d27] text-slate-400'}`}>
                     {bills.length}
                   </span>
                 </button>
@@ -3370,26 +3417,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('taxes')}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     billingSubTab === 'taxes'
-                      ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg shadow-rose-950/50'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#181d27]/60'
                   }`}
                 >
-                  <Layers className="w-3.5 h-3.5" />
+                  <Layers className="w-3.5 h-3.5 text-emerald-400" />
                   <span>GST & Tax Rules</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setBillingSubTab('settings')}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     billingSubTab === 'settings'
-                      ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg shadow-amber-950/50'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#181d27]/60'
                   }`}
                 >
-                  <QrCode className="w-3.5 h-3.5" />
+                  <QrCode className="w-3.5 h-3.5 text-emerald-400" />
                   <span>UPI & Bill Setup</span>
                 </button>
               </div>
@@ -3421,9 +3468,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               <>
                 {/* Billing KPI Metrics */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                     <span className="text-[11px] text-emerald-400 font-semibold uppercase">Today's Sales</span>
-                    <p className="text-2xl font-black text-emerald-400">
+                    <p className="text-2xl font-bold font-mono text-emerald-400">
                       {formatCurrency(
                         bills
                           .filter((b) => b.createdAt.startsWith(new Date().toISOString().split('T')[0]) && (b.paymentStatus === 'PAID' || b.status === 'CLOSED'))
@@ -3434,23 +3481,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <span className="text-[10px] text-slate-500">Verified paid revenue today</span>
                   </Card>
 
-                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                     <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Receipts</span>
-                    <p className="text-2xl font-black text-white">{bills.length}</p>
+                    <p className="text-2xl font-bold font-mono text-white">{bills.length}</p>
                     <span className="text-[10px] text-slate-500">Generated invoices & sessions</span>
                   </Card>
 
-                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                     <span className="text-[11px] text-emerald-400 font-semibold uppercase">Paid Invoices</span>
-                    <p className="text-2xl font-black text-emerald-300">
+                    <p className="text-2xl font-bold font-mono text-emerald-300">
                       {bills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').length}
                     </p>
                     <span className="text-[10px] text-slate-500">Completed table bills</span>
                   </Card>
 
-                  <Card className="bg-slate-900 border-slate-800 p-4 space-y-1">
+                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
                     <span className="text-[11px] text-amber-400 font-semibold uppercase">Pending / Open Bills</span>
-                    <p className="text-2xl font-black text-amber-300">
+                    <p className="text-2xl font-bold font-mono text-amber-300">
                       {bills.filter((b) => (b.paymentStatus === 'UNPAID' || b.paymentStatus === 'PAYMENT_PENDING' || b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED') && b.status !== 'CANCELLED' && b.status !== 'CLOSED').length}
                     </p>
                     <span className="text-[10px] text-slate-500">Active table sessions</span>
@@ -3469,7 +3516,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         size="sm"
                         variant="outline"
                         onClick={() => loadData()}
-                        className="text-xs border-slate-800 text-slate-300 hover:text-white"
+                        className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white"
                       >
                         Refresh Live Tables
                       </Button>
@@ -3497,12 +3544,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           return (
                             <Card
                               key={tbl.id}
-                              className={`p-5 rounded-2xl border transition-all space-y-4 ${
+                              className={`p-5 rounded-xl border transition-all space-y-4 ${
                                 tbl.status === 'BILL_REQUESTED' || activeBill?.status === 'BILL_REQUESTED'
-                                  ? 'bg-amber-950/20 border-amber-500/50 shadow-lg shadow-amber-950/30'
+                                  ? 'bg-amber-950/20 border-amber-500/50 shadow-md shadow-amber-950/20'
                                   : activeBill?.paymentStatus === 'PAID'
                                   ? 'bg-emerald-950/20 border-emerald-500/50'
-                                  : 'bg-slate-900 border-slate-800'
+                                  : 'bg-[#12151b] border-[#1e232e]'
                               }`}
                             >
                               <div className="flex items-start justify-between">
@@ -3528,13 +3575,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                                 <div className="text-right font-mono">
                                   <span className="text-[10px] text-slate-400 uppercase">Running Total</span>
-                                  <p className="text-xl font-black text-emerald-400">
+                                  <p className="text-xl font-bold text-emerald-400">
                                     {formatCurrency(runningTotal, theme.currency || 'INR (₹)')}
                                   </p>
                                 </div>
                               </div>
 
-                              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80 text-xs font-mono flex items-center justify-between text-slate-300">
+                              <div className="bg-[#0e1117] p-3 rounded-lg border border-[#1e232e] text-xs font-mono flex items-center justify-between text-slate-300">
                                 <span>{orderCount} Orders ({totalItems} Items)</span>
                                 {activeBill?.invoiceNumber && (
                                   <span className="text-emerald-400 font-bold">{activeBill.invoiceNumber}</span>
@@ -3549,7 +3596,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                       size="sm"
                                       variant="outline"
                                       onClick={() => setSelectedBillDetails(activeBill)}
-                                      className="border-slate-800 text-xs font-bold text-slate-200 hover:text-white"
+                                      className="border-[#1e232e] bg-[#12151b] text-xs font-semibold text-slate-200 hover:text-white"
                                     >
                                       View Bill 📄
                                     </Button>
@@ -3557,11 +3604,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                     {activeBill.paymentStatus !== 'PAID' ? (
                                       <Button
                                         size="sm"
+                                        variant="brand"
                                         onClick={() => {
                                           setPaymentBillModal(activeBill);
                                           setPaymentMethodInput('CASH');
                                         }}
-                                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
+                                        className="text-xs font-semibold"
                                       >
                                         Mark Paid 💳
                                       </Button>
@@ -3576,7 +3624,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                           setSettlingBillId(null);
                                           await loadData();
                                         }}
-                                        className="bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold"
+                                        className="bg-[#181d27] hover:bg-[#222838] text-amber-300 text-xs font-semibold border border-[#2d3545]"
                                       >
                                         Close Table 🏁
                                       </Button>
@@ -3585,6 +3633,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                 ) : (
                                   <Button
                                     size="sm"
+                                    variant="brand"
                                     onClick={async () => {
                                       try {
                                         const b = await api.generateTableInvoice(currentRestaurant?.id || api.getCurrentRestaurantId() || '', {
@@ -3597,7 +3646,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                         addToast('error', 'Invoice Error', err.message || 'Failed to generate invoice');
                                       }
                                     }}
-                                    className="col-span-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs"
+                                    className="col-span-2 text-xs font-semibold"
                                   >
                                     Generate GST Invoice 🧾
                                   </Button>
@@ -3609,7 +3658,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </div>
 
                     {tables.filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.isOccupied).length === 0 && (
-                      <div className="p-12 text-center bg-slate-900/40 border border-dashed border-slate-800 rounded-2xl space-y-2">
+                      <div className="p-12 text-center bg-[#12151b]/40 border border-dashed border-[#1e232e] rounded-xl space-y-2">
                         <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
                         <h4 className="font-bold text-white text-sm">All Tables Vacant & Settled</h4>
                         <p className="text-xs text-slate-400">No active dining sessions requiring bill generation or payment settlement.</p>
@@ -3622,12 +3671,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 {billingSubTab === 'invoices' && (
                   <div className="space-y-4">
                     {/* Filters Bar */}
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#12151b] p-3 rounded-xl border border-[#1e232e]">
                       <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
                         <select
                           value={billingStatusFilter}
                           onChange={(e: any) => setBillingStatusFilter(e.target.value)}
-                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                          className="px-3 py-1.5 bg-[#0e1117] border border-[#1e232e] rounded-lg text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500"
                         >
                           <option value="ALL">All Statuses</option>
                           <option value="PAID">Paid Only</option>
@@ -3637,7 +3686,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         <select
                           value={billingPaymentFilter}
                           onChange={(e: any) => setBillingPaymentFilter(e.target.value)}
-                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                          className="px-3 py-1.5 bg-[#0e1117] border border-[#1e232e] rounded-lg text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500"
                         >
                           <option value="ALL">All Payment Methods</option>
                           <option value="UPI">UPI / Digital</option>
@@ -3653,13 +3702,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           value={billingSearchQuery}
                           onChange={(e) => setBillingSearchQuery(e.target.value)}
                           placeholder="Search invoice #, table #, session..."
-                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#0e1117] border border-[#1e232e] rounded-lg text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                         />
                       </div>
                     </div>
 
                     {/* Bills DataTable */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <div className="bg-[#12151b] border border-[#1e232e] rounded-xl overflow-hidden shadow-sm">
                       <DataTable<Bill>
                         data={bills.filter((b) => {
                           if (billingStatusFilter === 'PAID' && !(b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
@@ -4009,12 +4058,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
               return (
                 <>
-                  <Card className="bg-slate-900 border-slate-800 p-6 space-y-6 rounded-3xl shadow-xl">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                  <Card className="bg-[#12151b] border-[#1e232e] p-6 space-y-6 rounded-xl shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1e232e] pb-4">
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                            <Calendar className="w-5 h-5 text-amber-400" /> Business Day: {currentBusinessDay?.date || 'Today'}
+                            <Calendar className="w-5 h-5 text-emerald-400" /> Business Day: {currentBusinessDay?.date || 'Today'}
                           </h3>
                           <Badge variant={currentBusinessDay?.status === 'OPEN' ? 'success' : 'warning'} className="font-mono">
                             {currentBusinessDay?.status === 'OPEN' ? 'STATUS: OPEN' : 'STATUS: CLOSED'}
@@ -4028,9 +4077,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       <div className="flex items-center gap-2">
                         {currentBusinessDay?.status === 'OPEN' ? (
                           <Button
-                            variant="brand"
+                            variant="danger"
                             onClick={() => setIsCloseDayModalOpen(true)}
-                            className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs py-2 px-4 shadow-lg"
+                            className="text-xs font-semibold py-2 px-4"
                           >
                             <span>CLOSE BUSINESS DAY 🌅</span>
                           </Button>
@@ -4042,7 +4091,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                               addToast('success', 'New Business Day Opened ☀️', 'Now recording orders for new business day.');
                               await loadData();
                             }}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-4 shadow-lg"
+                            className="text-xs font-semibold py-2 px-4"
                           >
                             <span>OPEN NEW BUSINESS DAY ☀️</span>
                           </Button>
@@ -4051,52 +4100,52 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono">
-                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
                         <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Sales Today</span>
-                        <p className="text-2xl font-black text-amber-400 mt-1">{formatCurrency(totalSales, theme.currency)}</p>
+                        <p className="text-2xl font-bold text-emerald-400 mt-1">{formatCurrency(totalSales, theme.currency)}</p>
                         <span className="text-[10px] text-slate-400">{dayOrders.length} Total Orders</span>
                       </div>
 
-                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
                         <span className="text-[10px] text-slate-400 uppercase font-semibold">Food Sales</span>
-                        <p className="text-2xl font-black text-white mt-1">{formatCurrency(foodSales, theme.currency)}</p>
+                        <p className="text-2xl font-bold text-white mt-1">{formatCurrency(foodSales, theme.currency)}</p>
                         <span className="text-[10px] text-emerald-400">{foodOrders.length} Food Orders</span>
                       </div>
 
-                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
                         <span className="text-[10px] text-slate-400 uppercase font-semibold">Bar Sales</span>
-                        <p className="text-2xl font-black text-purple-400 mt-1">{formatCurrency(barSales, theme.currency)}</p>
+                        <p className="text-2xl font-bold text-purple-400 mt-1">{formatCurrency(barSales, theme.currency)}</p>
                         <span className="text-[10px] text-purple-300">{barOrders.length} Bar Orders</span>
                       </div>
 
-                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
                         <span className="text-[10px] text-slate-400 uppercase font-semibold">Completed vs Cancelled</span>
-                        <p className="text-2xl font-black text-sky-400 mt-1">{completed.length} / {cancelled.length}</p>
+                        <p className="text-2xl font-bold text-sky-400 mt-1">{completed.length} / {cancelled.length}</p>
                         <span className="text-[10px] text-slate-400">{completed.length} Delivered</span>
                       </div>
                     </div>
                   </Card>
 
                   {/* Historical Daily Summaries Table */}
-                  <Card className="bg-slate-900 border-slate-800 p-6 space-y-4 rounded-3xl shadow-xl">
+                  <Card className="bg-[#12151b] border-[#1e232e] p-6 space-y-4 rounded-xl shadow-sm">
                     <div className="flex items-center justify-between">
                       <h3 className="text-base font-bold text-white flex items-center gap-2">
-                        <History className="w-5 h-5 text-sky-400" /> Daily Summary History Ledger
+                        <History className="w-5 h-5 text-emerald-400" /> Daily Summary History Ledger
                       </h3>
-                      <Badge variant="outline" className="border-slate-700 text-slate-300 font-mono">
+                      <Badge variant="outline" className="border-[#1e232e] text-slate-300 font-mono">
                         {businessDayHistory.length} Past Days Saved
                       </Badge>
                     </div>
 
                     {businessDayHistory.length === 0 ? (
-                      <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 text-xs text-slate-400">
+                      <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-dashed border-[#1e232e] text-xs text-slate-400">
                         No closed business day history records yet. When a business day is closed, its summary report will be archived here.
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs font-mono">
                           <thead>
-                            <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
+                            <tr className="border-b border-[#1e232e] text-slate-400 uppercase text-[10px]">
                               <th className="pb-3 px-3">Date</th>
                               <th className="pb-3 px-3">Status</th>
                               <th className="pb-3 px-3">Total Orders</th>
@@ -4106,19 +4155,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                               <th className="pb-3 px-3 text-right">Closed By</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-800/80">
+                          <tbody className="divide-y divide-[#1e232e]">
                             {businessDayHistory.map((b) => (
-                              <tr key={b.id} className="hover:bg-slate-850/50">
+                              <tr key={b.id} className="hover:bg-[#141822]/60 transition-colors">
                                 <td className="py-3 px-3 font-bold text-white">{b.date}</td>
                                 <td className="py-3 px-3">
-                                  <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">
+                                  <Badge variant="outline" className="text-[10px] border-[#1e232e] text-slate-300">
                                     {b.status}
                                   </Badge>
                                 </td>
                                 <td className="py-3 px-3 text-slate-300">{b.summary?.totalOrders || 0}</td>
                                 <td className="py-3 px-3 text-emerald-400">{formatCurrency(b.summary?.foodSales || 0, theme.currency)}</td>
                                 <td className="py-3 px-3 text-purple-400">{formatCurrency(b.summary?.barSales || 0, theme.currency)}</td>
-                                <td className="py-3 px-3 font-bold text-amber-400">{formatCurrency(b.summary?.totalSales || 0, theme.currency)}</td>
+                                <td className="py-3 px-3 font-bold text-emerald-400">{formatCurrency(b.summary?.totalSales || 0, theme.currency)}</td>
                                 <td className="py-3 px-3 text-right text-slate-400">{b.closedBy || 'Owner'}</td>
                               </tr>
                             ))}
@@ -4142,8 +4191,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         maxWidth="md"
       >
         <div className="space-y-4 font-sans">
-          <div className="p-4 bg-amber-950/40 border border-amber-800/60 rounded-2xl space-y-1 text-amber-200">
-            <h4 className="font-black text-sm flex items-center gap-2">
+          <div className="p-4 bg-amber-950/30 border border-amber-800/40 rounded-xl space-y-1 text-amber-200">
+            <h4 className="font-bold text-sm flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400" /> Confirm Daily Closing
             </h4>
             <p className="text-xs text-amber-300/80">
@@ -4175,8 +4224,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             const totalSales = foodSales + barSales;
 
             return (
-              <div className="space-y-2 bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs font-mono">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <div className="space-y-2 bg-[#0e1117] border border-[#1e232e] p-4 rounded-xl text-xs font-mono">
+                <div className="flex justify-between items-center pb-2 border-b border-[#1e232e]">
                   <span className="text-slate-400">Business Day Date:</span>
                   <span className="font-bold text-white">{currentBusinessDay?.date || 'Today'}</span>
                 </div>
@@ -4192,9 +4241,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   <span className="text-slate-400">Bar Orders / Bar Sales:</span>
                   <span className="font-bold text-purple-400">{barOrders.length} orders • {formatCurrency(barSales, theme.currency)}</span>
                 </div>
-                <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-sm">
+                <div className="flex justify-between items-center pt-2 border-t border-[#1e232e] text-sm">
                   <span className="font-bold text-white">TOTAL DAILY SALES:</span>
-                  <span className="font-black text-amber-400 text-base">{formatCurrency(totalSales, theme.currency)}</span>
+                  <span className="font-bold text-emerald-400 text-base">{formatCurrency(totalSales, theme.currency)}</span>
                 </div>
               </div>
             );

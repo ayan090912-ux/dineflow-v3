@@ -450,24 +450,22 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         {/* Row 1: Title, Status Pills, Actions */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#141822] border border-[#222838] flex items-center justify-center font-bold text-orange-400 shrink-0">
-              <ChefHat className="w-5 h-5 text-orange-400" />
+            <div className="w-10 h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
+              <ChefHat className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <DinelyLogo size="sm" />
-                <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                  Kitchen Display System
+                <h1 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
+                  Kitchen Station
                 </h1>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#161b24] text-slate-400 border border-[#242c3d] font-medium uppercase">
-                  Station Hot Line
-                </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Socket
+                <Badge variant="brand">KITCHEN KDS</Badge>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Main Hot Line • Dispatch & Order Flow
+                Hot line order fulfillment & ticket pipeline
               </p>
             </div>
           </div>
@@ -477,13 +475,13 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             {/* Ticket Counter Pills */}
             <div className="flex items-center gap-2 bg-[#12151b] px-3 py-1.5 rounded-lg border border-[#1e232e] text-xs font-mono font-medium shrink-0">
               <span className="text-amber-400">{pendingOrders.length} New</span>
-              <span className="text-slate-700">/</span>
-              <span className="text-orange-400">{inKitchenOrders.length} Cooking</span>
-              <span className="text-slate-700">/</span>
+              <span className="text-slate-600">/</span>
+              <span className="text-sky-400">{inKitchenOrders.length} Cooking</span>
+              <span className="text-slate-600">/</span>
               <span className="text-emerald-400">{readyOrders.length} Ready</span>
               {overdueCount > 0 && (
                 <>
-                  <span className="text-slate-700">/</span>
+                  <span className="text-slate-600">/</span>
                   <span className="text-rose-400 font-bold">
                     {overdueCount} Late
                   </span>
@@ -557,20 +555,20 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           return (
             <div className="pt-2.5 border-t border-[#1e232e] flex flex-wrap items-center justify-between gap-2.5 text-xs font-mono">
               <span className="text-slate-400 font-sans flex items-center gap-1.5 uppercase text-[11px] tracking-wider font-medium">
-                <Activity className="w-3.5 h-3.5 text-orange-400" /> Today's Kitchen Flow:
+                <Activity className="w-3.5 h-3.5 text-emerald-400" /> Kitchen Flow:
               </span>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
                   <span>Queued:</span> <span className="font-bold text-amber-400">{received}</span>
                 </span>
                 <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
-                  <span>Cooking:</span> <span className="font-bold text-orange-400">{preparing}</span>
+                  <span>Cooking:</span> <span className="font-bold text-sky-400">{preparing}</span>
                 </span>
                 <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
                   <span>Ready at Pass:</span> <span className="font-bold text-emerald-400">{ready}</span>
                 </span>
                 <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
-                  <span>Completed:</span> <span className="font-bold text-sky-400">{completed}</span>
+                  <span>Completed:</span> <span className="font-bold text-slate-300">{completed}</span>
                 </span>
               </div>
             </div>
@@ -581,7 +579,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-2.5 border-t border-[#1e232e]">
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 md:pb-0">
             {[
-              { id: 'KDS', label: 'Live Bump Board', icon: <Flame className="w-3.5 h-3.5 text-orange-400" /> },
+              { id: 'KDS', label: 'Live Bump Board', icon: <Flame className="w-3.5 h-3.5 text-emerald-400" /> },
               { id: 'WAITER', label: 'Pass Pickup Window', icon: <Bell className="w-3.5 h-3.5 text-amber-400" />, badge: readyOrders.length },
               { id: 'COMPLETED', label: 'Completed Shift Orders', icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />, badge: completedOrders.length },
               { id: 'ANALYTICS', label: 'Kitchen Performance', icon: <BarChart2 className="w-3.5 h-3.5 text-sky-400" /> },
@@ -591,7 +589,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 onClick={() => setViewMode(tab.id as any)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   viewMode === tab.id
-                    ? 'bg-[#181d27] text-white border border-[#2d3545]'
+                    ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
                     : 'bg-[#12151b] text-slate-400 hover:text-slate-200 border border-[#1e232e]'
                 }`}
               >
@@ -624,11 +622,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {/* COLUMN 1: NEW INCOMING ORDERS */}
             <div className="space-y-3.5">
-              <div className="p-2.5 bg-[#0e1117] rounded-xl border border-amber-500/30 flex justify-between items-center">
-                <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+              <div className="p-2.5 bg-[#12151b] rounded-xl border border-[#1e232e] flex justify-between items-center">
+                <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                   <Bell className="w-3.5 h-3.5 text-amber-400" /> 1. Incoming Queue ({pendingOrders.length})
                 </span>
-                <span className="text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
+                <span className="text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded">
                   {pendingOrders.length}
                 </span>
               </div>
@@ -726,11 +724,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 2: ACTIVE COOKING STATION */}
             <div className="space-y-3.5">
-              <div className="p-2.5 bg-[#0e1117] rounded-xl border border-orange-500/30 flex justify-between items-center">
-                <span className="text-xs font-semibold text-orange-400 uppercase tracking-wider flex items-center gap-2">
-                  <Flame className="w-3.5 h-3.5 text-orange-400" /> 2. Active Cooking Grid ({inKitchenOrders.length})
+              <div className="p-2.5 bg-[#12151b] rounded-xl border border-[#1e232e] flex justify-between items-center">
+                <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Flame className="w-3.5 h-3.5 text-sky-400" /> 2. Active Cooking Grid ({inKitchenOrders.length})
                 </span>
-                <span className="text-[10px] font-mono font-bold bg-orange-500/10 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded">
+                <span className="text-[10px] font-mono font-medium bg-sky-500/10 text-sky-400 border border-sky-500/25 px-2 py-0.5 rounded">
                   {inKitchenOrders.length}
                 </span>
               </div>
@@ -898,11 +896,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 3: PLATED & READY FOR PASS PICKUP */}
             <div className="space-y-3.5">
-              <div className="p-2.5 bg-[#0e1117] rounded-xl border border-emerald-500/30 flex justify-between items-center">
-                <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+              <div className="p-2.5 bg-[#12151b] rounded-xl border border-[#1e232e] flex justify-between items-center">
+                <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> 3. Plated & Ready ({readyOrders.length})
                 </span>
-                <span className="text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">
+                <span className="text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded">
                   {readyOrders.length}
                 </span>
               </div>

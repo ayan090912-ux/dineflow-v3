@@ -298,7 +298,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
           onClick={handleOpenCreateModal}
           variant="brand"
           size="sm"
-          className="bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs px-4 py-2 rounded-lg"
+          className="text-xs px-4 py-2"
           icon={<Plus className="w-3.5 h-3.5" />}
         >
           Add Tax Rule

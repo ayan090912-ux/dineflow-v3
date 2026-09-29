@@ -15,14 +15,14 @@ export const Badge: React.FC<BadgeProps> = ({
   ...props
 }) => {
   const variantStyles = {
-    default: 'bg-white/[0.06] text-white/70 border border-white/[0.08]',
-    neutral: 'bg-white/[0.06] text-white/70 border border-white/[0.08]',
-    success: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-    warning: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
-    danger: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
-    info: 'bg-sky-500/10 text-sky-400 border border-sky-500/20',
-    outline: 'border border-white/[0.08] text-white/60 bg-transparent',
-    brand: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+    default: 'bg-[#181d27] text-slate-300 border border-[#2d3545]',
+    neutral: 'bg-[#181d27] text-slate-300 border border-[#2d3545]',
+    success: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25',
+    warning: 'bg-amber-500/10 text-amber-400 border border-amber-500/25',
+    danger: 'bg-rose-500/10 text-rose-400 border border-rose-500/25',
+    info: 'bg-sky-500/10 text-sky-400 border border-sky-500/25',
+    outline: 'border border-[#1e232e] text-slate-400 bg-transparent',
+    brand: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
   };
 
   const sizeStyles = {

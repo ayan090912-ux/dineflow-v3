@@ -26,20 +26,20 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     <div
       className={twMerge(
         clsx(
-          'bg-[#0e1117] border border-white/[0.08] rounded-xl p-8 text-center space-y-4 max-w-md mx-auto my-6 font-sans',
+          'bg-[#0e1117] border border-[#1e232e] rounded-xl p-8 text-center space-y-4 max-w-md mx-auto my-6 font-sans shadow-xs',
           className
         )
       )}
       {...props}
     >
       {icon && (
-        <div className="w-12 h-12 rounded-xl bg-[#12151b] border border-white/[0.08] flex items-center justify-center text-white/40 mx-auto">
+        <div className="w-12 h-12 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-400 mx-auto">
           {icon}
         </div>
       )}
       <div className="space-y-1">
         <h3 className="text-sm font-semibold text-white">{title}</h3>
-        {description && <p className="text-xs text-white/50 leading-relaxed">{description}</p>}
+        {description && <p className="text-xs text-slate-400 leading-relaxed">{description}</p>}
       </div>
       {actionLabel && onAction && (
         <div className="pt-2">

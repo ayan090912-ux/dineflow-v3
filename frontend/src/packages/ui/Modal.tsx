@@ -63,21 +63,21 @@ export const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.15 }}
-            className={`relative w-full ${widthClasses[maxWidth]} max-h-[92vh] flex flex-col bg-[#0e1117] text-[#f0f2f5] rounded-2xl border border-white/[0.08] shadow-2xl overflow-hidden z-10 p-6 font-sans`}
+            className={`relative w-full ${widthClasses[maxWidth]} max-h-[92vh] flex flex-col bg-[#0e1117] text-slate-100 rounded-2xl border border-[#1e232e] shadow-2xl overflow-hidden z-10 p-6 font-sans`}
           >
             <div className="flex items-start justify-between mb-3 shrink-0">
               <div>
                 {title && <h3 className="text-base font-semibold text-white">{title}</h3>}
-                {description && <p className="text-xs text-white/50 mt-1">{description}</p>}
+                {description && <p className="text-xs text-slate-400 mt-1">{description}</p>}
               </div>
-              <Button variant="ghost" size="sm" onClick={onClose} className="rounded-lg p-1.5 h-7 w-7 text-white/40 hover:text-white hover:bg-white/[0.04]">
+              <Button variant="ghost" size="sm" onClick={onClose} className="rounded-lg p-1.5 h-7 w-7 text-slate-400 hover:text-white hover:bg-[#181d27]">
                 <X className="w-4 h-4" />
               </Button>
             </div>
 
-            <div className="py-2 text-white/70 overflow-y-auto max-h-[calc(92vh-90px)] pr-1">{children}</div>
+            <div className="py-2 text-slate-300 overflow-y-auto max-h-[calc(92vh-90px)] pr-1">{children}</div>
 
-            {footer && <div className="mt-4 pt-3 border-t border-white/[0.08] flex justify-end gap-2 shrink-0">{footer}</div>}
+            {footer && <div className="mt-4 pt-3 border-t border-[#1e232e] flex justify-end gap-2 shrink-0">{footer}</div>}
           </motion.div>
         </div>
       )}

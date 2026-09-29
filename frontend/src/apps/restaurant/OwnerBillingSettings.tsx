@@ -233,7 +233,8 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
         <Button
           type="submit"
           disabled={isSaving}
-          className="bg-amber-500 hover:bg-amber-400 text-black font-semibold px-5 py-2.5 rounded-lg flex items-center gap-2 text-xs shrink-0"
+          variant="brand"
+          className="font-semibold px-5 py-2.5 rounded-lg flex items-center gap-2 text-xs shrink-0"
         >
           <Save className="w-4 h-4" />
           <span>{isSaving ? 'Saving...' : 'Save Settings'}</span>

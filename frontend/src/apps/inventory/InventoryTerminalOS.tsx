@@ -256,41 +256,42 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white pb-12">
+    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white pb-12">
       {/* Toast Feedback */}
       {toast && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top duration-200 ${
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top duration-200 ${
             toast.type === 'success'
-              ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
+              ? 'bg-[#12151b] border-emerald-500/40 text-emerald-300'
               : toast.type === 'warning'
-              ? 'bg-amber-950 border-amber-500/50 text-amber-300'
-              : 'bg-blue-950 border-blue-500/50 text-blue-300'
+              ? 'bg-[#12151b] border-amber-500/40 text-amber-300'
+              : 'bg-[#12151b] border-[#1e232e] text-slate-200'
           }`}
         >
-          <Sparkles className="w-4 h-4 shrink-0" />
+          <Sparkles className="w-4 h-4 shrink-0 text-emerald-400" />
           <span>{toast.msg}</span>
         </div>
       )}
 
       {/* Header OS Control Bar */}
-      <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 px-6 py-3.5 flex items-center justify-between shadow-2xl">
+      <header className="sticky top-0 z-40 bg-[#0e1117] border-b border-[#1e232e] px-6 py-3.5 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500 to-amber-600 flex items-center justify-center shadow-lg shadow-rose-950/50 border border-rose-400/30">
-            <Package className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
+            <Package className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <DinelyLogo size="sm" />
-              <h1 className="text-base font-black tracking-wide text-white uppercase font-mono">
-                Inventory & Raw Materials OS
+              <h1 className="text-base font-semibold text-white tracking-tight">
+                Inventory Stock
               </h1>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono">
-                LIVE TERMINAL
+              <Badge variant="brand">INVENTORY STOCK</Badge>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Kitchen & Bar Stock Division • Real-Time Supplier Control
+            <p className="text-xs text-slate-400 mt-0.5">
+              Kitchen & bar raw materials, stock levels, and vendor management
             </p>
           </div>
         </div>
@@ -298,14 +299,14 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
         {/* Right Header Actions */}
         <div className="flex items-center gap-3">
           {/* Live Clock */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-300">
-            <Clock className="w-3.5 h-3.5 text-rose-400" />
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#12151b] border border-[#1e232e] text-xs font-mono text-slate-300">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span>{currentTime || '12:00 PM'}</span>
           </div>
 
           <button
             onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-[#12151b] border border-[#1e232e] text-slate-400 hover:text-white transition-colors"
             title={isAudioMuted ? 'Unmute Sound' : 'Mute Sound'}
           >
             {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
@@ -314,15 +315,18 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
           <Button
             onClick={() => setIsAddSupplierModalOpen(true)}
             variant="outline"
-            className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 text-xs font-bold flex items-center gap-1.5 rounded-xl"
+            size="sm"
+            className="text-xs flex items-center gap-1.5"
           >
-            <Building2 className="w-4 h-4 text-amber-400" />
+            <Building2 className="w-4 h-4 text-slate-300" />
             <span>+ Add Supplier</span>
           </Button>
 
           <Button
             onClick={() => setIsAddStockModalOpen(true)}
-            className="bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-xs font-black shadow-lg shadow-rose-950/50 flex items-center gap-1.5 rounded-xl"
+            variant="brand"
+            size="sm"
+            className="text-xs flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
             <span>Add Raw Material</span>
@@ -331,7 +335,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
           {onLogout && (
             <button
               onClick={onLogout}
-              className="text-xs text-slate-400 hover:text-white px-2 py-1 transition-colors"
+              className="text-xs text-slate-400 hover:text-rose-400 px-2 py-1 transition-colors"
             >
               Exit Terminal
             </button>
@@ -343,45 +347,45 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
       <main className="max-w-7xl mx-auto w-full px-6 pt-6 space-y-6 flex-1">
         {/* Metric Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-4 bg-slate-900/80 border-slate-800 rounded-2xl relative overflow-hidden group hover:border-slate-700 transition-all">
+          <Card className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">
+              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
                 Total Stock Items
               </span>
-              <Package className="w-4 h-4 text-slate-500" />
+              <Package className="w-4 h-4 text-slate-400" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-white font-mono">{items.length}</span>
-              <span className="text-[11px] text-slate-400">
+              <span className="text-2xl font-bold font-mono text-white">{items.length}</span>
+              <span className="text-xs text-slate-400 font-mono">
                 ({kitchenItems.length} Kitchen • {barItems.length} Bar)
               </span>
             </div>
           </Card>
 
-          <Card className="p-4 bg-slate-900/80 border-amber-500/30 rounded-2xl relative overflow-hidden group hover:border-amber-500/50 transition-all">
+          <Card className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-amber-400 tracking-wider uppercase">
+              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
                 Low Stock Alerts
               </span>
               <AlertTriangle className="w-4 h-4 text-amber-400" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-amber-300 font-mono">
+              <span className="text-2xl font-bold font-mono text-amber-400">
                 {lowStockItems.length}
               </span>
-              <span className="text-[11px] text-slate-400">At or below reorder limit</span>
+              <span className="text-xs text-slate-400">Below min reorder</span>
             </div>
           </Card>
 
-          <Card className="p-4 bg-slate-900/80 border-emerald-500/30 rounded-2xl relative overflow-hidden group hover:border-emerald-500/50 transition-all">
+          <Card className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-emerald-400 tracking-wider uppercase">
+              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
                 Total Inventory Value
               </span>
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-black text-emerald-300 font-mono">
+              <span className="text-2xl font-bold font-mono text-emerald-400">
                 {formatCurrency(totalValue)}
               </span>
             </div>
@@ -389,86 +393,57 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
 
           <Card
             onClick={() => setActiveTab('SUPPLIERS')}
-            className="p-4 bg-slate-900/80 border-blue-500/30 rounded-2xl relative overflow-hidden group hover:border-blue-500/60 cursor-pointer transition-all"
+            className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-blue-400 tracking-wider uppercase flex items-center gap-1">
-                <span>Active Suppliers</span>
-                <ArrowUpRight className="w-3.5 h-3.5 text-blue-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+                Active Suppliers
               </span>
-              <Users className="w-4 h-4 text-blue-400" />
+              <Building2 className="w-4 h-4 text-sky-400" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-blue-300 font-mono">{suppliers.length}</span>
-              <span className="text-[11px] text-blue-400 font-bold group-hover:underline">
-                Manage Vendors & Contacts →
+              <span className="text-2xl font-bold font-mono text-white">{suppliers.length}</span>
+              <span className="text-xs text-emerald-400 group-hover:underline">
+                Manage Vendors →
               </span>
             </div>
           </Card>
         </div>
 
         {/* Tab & Search Filter Navigation */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900/60 p-2 rounded-2xl border border-slate-800">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0e1117] p-2 rounded-xl border border-[#1e232e]">
           {/* Tabs */}
           <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto p-1">
-            <button
-              onClick={() => setActiveTab('ALL')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === 'ALL'
-                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-950/50'
-                  : 'bg-slate-950/60 text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Package className="w-3.5 h-3.5" />
-              <span>All Raw Stock ({items.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('KITCHEN')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === 'KITCHEN'
-                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-950/50'
-                  : 'bg-slate-950/60 text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <ChefHat className="w-3.5 h-3.5 text-amber-300" />
-              <span>Kitchen Inventory ({kitchenItems.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('BAR')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === 'BAR'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/50'
-                  : 'bg-slate-950/60 text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <GlassWater className="w-3.5 h-3.5 text-indigo-300" />
-              <span>Bar Inventory ({barItems.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('SUPPLIERS')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === 'SUPPLIERS'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/50'
-                  : 'bg-slate-950/60 text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5 text-blue-300" />
-              <span>Suppliers Directory ({suppliers.length})</span>
-            </button>
+            {[
+              { id: 'ALL', label: `All Raw Stock (${items.length})`, icon: <Package className="w-3.5 h-3.5" /> },
+              { id: 'KITCHEN', label: `Kitchen Inventory (${kitchenItems.length})`, icon: <ChefHat className="w-3.5 h-3.5" /> },
+              { id: 'BAR', label: `Bar Inventory (${barItems.length})`, icon: <GlassWater className="w-3.5 h-3.5" /> },
+              { id: 'SUPPLIERS', label: `Suppliers Directory (${suppliers.length})`, icon: <Building2 className="w-3.5 h-3.5" /> },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTab === tab.id
+                    ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b] border border-transparent'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
           </div>
 
           {/* Search Bar */}
           <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search stock, category, supplier..."
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-rose-500"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-[#12151b] border border-[#1e232e] rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/50"
             />
           </div>
         </div>
@@ -555,29 +530,29 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
           </div>
         ) : (
           /* CONTENT VIEW: INVENTORY RAW MATERIALS TABLE */
-          <Card className="bg-slate-900/90 border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+          <Card className="bg-[#0e1117] border-[#1e232e] rounded-xl overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
-                    <th className="py-3.5 px-4">Raw Material / Item</th>
-                    <th className="py-3.5 px-3">Division</th>
-                    <th className="py-3.5 px-3">Category</th>
-                    <th className="py-3.5 px-3 text-center">Stock Quantity</th>
-                    <th className="py-3.5 px-3 text-center">Min Alert</th>
-                    <th className="py-3.5 px-3">Unit Cost & Value</th>
-                    <th className="py-3.5 px-3">Supplier Contact</th>
-                    <th className="py-3.5 px-3">Status</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  <tr className="bg-[#12151b] border-b border-[#1e232e] text-slate-400 font-mono font-medium uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-4">Raw Material / Item</th>
+                    <th className="py-3 px-3">Division</th>
+                    <th className="py-3 px-3">Category</th>
+                    <th className="py-3 px-3 text-center">Stock Quantity</th>
+                    <th className="py-3 px-3 text-center">Min Alert</th>
+                    <th className="py-3 px-3">Unit Cost & Value</th>
+                    <th className="py-3 px-3">Supplier Contact</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-[#1e232e]">
                   {displayedItems.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
                         <Package className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                        <p className="font-bold text-slate-400">No raw stock items found</p>
-                        <p className="text-[11px]">
+                        <p className="font-semibold text-slate-300">No raw stock items found</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
                           Click "+ Add Raw Material" to register inventory stock.
                         </p>
                       </td>
@@ -587,51 +562,45 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                       const isLow = item.quantity <= item.minThreshold;
                       const isBar = item.station === 'BAR';
                       return (
-                        <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
+                        <tr key={item.id} className="hover:bg-[#141822]/60 transition-colors">
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-white text-sm">{item.name}</div>
-                            <div className="text-[11px] text-slate-400 font-mono">
+                            <div className="font-semibold text-white text-xs">{item.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                               📍 {item.storageLocation || 'Main Storage'}
                             </div>
                           </td>
 
                           <td className="py-3.5 px-3">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                isBar
-                                  ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
-                                  : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                              }`}
-                            >
-                              {isBar ? <GlassWater className="w-3 h-3" /> : <ChefHat className="w-3 h-3" />}
-                              <span>{isBar ? 'BAR INVENTORY' : 'KITCHEN INVENTORY'}</span>
-                            </span>
+                            <Badge variant="neutral" className="gap-1">
+                              {isBar ? <GlassWater className="w-3 h-3 text-emerald-400" /> : <ChefHat className="w-3 h-3 text-emerald-400" />}
+                              <span>{isBar ? 'BAR' : 'KITCHEN'}</span>
+                            </Badge>
                           </td>
 
                           <td className="py-3.5 px-3 text-slate-300">
-                            <span className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px]">
+                            <span className="px-2 py-0.5 rounded bg-[#181d27] border border-[#2d3545] text-slate-300 text-[10px] font-mono">
                               {item.category}
                             </span>
                           </td>
 
                           <td className="py-3.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handleAdjustQuantity(item.id, -1)}
-                                className="w-6 h-6 rounded-lg bg-slate-950 hover:bg-rose-600 text-slate-300 hover:text-white font-bold border border-slate-800 transition-colors flex items-center justify-center"
+                                className="w-6 h-6 rounded-lg bg-[#181d27] hover:bg-[#222838] text-slate-300 hover:text-white font-bold border border-[#2d3545] transition-colors flex items-center justify-center cursor-pointer"
                               >
                                 -
                               </button>
                               <span
-                                className={`font-mono font-bold text-sm min-w-[3rem] ${
-                                  isLow ? 'text-rose-400 font-black' : 'text-emerald-400'
+                                className={`font-mono font-bold text-xs min-w-[3rem] ${
+                                  isLow ? 'text-rose-400' : 'text-emerald-400'
                                 }`}
                               >
-                                {item.quantity} <span className="text-[10px] text-slate-400">{item.unit}</span>
+                                {item.quantity} <span className="text-[10px] text-slate-400 font-normal">{item.unit}</span>
                               </span>
                               <button
                                 onClick={() => handleAdjustQuantity(item.id, 1)}
-                                className="w-6 h-6 rounded-lg bg-slate-950 hover:bg-emerald-600 text-slate-300 hover:text-white font-bold border border-slate-800 transition-colors flex items-center justify-center"
+                                className="w-6 h-6 rounded-lg bg-[#181d27] hover:bg-[#222838] text-slate-300 hover:text-white font-bold border border-[#2d3545] transition-colors flex items-center justify-center cursor-pointer"
                               >
                                 +
                               </button>
@@ -643,41 +612,36 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                           </td>
 
                           <td className="py-3.5 px-3">
-                            <div className="font-mono text-slate-200">
+                            <div className="font-mono text-slate-200 text-xs">
                               {formatCurrency(item.costPerUnit)} / {item.unit}
                             </div>
-                            <div className="text-[10px] font-mono text-emerald-400">
+                            <div className="text-[10px] font-mono text-slate-400">
                               Total: {formatCurrency(item.quantity * item.costPerUnit)}
                             </div>
                           </td>
 
                           <td className="py-3.5 px-3 text-slate-300">
-                            <div className="font-bold text-slate-200">{item.supplierName || 'General Supplier'}</div>
+                            <div className="font-medium text-slate-200 text-xs">{item.supplierName || 'General Supplier'}</div>
                             <div className="text-[10px] text-slate-400 font-mono">{item.supplierContact || 'N/A'}</div>
                           </td>
 
                           <td className="py-3.5 px-3">
-                            {isLow ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 animate-pulse">
-                                <AlertTriangle className="w-3 h-3" />
-                                <span>LOW STOCK</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
-                                <CheckCircle2 className="w-3 h-3" />
-                                <span>IN STOCK</span>
-                              </span>
-                            )}
+                            <Badge variant={isLow ? 'danger' : 'success'}>
+                              {isLow ? <AlertTriangle className="w-3 h-3 mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+                              <span>{isLow ? 'LOW STOCK' : 'IN STOCK'}</span>
+                            </Badge>
                           </td>
 
                           <td className="py-3.5 px-4 text-right">
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => handleDeleteItem(item.id, item.name)}
-                              className="p-2 rounded-xl bg-slate-950 hover:bg-rose-600 text-slate-400 hover:text-white border border-slate-800 transition-colors"
+                              className="h-7 w-7 p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg"
                               title="Delete Item"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            </Button>
                           </td>
                         </tr>
                       );

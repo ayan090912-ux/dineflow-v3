@@ -169,16 +169,16 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
   ];
 
   return (
-    <div className="space-y-8 max-w-4xl animate-in fade-in">
+    <div className="space-y-6 max-w-4xl animate-in fade-in">
       {/* Header Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#1e232e]">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Badge variant="brand" className="text-[10px] uppercase font-mono">Workspace Configuration</Badge>
             <span className="text-xs text-slate-500">•</span>
             <span className="text-xs text-slate-400 font-bold">{restaurant?.name || 'My Business'}</span>
           </div>
-          <h2 className="text-2xl font-black text-white tracking-tight">
+          <h2 className="text-2xl font-bold text-white tracking-tight">
             Workspace & Terminal Management
           </h2>
           <p className="text-xs text-slate-400">
@@ -190,7 +190,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
           variant="brand"
           onClick={handleSave}
           isLoading={isSaving}
-          className="text-xs font-bold px-6 py-2.5 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-lg shadow-rose-950/40 shrink-0"
+          className="text-xs font-semibold px-6 py-2.5 shrink-0"
           icon={<Save className="w-4 h-4 mr-1" />}
         >
           Save Workspace Changes
@@ -198,17 +198,16 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       </div>
 
       {/* Tenant Public Subdomain & Customer Portal Card */}
-      <Card className="bg-slate-900 border-indigo-500/30 p-6 rounded-2xl space-y-4 shadow-xl shadow-indigo-950/20 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+      <Card className="bg-[#12151b] border-[#1e232e] p-6 rounded-xl space-y-4 shadow-sm relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shrink-0">
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
               <Globe className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider font-mono">Customer Ordering Portal</span>
-                <Badge variant="success" className="font-mono text-[10px]">ACTIVE</Badge>
+                <span className="text-xs text-emerald-400 font-semibold uppercase tracking-wider font-mono">Customer Ordering Portal</span>
+                <Badge variant="brand" className="font-mono text-[10px]">ACTIVE</Badge>
               </div>
               <h4 className="text-sm sm:text-base font-bold text-white font-mono mt-0.5 break-all">
                 {customerUrl}
@@ -224,7 +223,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
               variant="outline"
               size="sm"
               onClick={handleCopyPublicUrl}
-              className="text-xs border-slate-700 hover:bg-slate-800 text-slate-200"
+              className="text-xs border-[#1e232e] bg-[#12151b] hover:bg-[#181d27] text-slate-200"
               icon={<Copy className="w-3.5 h-3.5 mr-1" />}
             >
               {copiedUrl ? 'Copied! ✓' : 'Copy Link'}
@@ -233,7 +232,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
               href={customerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-950/40"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               Open Customer App
@@ -243,9 +242,9 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       </Card>
 
       {/* Business Model Summary Box */}
-      <Card className="bg-slate-900 border-slate-800 p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <Card className="bg-[#12151b] border-[#1e232e] p-5 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 shrink-0">
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
             <Building2 className="w-6 h-6" />
           </div>
           <div>
@@ -265,7 +264,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
 
         <div className="text-right shrink-0">
           <span className="text-[10px] text-slate-500 uppercase font-mono block">Active Terminals</span>
-          <span className="text-xl font-black text-emerald-400 font-mono">
+          <span className="text-xl font-bold text-emerald-400 font-mono">
             {enabledModules.length} Enabled
           </span>
         </div>
@@ -275,7 +274,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Layers className="w-4 h-4 text-rose-400" /> Operational Terminals & Modules
+            <Layers className="w-4 h-4 text-emerald-400" /> Operational Terminals & Modules
           </h3>
           <span className="text-xs text-slate-400 font-mono">Toggle to enable or disable</span>
         </div>
@@ -289,16 +288,16 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
               return (
                 <div
                   key={mod.key}
-                  className="p-4 rounded-2xl border border-slate-800/40 bg-slate-950/40 text-slate-600 flex items-center justify-between gap-4 opacity-50"
+                  className="p-4 rounded-xl border border-[#1e232e] bg-[#0e1117]/60 text-slate-600 flex items-center justify-between gap-4 opacity-50"
                 >
                   <div className="flex items-center gap-3.5">
-                    <div className="p-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-600">
+                    <div className="p-2.5 rounded-lg border border-[#1e232e] bg-[#12151b] text-slate-600">
                       <IconComp className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-500 text-sm line-through">{mod.name}</span>
-                        <Badge variant="outline" className="text-[9px] border-slate-800 text-slate-600">Not Applicable for {bType}</Badge>
+                        <Badge variant="outline" className="text-[9px] border-[#1e232e] text-slate-600">Not Applicable for {bType}</Badge>
                       </div>
                       <p className="text-xs text-slate-600 mt-0.5">This module is not offered under your current business model.</p>
                     </div>
@@ -312,16 +311,16 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
               <div
                 key={mod.key}
                 onClick={() => toggleModule(mod.key)}
-                className={`p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between gap-4 ${
+                className={`p-4 sm:p-5 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-4 ${
                   isEnabled
-                    ? 'bg-slate-900 border-slate-700/80 hover:border-rose-500/50 shadow-md'
-                    : 'bg-slate-950 border-slate-800/80 text-slate-500 opacity-60 hover:opacity-80'
+                    ? 'bg-[#12151b] border-[#1e232e] hover:border-emerald-500/50 shadow-xs'
+                    : 'bg-[#0e1117] border-[#1e232e] text-slate-500 opacity-60 hover:opacity-80'
                 }`}
               >
                 <div className="flex items-start sm:items-center gap-3.5">
                   <div
-                    className={`p-3 rounded-2xl border shrink-0 transition-colors ${
-                      isEnabled ? 'bg-slate-800 border-slate-700 ' + mod.color : 'bg-slate-950 border-slate-800 text-slate-600'
+                    className={`p-3 rounded-xl border shrink-0 transition-colors ${
+                      isEnabled ? 'bg-[#181d27] border-[#2d3545] text-emerald-400' : 'bg-[#0e1117] border-[#1e232e] text-slate-600'
                     }`}
                   >
                     <IconComp className="w-5 h-5" />
@@ -331,7 +330,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
                       <span className={`font-bold text-sm ${isEnabled ? 'text-white' : 'text-slate-400'}`}>
                         {mod.name}
                       </span>
-                      <Badge variant={isEnabled ? mod.badgeVariant : 'outline'} className="text-[9px]">
+                      <Badge variant={isEnabled ? 'brand' : 'outline'} className="text-[9px]">
                         {mod.badge}
                       </Badge>
                       {isEnabled ? (
@@ -339,7 +338,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
                           ACTIVE
                         </span>
                       ) : (
-                        <span className="text-[10px] text-slate-500 font-mono font-bold bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800">
+                        <span className="text-[10px] text-slate-500 font-mono font-bold bg-[#181d27] px-2 py-0.5 rounded-full border border-[#2d3545]">
                           DISABLED
                         </span>
                       )}
@@ -353,7 +352,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
                     type="checkbox"
                     checked={isEnabled}
                     onChange={() => {}}
-                    className="w-5 h-5 rounded text-rose-500 accent-rose-500 cursor-pointer"
+                    className="w-5 h-5 rounded text-emerald-500 accent-emerald-500 cursor-pointer"
                   />
                 </div>
               </div>
@@ -363,8 +362,8 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       </div>
 
       {/* Historical Data Safety Notice */}
-      <div className="p-4 bg-indigo-950/30 border border-indigo-500/30 rounded-2xl flex items-start gap-3 text-xs text-slate-300">
-        <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+      <div className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl flex items-start gap-3 text-xs text-slate-300">
+        <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
         <div className="space-y-0.5">
           <span className="font-bold text-white block">Safe Data Preservation Policy</span>
           <p className="text-slate-400 text-xs leading-relaxed">

@@ -29,34 +29,34 @@ export function Table<T>({
   className,
 }: TableProps<T>) {
   return (
-    <div className={twMerge('w-full overflow-x-auto rounded-xl border border-white/[0.08] bg-[#0e1117] shadow-lg font-sans', className)}>
+    <div className={twMerge('w-full overflow-x-auto rounded-xl border border-[#1e232e] bg-[#0e1117] shadow-xs font-sans', className)}>
       <table className="w-full text-left border-collapse text-xs">
         <thead>
-          <tr className="border-b border-white/[0.08] bg-[#12151b]">
+          <tr className="border-b border-[#1e232e] bg-[#12151b]">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={twMerge('px-4 py-3 font-mono font-medium text-[10px] text-white/50 uppercase tracking-wider', col.className)}
+                className={twMerge('px-4 py-3 font-mono font-medium text-[10px] text-slate-400 uppercase tracking-wider', col.className)}
               >
                 {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-white/[0.06]">
+        <tbody className="divide-y divide-[#1e232e]">
           {isLoading ? (
             Array.from({ length: 4 }).map((_, idx) => (
               <tr key={idx} className="animate-pulse">
                 {columns.map((col) => (
                   <td key={col.key} className="px-4 py-3.5">
-                    <div className="h-3.5 bg-white/[0.06] rounded w-3/4"></div>
+                    <div className="h-3.5 bg-[#181d27] rounded w-3/4"></div>
                   </td>
                 ))}
               </tr>
             ))
           ) : data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-12 text-center text-white/40 text-xs">
+              <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-400 text-xs">
                 {emptyMessage}
               </td>
             </tr>
@@ -66,12 +66,12 @@ export function Table<T>({
                 key={keyExtractor(item)}
                 onClick={() => onRowClick?.(item)}
                 className={clsx(
-                  'transition-colors hover:bg-white/[0.02]',
+                  'transition-colors hover:bg-[#141822]/60',
                   onRowClick && 'cursor-pointer'
                 )}
               >
                 {columns.map((col) => (
-                  <td key={col.key} className={twMerge('px-4 py-3 text-white/80 font-normal', col.className)}>
+                  <td key={col.key} className={twMerge('px-4 py-3 text-slate-200 font-normal', col.className)}>
                     {col.render ? col.render(item) : (item as Record<string, unknown>)[col.key] as React.ReactNode}
                   </td>
                 ))}

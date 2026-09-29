@@ -11,8 +11,24 @@
     --color-bg-elevated: #1a1e27;
     --color-border-subtle: #1e232e;
     --color-border-strong: #2d3545;
-    --color-brand-accent: #f97316;
-    --color-brand-warmth: #fbbf24;
+    --color-brand-accent: #10b981;
+    --color-brand-warmth: #f59e0b;
+
+    /* Canonical Dinely Unified Design Tokens */
+    --dinely-bg: #0b0d11;
+    --dinely-surface: #12151b;
+    --dinely-surface-elevated: #1a1e27;
+    --dinely-border: #1e232e;
+    --dinely-border-strong: #2d3545;
+    --dinely-text: #f3f4f6;
+    --dinely-text-secondary: #94a3b8;
+    --dinely-text-muted: #64748b;
+    --dinely-accent: #10b981;
+    --dinely-accent-hover: #059669;
+    --dinely-success: #10b981;
+    --dinely-warning: #f59e0b;
+    --dinely-danger: #ef4444;
+    --dinely-info: #3b82f6;
   }
 
   body {

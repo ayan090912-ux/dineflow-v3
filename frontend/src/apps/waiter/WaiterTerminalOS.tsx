@@ -515,10 +515,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       case 'EXTRA_SPOON':
       case 'EXTRA_PLATE':
       case 'CUTLERY':
-        return <Badge variant="outline" className="flex items-center gap-1 border-amber-500/50 text-amber-300"><Utensils className="w-3 h-3" /> Spoon / Cutlery</Badge>;
+        return <Badge variant="neutral" className="flex items-center gap-1"><Utensils className="w-3 h-3" /> Spoon / Cutlery</Badge>;
       case 'TISSUE':
       case 'NAPKINS':
-        return <Badge variant="outline" className="flex items-center gap-1 border-purple-500/50 text-purple-300"><FileText className="w-3 h-3" /> Tissue</Badge>;
+        return <Badge variant="neutral" className="flex items-center gap-1"><FileText className="w-3 h-3" /> Tissue</Badge>;
       case 'CALL_WAITER':
         return <Badge variant="danger" className="flex items-center gap-1 animate-pulse"><PhoneCall className="w-3 h-3" /> Call Waiter</Badge>;
       case 'CUSTOM':
@@ -565,34 +565,34 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       )}
 
       {/* HEADER BAR */}
-      <header className="bg-[#0e1117] border-b border-[#1e232e] sticky top-0 z-40 px-4 lg:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+      <header className="bg-[#0e1117] border-b border-[#1e232e] sticky top-0 z-40 px-4 lg:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
         {/* Brand Header */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#141822] border border-[#222838] flex items-center justify-center font-bold text-orange-400 shrink-0">
-            <PhoneCall className="w-4.5 h-4.5 text-orange-400" />
+          <div className="w-10 h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
+            <PhoneCall className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <DinelyLogo size="sm" />
-              <h1 className="text-base font-bold text-white tracking-tight">Waiter Terminal OS</h1>
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#161b24] text-slate-400 border border-[#242c3d]">STAFF</span>
+              <h1 className="text-base font-semibold text-white tracking-tight">Waiter Terminal</h1>
+              <Badge variant="brand">WAITER TERMINAL</Badge>
+              {wsStatus === 'CONNECTED' ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+                </span>
+              ) : wsStatus === 'RECONNECTING' ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Reconnecting
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
+                </span>
+              )}
             </div>
-            {wsStatus === 'CONNECTED' ? (
-              <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                <span className="text-emerald-400 font-mono text-[11px]">Live Sync Active</span>
-              </p>
-            ) : wsStatus === 'RECONNECTING' ? (
-              <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-0.5 animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                <span className="font-mono text-[11px]">Reconnecting...</span>
-              </p>
-            ) : (
-              <p className="text-xs text-rose-400 flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
-                <span className="font-mono text-[11px]">Offline</span>
-              </p>
-            )}
+            <p className="text-xs text-slate-400 mt-0.5">
+              Floor service requests, active table sessions & dish delivery
+            </p>
           </div>
         </div>
 
