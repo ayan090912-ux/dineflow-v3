@@ -679,6 +679,21 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             }
           }).catch(() => {});
         }
+      } else if (event.type === 'WorkspaceConfigUpdated') {
+        const evtRestId = event.restaurantId || (event as any).restaurant_id;
+        if (!restId || !evtRestId || String(evtRestId).toLowerCase() === String(restId).toLowerCase()) {
+          setCurrentRestaurant((prev: any) => ({
+            ...prev,
+            enabledModules: event.enabledModules || prev?.enabledModules,
+            hasKitchen: event.hasKitchen !== undefined ? event.hasKitchen : prev?.hasKitchen,
+            hasWaiter: event.hasWaiter !== undefined ? event.hasWaiter : prev?.hasWaiter,
+            hasBar: event.hasBar !== undefined ? event.hasBar : prev?.hasBar,
+            hasInventory: event.hasInventory !== undefined ? event.hasInventory : prev?.hasInventory,
+            hasBilling: event.hasBilling !== undefined ? event.hasBilling : prev?.hasBilling,
+            hasTables: event.hasTables !== undefined ? event.hasTables : prev?.hasTables,
+          }));
+          addToast('info', 'Workspace Updated', 'Restaurant operational terminal configuration was updated.');
+        }
       } else if (event.type === 'RECONNECTED') {
         loadData(false);
       }
@@ -1764,7 +1779,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 Add Employee
               </Button>
             )}
-            {activeTab === 'inventory' && (
+            {activeTab === 'inventory' && isModuleEnabled(currentRestaurant, 'inventory') && (
               <Button
                 variant="brand"
                 size="sm"
@@ -2195,17 +2210,80 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab: Waiter Terminal Operating System */}
         {activeTab === 'waiter' && (
-          <WaiterTerminalOS />
+          isModuleEnabled(currentRestaurant, 'waiter') ? (
+            <WaiterTerminalOS />
+          ) : (
+            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                <PhoneCall className="w-8 h-8" />
+              </div>
+              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+              <h3 className="text-xl font-bold text-white">Waiter Terminal is currently disabled for this restaurant.</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                The Waiter Terminal has been deactivated in Workspace Settings.
+              </p>
+              <div className="pt-2 flex justify-center gap-3">
+                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                  Open Terminals & Setup
+                </Button>
+                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                  Return to Dashboard
+                </Button>
+              </div>
+            </Card>
+          )
         )}
 
         {/* Tab 3: Kitchen Display System (KDS) & ETA Controls */}
         {activeTab === 'kitchen' && (
-          <KitchenETADashboard orders={orders} onRefreshOrders={handleRefreshOrders} />
+          isModuleEnabled(currentRestaurant, 'kitchen') ? (
+            <KitchenETADashboard orders={orders} onRefreshOrders={handleRefreshOrders} />
+          ) : (
+            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                <ChefHat className="w-8 h-8" />
+              </div>
+              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+              <h3 className="text-xl font-bold text-white">Kitchen Terminal is currently disabled for this restaurant.</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                The Kitchen Display System has been deactivated in Workspace Settings.
+              </p>
+              <div className="pt-2 flex justify-center gap-3">
+                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                  Open Terminals & Setup
+                </Button>
+                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                  Return to Dashboard
+                </Button>
+              </div>
+            </Card>
+          )
         )}
 
         {/* Tab 3.5: Bar Terminal */}
         {activeTab === 'bar' && (
-          <BarTerminal />
+          isModuleEnabled(currentRestaurant, 'bar') ? (
+            <BarTerminal />
+          ) : (
+            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+              <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-400 mx-auto flex items-center justify-center">
+                <Wine className="w-8 h-8" />
+              </div>
+              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+              <h3 className="text-xl font-bold text-white">Bar Terminal is currently disabled for this restaurant.</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                The Bar Terminal KDS has been deactivated in Workspace Settings.
+              </p>
+              <div className="pt-2 flex justify-center gap-3">
+                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                  Open Terminals & Setup
+                </Button>
+                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                  Return to Dashboard
+                </Button>
+              </div>
+            </Card>
+          )
         )}
 
         {/* Tab 3.6: Counter / Pickup QR Entry Point */}
@@ -3060,7 +3138,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab 7: Raw Material & Inventory Management */}
         {activeTab === 'inventory' && (
-          <div className="space-y-6">
+          isModuleEnabled(currentRestaurant, 'inventory') ? (
+            <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -3357,11 +3436,31 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
             )}
           </div>
-        )}
+        ) : (
+          <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center">
+              <Package className="w-8 h-8" />
+            </div>
+            <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+            <h3 className="text-xl font-bold text-white">Inventory Terminal is currently disabled for this restaurant.</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Raw Material & Inventory Management has been deactivated in Workspace Settings.
+            </p>
+            <div className="pt-2 flex justify-center gap-3">
+              <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                Open Terminals & Setup
+              </Button>
+              <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                Return to Dashboard
+              </Button>
+            </div>
+          </Card>
+        ))}
 
         {/* Tab: Billing & Digital Receipt OS */}
         {activeTab === 'billing' && (
-          <div className="space-y-6">
+          isModuleEnabled(currentRestaurant, 'billing') ? (
+            <div className="space-y-6">
             {/* Header Title Banner */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1e232e] pb-5">
               <div className="space-y-1">
@@ -3843,7 +3942,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </>
             )}
           </div>
-        )}
+        ) : (
+          <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center">
+              <Receipt className="w-8 h-8" />
+            </div>
+            <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+            <h3 className="text-xl font-bold text-white">Billing Terminal is currently disabled for this restaurant.</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Billing, Invoices & Tax Management has been deactivated in Workspace Settings.
+            </p>
+            <div className="pt-2 flex justify-center gap-3">
+              <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                Open Terminals & Setup
+              </Button>
+              <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                Return to Dashboard
+              </Button>
+            </div>
+          </Card>
+        ))}
 
 
         {/* Tab 8: Branding & Theme Engine */}

@@ -436,7 +436,10 @@ function AppContent() {
         const restId = event.restaurantId || event.restaurant_id || api.getCurrentRestaurantId();
         if (restId) {
           api.getRestaurantDetails(restId).then((r) => {
-            if (isMounted && r) setCurrentRestaurant(r);
+            if (isMounted && r) {
+              setCurrentRestaurant(r);
+              setResolvedTenant((prev) => (prev && (prev.id === r.id || prev.slug === r.slug) ? r : prev));
+            }
           });
         }
       }
@@ -602,6 +605,16 @@ function AppContent() {
 
       // 2. Kitchen Terminal (KDS)
       if (tenantApp === 'KITCHEN') {
+        if (!isModuleEnabled(resolvedTenant, 'kitchen')) {
+          return (
+            <ModuleNotEnabledPage
+              moduleName="Kitchen Display System"
+              restaurant={resolvedTenant}
+              onNavigate={navigateTo}
+            />
+          );
+        }
+
         if (!currentUser) {
           return (
             <RoleLoginPage
@@ -644,6 +657,16 @@ function AppContent() {
 
       // 3. Waiter Terminal
       if (tenantApp === 'WAITER') {
+        if (!isModuleEnabled(resolvedTenant, 'waiter')) {
+          return (
+            <ModuleNotEnabledPage
+              moduleName="Waiter Terminal"
+              restaurant={resolvedTenant}
+              onNavigate={navigateTo}
+            />
+          );
+        }
+
         if (!currentUser) {
           return (
             <RoleLoginPage
@@ -677,6 +700,16 @@ function AppContent() {
 
       // 4. Bar Terminal
       if (tenantApp === 'BAR') {
+        if (!isModuleEnabled(resolvedTenant, 'bar')) {
+          return (
+            <ModuleNotEnabledPage
+              moduleName="Bar Terminal"
+              restaurant={resolvedTenant}
+              onNavigate={navigateTo}
+            />
+          );
+        }
+
         if (!currentUser) {
           return (
             <RoleLoginPage
@@ -710,6 +743,16 @@ function AppContent() {
 
       // 5. Inventory Terminal
       if (tenantApp === 'INVENTORY') {
+        if (!isModuleEnabled(resolvedTenant, 'inventory')) {
+          return (
+            <ModuleNotEnabledPage
+              moduleName="Inventory & Stock"
+              restaurant={resolvedTenant}
+              onNavigate={navigateTo}
+            />
+          );
+        }
+
         if (!currentUser) {
           return (
             <RoleLoginPage
@@ -743,6 +786,16 @@ function AppContent() {
 
       // 6. Billing / Operations Center
       if (tenantApp === 'BILLING') {
+        if (!isModuleEnabled(resolvedTenant, 'billing')) {
+          return (
+            <ModuleNotEnabledPage
+              moduleName="Billing & POS"
+              restaurant={resolvedTenant}
+              onNavigate={navigateTo}
+            />
+          );
+        }
+
         if (!currentUser) {
           return (
             <RoleLoginPage

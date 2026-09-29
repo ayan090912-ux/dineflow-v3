@@ -18,6 +18,9 @@ import {
   ExternalLink,
   QrCode,
   Copy,
+  Users,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { Button, Card, Badge } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -41,6 +44,8 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
   const [hasSeating, setHasSeating] = useState<boolean>(restaurant?.hasTables !== false);
   const [isSaving, setIsSaving] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [rowStatus, setRowStatus] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'failed'>>({});
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (restaurant) {
@@ -56,38 +61,22 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
     }
   }, [restaurant]);
 
-  const toggleModule = (moduleKey: string) => {
-    // Food Cart rule: Bar is not supported
-    if (bType === 'FOOD_CART' && moduleKey === 'bar') {
-      addToast('warning', 'Terminal Restricted', 'Bar Terminal KDS is not supported for Food Cart businesses.');
-      return;
-    }
-
-    setEnabledModules((prev) => {
-      if (prev.includes(moduleKey)) {
-        // Prevent disabling all modules
-        if (prev.length <= 1) {
-          addToast('warning', 'Minimum Required', 'At least one terminal module must remain active.');
-          return prev;
-        }
-        return prev.filter((m) => m !== moduleKey);
-      } else {
-        return [...prev, moduleKey];
-      }
-    });
-  };
-
-  const handleSave = async () => {
+  const saveConfiguration = async (newModules: string[], activeKey?: string) => {
     if (!restaurant) return;
     setIsSaving(true);
-    try {
-      const hasKitchen = enabledModules.includes('kitchen');
-      const hasWaiter = enabledModules.includes('waiter');
-      const hasBar = enabledModules.includes('bar');
-      const hasInventory = enabledModules.includes('inventory');
-      const hasBilling = enabledModules.includes('billing');
+    setErrorMessage(null);
+    if (activeKey) {
+      setRowStatus((prev) => ({ ...prev, [activeKey]: 'saving' }));
+    }
 
-      await api.updateWorkspaceModules(restaurant.id, enabledModules, {
+    try {
+      const hasKitchen = newModules.includes('kitchen');
+      const hasWaiter = newModules.includes('waiter');
+      const hasBar = newModules.includes('bar');
+      const hasInventory = newModules.includes('inventory');
+      const hasBilling = newModules.includes('billing');
+
+      const serverRes = await api.updateWorkspaceModules(restaurant.id, newModules, {
         hasKitchen,
         hasWaiter,
         hasBar,
@@ -96,13 +85,60 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
         hasTables: hasSeating,
       });
 
+      // Update state authoritatively from server response
+      if (serverRes?.enabledModules) {
+        setEnabledModules(serverRes.enabledModules);
+      } else {
+        setEnabledModules(newModules);
+      }
+
       await onRefreshRestaurant();
+
+      if (activeKey) {
+        setRowStatus((prev) => ({ ...prev, [activeKey]: 'saved' }));
+        setTimeout(() => {
+          setRowStatus((prev) => ({ ...prev, [activeKey]: 'idle' }));
+        }, 3000);
+      }
       addToast('success', 'Workspace Updated 🚀', 'Terminal permissions & navigation updated immediately.');
     } catch (err: any) {
-      addToast('error', 'Update Failed', err?.message || 'Failed to save workspace configuration.');
+      const msg = err?.message || 'Unable to update workspace settings.';
+      setErrorMessage(msg);
+      if (activeKey) {
+        setRowStatus((prev) => ({ ...prev, [activeKey]: 'failed' }));
+      }
+      addToast('error', 'Update Failed', 'Unable to update workspace settings.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const toggleModule = async (moduleKey: string) => {
+    if (isSaving) return;
+
+    // Food Cart rule: Bar is not supported
+    if (bType === 'FOOD_CART' && moduleKey === 'bar') {
+      addToast('warning', 'Terminal Restricted', 'Bar Terminal KDS is not supported for Food Cart businesses.');
+      return;
+    }
+
+    let nextModules: string[];
+    if (enabledModules.includes(moduleKey)) {
+      if (enabledModules.length <= 1) {
+        addToast('warning', 'Minimum Required', 'At least one terminal module must remain active.');
+        return;
+      }
+      nextModules = enabledModules.filter((m) => m !== moduleKey);
+    } else {
+      nextModules = [...enabledModules, moduleKey];
+    }
+
+    // Persist immediately on toggle with feedback
+    await saveConfiguration(nextModules, moduleKey);
+  };
+
+  const handleManualSave = async () => {
+    await saveConfiguration(enabledModules);
   };
 
   const publicDomain = getRestaurantPublicDomain(restaurant);
@@ -120,6 +156,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       key: 'kitchen',
       name: 'Kitchen Display System (KDS)',
       desc: 'Live chef queue, station timing, food preparation management, and order completion.',
+      roles: 'Chefs, Cooks, Kitchen Staff, Managers, Owner',
       icon: ChefHat,
       badge: 'Core Food Ops',
       color: 'text-amber-400',
@@ -130,6 +167,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       key: 'waiter',
       name: 'Waiter Terminal OS',
       desc: 'Table floorplan, real-time customer water/service calls, bill requests, and order delivery.',
+      roles: 'Waiters, Servers, Floor Staff, Managers, Owner',
       icon: PhoneCall,
       badge: bType === 'FOOD_CART' ? 'Optional' : 'Floor Ops',
       color: 'text-emerald-400',
@@ -140,16 +178,18 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       key: 'bar',
       name: 'Bar Terminal KDS',
       desc: 'Dedicated mixology workstation for alcoholic drink orders, cocktails, and beverage prep.',
+      roles: 'Bartenders, Mixologists, Bar Staff, Managers, Owner',
       icon: Wine,
       badge: bType === 'BAR' ? 'Primary' : 'Beverage Ops',
       color: 'text-purple-400',
       badgeVariant: 'brand' as const,
-      isOffered: bType !== 'FOOD_CART', // Bar not offered for Food Cart
+      isOffered: bType !== 'FOOD_CART',
     },
     {
       key: 'inventory',
       name: 'Inventory & Stock OS',
       desc: 'Raw ingredient tracking, low-stock alerts, supplier management, and consumption logging.',
+      roles: 'Inventory Managers, Storekeepers, Managers, Owner',
       icon: Package,
       badge: 'Supply Chain',
       color: 'text-rose-400',
@@ -160,6 +200,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       key: 'billing',
       name: 'Billing & POS Terminal',
       desc: 'Digital receipts, custom UPI QR payments, GST invoices, cashier settlement, and tax reports.',
+      roles: 'Cashiers, POS Operators, Managers, Owner',
       icon: Receipt,
       badge: 'Financial & POS',
       color: 'text-sky-400',
@@ -188,7 +229,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
 
         <Button
           variant="brand"
-          onClick={handleSave}
+          onClick={handleManualSave}
           isLoading={isSaving}
           className="text-xs font-semibold px-6 py-2.5 shrink-0"
           icon={<Save className="w-4 h-4 mr-1" />}
@@ -196,6 +237,29 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
           Save Workspace Changes
         </Button>
       </div>
+
+      {/* Error / Retry Banner */}
+      {errorMessage && (
+        <Card className="bg-rose-500/10 border-rose-500/30 p-4 rounded-xl flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-rose-300 text-xs">
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+            <div>
+              <span className="font-bold block text-rose-200">Unable to update workspace settings.</span>
+              <span>{errorMessage}</span>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleManualSave}
+            disabled={isSaving}
+            className="text-xs border-rose-500/30 hover:bg-rose-500/20 text-rose-200 shrink-0"
+            icon={<RefreshCw className={`w-3.5 h-3.5 mr-1 ${isSaving ? 'animate-spin' : ''}`} />}
+          >
+            Retry
+          </Button>
+        </Card>
+      )}
 
       {/* Tenant Public Subdomain & Customer Portal Card */}
       <Card className="bg-[#12151b] border-[#1e232e] p-6 rounded-xl space-y-4 shadow-sm relative overflow-hidden">
@@ -283,6 +347,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
           {modulesConfig.map((mod) => {
             const IconComp = mod.icon;
             const isEnabled = enabledModules.includes(mod.key);
+            const status = rowStatus[mod.key] || 'idle';
 
             if (!mod.isOffered) {
               return (
@@ -342,17 +407,40 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
                           DISABLED
                         </span>
                       )}
+
+                      {/* Realtime Save State Indicators */}
+                      {status === 'saving' && (
+                        <span className="text-[10px] text-amber-400 font-mono font-bold flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                        </span>
+                      )}
+                      {status === 'saved' && (
+                        <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          <CheckCircle2 className="w-3 h-3" /> Saved ✓
+                        </span>
+                      )}
+                      {status === 'failed' && (
+                        <span className="text-[10px] text-rose-400 font-mono font-bold flex items-center gap-1 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                          <AlertCircle className="w-3 h-3" /> Failed
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed max-w-xl">{mod.desc}</p>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono pt-0.5">
+                      <Users className="w-3 h-3 text-slate-400" />
+                      <span>Authorized Roles:</span>
+                      <span className="text-slate-300">{mod.roles}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="shrink-0">
+                <div className="shrink-0 flex items-center gap-3">
                   <input
                     type="checkbox"
                     checked={isEnabled}
+                    disabled={isSaving}
                     onChange={() => {}}
-                    className="w-5 h-5 rounded text-emerald-500 accent-emerald-500 cursor-pointer"
+                    className="w-5 h-5 rounded text-emerald-500 accent-emerald-500 cursor-pointer disabled:opacity-50"
                   />
                 </div>
               </div>

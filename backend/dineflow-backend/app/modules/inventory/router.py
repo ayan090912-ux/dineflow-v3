@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import verify_tenant_authorization, CallerContext, get_caller_context
@@ -58,22 +58,27 @@ def _format_supplier_response(sup: SupplierModel) -> dict:
     }
 
 
-async def _resolve_actual_restaurant_id(restaurant_id: str, db: AsyncSession) -> str:
+async def _resolve_actual_restaurant(restaurant_id: str, db: AsyncSession) -> Optional[Restaurant]:
     clean_id = (restaurant_id or "").strip()
     res = await db.execute(
         select(Restaurant).where(
             Restaurant.deleted_at.is_(None),
             or_(
                 Restaurant.id == clean_id,
+                func.lower(Restaurant.id) == clean_id.lower(),
                 Restaurant.slug == clean_id.lower(),
                 Restaurant.public_slug == clean_id.lower(),
             )
         )
     )
-    rest = res.scalar_one_or_none()
+    return res.scalar_one_or_none()
+
+
+async def _resolve_actual_restaurant_id(restaurant_id: str, db: AsyncSession) -> str:
+    rest = await _resolve_actual_restaurant(restaurant_id, db)
     if rest:
         return rest.id
-    return clean_id
+    return (restaurant_id or "").strip()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -114,7 +119,13 @@ async def create_inventory_item(
     if not target_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="restaurant_id is required")
 
-    actual_id = await _resolve_actual_restaurant_id(target_id, db)
+    rest_obj = await _resolve_actual_restaurant(target_id, db)
+    if not rest_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+    if rest_obj.has_inventory is False or (rest_obj.enabled_modules and "inventory" not in rest_obj.enabled_modules):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inventory module is disabled for this restaurant.")
+
+    actual_id = rest_obj.id
     await verify_tenant_authorization(actual_id, caller=caller, db=db)
 
     min_thresh = payload.minThreshold if payload.minThreshold is not None else (payload.min_threshold or 2.0)
@@ -236,6 +247,12 @@ async def adjust_inventory_quantity(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
 
     await verify_tenant_authorization(item.restaurant_id, caller=caller, db=db)
+
+    # Check if inventory module is enabled
+    res_r = await db.execute(select(Restaurant).where(Restaurant.id == item.restaurant_id))
+    rest = res_r.scalar_one_or_none()
+    if rest and (rest.has_inventory is False or (rest.enabled_modules and "inventory" not in rest.enabled_modules)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inventory module is disabled for this restaurant.")
 
     new_qty = max(0.0, float(item.quantity) + float(payload.delta))
     item.quantity = new_qty

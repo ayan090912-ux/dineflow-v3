@@ -1813,13 +1813,13 @@ export class DinelyApiClient {
       publicSlug: pubSlug,
       cuisine: r.cuisine || 'Multi-Cuisine',
       businessType: bType as BusinessType,
-      hasBar: r.hasBar !== false && r.has_bar !== false,
-      hasTables: r.hasTables !== false && r.has_tables !== false,
-      hasKitchen: r.hasKitchen !== false && r.has_kitchen !== false,
-      hasWaiter: r.hasWaiter !== false && r.has_waiter !== false,
-      hasInventory: r.hasInventory !== false && r.has_inventory !== false,
-      hasBilling: r.hasBilling !== false && r.has_billing !== false,
-      enabledModules: r.enabledModules || r.enabled_modules,
+      hasBar: r.hasBar !== undefined ? Boolean(r.hasBar) : (r.has_bar !== undefined ? Boolean(r.has_bar) : (bType === 'BAR')),
+      hasTables: r.hasTables !== undefined ? Boolean(r.hasTables) : (r.has_tables !== undefined ? Boolean(r.has_tables) : true),
+      hasKitchen: r.hasKitchen !== undefined ? Boolean(r.hasKitchen) : (r.has_kitchen !== undefined ? Boolean(r.has_kitchen) : true),
+      hasWaiter: r.hasWaiter !== undefined ? Boolean(r.hasWaiter) : (r.has_waiter !== undefined ? Boolean(r.has_waiter) : true),
+      hasInventory: r.hasInventory !== undefined ? Boolean(r.hasInventory) : (r.has_inventory !== undefined ? Boolean(r.has_inventory) : true),
+      hasBilling: r.hasBilling !== undefined ? Boolean(r.hasBilling) : (r.has_billing !== undefined ? Boolean(r.has_billing) : true),
+      enabledModules: r.enabledModules !== undefined ? r.enabledModules : (r.enabled_modules !== undefined ? r.enabled_modules : undefined),
       orderNumberPrefix: r.orderNumberPrefix || r.order_number_prefix || '#ORD',
       address: r.address || '',
       phone: r.phone || '',
@@ -2376,7 +2376,7 @@ export class DinelyApiClient {
     if (rest.hasBilling === undefined) {
       rest.hasBilling = true;
     }
-    if (!rest.enabledModules || rest.enabledModules.length === 0) {
+    if (rest.enabledModules === undefined || rest.enabledModules === null) {
       if (bType === 'FOOD_CART') {
         rest.enabledModules = ['kitchen', 'inventory', 'billing'];
         if (rest.hasWaiter) rest.enabledModules.push('waiter');
@@ -2396,6 +2396,23 @@ export class DinelyApiClient {
     return rest;
   }
 
+  async getWorkspaceModules(restaurantId?: string) {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    if (!targetId) return null;
+    return await this.executeProtectedRequest<any>(
+      `/restaurants/${encodeURIComponent(targetId)}/workspace-modules`,
+      { method: 'GET' },
+      'OWNER'
+    ).catch(async () => {
+      // Fallback for staff or unauthenticated callers
+      const apiBase = getApiBaseUrl();
+      const headers = this.getAuthHeader();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/workspace-modules`, { headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    });
+  }
+
   async updateWorkspaceModules(
     restaurantId: string,
     enabledModules: string[],
@@ -2409,7 +2426,9 @@ export class DinelyApiClient {
     }
   ) {
     const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
-    const apiBase = getApiBaseUrl();
+    if (!targetId) {
+      throw new Error('Unable to resolve restaurant ID for workspace configuration.');
+    }
 
     const payload = {
       enabledModules,
@@ -2421,39 +2440,41 @@ export class DinelyApiClient {
       hasTables: moduleFlags?.hasTables,
     };
 
-    // Update in-memory local state
-    const rest = this.restaurants.find((r) => r.id === targetId);
+    // Authenticated API request to backend (enforces tenant ownership and PostgreSQL persistence)
+    const res = await this.executeProtectedRequest<any>(
+      `/restaurants/${encodeURIComponent(targetId)}/workspace-modules`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      },
+      'OWNER'
+    );
+
+    if (!res || res.status !== 'success') {
+      throw new Error('Server rejected workspace configuration change.');
+    }
+
+    // Update in-memory local state ONLY after backend transaction confirmed
+    const rest = this.restaurants.find(
+      (r) => r.id === targetId || (r.slug && r.slug.toLowerCase() === targetId.toLowerCase()) || (r.publicSlug && r.publicSlug.toLowerCase() === targetId.toLowerCase())
+    );
     if (rest) {
-      rest.enabledModules = enabledModules;
-      rest.hasKitchen = payload.hasKitchen;
-      rest.hasWaiter = payload.hasWaiter;
-      rest.hasBar = payload.hasBar;
-      rest.hasInventory = payload.hasInventory;
-      rest.hasBilling = payload.hasBilling;
+      rest.enabledModules = res.enabledModules || enabledModules;
+      rest.hasKitchen = res.hasKitchen !== undefined ? res.hasKitchen : payload.hasKitchen;
+      rest.hasWaiter = res.hasWaiter !== undefined ? res.hasWaiter : payload.hasWaiter;
+      rest.hasBar = res.hasBar !== undefined ? res.hasBar : payload.hasBar;
+      rest.hasInventory = res.hasInventory !== undefined ? res.hasInventory : payload.hasInventory;
+      rest.hasBilling = res.hasBilling !== undefined ? res.hasBilling : payload.hasBilling;
       if (payload.hasTables !== undefined) rest.hasTables = payload.hasTables;
       this.saveDatabase();
     }
 
-    try {
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/workspace-modules`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (e) {
-      console.warn('API PATCH for workspace-modules failed:', e);
-    }
-
     realtimeBus.emit('WorkspaceConfigUpdated' as any, {
       restaurantId: targetId,
-      enabledModules,
-      ...payload,
+      ...res,
     });
 
-    return { status: 'success', restaurantId: targetId, enabledModules, ...payload };
+    return res;
   }
 
   async syncRestaurantToBackend(rest: Restaurant) {

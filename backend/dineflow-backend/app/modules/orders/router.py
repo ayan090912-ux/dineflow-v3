@@ -341,11 +341,19 @@ async def create_order(
 
         try:
             from app.modules.websocket.manager import ws_manager
+            order_target_aud = ["CUSTOMER", "OWNER"]
+            if restaurant.has_kitchen is not False and (not restaurant.enabled_modules or "kitchen" in restaurant.enabled_modules):
+                order_target_aud.append("KITCHEN")
+            if restaurant.has_bar is not False and (not restaurant.enabled_modules or "bar" in restaurant.enabled_modules):
+                order_target_aud.append("BAR")
+            if restaurant.has_waiter is not False and (not restaurant.enabled_modules or "waiter" in restaurant.enabled_modules):
+                order_target_aud.append("WAITER")
+
             await ws_manager.broadcast_event(
                 restaurant_id=restaurant.id,
                 event_type="order_created",
                 payload=resp_data,
-                target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]
+                target_audience=order_target_aud
             )
             # Instantly update Active Tables across Owner, Waiter, and Customer terminals
             if tbl_id or tbl_num:
@@ -498,13 +506,14 @@ async def update_order_status(
             detail="Authentication required to update order status"
         )
 
+    res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
+    r_obj = res_r.scalar_one_or_none()
+    if not r_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
     if not caller.is_admin:
         if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
             # Check owner
-            res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
-            r_obj = res_r.scalar_one_or_none()
-            if not r_obj:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
             is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
             if not is_owner:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
@@ -513,6 +522,12 @@ async def update_order_status(
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         else:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update order status")
+
+    # Authoritative terminal enablement enforcement
+    if payload.kitchenStatus and (r_obj.has_kitchen is False or (r_obj.enabled_modules and "kitchen" not in r_obj.enabled_modules)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kitchen terminal is disabled for this restaurant.")
+    if payload.barStatus and (r_obj.has_bar is False or (r_obj.enabled_modules and "bar" not in r_obj.enabled_modules)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bar terminal is disabled for this restaurant.")
 
     if payload.status:
         order.status = payload.status

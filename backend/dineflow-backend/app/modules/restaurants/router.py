@@ -884,6 +884,40 @@ async def update_restaurant(
 
     return rest
 
+@router.get("/{restaurant_id}/workspace-modules")
+async def get_workspace_modules(
+    restaurant_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    clean_id = (restaurant_id or "").strip()
+    query = select(Restaurant).where(
+        or_(
+            Restaurant.id == clean_id,
+            func.lower(Restaurant.id) == clean_id.lower(),
+            Restaurant.slug == clean_id.lower(),
+            Restaurant.public_slug == clean_id.lower()
+        ),
+        Restaurant.deleted_at.is_(None)
+    )
+    result = await db.execute(query)
+    rest = result.scalar_one_or_none()
+    if not rest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
+    return {
+        "status": "success",
+        "restaurantId": rest.id,
+        "businessType": rest.business_type,
+        "enabledModules": rest.enabled_modules or [],
+        "hasKitchen": rest.has_kitchen,
+        "hasWaiter": rest.has_waiter,
+        "hasBar": rest.has_bar,
+        "hasInventory": rest.has_inventory,
+        "hasBilling": rest.has_billing,
+        "hasTables": rest.has_tables,
+    }
+
+
 @router.patch("/{restaurant_id}/workspace-modules")
 async def update_workspace_modules(
     restaurant_id: str,
@@ -891,7 +925,18 @@ async def update_workspace_modules(
     caller: CallerContext = Depends(require_tenant_owner_or_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Restaurant).where(Restaurant.id == restaurant_id)
+    clean_id = (restaurant_id or "").strip()
+    canonical_id = caller.restaurant_id or clean_id
+    query = select(Restaurant).where(
+        or_(
+            Restaurant.id == canonical_id,
+            Restaurant.id == clean_id,
+            func.lower(Restaurant.id) == clean_id.lower(),
+            Restaurant.slug == clean_id.lower(),
+            Restaurant.public_slug == clean_id.lower()
+        ),
+        Restaurant.deleted_at.is_(None)
+    )
     result = await db.execute(query)
     rest = result.scalar_one_or_none()
     if not rest:
@@ -910,12 +955,12 @@ async def update_workspace_modules(
     await db.commit()
     await db.refresh(rest)
 
-    # Broadcast realtime configuration update (non-blocking)
+    # Broadcast realtime configuration update (non-blocking) to canonical restaurant ID
     asyncio.create_task(ws_manager.broadcast_to_restaurant(
-        restaurant_id=restaurant_id,
+        restaurant_id=rest.id,
         message={
             "type": "WorkspaceConfigUpdated",
-            "restaurantId": restaurant_id,
+            "restaurantId": rest.id,
             "businessType": rest.business_type,
             "enabledModules": rest.enabled_modules,
             "hasKitchen": rest.has_kitchen,
@@ -930,7 +975,7 @@ async def update_workspace_modules(
 
     return {
         "status": "success",
-        "restaurantId": restaurant_id,
+        "restaurantId": rest.id,
         "businessType": rest.business_type,
         "enabledModules": rest.enabled_modules,
         "hasKitchen": rest.has_kitchen,

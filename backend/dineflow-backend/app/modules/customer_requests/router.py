@@ -71,6 +71,9 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     if not rest or rest.deleted_at is not None or rest.lifecycle_status == "ARCHIVED":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant is archived or inactive")
 
+    if rest.has_waiter is False or (rest.enabled_modules and "waiter" not in rest.enabled_modules):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Waiter service is disabled for this restaurant.")
+
     canonical_rest_id = rest.id
 
     now_utc = datetime.now(timezone.utc)
