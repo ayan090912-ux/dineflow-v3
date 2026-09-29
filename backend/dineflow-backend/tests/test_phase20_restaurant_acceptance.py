@@ -3,14 +3,20 @@ import uuid
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.database.connection import AsyncSessionLocal
+from app.core.middlewares.rate_limit import limiter
 from sqlalchemy import text
 
 @pytest.mark.asyncio
-async def test_complete_restaurant_acceptance_flow():
+async def test_complete_restaurant_acceptance_flow(monkeypatch):
     """
     PHASE 20 — COMPLETE RESTAURANT ACCEPTANCE TEST
     Exercises the complete end-to-end lifecycle on a disposable test restaurant.
     """
+    async def mock_is_allowed(*args, **kwargs):
+        return True, 1000, 1000, 0
+
+    monkeypatch.setattr(limiter, "is_allowed", mock_is_allowed)
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         test_uid = f"uid-{uuid.uuid4().hex[:8]}"
