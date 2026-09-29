@@ -1482,7 +1482,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               const hasBarModule = isModuleEnabled(currentRestaurant, 'bar');
               const hasInventoryModule = isModuleEnabled(currentRestaurant, 'inventory');
               const hasBillingModule = isModuleEnabled(currentRestaurant, 'billing');
-              const hasTablesModule = currentRestaurant?.hasTables !== false;
+              const hasTablesModule = isModuleEnabled(currentRestaurant, 'tables');
               const isFoodCart = currentRestaurant?.businessType === 'FOOD_CART' || currentRestaurant?.businessType === 'FOOD_TRUCK';
 
               const sections = [
@@ -1757,7 +1757,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 Add Menu Item
               </Button>
             )}
-            {activeTab === 'tables' && (
+            {activeTab === 'tables' && isModuleEnabled(currentRestaurant, 'tables') && (
               <Button
                 variant="brand"
                 size="sm"
@@ -2343,7 +2343,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab 4: Table Floorplan, Merging & Reservations */}
         {activeTab === 'tables' && (
-          <div className="space-y-6">
+          isModuleEnabled(currentRestaurant, 'tables') ? (
+            <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -2643,7 +2644,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               })}
             </div>
           </div>
-        )}
+        ) : (
+          <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+              <Grid className="w-8 h-8" />
+            </div>
+            <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+            <h3 className="text-xl font-bold text-white">Table Floorplan & QR is currently disabled for this restaurant.</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Dining Room Tables & Floorplan have been deactivated in Workspace Settings.
+            </p>
+            <div className="pt-2 flex justify-center gap-3">
+              <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                Open Terminals & Setup
+              </Button>
+              <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                Return to Dashboard
+              </Button>
+            </div>
+          </Card>
+        ))}
 
         {/* Tab 5: Menu & Pricing */}
         {activeTab === 'menu' && (

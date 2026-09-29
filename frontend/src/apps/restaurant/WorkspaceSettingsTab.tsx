@@ -21,6 +21,7 @@ import {
   Users,
   Loader2,
   RefreshCw,
+  Grid,
 } from 'lucide-react';
 import { Button, Card, Badge } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -49,13 +50,16 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
 
   useEffect(() => {
     if (restaurant) {
-      const current = restaurant.enabledModules || [
+      const current = restaurant.enabledModules ? [...restaurant.enabledModules] : [
         'kitchen',
         'inventory',
         'billing',
         ...(restaurant.hasWaiter ? ['waiter'] : []),
         ...(restaurant.hasBar ? ['bar'] : []),
       ];
+      if (restaurant.hasTables !== false && !current.includes('tables')) {
+        current.push('tables');
+      }
       setEnabledModules(current);
       setHasSeating(restaurant.hasTables !== false);
     }
@@ -75,6 +79,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       const hasBar = newModules.includes('bar');
       const hasInventory = newModules.includes('inventory');
       const hasBilling = newModules.includes('billing');
+      const hasTables = newModules.includes('tables');
 
       const serverRes = await api.updateWorkspaceModules(restaurant.id, newModules, {
         hasKitchen,
@@ -82,8 +87,10 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
         hasBar,
         hasInventory,
         hasBilling,
-        hasTables: hasSeating,
+        hasTables,
       });
+
+      setHasSeating(hasTables);
 
       // Update state authoritatively from server response
       if (serverRes?.enabledModules) {
@@ -205,6 +212,17 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       badge: 'Financial & POS',
       color: 'text-sky-400',
       badgeVariant: 'info' as const,
+      isOffered: true,
+    },
+    {
+      key: 'tables',
+      name: 'Dining Room Tables & Floorplan',
+      desc: 'Interactive table floorplan, QR code standees, guest seat count, merge tables, and live table status.',
+      roles: 'Floor Staff, Waiters, Hosts, Managers, Owner',
+      icon: Grid,
+      badge: 'Floor Seating',
+      color: 'text-amber-400',
+      badgeVariant: 'warning' as const,
       isOffered: true,
     },
   ];

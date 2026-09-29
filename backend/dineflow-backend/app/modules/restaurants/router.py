@@ -949,8 +949,7 @@ async def update_workspace_modules(
     rest.has_bar = payload.hasBar if payload.hasBar is not None else ("bar" in modules)
     rest.has_inventory = payload.hasInventory if payload.hasInventory is not None else ("inventory" in modules)
     rest.has_billing = payload.hasBilling if payload.hasBilling is not None else ("billing" in modules)
-    if payload.hasTables is not None:
-        rest.has_tables = payload.hasTables
+    rest.has_tables = payload.hasTables if payload.hasTables is not None else ("tables" in modules)
 
     await db.commit()
     await db.refresh(rest)

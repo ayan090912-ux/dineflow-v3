@@ -84,7 +84,9 @@ export function isModuleEnabled(
 
   // If enabledModules array is present, check membership
   if (Array.isArray(restaurant.enabledModules) && restaurant.enabledModules.length > 0) {
-    if (module === 'dashboard' || module === 'restaurant') return true;
+    if (module.toLowerCase() === 'tables') {
+      return restaurant.hasTables !== false && restaurant.enabledModules.includes('tables');
+    }
     return restaurant.enabledModules.includes(module.toLowerCase());
   }
 
@@ -94,6 +96,7 @@ export function isModuleEnabled(
   if (module === 'bar') return restaurant.hasBar === true || bType === 'BAR';
   if (module === 'inventory') return restaurant.hasInventory !== false;
   if (module === 'billing') return restaurant.hasBilling !== false;
+  if (module === 'tables') return restaurant.hasTables !== false;
   if (module === 'dashboard' || module === 'restaurant' || module === 'operations') return true;
 
   return true;

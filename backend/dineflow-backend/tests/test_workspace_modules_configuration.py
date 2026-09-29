@@ -239,3 +239,18 @@ class TestWorkspaceModulesConfiguration:
             )
             assert inv_resp.status_code == 400
             assert "Inventory module is disabled" in inv_resp.text
+
+            # Table creation when tables is disabled -> should be rejected with 400
+            rest.has_tables = False
+            await db_session.commit()
+            tbl_resp = await ac.post(
+                f"/api/v1/restaurants/{rest.id}/tables",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                json={
+                    "tableNumber": "Table 99",
+                    "capacity": 4,
+                    "section": "Main Dining"
+                }
+            )
+            assert tbl_resp.status_code == 400
+            assert "Tables & Floorplan feature is currently disabled" in tbl_resp.text

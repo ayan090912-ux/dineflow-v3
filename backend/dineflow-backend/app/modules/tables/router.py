@@ -200,6 +200,15 @@ async def create_table(
     except Exception:
         pass
 
+    from app.modules.restaurants.models import Restaurant
+    r_check = await db.execute(select(Restaurant).where(Restaurant.id == target_rest_id))
+    rest_chk = r_check.scalar_one_or_none()
+    if rest_chk and rest_chk.has_tables is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tables & Floorplan feature is currently disabled for this restaurant."
+        )
+
     t_num = (payload.tableNumber or payload.table_number or "Table 01").strip()
     clean_num = _extract_clean_table_number(t_num)
     t_id = payload.id or f"tbl-{target_rest_id}-table_{clean_num}"
