@@ -48,6 +48,12 @@ class UpdateOrderStatusSchema(BaseModel):
     estimatedPrepTimeMinutes: Optional[int] = None
     etaTargetTimestamp: Optional[str] = None
 
+class UpdateOrderETASchema(BaseModel):
+    deltaMinutes: Optional[int] = None
+    targetTimestamp: Optional[str] = None
+    estimatedPrepTimeMinutes: Optional[int] = None
+    reason: Optional[str] = None
+
 def format_order_response(order: Order) -> dict:
     created_at_val = None
     if getattr(order, "created_at", None):
@@ -591,6 +597,93 @@ async def update_order_status(
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] order_status_updated:", ws_err)
+
+    return resp_data
+
+@router.put("/{order_id}/eta")
+@router.patch("/{order_id}/eta")
+async def update_order_eta(
+    order_id: str,
+    payload: UpdateOrderETASchema,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Order).where(Order.id == order_id)
+    result = await db.execute(query)
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to update order ETA"
+        )
+
+    res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
+    r_obj = res_r.scalar_one_or_none()
+    if not r_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
+    if not caller.is_admin:
+        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+            is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
+            if not is_owner:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
+        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+            if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update order ETA")
+
+    current_mins = order.estimated_prep_time_minutes or 15
+    if payload.deltaMinutes is not None:
+        new_mins = max(1, current_mins + payload.deltaMinutes)
+        order.estimated_prep_time_minutes = new_mins
+        base_time = order.eta_target_timestamp or datetime.now(timezone.utc)
+        order.eta_target_timestamp = base_time + timedelta(minutes=payload.deltaMinutes)
+    elif payload.estimatedPrepTimeMinutes is not None:
+        order.estimated_prep_time_minutes = max(1, payload.estimatedPrepTimeMinutes)
+        order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=order.estimated_prep_time_minutes)
+
+    if payload.targetTimestamp:
+        try:
+            dt_val = datetime.fromisoformat(payload.targetTimestamp.replace("Z", "+00:00"))
+            order.eta_target_timestamp = dt_val
+        except Exception:
+            pass
+
+    await db.commit()
+    await db.refresh(order)
+    resp_data = format_order_response(order)
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="ETAUpdated",
+            payload={
+                "orderId": order.id,
+                "order_id": order.id,
+                "restaurantId": order.restaurant_id,
+                "restaurant_id": order.restaurant_id,
+                "tableNumber": order.table_number,
+                "table_number": order.table_number,
+                "estimatedPrepTimeMinutes": order.estimated_prep_time_minutes,
+                "etaTargetTimestamp": resp_data.get("eta_target_timestamp") or resp_data.get("etaTargetTimestamp"),
+                "reason": payload.reason or "ETA Updated",
+                "data": resp_data,
+            },
+            target_audience=["KITCHEN", "WAITER", "CUSTOMER", "OWNER"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_status_updated",
+            payload=resp_data,
+            target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_NOTICE] eta_updated:", ws_err)
 
     return resp_data
 
