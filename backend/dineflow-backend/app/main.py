@@ -20,6 +20,7 @@ import app.modules.orders.models
 import app.modules.customer_requests.models
 import app.modules.taxes.models
 import app.modules.inventory.models
+import app.modules.business_day.models
 
 
 from sqlalchemy import text
@@ -62,6 +63,33 @@ async def ensure_db_schema_columns(conn):
             created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT uq_restaurant_membership_user UNIQUE (restaurant_id, user_uid)
+        );""",
+        """CREATE TABLE IF NOT EXISTS business_days (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            business_date VARCHAR(50) NOT NULL,
+            status VARCHAR(30) DEFAULT 'OPEN' NOT NULL,
+            opened_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            opened_by VARCHAR(255) DEFAULT 'System / Manager',
+            closed_at TIMESTAMPTZ,
+            closed_by VARCHAR(255),
+            total_orders INTEGER DEFAULT 0 NOT NULL,
+            food_orders INTEGER DEFAULT 0 NOT NULL,
+            bar_orders INTEGER DEFAULT 0 NOT NULL,
+            completed_orders INTEGER DEFAULT 0 NOT NULL,
+            cancelled_orders INTEGER DEFAULT 0 NOT NULL,
+            total_sales FLOAT DEFAULT 0.0 NOT NULL,
+            food_sales FLOAT DEFAULT 0.0 NOT NULL,
+            bar_sales FLOAT DEFAULT 0.0 NOT NULL,
+            tax_amount FLOAT DEFAULT 0.0 NOT NULL,
+            discount_amount FLOAT DEFAULT 0.0 NOT NULL,
+            cash_sales FLOAT DEFAULT 0.0 NOT NULL,
+            card_sales FLOAT DEFAULT 0.0 NOT NULL,
+            upi_sales FLOAT DEFAULT 0.0 NOT NULL,
+            closing_notes TEXT,
+            summary_json JSON,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );""",
     ]
     for stmt in create_table_statements:
@@ -106,6 +134,7 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_amount FLOAT DEFAULT 0.0;",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_breakdown_json JSON;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS business_day_id VARCHAR(255);",
     ]
     for stmt in schema_patch_statements:
         try:
@@ -254,6 +283,7 @@ from app.modules.taxes.router import router as tax_router
 from app.modules.billing.router import router as billing_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.websocket.router import router as websocket_router
+from app.modules.business_day.router import router as business_day_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -266,6 +296,7 @@ app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
 app.include_router(customer_requests_router, prefix="/api/v1/customer-requests", tags=["Customer Requests"])
 app.include_router(inventory_router, prefix="/api/v1", tags=["Inventory & Suppliers"])
+app.include_router(business_day_router, prefix="/api/v1/restaurants/{restaurant_id}/business-day", tags=["Business Day"])
 app.include_router(websocket_router, prefix="/api/v1", tags=["Realtime WebSocket"])
 
 

@@ -85,6 +85,13 @@ export interface RealTimeEventPayload {
   name?: string;
   role?: string;
   lastLoginAt?: string;
+  enabledModules?: string[];
+  hasKitchen?: boolean;
+  hasWaiter?: boolean;
+  hasBar?: boolean;
+  hasInventory?: boolean;
+  hasBilling?: boolean;
+  hasTables?: boolean;
   data?: any;
   payload?: any;
 }
@@ -331,14 +338,8 @@ class RealTimeEventBus {
             ...payloadObj,
           };
 
-          // Dispatch primary event
+          // Dispatch event exactly once to listeners
           this.notifyListeners(mappedPayload, false);
-
-          // Dispatch canonical alias events if snake_case <-> PascalCase mapping exists
-          const aliasType = this.getEventAlias(raw.type);
-          if (aliasType && aliasType !== raw.type) {
-            this.notifyListeners({ ...mappedPayload, type: aliasType }, false);
-          }
         } catch (err) {
           console.error('[WS_MESSAGE_PARSE_ERROR]:', err);
         }

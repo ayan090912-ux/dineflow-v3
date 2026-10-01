@@ -63,6 +63,13 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
         return;
       }
 
+      // Day Closed Reset - clean live operational queues
+      if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
+        setOrders([]);
+        setLastNotification('Business Day Closed 🌅 Bar queue reset for new day.');
+        return;
+      }
+
       if (
         event.type === 'order_created' ||
         event.type === 'OrderCreated' ||

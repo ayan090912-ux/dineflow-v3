@@ -35,6 +35,7 @@ from app.modules.orders.models import Order, OrderItem, Bill
 from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot, TaxAuditLog
 from app.modules.inventory.models import InventoryItemModel, SupplierModel
+from app.modules.business_day.models import BusinessDay
 
 TEST_TABLES = [
     PlatformAdmin.__table__,
@@ -58,6 +59,7 @@ TEST_TABLES = [
     TaxAuditLog.__table__,
     InventoryItemModel.__table__,
     SupplierModel.__table__,
+    BusinessDay.__table__,
 ]
 
 

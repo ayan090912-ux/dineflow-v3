@@ -496,7 +496,7 @@ function AppContent() {
         );
       }
       if (tenantResolutionState === 'RESOLVING') {
-        const tenantDisplayName = domainResolution.restaurantName || (domainResolution.slug ? domainResolution.slug.toUpperCase().replace(/-/g, ' ') : undefined);
+        const tenantDisplayName = (domainResolution as any)?.restaurantName || (domainResolution.slug ? domainResolution.slug.toUpperCase().replace(/-/g, ' ') : undefined);
         return (
           <LoadingScreen
             restaurantName={tenantDisplayName}

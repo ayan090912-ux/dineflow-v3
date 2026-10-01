@@ -97,6 +97,107 @@ const playKitchenChime = (type: 'NEW_ORDER' | 'OVERDUE' | 'BUMP') => {
   }
 };
 
+export const calculateRemainingTime = (order: Order) => {
+  if (!order.etaTargetTimestamp) return { formatted: '--:--', isOverdue: false, secondsLeft: 0, progressPct: 100 };
+  const target = new Date(order.etaTargetTimestamp).getTime();
+  const now = Date.now();
+  const diff = Math.floor((target - now) / 1000);
+
+  if (diff < 0) {
+    const overdueSecs = Math.abs(diff);
+    const mins = Math.floor(overdueSecs / 60);
+    const secs = overdueSecs % 60;
+    return {
+      formatted: `+${mins}:${secs.toString().padStart(2, '0')} LATE`,
+      isOverdue: true,
+      secondsLeft: diff,
+      progressPct: 100,
+    };
+  } else {
+    const mins = Math.floor(diff / 60);
+    const secs = diff % 60;
+    const totalSecs = (order.estimatedPrepTimeMinutes || 15) * 60;
+    const elapsedSecs = totalSecs - diff;
+    const progressPct = Math.min(100, Math.max(0, (elapsedSecs / totalSecs) * 100));
+
+    return {
+      formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+      isOverdue: false,
+      secondsLeft: diff,
+      progressPct,
+    };
+  }
+};
+
+interface CookingCountdownProps {
+  order: Order;
+  onToggleTimer: (orderId: string) => void;
+  onOpenHistory: (order: Order) => void;
+}
+
+const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, onToggleTimer, onOpenHistory }) => {
+  const [timerData, setTimerData] = useState(() => calculateRemainingTime(order));
+
+  useEffect(() => {
+    setTimerData(calculateRemainingTime(order));
+    if (order.isTimerPaused) return;
+
+    const interval = setInterval(() => {
+      setTimerData(calculateRemainingTime(order));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [order.etaTargetTimestamp, order.estimatedPrepTimeMinutes, order.isTimerPaused]);
+
+  return (
+    <>
+      <div className="p-2.5 bg-[#0c0e14] rounded-lg border border-[#1e232e] flex items-center justify-between">
+        <div>
+          <span className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1">
+            <Clock className="w-3 h-3 text-orange-400" /> Prep Countdown
+          </span>
+          <div
+            className={`font-mono text-xl font-bold tracking-tight ${
+              timerData.isOverdue ? 'text-rose-400' : 'text-emerald-400'
+            }`}
+          >
+            {timerData.formatted}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-1.5 text-slate-400 hover:text-white bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
+            onClick={() => onToggleTimer(order.id)}
+            title={order.isTimerPaused ? 'Resume Timer' : 'Pause Timer'}
+          >
+            {order.isTimerPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-400" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-1.5 text-slate-400 hover:text-sky-300 bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
+            onClick={() => onOpenHistory(order)}
+            title="View ETA Audit History"
+          >
+            <History className="w-3.5 h-3.5 text-sky-400" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="w-full bg-[#0c0e14] h-1.5 rounded-full overflow-hidden border border-[#1e232e]">
+        <div
+          className={`h-full transition-all duration-1000 ${
+            timerData.isOverdue ? 'bg-rose-500' : 'bg-emerald-500'
+          }`}
+          style={{ width: `${timerData.progressPct}%` }}
+        />
+      </div>
+    </>
+  );
+});
+
 interface KitchenETADashboardProps {
   orders?: Order[];
   onRefreshOrders?: () => void;
@@ -188,15 +289,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Timer Tick State to force re-render every second for live timers
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTick((t) => t + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   // Load analytics when on analytics view
   useEffect(() => {
     if (viewMode === 'ANALYTICS') {
@@ -244,7 +336,56 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station === 'BAR') {
         return;
       }
-      fetchFreshOrders();
+
+      // Targeted ETA Update - Update specific ticket without refetching the entire board
+      if (event.type === 'ETAUpdated' || (event as any).type === 'ETA_UPDATED') {
+        const orderId = (event as any).orderId || (event as any).order_id;
+        const mins = (event as any).estimatedPrepTimeMinutes;
+        const target = (event as any).etaTargetTimestamp;
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? {
+                    ...o,
+                    estimatedPrepTimeMinutes: mins !== undefined ? mins : o.estimatedPrepTimeMinutes,
+                    etaTargetTimestamp: target !== undefined ? target : o.etaTargetTimestamp,
+                  }
+                : o
+            )
+          );
+        }
+        return;
+      }
+
+      // Targeted Order Status Update
+      if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
+        const orderId = (event as any).orderId || (event as any).order_id;
+        const status = (event as any).status;
+        const kitchenStatus = (event as any).kitchenStatus;
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? {
+                    ...o,
+                    status: status || o.status,
+                    kitchenStatus: kitchenStatus || o.kitchenStatus,
+                  }
+                : o
+            )
+          );
+        }
+        return;
+      }
+
+      // Day Closed Reset - clean live operational queues
+      if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
+        setOrders([]);
+        setBumpedHistory([]);
+        showToast('Business Day Closed 🌅 Live kitchen queues reset for the new day.', 'info');
+        return;
+      }
 
       const evtId = event.eventId || (event as any).event_id;
       if (evtId && handledEventIds.has(evtId)) {
@@ -256,11 +397,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
       if (!isMuted && (event.type === 'order_created' || event.type === 'OrderCreated')) {
         playKitchenChime('NEW_ORDER');
-      }
-      if (event.type === 'TableMerged') {
+        fetchFreshOrders();
+      } else if (event.type === 'TableMerged') {
         showToast(`🔗 Large Gathering Table Merge: ${event.data?.mergedGroupLabel || 'Tables Combined'}`, 'info');
-      }
-      if (event.type === 'RECONNECTED') {
+      } else if (event.type === 'RECONNECTED') {
         fetchFreshOrders();
       }
     });
@@ -291,30 +431,92 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const handleConfirmAcceptOrder = async () => {
     if (!selectedOrderToAccept) return;
     const finalMins = parseInt(customPrepInput, 10) || chosenPrepTime || 15;
+    const targetTimestamp = new Date(Date.now() + finalMins * 60000).toISOString();
+
+    // Optimistic local state update
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === selectedOrderToAccept.id
+          ? {
+              ...o,
+              kitchenStatus: 'PREPARING',
+              status: 'PREPARING',
+              estimatedPrepTimeMinutes: finalMins,
+              etaTargetTimestamp: targetTimestamp,
+            }
+          : o
+      )
+    );
+
     await api.updateFulfillmentTicketStatus(selectedOrderToAccept.id, 'PREPARING', 'KITCHEN');
     await api.updateKitchenStatus(selectedOrderToAccept.id, 'PREPARING');
     await api.acceptOrder(selectedOrderToAccept.id, finalMins);
     if (!isMuted) playKitchenChime('BUMP');
     showToast(`Order #${selectedOrderToAccept.id} Kitchen Ticket Accepted! Timer set to ${finalMins} mins.`, 'success');
     setSelectedOrderToAccept(null);
-    onRefreshOrdersRef.current?.();
   };
 
   const handleEtaDelta = async (orderId: string, delta: number) => {
-    await api.updateOrderETA(orderId, delta, undefined, `Adjusted by ${delta > 0 ? '+' : ''}${delta} mins`);
+    // 1. Instant optimistic local React state update
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id === orderId) {
+          const currentMins = o.estimatedPrepTimeMinutes || 15;
+          const newMins = Math.max(1, currentMins + delta);
+          const currentTarget = o.etaTargetTimestamp
+            ? new Date(o.etaTargetTimestamp).getTime()
+            : Date.now() + currentMins * 60000;
+          const newTarget = new Date(currentTarget + delta * 60000).toISOString();
+          return {
+            ...o,
+            estimatedPrepTimeMinutes: newMins,
+            etaTargetTimestamp: newTarget,
+          };
+        }
+        return o;
+      })
+    );
     showToast(`ETA updated by ${delta > 0 ? '+' : ''}${delta} mins for #${orderId}`, 'info');
-    onRefreshOrdersRef.current?.();
+
+    // 2. Persist to backend without triggering full-board refetch
+    try {
+      await api.updateOrderETA(orderId, delta, undefined, `Adjusted by ${delta > 0 ? '+' : ''}${delta} mins`);
+    } catch (err) {
+      console.error('Failed to update ETA:', err);
+    }
   };
 
   const handleSaveCustomEta = async () => {
     if (!selectedOrderForEta) return;
     const mins = parseInt(customEtaInput, 10);
     if (isNaN(mins) || mins <= 0) return;
-    await api.updateOrderETA(selectedOrderForEta.id, mins, etaChangeReason || 'Manual custom ETA set by Chef');
-    showToast(`ETA set to ${mins} mins for Order #${selectedOrderForEta.id}`, 'success');
+    const orderId = selectedOrderForEta.id;
+    const reason = etaChangeReason || 'Manual custom ETA set by Chef';
+
+    // 1. Instant optimistic local React state update
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id === orderId) {
+          const newTarget = new Date(Date.now() + mins * 60000).toISOString();
+          return {
+            ...o,
+            estimatedPrepTimeMinutes: mins,
+            etaTargetTimestamp: newTarget,
+          };
+        }
+        return o;
+      })
+    );
+    showToast(`ETA set to ${mins} mins for Order #${orderId}`, 'success');
     setSelectedOrderForEta(null);
     setEtaChangeReason('');
-    onRefreshOrdersRef.current?.();
+
+    // 2. Persist to backend without triggering full-board refetch
+    try {
+      await api.updateOrderETA(orderId, mins, reason);
+    } catch (err) {
+      console.error('Failed to save custom ETA:', err);
+    }
   };
 
   const handleToggleTimer = async (orderId: string) => {
@@ -366,38 +568,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     }));
   };
 
-  // Remaining time helper
-  const getRemainingTime = (order: Order) => {
-    if (!order.etaTargetTimestamp) return { formatted: '--:--', isOverdue: false, secondsLeft: 0, progressPct: 100 };
-    const target = new Date(order.etaTargetTimestamp).getTime();
-    const now = Date.now();
-    const diff = Math.floor((target - now) / 1000);
-
-    if (diff < 0) {
-      const overdueSecs = Math.abs(diff);
-      const mins = Math.floor(overdueSecs / 60);
-      const secs = overdueSecs % 60;
-      return {
-        formatted: `+${mins}:${secs.toString().padStart(2, '0')} LATE`,
-        isOverdue: true,
-        secondsLeft: diff,
-        progressPct: 100,
-      };
-    } else {
-      const mins = Math.floor(diff / 60);
-      const secs = diff % 60;
-      const totalSecs = (order.estimatedPrepTimeMinutes || 15) * 60;
-      const elapsedSecs = totalSecs - diff;
-      const progressPct = Math.min(100, Math.max(0, (elapsedSecs / totalSecs) * 100));
-
-      return {
-        formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
-        isOverdue: false,
-        secondsLeft: diff,
-        progressPct,
-      };
-    }
-  };
+  // Use top-level calculateRemainingTime for remaining time computations
 
   const getElapsedMinutes = (createdAtStr: string) => {
     const createdMs = new Date(createdAtStr).getTime();
@@ -433,7 +604,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const readyOrders = filteredOrders.filter((o) => o.kitchenStatus === 'READY' || (!o.kitchenStatus && o.status === 'READY'));
   const completedOrders = filteredOrders.filter((o) => o.kitchenStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'COMPLETED');
 
-  const overdueCount = (orders || []).filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && getRemainingTime(o).isOverdue).length;
+  const overdueCount = (orders || []).filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && calculateRemainingTime(o).isOverdue).length;
 
   return (
     <div className="bg-[#0b0d11] text-slate-100 flex flex-col font-sans relative w-full rounded-2xl overflow-hidden border border-[#1e232e]">
@@ -741,12 +912,12 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 </div>
               ) : (
                 inKitchenOrders.map((order) => {
-                  const timerData = getRemainingTime(order);
+                  const isOverdue = calculateRemainingTime(order).isOverdue;
                   return (
                     <div
                       key={order.id}
                       className={`p-4 space-y-3 transition-all rounded-xl border ${
-                        timerData.isOverdue
+                        isOverdue
                           ? 'border-rose-500/80 bg-rose-950/20'
                           : 'border-[#1e232e] bg-[#12151b]'
                       }`}
@@ -755,7 +926,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-white text-lg">{order.id.length > 10 ? `#${order.id.slice(-4)}` : `#${order.id}`}</span>
-                            {timerData.isOverdue && (
+                            {isOverdue && (
                               <span className="text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded">
                                 OVERDUE
                               </span>
@@ -770,52 +941,12 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         </span>
                       </div>
 
-                      {/* COUNTDOWN DISPLAY BOX */}
-                      <div className="p-2.5 bg-[#0c0e14] rounded-lg border border-[#1e232e] flex items-center justify-between">
-                        <div>
-                          <span className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-orange-400" /> Prep Countdown
-                          </span>
-                          <div
-                            className={`font-mono text-xl font-bold tracking-tight ${
-                              timerData.isOverdue ? 'text-rose-400' : 'text-emerald-400'
-                            }`}
-                          >
-                            {timerData.formatted}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="p-1.5 text-slate-400 hover:text-white bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
-                            onClick={() => handleToggleTimer(order.id)}
-                            title={order.isTimerPaused ? 'Resume Timer' : 'Pause Timer'}
-                          >
-                            {order.isTimerPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-400" />}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="p-1.5 text-slate-400 hover:text-sky-300 bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
-                            onClick={() => setHistoryOrder(order)}
-                            title="View ETA Audit History"
-                          >
-                            <History className="w-3.5 h-3.5 text-sky-400" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="w-full bg-[#0c0e14] h-1.5 rounded-full overflow-hidden border border-[#1e232e]">
-                        <div
-                          className={`h-full transition-all duration-1000 ${
-                            timerData.isOverdue ? 'bg-rose-500' : 'bg-emerald-500'
-                          }`}
-                          style={{ width: `${timerData.progressPct}%` }}
-                        />
-                      </div>
+                      {/* Localized Countdown Timer Component (ticks independently without re-rendering the board) */}
+                      <CookingCountdown
+                        order={order}
+                        onToggleTimer={handleToggleTimer}
+                        onOpenHistory={setHistoryOrder}
+                      />
 
                       {/* ETA Quick Adjusters */}
                       <div className="flex items-center justify-between bg-[#0c0e14] p-1.5 rounded-lg border border-[#1e232e]">

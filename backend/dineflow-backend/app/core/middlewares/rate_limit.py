@@ -29,13 +29,16 @@ RATE_LIMIT_RULES: List[Tuple[str, str, int, int]] = [
     ("POST", "/api/v1/customer-requests", 20, 60),
     ("POST", "/api/v1/billing", 20, 60),
     # 5. Public Tenant Resolution (Read-heavy)
-    ("GET", "/api/v1/restaurants/public/resolve", 120, 60),
-    ("GET", "/api/v1/restaurants/public/slug", 120, 60),
+    ("GET", "/api/v1/restaurants/public/resolve", 240, 60),
+    ("GET", "/api/v1/restaurants/public/slug", 240, 60),
     # 6. Menu Retrieval (Read-heavy)
-    ("GET", "/api/v1/menu", 180, 60),
+    ("GET", "/api/v1/menu", 240, 60),
+    # 7. Operational Restaurant Dashboards & Terminals (Multi-terminal live venues)
+    ("GET", "/api/v1/restaurants", 300, 60),
+    ("GET", "/api/v1/orders", 300, 60),
 ]
 
-DEFAULT_RATE_LIMIT = (120, 60) # 120 req / 60s for general endpoints
+DEFAULT_RATE_LIMIT = (300, 60) # 300 req / 60s for general endpoints (scaled for multi-terminal restaurants)
 
 class SlidingWindowRateLimiter:
     def __init__(self):

@@ -374,6 +374,18 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
         }
       } else if (event.type === 'BillRequested' || event.type === 'bill_updated') {
         showToast('Bill Check Request 🧾', `${tblNum} requested final bill`, 'info');
+      } else if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
+        setRequests([]);
+        setActiveSessions([]);
+        setTables((prev) =>
+          prev.map((t) => ({
+            ...t,
+            status: 'AVAILABLE',
+            isOccupied: false,
+            activeSessionId: undefined,
+          }))
+        );
+        showToast('Business Day Closed 🌅', 'Live operational queues and active sessions reset for the new day.', 'info');
       }
     });
 

@@ -320,6 +320,44 @@ export class DinelyApiClient {
     this.currentTokensByScope[targetScope] = tokens;
   }
 
+  private inFlightRequests: Map<string, Promise<any>> = new Map();
+  private queryCache: Map<string, { data: any; expiry: number }> = new Map();
+
+  public getCachedOrFetch<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
+    const cached = this.queryCache.get(key);
+    if (cached && Date.now() < cached.expiry) {
+      return Promise.resolve(cached.data);
+    }
+    const inFlight = this.inFlightRequests.get(key);
+    if (inFlight) {
+      return inFlight;
+    }
+    const p = fetcher()
+      .then((data) => {
+        this.queryCache.set(key, { data, expiry: Date.now() + ttlMs });
+        this.inFlightRequests.delete(key);
+        return data;
+      })
+      .catch((err) => {
+        this.inFlightRequests.delete(key);
+        throw err;
+      });
+    this.inFlightRequests.set(key, p);
+    return p;
+  }
+
+  public invalidateQueryCache(keyPrefix?: string) {
+    if (!keyPrefix) {
+      this.queryCache.clear();
+      return;
+    }
+    for (const key of Array.from(this.queryCache.keys())) {
+      if (key.startsWith(keyPrefix)) {
+        this.queryCache.delete(key);
+      }
+    }
+  }
+
   constructor() {
     this.loadDatabase();
     this.restoreSession();
@@ -2561,40 +2599,42 @@ export class DinelyApiClient {
     let targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return null;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    return this.getCachedOrFetch(`rest:${targetId}`, 15000, async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    try {
-      const apiBase = getApiBaseUrl();
-      const headers = this.getAuthHeader();
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`, {
-        headers,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.id) {
-          const mappedRest = this.mapBackendRestaurant(data);
-          // Sync with in-memory store
-          const existingIdx = this.restaurants.findIndex((r) => r.id === mappedRest.id);
-          if (existingIdx >= 0) {
-            this.restaurants[existingIdx] = { ...this.restaurants[existingIdx], ...mappedRest };
-          } else {
-            this.restaurants.push(mappedRest);
+      try {
+        const apiBase = getApiBaseUrl();
+        const headers = this.getAuthHeader();
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}`, {
+          headers,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.id) {
+            const mappedRest = this.mapBackendRestaurant(data);
+            // Sync with in-memory store
+            const existingIdx = this.restaurants.findIndex((r) => r.id === mappedRest.id);
+            if (existingIdx >= 0) {
+              this.restaurants[existingIdx] = { ...this.restaurants[existingIdx], ...mappedRest };
+            } else {
+              this.restaurants.push(mappedRest);
+            }
+            return this.ensureRestaurantDefaults(mappedRest);
           }
-          return this.ensureRestaurantDefaults(mappedRest);
+        } else if (res.status === 404) {
+          return null;
         }
-      } else if (res.status === 404) {
-        return null;
+      } catch (e) {
+        clearTimeout(timeoutId);
+        console.warn('API fetch for getRestaurantDetails failed:', e);
       }
-    } catch (e) {
-      clearTimeout(timeoutId);
-      console.warn('API fetch for getRestaurantDetails failed:', e);
-    }
 
-    const local = this.restaurants.find((r) => r.id === targetId || (targetId && r.id.toLowerCase() === targetId.toLowerCase()));
-    return local ? this.ensureRestaurantDefaults(local) : null;
+      const local = this.restaurants.find((r) => r.id === targetId || (targetId && r.id.toLowerCase() === targetId.toLowerCase()));
+      return local ? this.ensureRestaurantDefaults(local) : null;
+    });
   }
 
   async resolveRestaurantBySlug(slug: string): Promise<Restaurant | null> {
@@ -3036,68 +3076,70 @@ export class DinelyApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
-    try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/menu`);
-      if (res.ok) {
-        const data = await res.json();
-        const rawItems = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []);
-        return rawItems.map((m: any) => ({
-          id: m.id,
-          restaurantId: m.restaurant_id || m.restaurantId || targetId,
-          categoryId: m.category_id || m.categoryId,
-          name: m.name,
-          description: m.description || '',
-          price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
-          imageUrl: m.image_url || m.imageUrl || m.image,
-          image: m.image_url || m.imageUrl || m.image,
-          isAvailable: m.is_available !== false && m.isAvailable !== false,
-          isVegetarian: m.is_vegetarian !== false && m.isVegetarian !== false,
-          dietaryType: m.dietary_type || m.dietaryType || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
-          targetDestination: m.target_destination || m.targetDestination || 'KITCHEN',
-          isAlcoholic: m.is_alcoholic || m.isAlcoholic || (m.target_destination === 'BAR'),
-          prepTimeMinutes: m.prep_time_minutes || m.prepTimeMinutes || 15,
-        }));
-      } else {
-        const errText = await res.text();
-        console.error(`[getMenuItems] HTTP ${res.status}: ${errText}`);
+    return this.getCachedOrFetch(`menu:${targetId}`, 15000, async () => {
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/menu`);
+        if (res.ok) {
+          const data = await res.json();
+          const rawItems = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []);
+          return rawItems.map((m: any) => ({
+            id: m.id,
+            restaurantId: m.restaurant_id || m.restaurantId || targetId,
+            categoryId: m.category_id || m.categoryId,
+            name: m.name,
+            description: m.description || '',
+            price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
+            imageUrl: m.image_url || m.imageUrl || m.image,
+            image: m.image_url || m.imageUrl || m.image,
+            isAvailable: m.is_available !== false && m.isAvailable !== false,
+            isVegetarian: m.is_vegetarian !== false && m.isVegetarian !== false,
+            dietaryType: m.dietary_type || m.dietaryType || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
+            targetDestination: m.target_destination || m.targetDestination || 'KITCHEN',
+            isAlcoholic: m.is_alcoholic || m.isAlcoholic || (m.target_destination === 'BAR'),
+            prepTimeMinutes: m.prep_time_minutes || m.prepTimeMinutes || 15,
+          }));
+        } else {
+          const errText = await res.text();
+          console.error(`[getMenuItems] HTTP ${res.status}: ${errText}`);
+        }
+      } catch (e) {
+        console.warn('API fetch for menu items failed:', e);
+        throw e;
       }
-    } catch (e) {
-      console.warn('API fetch for menu items failed:', e);
-      throw e;
-    }
-
-    return [];
+      return [];
+    });
   }
 
   async getCategories(restaurantId?: string): Promise<MenuCategory[]> {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
-    try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/categories`);
-      if (res.ok) {
-        const cats = await res.json();
-        const rawCats = Array.isArray(cats) ? cats : (Array.isArray(cats?.categories) ? cats.categories : []);
-        return rawCats.map((c: any) => ({
-          id: c.id,
-          restaurantId: c.restaurant_id || c.restaurantId || targetId,
-          name: c.name,
-          order: c.sort_order || c.order || 1,
-          sortOrder: c.sort_order || c.order || 1,
-          isEnabled: c.is_enabled !== false,
-        }));
-      } else {
-        const errText = await res.text();
-        console.error(`[getCategories] HTTP ${res.status}: ${errText}`);
+    return this.getCachedOrFetch(`categories:${targetId}`, 15000, async () => {
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/categories`);
+        if (res.ok) {
+          const cats = await res.json();
+          const rawCats = Array.isArray(cats) ? cats : (Array.isArray(cats?.categories) ? cats.categories : []);
+          return rawCats.map((c: any) => ({
+            id: c.id,
+            restaurantId: c.restaurant_id || c.restaurantId || targetId,
+            name: c.name,
+            order: c.sort_order || c.order || 1,
+            sortOrder: c.sort_order || c.order || 1,
+            isEnabled: c.is_enabled !== false,
+          }));
+        } else {
+          const errText = await res.text();
+          console.error(`[getCategories] HTTP ${res.status}: ${errText}`);
+        }
+      } catch (e) {
+        console.warn('API fetch for categories failed:', e);
+        throw e;
       }
-    } catch (e) {
-      console.warn('API fetch for categories failed:', e);
-      throw e;
-    }
-
-    return [];
+      return [];
+    });
   }
 
   async createCategory(catData: Partial<MenuCategory>): Promise<MenuCategory> {
@@ -3255,41 +3297,43 @@ export class DinelyApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
-    try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/tables`);
-      if (res.ok) {
-        const tables = await res.json();
-        const rawTables = Array.isArray(tables) ? tables : (Array.isArray(tables?.tables) ? tables.tables : []);
-        const mappedTables: Table[] = rawTables.map((t: any) => {
-          const rawQr = t.qr_code_url || '';
-          const rest = this.restaurants.find((r) => r.id === targetId);
-          const slug = rest?.publicSlug || rest?.slug || targetId;
-          const cleanQr = (rawQr && !rawQr.includes('.dinely.app') && !rawQr.includes('dinely.food/customer?tenant=') && !rawQr.includes('/customer?restaurant='))
-            ? rawQr
-            : getRestaurantCustomerUrl(slug, t.table_number || t.tableNumber, t.id);
-          return {
-            id: t.id,
-            restaurantId: t.restaurant_id || t.restaurantId || targetId,
-            tableNumber: t.table_number || t.tableNumber,
-            section: t.section || 'Main Hall',
-            capacity: t.capacity || 4,
-            status: t.status || 'AVAILABLE',
-            isOccupied: t.is_occupied || false,
-            qrCodeUrl: cleanQr,
-          };
-        });
-        return mappedTables;
-      } else {
-        const errText = await res.text();
-        console.error(`[getTables] HTTP ${res.status}: ${errText}`);
+    return this.getCachedOrFetch(`tables:${targetId}`, 10000, async () => {
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/tables`);
+        if (res.ok) {
+          const tables = await res.json();
+          const rawTables = Array.isArray(tables) ? tables : (Array.isArray(tables?.tables) ? tables.tables : []);
+          const mappedTables: Table[] = rawTables.map((t: any) => {
+            const rawQr = t.qr_code_url || '';
+            const rest = this.restaurants.find((r) => r.id === targetId);
+            const slug = rest?.publicSlug || rest?.slug || targetId;
+            const cleanQr = (rawQr && !rawQr.includes('.dinely.app') && !rawQr.includes('dinely.food/customer?tenant=') && !rawQr.includes('/customer?restaurant='))
+              ? rawQr
+              : getRestaurantCustomerUrl(slug, t.table_number || t.tableNumber, t.id);
+            return {
+              id: t.id,
+              restaurantId: t.restaurant_id || t.restaurantId || targetId,
+              tableNumber: t.table_number || t.tableNumber,
+              section: t.section || 'Main Hall',
+              capacity: t.capacity || 4,
+              status: t.status || 'AVAILABLE',
+              isOccupied: t.is_occupied || false,
+              qrCodeUrl: cleanQr,
+            };
+          });
+          return mappedTables;
+        } else {
+          const errText = await res.text();
+          console.error(`[getTables] HTTP ${res.status}: ${errText}`);
+        }
+      } catch (e) {
+        console.warn('API fetch for tables failed:', e);
+        throw e;
       }
-    } catch (e) {
-      console.warn('API fetch for tables failed:', e);
-      throw e;
-    }
 
-    return [];
+      return [];
+    });
   }
 
   async getInventory(restaurantId?: string): Promise<InventoryItem[]> {
@@ -4518,18 +4562,45 @@ export class DinelyApiClient {
   }
 
   // --- Business Day Management ---
-  async getCurrentBusinessDay(restaurantId?: string) {
-    await delay(50);
+  async getCurrentBusinessDay(restaurantId?: string): Promise<BusinessDay | null> {
     const restId = this.resolveTenantRestaurantId(restaurantId);
-    const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
-    if (openDay) {
-      return openDay;
+    if (!restId) return null;
+
+    try {
+      const data = await this.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(restId)}/business-day/current`,
+        { method: 'GET' },
+        'OWNER'
+      );
+      if (data && data.id) {
+        const bday: BusinessDay = {
+          id: data.id,
+          restaurantId: data.restaurant_id || data.restaurantId || restId,
+          date: data.business_date || data.date,
+          status: data.status || 'OPEN',
+          openedAt: data.opened_at || data.openedAt,
+          openedBy: data.opened_by || data.openedBy,
+          closedAt: data.closed_at || data.closedAt,
+          closedBy: data.closed_by || data.closedBy,
+          summary: data.summary,
+        };
+        const idx = this.businessDays.findIndex((b) => b.id === bday.id);
+        if (idx !== -1) {
+          this.businessDays[idx] = bday;
+        } else {
+          this.businessDays.unshift(bday);
+        }
+        this.saveDatabase();
+        return bday;
+      }
+    } catch (err) {
+      console.warn('[getCurrentBusinessDay] Backend API fallback:', err);
     }
 
+    const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+    if (openDay) return openDay;
     const restDays = this.businessDays.filter((b) => b.restaurantId === restId);
-    if (restDays.length > 0) {
-      return restDays[0];
-    }
+    if (restDays.length > 0) return restDays[0];
 
     const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const initialDay: BusinessDay = {
@@ -4545,14 +4616,87 @@ export class DinelyApiClient {
     return initialDay;
   }
 
-  async openBusinessDay(restaurantId?: string, openedBy?: string) {
-    await delay(100);
+  async getBusinessDayPrecheck(restaurantId?: string) {
     const restId = this.resolveTenantRestaurantId(restaurantId);
+    if (!restId) throw new Error('No active restaurant selected');
+
+    try {
+      return await this.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(restId)}/business-day/precheck`,
+        { method: 'GET' },
+        'OWNER'
+      );
+    } catch (err) {
+      console.warn('[getBusinessDayPrecheck] Backend API fallback:', err);
+      const openTables = this.tables.filter((t) => t.restaurantId === restId && (t.status === 'OCCUPIED' || t.isOccupied)).length;
+      const activeSessions = this.tableSessions.filter((s) => s.restaurantId === restId && s.status === 'ACTIVE').length;
+      const openOrders = this.orders.filter((o) => o.restaurantId === restId && ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(o.status)).length;
+      const openKitchen = this.orders.filter((o) => o.restaurantId === restId && ['PENDING', 'ACCEPTED', 'PREPARING'].includes(o.kitchenStatus || o.status)).length;
+      const openBar = this.orders.filter((o) => o.restaurantId === restId && ['PENDING', 'ACCEPTED', 'PREPARING'].includes(o.barStatus || '')).length;
+      const unpaidBills = this.bills.filter((b) => b.restaurantId === restId && b.status !== 'PAID' && b.status !== 'CANCELLED').length;
+      const openRequests = this.customerRequests.filter((r) => r.restaurantId === restId && r.status === 'PENDING').length;
+      const warnings: string[] = [];
+      if (openTables > 0) warnings.push(`${openTables} active dining table(s) currently occupied.`);
+      if (openKitchen > 0) warnings.push(`${openKitchen} kitchen ticket(s) still in preparation.`);
+      if (openBar > 0) warnings.push(`${openBar} bar drink(s) pending.`);
+      if (unpaidBills > 0) warnings.push(`${unpaidBills} unpaid bill(s) pending settlement.`);
+      if (openRequests > 0) warnings.push(`${openRequests} waiter assistance request(s) open.`);
+      return {
+        canClose: warnings.length === 0,
+        can_close_safely: warnings.length === 0,
+        openTablesCount: openTables,
+        active_tables_count: openTables,
+        activeSessionsCount: activeSessions,
+        uncompletedKitchenOrdersCount: openKitchen,
+        uncompletedBarOrdersCount: openBar,
+        openOrdersCount: openOrders,
+        open_orders_count: openOrders,
+        openWaiterRequestsCount: openRequests,
+        unpaidBillsCount: unpaidBills,
+        totalOrdersToday: this.orders.filter((o) => o.restaurantId === restId).length,
+        totalSalesToday: this.orders.filter((o) => o.restaurantId === restId && o.status !== 'CANCELLED').reduce((s, o) => s + o.totalAmount, 0),
+        warnings,
+      };
+    }
+  }
+
+  async openBusinessDay(restaurantId?: string, openedBy?: string) {
+    const restId = this.resolveTenantRestaurantId(restaurantId);
+    if (!restId) throw new Error('No active restaurant selected');
+
+    try {
+      const data = await this.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(restId)}/business-day/open`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ openedBy: openedBy || 'Manager' }),
+        },
+        'OWNER'
+      );
+      if (data && data.id) {
+        const bday: BusinessDay = {
+          id: data.id,
+          restaurantId: data.restaurant_id || data.restaurantId || restId,
+          date: data.business_date || data.date,
+          status: 'OPEN',
+          openedAt: data.opened_at || data.openedAt || new Date().toISOString(),
+          openedBy: data.opened_by || data.openedBy || openedBy || 'Manager',
+        };
+        const idx = this.businessDays.findIndex((b) => b.id === bday.id);
+        if (idx !== -1) {
+          this.businessDays[idx] = bday;
+        } else {
+          this.businessDays.unshift(bday);
+        }
+        this.saveDatabase();
+        return bday;
+      }
+    } catch (err) {
+      console.warn('[openBusinessDay] Backend API fallback:', err);
+    }
 
     const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
-    if (openDay) {
-      return openDay;
-    }
+    if (openDay) return openDay;
 
     const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const newDay: BusinessDay = {
@@ -4576,65 +4720,38 @@ export class DinelyApiClient {
     return newDay;
   }
 
-  async closeBusinessDay(restaurantId?: string, closedBy?: string) {
-    await delay(150);
+  async closeBusinessDay(
+    restaurantId?: string,
+    closedBy?: string,
+    options?: { closingNotes?: string; forceCloseActiveTables?: boolean; forceFinalizeOrders?: boolean }
+  ) {
     const restId = this.resolveTenantRestaurantId(restaurantId);
-    const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+    if (!restId) throw new Error('No active restaurant selected');
 
-    if (!openDay) {
-      throw new Error('No active open business day to close.');
+    let backendResult: any = null;
+    try {
+      backendResult = await this.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(restId)}/business-day/close`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            closingNotes: options?.closingNotes || `Closed by ${closedBy || 'Owner'}`,
+            forceCloseActiveTables: options?.forceCloseActiveTables ?? true,
+            forceFinalizeOrders: options?.forceFinalizeOrders ?? true,
+          }),
+        },
+        'OWNER'
+      );
+    } catch (err) {
+      console.warn('[closeBusinessDay] Backend API fallback:', err);
     }
 
-    const dayOrders = this.orders.filter(
-      (o) => o.restaurantId === restId && (o.businessDayId === openDay.id || new Date(o.createdAt).getTime() >= new Date(openDay.openedAt).getTime())
-    );
-
-    const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
-    const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
-
-    const foodOrders = dayOrders.filter((o) => o.targetDestination === 'KITCHEN' || o.targetDestination === 'MIXED' || o.items.some((i) => i.targetDestination !== 'BAR'));
-    const barOrders = dayOrders.filter((o) => o.targetDestination === 'BAR' || o.items.some((i) => i.targetDestination === 'BAR' || i.isAlcoholic));
-
-    let foodSales = 0;
-    let barSales = 0;
-
-    dayOrders.forEach((o) => {
-      if (o.status !== 'CANCELLED') {
-        o.items.forEach((item) => {
-          const itemTotal = item.price * item.quantity;
-          if (item.targetDestination === 'BAR' || item.isAlcoholic) {
-            barSales += itemTotal;
-          } else {
-            foodSales += itemTotal;
-          }
-        });
-      }
-    });
-
-    const totalSales = foodSales + barSales;
-
-    const summary: DailySummaryData = {
-      totalOrders: dayOrders.length,
-      foodOrders: foodOrders.length,
-      barOrders: barOrders.length,
-      foodSales,
-      barSales,
-      totalSales,
-      completedOrders: completed.length,
-      cancelledOrders: cancelled.length,
-    };
-
-    openDay.status = 'CLOSED';
-    openDay.closedAt = new Date().toISOString();
-    openDay.closedBy = closedBy || 'Owner';
-    openDay.summary = summary;
-
-    // Close any active table sessions when ending the business day
+    // Clean operational reset for next day in local state
     this.tableSessions.forEach((s) => {
       if (s.restaurantId === restId && s.status === 'ACTIVE') {
         s.status = 'CLOSED';
         s.sessionClosedAt = new Date().toISOString();
-        s.closedByWaiterName = closedBy || 'System Day Close';
+        s.closedByWaiterName = closedBy || 'Day Close';
       }
     });
 
@@ -4647,20 +4764,85 @@ export class DinelyApiClient {
       }
     });
 
-    this.saveDatabase();
-
-    realtimeBus.emit('BusinessDayClosed' as any, {
-      businessDayId: openDay.id,
-      restaurantId: restId,
-      summary,
+    this.orders.forEach((o) => {
+      if (o.restaurantId === restId && ['PENDING', 'ACCEPTED', 'PREPARING'].includes(o.status)) {
+        o.status = 'COMPLETED';
+        o.kitchenStatus = 'COMPLETED';
+        o.barStatus = 'COMPLETED';
+      }
     });
 
-    return openDay;
+    this.customerRequests.forEach((r) => {
+      if (r.restaurantId === restId && r.status === 'PENDING') {
+        r.status = 'COMPLETED';
+      }
+    });
+
+    const openDay = this.businessDays.find((b) => b.restaurantId === restId && b.status === 'OPEN');
+    if (openDay) {
+      openDay.status = 'CLOSED';
+      openDay.closedAt = new Date().toISOString();
+      openDay.closedBy = closedBy || 'Owner';
+      if (backendResult?.summary) openDay.summary = backendResult.summary;
+    }
+
+    if (backendResult?.nextDay) {
+      const nextDayData = backendResult.nextDay;
+      const nextDay: BusinessDay = {
+        id: nextDayData.id,
+        restaurantId: restId,
+        date: nextDayData.business_date || nextDayData.date,
+        status: 'OPEN',
+        openedAt: nextDayData.opened_at || nextDayData.openedAt || new Date().toISOString(),
+        openedBy: nextDayData.opened_by || nextDayData.openedBy || 'System Next Day',
+      };
+      this.businessDays.unshift(nextDay);
+    }
+
+    this.invalidateQueryCache();
+    this.saveDatabase();
+
+    const closedEventPayload = {
+      businessDayId: openDay?.id || backendResult?.id,
+      restaurantId: restId,
+      summary: backendResult?.summary || openDay?.summary,
+      closedDay: backendResult?.closedDay || openDay,
+      nextDay: backendResult?.nextDay,
+      timestamp: new Date().toISOString(),
+    };
+
+    realtimeBus.emit('DayClosed' as any, closedEventPayload);
+    realtimeBus.emit('BusinessDayClosed' as any, closedEventPayload);
+
+    return backendResult || openDay;
   }
 
-  async getBusinessDayHistory(restaurantId?: string) {
-    await delay(100);
+  async getBusinessDayHistory(restaurantId?: string): Promise<BusinessDay[]> {
     const restId = this.resolveTenantRestaurantId(restaurantId);
+    if (!restId) return [];
+
+    try {
+      const data = await this.executeProtectedRequest<any[]>(
+        `/restaurants/${encodeURIComponent(restId)}/business-day/history`,
+        { method: 'GET' },
+        'OWNER'
+      );
+      if (Array.isArray(data)) {
+        return data.map((d) => ({
+          id: d.id,
+          restaurantId: d.restaurant_id || d.restaurantId || restId,
+          date: d.business_date || d.date,
+          status: d.status,
+          openedAt: d.opened_at || d.openedAt,
+          openedBy: d.opened_by || d.openedBy,
+          closedAt: d.closed_at || d.closedAt,
+          closedBy: d.closed_by || d.closedBy,
+          summary: d.summary,
+        }));
+      }
+    } catch (err) {
+      console.warn('[getBusinessDayHistory] Backend API fallback:', err);
+    }
     return this.businessDays.filter((b) => b.restaurantId === restId && b.status === 'CLOSED');
   }
 
@@ -5277,23 +5459,35 @@ export class DinelyApiClient {
 
   // Order & Kitchen APIs
   async acceptOrder(orderId: string, prepTime: number) {
-    const order = this.orders.find((o) => o.id === orderId);
+    let order = this.orders.find((o) => o.id === orderId);
     const targetEta = new Date(Date.now() + prepTime * 60000).toISOString();
 
     try {
-      const apiBase = getApiBaseUrl();
-      await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'IN_KITCHEN',
-          kitchenStatus: 'PREPARING',
-          estimatedPrepTimeMinutes: prepTime,
-          etaTargetTimestamp: targetEta,
-        }),
-      });
+      const resp = await this.executeProtectedRequest<any>(
+        `/orders/${encodeURIComponent(orderId)}/status`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'PREPARING',
+            kitchenStatus: 'PREPARING',
+            estimatedPrepTimeMinutes: prepTime,
+            etaTargetTimestamp: targetEta,
+          }),
+        },
+        'KITCHEN'
+      );
+      if (resp && resp.id) {
+        const normalized = normalizeOrder(resp);
+        const idx = this.orders.findIndex((o) => o.id === normalized.id);
+        if (idx !== -1) {
+          this.orders[idx] = { ...this.orders[idx], ...normalized };
+        } else {
+          this.orders.unshift(normalized);
+        }
+        order = this.orders.find((o) => o.id === orderId);
+      }
     } catch (e) {
-      console.warn('API PUT for acceptOrder failed:', e);
+      console.warn('Backend acceptOrder failed, updating local state:', e);
     }
 
     if (order) {
@@ -5316,6 +5510,8 @@ export class DinelyApiClient {
         orderId: order.id,
         restaurantId: order.restaurantId,
         tableNumber: order.tableNumber,
+        estimatedPrepTimeMinutes: prepTime,
+        etaTargetTimestamp: targetEta,
         data: order,
       });
     }
@@ -5323,39 +5519,25 @@ export class DinelyApiClient {
   }
 
   async updateOrderETA(orderId: string, deltaOrMins: number, reason?: string, note?: string) {
-    const order = this.orders.find((o) => o.id === orderId);
+    let order = this.orders.find((o) => o.id === orderId);
+    const currentMins = order?.estimatedPrepTimeMinutes || 15;
+    let newMins = currentMins;
+
+    if (deltaOrMins === 5 || deltaOrMins === -5) {
+      newMins = Math.max(1, currentMins + deltaOrMins);
+    } else {
+      newMins = Math.max(1, deltaOrMins);
+    }
+
+    const baseTime = order?.etaTargetTimestamp ? new Date(order.etaTargetTimestamp).getTime() : Date.now();
+    const newTargetTimestamp =
+      deltaOrMins === 5 || deltaOrMins === -5
+        ? new Date(baseTime + deltaOrMins * 60000).toISOString()
+        : new Date(Date.now() + newMins * 60000).toISOString();
+
     if (order) {
-      const currentMins = order.estimatedPrepTimeMinutes || 15;
-      let newMins = currentMins;
-
-      if (deltaOrMins === 5 || deltaOrMins === -5) {
-        newMins = Math.max(1, currentMins + deltaOrMins);
-      } else {
-        newMins = Math.max(1, deltaOrMins);
-      }
-
       order.estimatedPrepTimeMinutes = newMins;
-      const baseTime = order.etaTargetTimestamp ? new Date(order.etaTargetTimestamp).getTime() : Date.now();
-      if (deltaOrMins === 5 || deltaOrMins === -5) {
-        order.etaTargetTimestamp = new Date(baseTime + deltaOrMins * 60000).toISOString();
-      } else {
-        order.etaTargetTimestamp = new Date(Date.now() + newMins * 60000).toISOString();
-      }
-
-      try {
-        const apiBase = getApiBaseUrl();
-        await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/status`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            estimatedPrepTimeMinutes: newMins,
-            etaTargetTimestamp: order.etaTargetTimestamp,
-          }),
-        });
-      } catch (e) {
-        console.warn('API PUT for updateOrderETA failed:', e);
-      }
-
+      order.etaTargetTimestamp = newTargetTimestamp;
       if (reason || note) {
         if (!order.etaHistory) order.etaHistory = [];
         order.etaHistory.unshift({
@@ -5369,17 +5551,53 @@ export class DinelyApiClient {
           updatedBy: 'Kitchen Chef',
         });
       }
-
       this.saveDatabase();
-
-      realtimeBus.emit('ETAUpdated' as any, {
-        orderId: order.id,
-        restaurantId: order.restaurantId,
-        tableNumber: order.tableNumber,
-        data: order,
-      });
     }
-    return order;
+
+    // Authenticated API PATCH to persist ETA immediately into PostgreSQL database
+    try {
+      const resp = await this.executeProtectedRequest<any>(
+        `/orders/${encodeURIComponent(orderId)}/status`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            estimatedPrepTimeMinutes: newMins,
+            etaTargetTimestamp: newTargetTimestamp,
+          }),
+        },
+        'KITCHEN'
+      );
+      if (resp && resp.id) {
+        const normalized = normalizeOrder(resp);
+        const idx = this.orders.findIndex((o) => o.id === normalized.id);
+        if (idx !== -1) {
+          this.orders[idx] = { ...this.orders[idx], ...normalized };
+        } else {
+          this.orders.unshift(normalized);
+        }
+        order = this.orders.find((o) => o.id === orderId);
+        this.saveDatabase();
+      }
+    } catch (e) {
+      console.warn('Backend updateOrderETA failed, fallback to local state:', e);
+    }
+
+    const updatedOrder = order || {
+      id: orderId,
+      estimatedPrepTimeMinutes: newMins,
+      etaTargetTimestamp: newTargetTimestamp,
+    };
+
+    realtimeBus.emit('ETAUpdated' as any, {
+      orderId: orderId,
+      restaurantId: order?.restaurantId,
+      tableNumber: order?.tableNumber,
+      estimatedPrepTimeMinutes: newMins,
+      etaTargetTimestamp: newTargetTimestamp,
+      data: updatedOrder,
+    });
+
+    return updatedOrder;
   }
 
   async toggleOrderTimer(orderId: string) {

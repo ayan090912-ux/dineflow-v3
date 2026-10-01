@@ -566,6 +566,23 @@ async def update_order_status(
                 payload=resp_data,
                 target_audience=["WAITER", "CUSTOMER", "OWNER"]
             )
+        if payload.estimatedPrepTimeMinutes is not None or payload.etaTargetTimestamp is not None:
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="ETAUpdated",
+                payload={
+                    "orderId": order.id,
+                    "order_id": order.id,
+                    "restaurantId": order.restaurant_id,
+                    "restaurant_id": order.restaurant_id,
+                    "tableNumber": order.table_number,
+                    "table_number": order.table_number,
+                    "estimatedPrepTimeMinutes": order.estimated_prep_time_minutes,
+                    "etaTargetTimestamp": resp_data.get("eta_target_timestamp") or resp_data.get("etaTargetTimestamp"),
+                    "data": resp_data,
+                },
+                target_audience=["KITCHEN", "WAITER", "CUSTOMER", "OWNER"]
+            )
         await ws_manager.broadcast_event(
             restaurant_id=order.restaurant_id,
             event_type="order_status_updated",
