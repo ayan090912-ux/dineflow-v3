@@ -43,8 +43,8 @@ if "sqlite" not in db_url:
     engine_kwargs.update({
         "pool_size": max(15, settings.DB_POOL_SIZE or 15),
         "max_overflow": max(10, settings.DB_MAX_OVERFLOW or 10),
-        "pool_pre_ping": True,
-        "pool_recycle": 300,  # 5 minutes: reuses active TLS channels without repeated cross-region handshakes
+        "pool_pre_ping": False,  # Disabled to eliminate extra ~400ms cross-continent round-trip per checkout
+        "pool_recycle": 600,  # 10 minutes: keeps active connection alive without repeated TLS handshakes
         "pool_timeout": 30,
         "connect_args": connect_args,
     })

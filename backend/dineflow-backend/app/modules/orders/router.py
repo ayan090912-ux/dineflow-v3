@@ -118,6 +118,8 @@ _ORDER_RESTAURANT_CACHE_TTL: float = 60.0
 _ORDER_TAX_CACHE: dict = {}
 _ORDER_TAX_CACHE_TTL: float = 60.0
 
+_ORDER_DAILY_SEQ: dict = {}
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_order(
     payload: CreateOrderSchema,
@@ -189,6 +191,7 @@ async def create_order(
         tbl_num = payload.tableNumber or "Table 01"
         tbl_id = payload.tableId or f"tbl-{restaurant.id}-{(tbl_num).lower().replace(' ', '_')}"
 
+        existing_tbl = None
         # If explicit tableId provided, verify it belongs to this restaurant
         if payload.tableId:
             res_tbl_check = await db.execute(select(Table).where(Table.id == payload.tableId))
@@ -278,13 +281,19 @@ async def create_order(
         except Exception as tax_err:
             print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
 
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        query_count = select(func.count(Order.id)).where(
-            (Order.restaurant_id == restaurant.id) &
-            (Order.created_at >= today_start)
-        )
-        res_count = await db.execute(query_count)
-        daily_seq = (res_count.scalar() or 0) + 1
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if restaurant.id in _ORDER_DAILY_SEQ and _ORDER_DAILY_SEQ[restaurant.id][0] == today_str:
+            daily_seq = _ORDER_DAILY_SEQ[restaurant.id][1] + 1
+            _ORDER_DAILY_SEQ[restaurant.id] = (today_str, daily_seq)
+        else:
+            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            query_count = select(func.count(Order.id)).where(
+                (Order.restaurant_id == restaurant.id) &
+                (Order.created_at >= today_start)
+            )
+            res_count = await db.execute(query_count)
+            daily_seq = (res_count.scalar() or 0) + 1
+            _ORDER_DAILY_SEQ[restaurant.id] = (today_str, daily_seq)
         order_num = f"#ORD-{daily_seq}"
 
         now_utc = datetime.now(timezone.utc)
@@ -325,17 +334,20 @@ async def create_order(
         db.add(new_order)
 
         try:
-            query_tbl = select(Table).where(
-                (Table.restaurant_id == restaurant.id) &
-                ((Table.id == tbl_id) | (Table.table_number == tbl_num))
-            )
-            res_tbl = await db.execute(query_tbl)
-            tbls = res_tbl.scalars().all()
-            if tbls:
-                tbl = tbls[0]
-                tbl.status = "OCCUPIED"
-                tbl.is_occupied = True
-                tbl.active_session_id = session_id
+            tbl_target = existing_tbl
+            if not tbl_target:
+                query_tbl = select(Table).where(
+                    (Table.restaurant_id == restaurant.id) &
+                    ((Table.id == tbl_id) | (Table.table_number == tbl_num))
+                )
+                res_tbl = await db.execute(query_tbl)
+                tbls = res_tbl.scalars().all()
+                if tbls:
+                    tbl_target = tbls[0]
+            if tbl_target:
+                tbl_target.status = "OCCUPIED"
+                tbl_target.is_occupied = True
+                tbl_target.active_session_id = session_id
                 from app.modules.tables.router import invalidate_tables_cache
                 invalidate_tables_cache(restaurant.id)
         except Exception as tbl_err:
@@ -650,19 +662,24 @@ async def update_order_eta(
             detail="Authentication required to update order ETA"
         )
 
-    res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
-    r_obj = res_r.scalar_one_or_none()
-    if not r_obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
-
     if not caller.is_admin:
-        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
-            is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
-            if not is_owner:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+        if caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
+        elif caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+            # Use cached restaurant context if available
+            r_obj = None
+            cached_r = _ORDER_RESTAURANT_CACHE.get(order.restaurant_id)
+            if cached_r and (time.time() - cached_r[0] < _ORDER_RESTAURANT_CACHE_TTL):
+                r_obj = cached_r[1]
+            if not r_obj:
+                res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
+                r_obj = res_r.scalar_one_or_none()
+                if r_obj:
+                    _ORDER_RESTAURANT_CACHE[order.restaurant_id] = (time.time(), r_obj)
+            is_owner = r_obj and ((caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower()))
+            if not is_owner:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
         else:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update order ETA")
 
@@ -684,7 +701,6 @@ async def update_order_eta(
             pass
 
     await db.commit()
-    await db.refresh(order)
     resp_data = format_order_response(order)
 
     try:
@@ -706,14 +722,8 @@ async def update_order_eta(
             },
             target_audience=["KITCHEN", "WAITER", "CUSTOMER", "OWNER"]
         )
-        await ws_manager.broadcast_event(
-            restaurant_id=order.restaurant_id,
-            event_type="order_status_updated",
-            payload=resp_data,
-            target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]
-        )
     except Exception as ws_err:
-        print("[WS_BROADCAST_NOTICE] eta_updated:", ws_err)
+        print("[WS_BROADCAST_NOTICE]:", ws_err)
 
     return resp_data
 

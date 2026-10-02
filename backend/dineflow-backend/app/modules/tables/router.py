@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_RESTAURANT_SLUG_CACHE: dict = {}
+
 async def _get_restaurant_public_slug(restaurant_id: str, db: AsyncSession) -> str:
+    if restaurant_id in _RESTAURANT_SLUG_CACHE:
+        return _RESTAURANT_SLUG_CACHE[restaurant_id]
     try:
         from app.modules.restaurants.models import Restaurant
         res_rest = await db.execute(select(Restaurant).where(
@@ -25,7 +29,10 @@ async def _get_restaurant_public_slug(restaurant_id: str, db: AsyncSession) -> s
         ))
         rest_obj = res_rest.scalar_one_or_none()
         if rest_obj:
-            return rest_obj.public_slug or rest_obj.slug or rest_obj.id
+            slug_val = rest_obj.public_slug or rest_obj.slug or rest_obj.id
+            _RESTAURANT_SLUG_CACHE[restaurant_id] = slug_val
+            _RESTAURANT_SLUG_CACHE[rest_obj.id] = slug_val
+            return slug_val
     except Exception as e:
         logger.warning(f"[_get_restaurant_public_slug] Failed to query public slug for restaurant '{restaurant_id}': {e}")
     return restaurant_id
@@ -183,9 +190,29 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
                 t.is_occupied = False
                 t.active_session_id = None
 
-    _TABLES_CACHE[restaurant_id] = (now_t, tables)
-    _TABLES_CACHE[canonical_id] = (now_t, tables)
-    return tables
+    formatted_tables = [
+        {
+            "id": t.id,
+            "restaurant_id": t.restaurant_id,
+            "restaurantId": t.restaurant_id,
+            "table_number": t.table_number,
+            "tableNumber": t.table_number,
+            "section": t.section,
+            "capacity": t.capacity,
+            "status": t.status,
+            "is_occupied": t.is_occupied,
+            "isOccupied": t.is_occupied,
+            "qr_code_url": t.qr_code_url,
+            "qrCodeUrl": t.qr_code_url,
+            "active_session_id": t.active_session_id,
+            "activeSessionId": t.active_session_id
+        }
+        for t in tables
+    ]
+
+    _TABLES_CACHE[restaurant_id] = (now_t, formatted_tables)
+    _TABLES_CACHE[canonical_id] = (now_t, formatted_tables)
+    return formatted_tables
 
 @router.get("/{restaurant_id}/active-sessions")
 async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depends(get_db)):

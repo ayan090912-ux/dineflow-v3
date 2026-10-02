@@ -133,48 +133,39 @@ async def resolve_public_tenant(
         if now_t - cached_ts < _PUBLIC_TENANT_TTL:
             return cached_ctx
 
-    # 1. Lookup in restaurant_domains if hostname was provided
+    # Single outerjoin query combining domain and slug lookups to eliminate serial round trips
     rest: Optional[Restaurant] = None
+    conditions = []
     if clean_host:
-        dom_stmt = select(RestaurantDomain).where(
-            or_(
-                func.lower(RestaurantDomain.hostname) == clean_host,
-                func.lower(RestaurantDomain.domain) == clean_host
-            ),
-            or_(
-                RestaurantDomain.is_verified.is_(True),
-                RestaurantDomain.verification_status == "VERIFIED"
-            )
-        ).limit(1)
-        dom_res = await db.execute(dom_stmt)
-        domain_entry = dom_res.scalar_one_or_none()
-        if domain_entry:
-            rest_stmt = select(Restaurant).where(
-                Restaurant.id == domain_entry.restaurant_id,
-                Restaurant.deleted_at.is_(None)
-            )
-            rest_res = await db.execute(rest_stmt)
-            rest = rest_res.scalar_one_or_none()
+        conditions.extend([
+            func.lower(RestaurantDomain.hostname) == clean_host,
+            func.lower(RestaurantDomain.domain) == clean_host,
+        ])
+    if target_slug:
+        conditions.extend([
+            func.lower(Restaurant.public_slug) == target_slug,
+            func.lower(Restaurant.slug) == target_slug,
+            Restaurant.id == target_slug,
+        ])
 
-    # 2. Lookup by slug or id if not found via domain OR if domain matched an unapproved/pending record but an approved/live one exists
-    if target_slug and (not rest or rest.lifecycle_status != "LIVE"):
+    if conditions:
         from sqlalchemy import case
-        rest_stmt = select(Restaurant).where(
-            Restaurant.deleted_at.is_(None),
-            or_(
-                func.lower(Restaurant.public_slug) == target_slug,
-                func.lower(Restaurant.slug) == target_slug,
-                Restaurant.id == target_slug
+        stmt = (
+            select(Restaurant)
+            .outerjoin(RestaurantDomain, RestaurantDomain.restaurant_id == Restaurant.id)
+            .where(
+                Restaurant.deleted_at.is_(None),
+                or_(*conditions)
             )
-        ).order_by(
-            case((Restaurant.lifecycle_status == "LIVE", 1), else_=0).desc(),
-            case((Restaurant.is_approved.is_(True), 1), else_=0).desc(),
-            Restaurant.created_at.desc()
-        ).limit(1)
-        rest_res = await db.execute(rest_stmt)
-        candidate_rest = rest_res.scalar_one_or_none()
-        if candidate_rest and (not rest or candidate_rest.lifecycle_status == "LIVE" or candidate_rest.is_approved):
-            rest = candidate_rest
+            .order_by(
+                case((Restaurant.lifecycle_status == "LIVE", 1), else_=0).desc(),
+                case((Restaurant.is_approved.is_(True), 1), else_=0).desc(),
+                Restaurant.created_at.desc()
+            )
+            .limit(1)
+        )
+        res = await db.execute(stmt)
+        rest = res.scalar_one_or_none()
 
     if not rest:
         identifier = clean_host or target_slug or "unknown"
@@ -232,6 +223,14 @@ async def resolve_public_tenant(
         }
     )
     _PUBLIC_TENANT_CACHE[cache_key] = (now_t, res_ctx)
+    if clean_host:
+        _PUBLIC_TENANT_CACHE[f"{clean_host}::False"] = (now_t, res_ctx)
+    if target_slug:
+        _PUBLIC_TENANT_CACHE[f":{target_slug}:False"] = (now_t, res_ctx)
+    if rest.id:
+        _PUBLIC_TENANT_CACHE[f":{rest.id}:False"] = (now_t, res_ctx)
+    if pub_slug:
+        _PUBLIC_TENANT_CACHE[f":{pub_slug}:False"] = (now_t, res_ctx)
     return res_ctx
 
 
