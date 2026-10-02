@@ -250,48 +250,60 @@ async def create_order(
             ))
             existing_tbl = res_tbl_check.scalar_one_or_none()
 
+        actual_session_id = None
         if existing_tbl:
             tbl_id = existing_tbl.id
             tbl_num = existing_tbl.table_number
+        else:
+            tbl_id = None
 
-        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id}-{int(now_utc.timestamp() * 1000)}"
+        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id or 'none'}-{int(now_utc.timestamp() * 1000)}"
 
         try:
             from sqlalchemy import case
-            query_sess = select(TableSession).where(
-                (TableSession.restaurant_id == restaurant.id) &
-                (
-                    (TableSession.id == session_id) |
+            if tbl_id:
+                query_sess = select(TableSession).where(
+                    (TableSession.restaurant_id == restaurant.id) &
                     (
-                        ((TableSession.table_id == tbl_id) | (TableSession.table_number == tbl_num)) &
-                        (TableSession.status == "ACTIVE")
-                    )
-                )
-            ).order_by(
-                case((TableSession.id == session_id, 1), else_=0).desc(),
-                TableSession.session_started_at.desc()
-            ).limit(1)
-            res_sess = await db.execute(query_sess)
-            matched_sess = res_sess.scalar_one_or_none()
-
-            if matched_sess and matched_sess.status == "ACTIVE":
-                session_id = matched_sess.id
-            elif existing_tbl:
-                try:
-                    async with db.begin_nested():
-                        new_sess = TableSession(
-                            id=session_id,
-                            restaurant_id=restaurant.id,
-                            table_id=tbl_id,
-                            table_number=tbl_num,
-                            status="ACTIVE",
-                            session_started_at=now_utc
+                        (TableSession.id == session_id) |
+                        (
+                            ((TableSession.table_id == tbl_id) | (TableSession.table_number == tbl_num)) &
+                            (TableSession.status == "ACTIVE")
                         )
-                        db.add(new_sess)
-                        await db.flush()
-                        session_id = new_sess.id
-                except Exception as flush_err:
-                    print("[SESSION_CREATION_RACE_HANDLED]:", flush_err)
+                    )
+                ).order_by(
+                    case((TableSession.id == session_id, 1), else_=0).desc(),
+                    TableSession.session_started_at.desc()
+                ).limit(1)
+                res_sess = await db.execute(query_sess)
+                matched_sess = res_sess.scalar_one_or_none()
+
+                if matched_sess and matched_sess.status == "ACTIVE":
+                    actual_session_id = matched_sess.id
+                elif existing_tbl:
+                    try:
+                        async with db.begin_nested():
+                            new_sess = TableSession(
+                                id=session_id,
+                                restaurant_id=restaurant.id,
+                                table_id=tbl_id,
+                                table_number=tbl_num,
+                                status="ACTIVE",
+                                session_started_at=now_utc
+                            )
+                            db.add(new_sess)
+                            await db.flush()
+                            actual_session_id = new_sess.id
+                    except Exception as flush_err:
+                        print("[SESSION_CREATION_RACE_HANDLED]:", flush_err)
+                        res_sess_race = await db.execute(select(TableSession).where(
+                            (TableSession.restaurant_id == restaurant.id) &
+                            (TableSession.table_id == tbl_id) &
+                            (TableSession.status == "ACTIVE")
+                        ).order_by(TableSession.session_started_at.desc()).limit(1))
+                        race_sess = res_sess_race.scalar_one_or_none()
+                        if race_sess:
+                            actual_session_id = race_sess.id
         except Exception as sess_err:
             print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
 
@@ -388,7 +400,7 @@ async def create_order(
             restaurant_id=restaurant.id,
             table_id=tbl_id,
             table_number=tbl_num,
-            table_session_id=session_id,
+            table_session_id=actual_session_id,
             status="PENDING",
             kitchen_status="PENDING",
             bar_status="PENDING",
