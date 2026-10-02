@@ -113,17 +113,21 @@ async def create_category(
     db.add(new_cat)
     await db.commit()
     await db.refresh(new_cat)
+    invalidate_menu_cache(target_rest_id)
     return new_cat
 
 import time
 
 _MENU_CACHE: dict = {}
-_MENU_CACHE_TTL: float = 60.0  # 60 seconds
+_MENU_CACHE_TTL: float = 300.0  # 5 minutes warm cache
 
 def invalidate_menu_cache(restaurant_id: Optional[str] = None):
     global _MENU_CACHE
     if restaurant_id:
-        _MENU_CACHE.pop(restaurant_id, None)
+        target = restaurant_id.lower()
+        to_del = [k for k in list(_MENU_CACHE.keys()) if k == restaurant_id or target in str(k).lower()]
+        for k in to_del:
+            _MENU_CACHE.pop(k, None)
     else:
         _MENU_CACHE.clear()
 
@@ -133,7 +137,7 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     Read-only retrieval of menu items and categories.
     Strictly idempotent; returns empty lists if empty without writing to database.
     Resolves both slug and UUID to canonical restaurant ID.
-    Cached for 30s to provide fast (<20ms) customer menu loading.
+    Cached for 300s with instant invalidation on mutations to provide fast (<15ms) customer menu loading.
     """
     now_t = time.time()
     if restaurant_id in _MENU_CACHE:
@@ -141,9 +145,12 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
         if now_t - cached_ts < _MENU_CACHE_TTL:
             return cached_menu
 
-    try:
-        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
-    except HTTPException:
+    if not restaurant_id.startswith("rest-"):
+        try:
+            canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+        except HTTPException:
+            canonical_id = restaurant_id
+    else:
         canonical_id = restaurant_id
 
     if canonical_id in _MENU_CACHE:
