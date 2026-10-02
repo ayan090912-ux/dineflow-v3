@@ -113,11 +113,25 @@ def format_order_response(order: Order) -> dict:
 
 
 class CachedRestaurant:
-    def __init__(self, id: str, lifecycle_status: str, owner_uid: Optional[str] = None, owner_email: Optional[str] = None):
+    def __init__(
+        self,
+        id: str,
+        lifecycle_status: str,
+        owner_uid: Optional[str] = None,
+        owner_email: Optional[str] = None,
+        has_kitchen: bool = True,
+        has_bar: bool = True,
+        has_waiter: bool = True,
+        enabled_modules: Optional[list] = None
+    ):
         self.id = id
         self.lifecycle_status = lifecycle_status
         self.owner_uid = owner_uid
         self.owner_email = owner_email
+        self.has_kitchen = has_kitchen
+        self.has_bar = has_bar
+        self.has_waiter = has_waiter
+        self.enabled_modules = enabled_modules or ["kitchen", "bar", "waiter", "billing"]
 
 class CachedTax:
     def __init__(self, id: str, name: str, type: str, rate: float, fixed_amount: float, is_inclusive: bool, status: str, applicable_order_types: list, applies_to: str):
@@ -187,7 +201,11 @@ async def create_order(
                 id=db_rest.id,
                 lifecycle_status=db_rest.lifecycle_status,
                 owner_uid=db_rest.owner_uid,
-                owner_email=db_rest.owner_email
+                owner_email=db_rest.owner_email,
+                has_kitchen=getattr(db_rest, "has_kitchen", True),
+                has_bar=getattr(db_rest, "has_bar", True),
+                has_waiter=getattr(db_rest, "has_waiter", True),
+                enabled_modules=getattr(db_rest, "enabled_modules", None)
             )
             _ORDER_RESTAURANT_CACHE[payload.restaurantId] = (now_mono, restaurant)
             _ORDER_RESTAURANT_CACHE[restaurant.id] = (now_mono, restaurant)
