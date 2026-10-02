@@ -116,3 +116,129 @@ async def test_multi_tenant_upi_isolation():
         # Verify B gets ONLY B
         res_b = await ac.get(f"/api/v1/restaurants/{rest_b}/billing/config")
         assert res_b.json()["upiId"] == "restaurantB@icici"
+
+
+@pytest.mark.asyncio
+async def test_order_with_items_cannot_generate_zero_invoice_regression():
+    """
+    REGRESSION TEST:
+    Ensures an order with line items CANNOT generate an invoice with grand total ₹0.0.
+    Verifies the invariant: Order total = Invoice grand total = Payment amount.
+    """
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        rest_id = "rest-billing-regression-1"
+        tbl_id = "tbl-reg-01"
+        sess_id = "sess-reg-01-12345"
+
+        from app.modules.tables.models import Table, TableSession
+        from app.modules.orders.models import Order, OrderItem
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        async with AsyncSessionLocal() as db:
+            db.add(Restaurant(
+                id=rest_id,
+                name="Regression Grill",
+                slug="regression-grill",
+                is_approved=True,
+                status="OPEN",
+                currency="INR (₹)",
+                tax_percentage=0.0
+            ))
+            db.add(Table(
+                id=tbl_id,
+                restaurant_id=rest_id,
+                table_number="01",
+                capacity=4,
+                status="OCCUPIED",
+                is_occupied=True,
+                active_session_id=sess_id
+            ))
+            db.add(TableSession(
+                id=sess_id,
+                restaurant_id=rest_id,
+                table_id=tbl_id,
+                table_number="01",
+                status="ACTIVE",
+                session_started_at=now
+            ))
+            # Seed order with 2 items totaling 770.0
+            items_data = [
+                {"menuItemId": "item-biryani", "name": "Chicken Biryani", "price": 340.0, "quantity": 1, "targetDestination": "KITCHEN"},
+                {"menuItemId": "item-keema", "name": "Chicken Keema", "unitPrice": 430.0, "quantity": 1, "targetDestination": "BAR"}
+            ]
+            db.add(Order(
+                id="ord-regression-770",
+                restaurant_id=rest_id,
+                table_id=tbl_id,
+                table_number="01",
+                table_session_id=sess_id,
+                status="READY",
+                kitchen_status="READY",
+                bar_status="READY",
+                subtotal=770.0,
+                total_amount=770.0,
+                items_json=items_data
+            ))
+            await db.commit()
+
+        # 1. Calculate bill
+        res_calc = await ac.post(f"/api/v1/restaurants/{rest_id}/billing/calculate", json={
+            "tableId": tbl_id,
+            "tableNumber": "01",
+            "tableSessionId": sess_id
+        })
+        assert res_calc.status_code == 200, f"Calculate failed: {res_calc.text}"
+        calc_data = res_calc.json()
+        assert calc_data["subtotal"] == 770.0, f"Expected subtotal 770.0, got {calc_data['subtotal']}"
+        assert calc_data["grandTotal"] == 770.0, f"Expected grandTotal 770.0, got {calc_data['grandTotal']}"
+
+        # 2. Generate invoice
+        res_inv = await ac.post(f"/api/v1/restaurants/{rest_id}/billing/generate-invoice", json={
+            "tableId": tbl_id,
+            "tableNumber": "01",
+            "tableSessionId": sess_id,
+            "paymentMethod": "CASH"
+        })
+        assert res_inv.status_code == 200, f"Generate invoice failed: {res_inv.text}"
+        inv_data = res_inv.json()
+        bill_id = inv_data["id"]
+        inv_grand_total = float(inv_data["grandTotal"])
+        assert inv_grand_total > 0.0, "FATAL: Invoice grand total cannot be 0.0 for orders with items"
+        assert inv_grand_total == 770.0, f"Expected invoice 770.0, got {inv_grand_total}"
+
+        # 3. Settle payment (authenticated staff terminal)
+        login_resp = await ac.post("/api/v1/auth/terminal-login", json={
+            "restaurant_id": rest_id,
+            "role": "WAITER",
+            "passcode": "1234"
+        })
+        assert login_resp.status_code == 200
+        waiter_token = login_resp.json()["access_token"]
+        w_headers = {"Authorization": f"Bearer {waiter_token}"}
+
+        res_pay = await ac.post(
+            f"/api/v1/restaurants/{rest_id}/billing/{bill_id}/mark-payment",
+            json={
+                "paymentMethod": "CASH",
+                "verifiedBy": "Regression Lead",
+                "amountPaid": inv_grand_total
+            },
+            headers=w_headers
+        )
+        assert res_pay.status_code == 200
+        pay_data = res_pay.json()
+        assert pay_data["status"] == "success"
+        bill_data = pay_data["bill"]
+        assert bill_data["paymentStatus"] == "PAID"
+        assert float(bill_data["grandTotal"]) == 770.0
+
+        # 4. Verify canonical invariant: Order total == Invoice grand total == Payment amount
+        order_total = 770.0
+        invoice_total = inv_grand_total
+        payment_total = float(bill_data["grandTotal"])
+        assert order_total == invoice_total == payment_total == 770.0, (
+            f"Invariant violated: Order={order_total}, Invoice={invoice_total}, Payment={payment_total}"
+        )
+

@@ -53,8 +53,17 @@ def calculate_taxes(
     for item in items:
         item_id = str(item.get("menuItemId") or item.get("menu_item_id") or item.get("id") or "")
         cat_id = str(item.get("categoryId") or item.get("category_id") or item.get("category") or "")
-        price = float(item.get("price") or item.get("unit_price") or 0.0)
+        raw_price = item.get("price")
+        if raw_price is None:
+            raw_price = item.get("unit_price")
+        if raw_price is None:
+            raw_price = item.get("unitPrice")
+        price = float(raw_price or 0.0)
         qty = int(item.get("quantity") or 1)
+        if price == 0.0 and item.get("totalPrice"):
+            price = round(float(item.get("totalPrice")) / max(1, qty), 2)
+        elif price == 0.0 and item.get("total_price"):
+            price = round(float(item.get("total_price")) / max(1, qty), 2)
         item_gross = round(price * qty, 2)
         subtotal += item_gross
 

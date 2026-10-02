@@ -57,6 +57,21 @@ RESERVED_SUBDOMAINS = {
 
 HOSTNAME_REGEX = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$")
 
+import time
+
+_PUBLIC_TENANT_CACHE: Dict[str, Any] = {}
+_PUBLIC_TENANT_TTL: float = 60.0  # 60s cache to eliminate repeated cross-region DB lookups
+
+def invalidate_public_tenant_cache(identifier: Optional[str] = None):
+    global _PUBLIC_TENANT_CACHE
+    if identifier:
+        clean_id = identifier.lower().strip()
+        keys_to_del = [k for k in _PUBLIC_TENANT_CACHE if clean_id in k.lower()]
+        for k in keys_to_del:
+            _PUBLIC_TENANT_CACHE.pop(k, None)
+    else:
+        _PUBLIC_TENANT_CACHE.clear()
+
 
 async def resolve_public_tenant(
     db: AsyncSession,
@@ -109,6 +124,14 @@ async def resolve_public_tenant(
                 extracted_slug = sub
 
     target_slug = (slug or extracted_slug or "").strip().lower()
+
+    # Fast in-memory cache lookup
+    cache_key = f"{clean_host or ''}:{target_slug or ''}:{allow_platform_root}"
+    now_t = time.time()
+    if cache_key in _PUBLIC_TENANT_CACHE:
+        cached_ts, cached_ctx = _PUBLIC_TENANT_CACHE[cache_key]
+        if now_t - cached_ts < _PUBLIC_TENANT_TTL:
+            return cached_ctx
 
     # 1. Lookup in restaurant_domains if hostname was provided
     rest: Optional[Restaurant] = None
@@ -169,7 +192,7 @@ async def resolve_public_tenant(
     pub_slug = rest.public_slug or rest.slug or rest.id
     canonical_domain = f"https://{pub_slug}.dinely.food"
 
-    return ResolvedTenantContext(
+    res_ctx = ResolvedTenantContext(
         restaurant_id=rest.id,
         name=rest.name,
         slug=rest.slug,
@@ -208,6 +231,8 @@ async def resolve_public_tenant(
             "owner_email": rest.owner_email,
         }
     )
+    _PUBLIC_TENANT_CACHE[cache_key] = (now_t, res_ctx)
+    return res_ctx
 
 
 async def resolve_owner_tenant(
@@ -474,13 +499,24 @@ async def resolve_canonical_restaurant(
     )
 
 
+_CANONICAL_ID_CACHE: Dict[str, str] = {}
+
 async def resolve_canonical_restaurant_id(
     restaurant_id_or_slug: Optional[str],
     db: AsyncSession
 ) -> str:
     """
     Returns the canonical Restaurant.id (UUID) for a given restaurant ID or slug.
+    Optimized with fast-path and in-memory cache to prevent redundant cross-region queries.
     """
-    rest = await resolve_canonical_restaurant(restaurant_id_or_slug, db)
+    clean = (restaurant_id_or_slug or "").strip()
+    if not clean:
+        raise HTTPException(status_code=400, detail="Restaurant identifier required")
+    if clean.startswith("rest-"):
+        return clean
+    if clean in _CANONICAL_ID_CACHE:
+        return _CANONICAL_ID_CACHE[clean]
+    rest = await resolve_canonical_restaurant(clean, db)
+    _CANONICAL_ID_CACHE[clean] = rest.id
     return rest.id
 

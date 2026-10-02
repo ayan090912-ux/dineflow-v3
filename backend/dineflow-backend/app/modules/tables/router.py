@@ -123,13 +123,36 @@ class UpdateTableSchema(BaseModel):
     is_occupied: Optional[bool] = None
     isOccupied: Optional[bool] = None
 
+import time
+
+_TABLES_CACHE: dict = {}
+_TABLES_CACHE_TTL: float = 8.0  # 8s cache for fast table state retrieval
+
+def invalidate_tables_cache(restaurant_id: Optional[str] = None):
+    global _TABLES_CACHE
+    if restaurant_id:
+        _TABLES_CACHE.pop(restaurant_id, None)
+    else:
+        _TABLES_CACHE.clear()
+
 @router.get("/{restaurant_id}/tables")
 async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
+    now_t = time.time()
+    if restaurant_id in _TABLES_CACHE:
+        cached_ts, cached_tables = _TABLES_CACHE[restaurant_id]
+        if now_t - cached_ts < _TABLES_CACHE_TTL:
+            return cached_tables
+
     try:
         from app.core.tenant.resolver import resolve_canonical_restaurant_id
         canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
     except Exception:
         canonical_id = restaurant_id
+
+    if canonical_id in _TABLES_CACHE:
+        cached_ts, cached_tables = _TABLES_CACHE[canonical_id]
+        if now_t - cached_ts < _TABLES_CACHE_TTL:
+            return cached_tables
 
     query = select(Table).where(Table.restaurant_id == canonical_id).order_by(Table.table_number)
     result = await db.execute(query)
@@ -160,6 +183,8 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
                 t.is_occupied = False
                 t.active_session_id = None
 
+    _TABLES_CACHE[restaurant_id] = (now_t, tables)
+    _TABLES_CACHE[canonical_id] = (now_t, tables)
     return tables
 
 @router.get("/{restaurant_id}/active-sessions")
@@ -445,6 +470,7 @@ async def create_table_session(
         tbl.is_occupied = True
         tbl.active_session_id = active_sess.id
         await db.commit()
+        invalidate_tables_cache(canonical_rest_id)
         return active_sess
 
     now_utc = datetime.now(timezone.utc)
@@ -462,6 +488,7 @@ async def create_table_session(
     tbl.active_session_id = new_sess.id
     await db.commit()
     await db.refresh(new_sess)
+    invalidate_tables_cache(canonical_rest_id)
 
     try:
         from app.modules.websocket.manager import ws_manager
@@ -682,6 +709,7 @@ async def close_table_session(
         print("[ORDER_CLEANUP_NOTICE]:", ord_err)
 
     await db.commit()
+    invalidate_tables_cache(rest_id)
 
     now_utc = datetime.now(timezone.utc)
     evt_id = f"evt-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"

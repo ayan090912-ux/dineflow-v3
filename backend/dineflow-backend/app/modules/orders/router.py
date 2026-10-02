@@ -228,12 +228,15 @@ async def create_order(
 
             tax_cats_map: Dict[str, List[str]] = {}
             tax_items_map: Dict[str, List[str]] = {}
-            for t in active_taxes:
-                c_res = await db.execute(select(TaxCategory.category_id).where(TaxCategory.tax_id == t.id))
-                tax_cats_map[t.id] = [r[0] for r in c_res.all()]
+            if active_taxes:
+                tax_ids = [t.id for t in active_taxes]
+                c_res = await db.execute(select(TaxCategory.tax_id, TaxCategory.category_id).where(TaxCategory.tax_id.in_(tax_ids)))
+                for tid, cid in c_res.all():
+                    tax_cats_map.setdefault(tid, []).append(cid)
 
-                i_res = await db.execute(select(TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id == t.id))
-                tax_items_map[t.id] = [r[0] for r in i_res.all()]
+                i_res = await db.execute(select(TaxMenuItem.tax_id, TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id.in_(tax_ids)))
+                for tid, mid in i_res.all():
+                    tax_items_map.setdefault(tid, []).append(mid)
 
             calc = calculate_taxes(
                 items=items_list_dict,
@@ -307,6 +310,8 @@ async def create_order(
                 tbl.status = "OCCUPIED"
                 tbl.is_occupied = True
                 tbl.active_session_id = session_id
+                from app.modules.tables.router import invalidate_tables_cache
+                invalidate_tables_cache(restaurant.id)
         except Exception as tbl_err:
             print("[TABLE_UPDATE_NOTICE] Table update skipped:", tbl_err)
 

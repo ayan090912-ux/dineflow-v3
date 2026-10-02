@@ -115,17 +115,41 @@ async def create_category(
     await db.refresh(new_cat)
     return new_cat
 
+import time
+
+_MENU_CACHE: dict = {}
+_MENU_CACHE_TTL: float = 30.0  # 30 seconds
+
+def invalidate_menu_cache(restaurant_id: Optional[str] = None):
+    global _MENU_CACHE
+    if restaurant_id:
+        _MENU_CACHE.pop(restaurant_id, None)
+    else:
+        _MENU_CACHE.clear()
+
 @router.get("/{restaurant_id}/menu")
 async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     """
     Read-only retrieval of menu items and categories.
     Strictly idempotent; returns empty lists if empty without writing to database.
     Resolves both slug and UUID to canonical restaurant ID.
+    Cached for 30s to provide fast (<20ms) customer menu loading.
     """
+    now_t = time.time()
+    if restaurant_id in _MENU_CACHE:
+        cached_ts, cached_menu = _MENU_CACHE[restaurant_id]
+        if now_t - cached_ts < _MENU_CACHE_TTL:
+            return cached_menu
+
     try:
         canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
     except HTTPException:
         canonical_id = restaurant_id
+
+    if canonical_id in _MENU_CACHE:
+        cached_ts, cached_menu = _MENU_CACHE[canonical_id]
+        if now_t - cached_ts < _MENU_CACHE_TTL:
+            return cached_menu
 
     query_cats = select(MenuCategory).where(MenuCategory.restaurant_id == canonical_id).order_by(MenuCategory.sort_order)
     res_cats = await db.execute(query_cats)
@@ -139,10 +163,13 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
     formatted_items = [format_menu_item_response(item) for item in items]
 
-    return {
+    resp_data = {
         "categories": categories,
         "items": formatted_items
     }
+    _MENU_CACHE[restaurant_id] = (now_t, resp_data)
+    _MENU_CACHE[canonical_id] = (now_t, resp_data)
+    return resp_data
 
 @router.post("/{restaurant_id}/menu", status_code=status.HTTP_201_CREATED)
 async def create_menu_item(
@@ -216,6 +243,7 @@ async def create_menu_item(
     db.add(new_item)
     await db.commit()
     await db.refresh(new_item)
+    invalidate_menu_cache(target_rest_id)
 
     resp_dict = format_menu_item_response(new_item)
 
@@ -282,6 +310,7 @@ async def update_menu_item(
 
     await db.commit()
     await db.refresh(item)
+    invalidate_menu_cache(target_rest_id)
 
     resp_dict = format_menu_item_response(item)
 
@@ -322,6 +351,7 @@ async def delete_menu_item(
 
     await db.delete(item)
     await db.commit()
+    invalidate_menu_cache(target_rest_id)
 
     try:
         await ws_manager.broadcast_event(

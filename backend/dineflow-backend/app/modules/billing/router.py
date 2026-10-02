@@ -374,18 +374,52 @@ async def calculate_table_bill(
     o_res = await db.execute(orders_query)
     table_orders = list(o_res.scalars().all())
 
+    # Fallback: If no orders found by session ID, search by tableId / tableNumber
+    if not table_orders and (input_data.tableId or tbl_num):
+        t_filters = []
+        if input_data.tableId:
+            t_filters.append(Order.table_id == input_data.tableId)
+        if tbl_num:
+            t_filters.extend([
+                Order.table_number == tbl_num,
+                Order.table_number == f"Table {tbl_num}",
+                Order.table_number == tbl_num.replace("Table ", "").strip()
+            ])
+        fallback_query = select(Order).where(
+            Order.restaurant_id == rest.id,
+            Order.status != "CANCELLED",
+            or_(*t_filters)
+        ).order_by(Order.created_at.desc()).limit(20)
+        fb_res = await db.execute(fallback_query)
+        table_orders = list(fb_res.scalars().all())
+
     # Aggregate item list
     bill_items: List[Dict[str, Any]] = []
     for order in table_orders:
         items = getattr(order, "items_json", []) or []
         for itm in items:
+            raw_p = itm.get("price")
+            if raw_p is None:
+                raw_p = itm.get("unit_price")
+            if raw_p is None:
+                raw_p = itm.get("unitPrice")
+            unit_p = float(raw_p or 0.0)
+            qty = int(itm.get("quantity") or 1)
+            raw_tot = itm.get("totalPrice") or itm.get("total_price")
+            total_p = round(float(raw_tot) if raw_tot is not None else (unit_p * qty), 2)
+            if unit_p == 0.0 and total_p > 0.0:
+                unit_p = round(total_p / max(1, qty), 2)
+
             bill_items.append({
                 "orderId": order.id,
                 "menuItemId": itm.get("menuItemId") or itm.get("id") or "",
                 "name": itm.get("name", "Item"),
-                "quantity": int(itm.get("quantity") or 1),
-                "unitPrice": float(itm.get("price") or 0.0),
-                "totalPrice": round(float(itm.get("price") or 0.0) * int(itm.get("quantity") or 1), 2),
+                "quantity": qty,
+                "price": unit_p,
+                "unit_price": unit_p,
+                "unitPrice": unit_p,
+                "totalPrice": total_p,
+                "total_price": total_p,
                 "station": itm.get("targetDestination") or ("BAR" if itm.get("isAlcoholic") else "KITCHEN"),
                 "category": itm.get("category"),
                 "categoryId": itm.get("categoryId"),
@@ -403,6 +437,13 @@ async def calculate_table_bill(
     subtotal = calc_res["subtotal"]
     tax_amount = calc_res["total_tax_amount"]
     tax_breakdown = calc_res["tax_breakdown"]
+
+    # Fallback safety: If subtotal came out to 0.0 but bill_items or table_orders have amounts
+    if subtotal <= 0.0:
+        if bill_items:
+            subtotal = round(sum(float(i.get("totalPrice") or 0.0) for i in bill_items), 2)
+        elif table_orders:
+            subtotal = round(sum(float(getattr(o, "subtotal", 0.0) or getattr(o, "total_amount", 0.0) or 0.0) for o in table_orders), 2)
 
     # Calculate Discount
     disc_amt = input_data.discountAmount or 0.0
@@ -477,6 +518,20 @@ async def generate_table_invoice(
         orderType=payload.orderType
     )
     calc_res = await calculate_table_bill(rest.id, calc_input, db)
+
+    # Invariant: An invoice for orders with non-zero line items must never calculate to 0.0
+    if calc_res.get("items") and float(calc_res.get("grandTotal") or 0.0) <= 0.0:
+        items_sum = sum(float(i.get("totalPrice") or i.get("price") or 0.0) for i in calc_res.get("items", []))
+        if items_sum > 0.0:
+            calc_res["subtotal"] = items_sum
+            calc_res["taxableSubtotal"] = items_sum
+            calc_res["grandTotal"] = items_sum
+    if calc_res.get("orders") and float(calc_res.get("grandTotal") or 0.0) <= 0.0:
+        orders_sum = sum(float(o.get("totalAmount") or 0.0) for o in calc_res.get("orders", []))
+        if orders_sum > 0.0:
+            calc_res["subtotal"] = orders_sum
+            calc_res["taxableSubtotal"] = orders_sum
+            calc_res["grandTotal"] = orders_sum
 
     # 3. Create or Update Bill record
     bill_id = f"bill-{uuid.uuid4().hex[:12]}"

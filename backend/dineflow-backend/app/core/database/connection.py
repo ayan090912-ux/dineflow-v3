@@ -41,10 +41,10 @@ if "sqlite" not in db_url:
             connect_args["server_settings"] = {"options": f"endpoint={endpoint_id}"}
 
     engine_kwargs.update({
-        "pool_size": settings.DB_POOL_SIZE,
-        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_size": max(15, settings.DB_POOL_SIZE or 15),
+        "max_overflow": max(10, settings.DB_MAX_OVERFLOW or 10),
         "pool_pre_ping": True,
-        "pool_recycle": 60,
+        "pool_recycle": 300,  # 5 minutes: reuses active TLS channels without repeated cross-region handshakes
         "pool_timeout": 30,
         "connect_args": connect_args,
     })
