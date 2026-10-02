@@ -112,6 +112,25 @@ def format_order_response(order: Order) -> dict:
     }
 
 
+class CachedRestaurant:
+    def __init__(self, id: str, lifecycle_status: str, owner_uid: Optional[str] = None, owner_email: Optional[str] = None):
+        self.id = id
+        self.lifecycle_status = lifecycle_status
+        self.owner_uid = owner_uid
+        self.owner_email = owner_email
+
+class CachedTax:
+    def __init__(self, id: str, name: str, type: str, rate: float, fixed_amount: float, is_inclusive: bool, status: str, applicable_order_types: list, applies_to: str):
+        self.id = id
+        self.name = name
+        self.type = type
+        self.rate = rate
+        self.fixed_amount = fixed_amount
+        self.is_inclusive = is_inclusive
+        self.status = status
+        self.applicable_order_types = applicable_order_types
+        self.applies_to = applies_to
+
 _ORDER_RESTAURANT_CACHE: dict = {}
 _ORDER_RESTAURANT_CACHE_TTL: float = 60.0
 
@@ -153,17 +172,23 @@ async def create_order(
                 )
             )
             res_rest = await db.execute(query_rest)
-            restaurant = res_rest.scalar_one_or_none()
-            if not restaurant:
+            db_rest = res_rest.scalar_one_or_none()
+            if not db_rest:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Restaurant '{payload.restaurantId}' was not found"
                 )
-            if restaurant.lifecycle_status in ["SUSPENDED", "ARCHIVED"]:
+            if db_rest.lifecycle_status in ["SUSPENDED", "ARCHIVED"]:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Restaurant '{payload.restaurantId}' is archived or suspended"
                 )
+            restaurant = CachedRestaurant(
+                id=db_rest.id,
+                lifecycle_status=db_rest.lifecycle_status,
+                owner_uid=db_rest.owner_uid,
+                owner_email=db_rest.owner_email
+            )
             _ORDER_RESTAURANT_CACHE[payload.restaurantId] = (now_mono, restaurant)
             _ORDER_RESTAURANT_CACHE[restaurant.id] = (now_mono, restaurant)
 
@@ -253,12 +278,26 @@ async def create_order(
                 res_taxes = await db.execute(
                     select(Tax).where((Tax.restaurant_id == restaurant.id) & (Tax.status == "ACTIVE"))
                 )
-                active_taxes = res_taxes.scalars().all()
+                raw_taxes = res_taxes.scalars().all()
+                active_taxes = [
+                    CachedTax(
+                        id=t.id,
+                        name=t.name,
+                        type=t.type,
+                        rate=float(t.rate or 0.0),
+                        fixed_amount=float(t.fixed_amount or 0.0),
+                        is_inclusive=bool(t.is_inclusive),
+                        status=t.status,
+                        applicable_order_types=list(t.applicable_order_types or []),
+                        applies_to=t.applies_to
+                    )
+                    for t in raw_taxes
+                ]
 
                 tax_cats_map: Dict[str, List[str]] = {}
                 tax_items_map: Dict[str, List[str]] = {}
-                if active_taxes:
-                    tax_ids = [t.id for t in active_taxes]
+                if raw_taxes:
+                    tax_ids = [t.id for t in raw_taxes]
                     c_res = await db.execute(select(TaxCategory.tax_id, TaxCategory.category_id).where(TaxCategory.tax_id.in_(tax_ids)))
                     for tid, cid in c_res.all():
                         tax_cats_map.setdefault(tid, []).append(cid)
@@ -677,8 +716,14 @@ async def update_order_eta(
                 r_obj = cached_r[1]
             if not r_obj:
                 res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
-                r_obj = res_r.scalar_one_or_none()
-                if r_obj:
+                db_r_obj = res_r.scalar_one_or_none()
+                if db_r_obj:
+                    r_obj = CachedRestaurant(
+                        id=db_r_obj.id,
+                        lifecycle_status=db_r_obj.lifecycle_status,
+                        owner_uid=db_r_obj.owner_uid,
+                        owner_email=db_r_obj.owner_email
+                    )
                     _ORDER_RESTAURANT_CACHE[order.restaurant_id] = (time.time(), r_obj)
             is_owner = r_obj and ((caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower()))
             if not is_owner:
