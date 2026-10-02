@@ -1,6 +1,7 @@
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -55,7 +56,6 @@ def format_menu_item_response(item: MenuItem) -> dict:
         "price": item.price,
         "image_url": item.image_url,
         "imageUrl": item.image_url,
-        "image": item.image_url,
         "is_available": item.is_available,
         "isAvailable": item.is_available,
         "is_vegetarian": item.is_vegetarian,
@@ -140,10 +140,15 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     Cached for 300s with instant invalidation on mutations to provide fast (<15ms) customer menu loading.
     """
     now_t = time.time()
+    cache_headers = {
+        "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=60",
+        "Vary": "Accept-Encoding"
+    }
+
     if restaurant_id in _MENU_CACHE:
         cached_ts, cached_menu = _MENU_CACHE[restaurant_id]
         if now_t - cached_ts < _MENU_CACHE_TTL:
-            return cached_menu
+            return JSONResponse(content=cached_menu, headers=cache_headers)
 
     if not restaurant_id.startswith("rest-"):
         try:
@@ -156,7 +161,7 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     if canonical_id in _MENU_CACHE:
         cached_ts, cached_menu = _MENU_CACHE[canonical_id]
         if now_t - cached_ts < _MENU_CACHE_TTL:
-            return cached_menu
+            return JSONResponse(content=cached_menu, headers=cache_headers)
 
     query_cats = select(MenuCategory).where(MenuCategory.restaurant_id == canonical_id).order_by(MenuCategory.sort_order)
     res_cats = await db.execute(query_cats)
@@ -190,7 +195,7 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     }
     _MENU_CACHE[restaurant_id] = (now_t, resp_data)
     _MENU_CACHE[canonical_id] = (now_t, resp_data)
-    return resp_data
+    return JSONResponse(content=resp_data, headers=cache_headers)
 
 @router.post("/{restaurant_id}/menu", status_code=status.HTTP_201_CREATED)
 async def create_menu_item(

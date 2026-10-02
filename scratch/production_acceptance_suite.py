@@ -19,8 +19,15 @@ async def run_suite():
 
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=20.0, follow_redirects=True) as client:
         # Phase 1 — Resolve Tenant
-        t0 = time.time()
-        res = await client.get("/api/v1/restaurants/public/resolve")
+        for attempt in range(3):
+            try:
+                t0 = time.time()
+                res = await client.get("/api/v1/restaurants/public/resolve")
+                break
+            except (httpx.ConnectError, httpx.ReadTimeout):
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(1.0)
         latency_resolve = int((time.time() - t0) * 1000)
         metrics["resolve"] = latency_resolve
         assert res.status_code == 200, f"Tenant resolve failed: {res.text}"
@@ -50,10 +57,10 @@ async def run_suite():
         metrics["tables"] = latency_tables
         assert res_tables.status_code == 200
         tables = res_tables.json()
-        table_01 = next((t for t in tables if "1" in str(t.get("tableNumber")) or "01" in str(t.get("tableNumber"))), tables[0])
-        table_id = table_01["id"]
-        table_num = table_01.get("tableNumber", "Table 01")
-        print(f"✅ 3. Table Identified: {table_num} (ID: {table_id}, Status: {table_01.get('status')}) ({latency_tables}ms)", flush=True)
+        avail_table = next((t for t in tables if t.get("status") == "AVAILABLE"), tables[0])
+        table_id = avail_table["id"]
+        table_num = avail_table.get("tableNumber") or "Table 04"
+        print(f"✅ 3. Table Identified: {table_num} (ID: {table_id}, Status: {avail_table.get('status')}) ({latency_tables}ms)", flush=True)
 
         # Table session
         res_sess = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{table_id}/session?table_number={table_num}")
