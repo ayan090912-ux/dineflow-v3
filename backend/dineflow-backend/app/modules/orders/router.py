@@ -260,6 +260,7 @@ async def create_order(
                     session_started_at=now_utc
                 )
                 db.add(new_sess)
+                await db.flush()
                 session_id = new_sess.id
         except Exception as sess_err:
             print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
