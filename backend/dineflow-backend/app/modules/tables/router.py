@@ -126,7 +126,7 @@ class UpdateTableSchema(BaseModel):
 import time
 
 _TABLES_CACHE: dict = {}
-_TABLES_CACHE_TTL: float = 8.0  # 8s cache for fast table state retrieval
+_TABLES_CACHE_TTL: float = 30.0  # 30s cache for fast table state retrieval
 
 def invalidate_tables_cache(restaurant_id: Optional[str] = None):
     global _TABLES_CACHE

@@ -118,7 +118,7 @@ async def create_category(
 import time
 
 _MENU_CACHE: dict = {}
-_MENU_CACHE_TTL: float = 30.0  # 30 seconds
+_MENU_CACHE_TTL: float = 60.0  # 60 seconds
 
 def invalidate_menu_cache(restaurant_id: Optional[str] = None):
     global _MENU_CACHE
@@ -163,8 +163,22 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
     formatted_items = [format_menu_item_response(item) for item in items]
 
+    formatted_cats = [
+        {
+            "id": c.id,
+            "restaurant_id": c.restaurant_id,
+            "restaurantId": c.restaurant_id,
+            "name": c.name,
+            "sort_order": c.sort_order,
+            "sortOrder": c.sort_order,
+            "is_enabled": c.is_enabled,
+            "isEnabled": c.is_enabled,
+        }
+        for c in categories
+    ]
+
     resp_data = {
-        "categories": categories,
+        "categories": formatted_cats,
         "items": formatted_items
     }
     _MENU_CACHE[restaurant_id] = (now_t, resp_data)

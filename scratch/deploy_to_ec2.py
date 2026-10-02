@@ -36,7 +36,7 @@ def run_ssm(commands, comment="Deploy Dinely updates"):
     )
     cmd_id = resp["Command"]["CommandId"]
     print(f"SSM Command sent: {cmd_id}")
-    for _ in range(60):
+    for _ in range(120):
         time.sleep(3)
         inv = ssm.get_command_invocation(CommandId=cmd_id, InstanceId="i-0997b0b381dfb3fd0")
         status = inv.get("Status")

@@ -1,3 +1,4 @@
+import time
 from typing import Optional, List, Any, Dict
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
@@ -111,6 +112,12 @@ def format_order_response(order: Order) -> dict:
     }
 
 
+_ORDER_RESTAURANT_CACHE: dict = {}
+_ORDER_RESTAURANT_CACHE_TTL: float = 60.0
+
+_ORDER_TAX_CACHE: dict = {}
+_ORDER_TAX_CACHE_TTL: float = 60.0
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_order(
     payload: CreateOrderSchema,
@@ -124,27 +131,39 @@ async def create_order(
         if not payload.items or len(payload.items) == 0:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order items cannot be empty")
 
-        # Strict Tenant Verification: Must exist in database and be active
-        query_rest = select(Restaurant).where(
-            Restaurant.deleted_at.is_(None),
-            or_(
-                Restaurant.id == payload.restaurantId,
-                Restaurant.slug == payload.restaurantId.lower(),
-                Restaurant.public_slug == payload.restaurantId.lower()
-            )
-        )
-        res_rest = await db.execute(query_rest)
-        restaurant = res_rest.scalar_one_or_none()
+        # Fast in-memory cache for Restaurant lookup
+        now_mono = time.time()
+        restaurant = None
+        cached_rest_entry = _ORDER_RESTAURANT_CACHE.get(payload.restaurantId) or _ORDER_RESTAURANT_CACHE.get(payload.restaurantId.lower())
+        if cached_rest_entry:
+            ts, cached_obj = cached_rest_entry
+            if now_mono - ts < _ORDER_RESTAURANT_CACHE_TTL:
+                restaurant = cached_obj
+
         if not restaurant:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Restaurant '{payload.restaurantId}' was not found"
+            # Strict Tenant Verification: Must exist in database and be active
+            query_rest = select(Restaurant).where(
+                Restaurant.deleted_at.is_(None),
+                or_(
+                    Restaurant.id == payload.restaurantId,
+                    Restaurant.slug == payload.restaurantId.lower(),
+                    Restaurant.public_slug == payload.restaurantId.lower()
+                )
             )
-        if restaurant.lifecycle_status in ["SUSPENDED", "ARCHIVED"]:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Restaurant '{payload.restaurantId}' is archived or suspended"
-            )
+            res_rest = await db.execute(query_rest)
+            restaurant = res_rest.scalar_one_or_none()
+            if not restaurant:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Restaurant '{payload.restaurantId}' was not found"
+                )
+            if restaurant.lifecycle_status in ["SUSPENDED", "ARCHIVED"]:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Restaurant '{payload.restaurantId}' is archived or suspended"
+                )
+            _ORDER_RESTAURANT_CACHE[payload.restaurantId] = (now_mono, restaurant)
+            _ORDER_RESTAURANT_CACHE[restaurant.id] = (now_mono, restaurant)
 
         # Tenant Authorization Check: If caller provides credentials, verify they belong to this restaurant
         if caller.is_authenticated and not caller.is_admin:
@@ -221,22 +240,28 @@ async def create_order(
         tax_breakdown = []
 
         try:
-            res_taxes = await db.execute(
-                select(Tax).where((Tax.restaurant_id == restaurant.id) & (Tax.status == "ACTIVE"))
-            )
-            active_taxes = res_taxes.scalars().all()
+            cached_tax_entry = _ORDER_TAX_CACHE.get(restaurant.id)
+            if cached_tax_entry and (now_mono - cached_tax_entry[0] < _ORDER_TAX_CACHE_TTL):
+                active_taxes, tax_cats_map, tax_items_map = cached_tax_entry[1]
+            else:
+                res_taxes = await db.execute(
+                    select(Tax).where((Tax.restaurant_id == restaurant.id) & (Tax.status == "ACTIVE"))
+                )
+                active_taxes = res_taxes.scalars().all()
 
-            tax_cats_map: Dict[str, List[str]] = {}
-            tax_items_map: Dict[str, List[str]] = {}
-            if active_taxes:
-                tax_ids = [t.id for t in active_taxes]
-                c_res = await db.execute(select(TaxCategory.tax_id, TaxCategory.category_id).where(TaxCategory.tax_id.in_(tax_ids)))
-                for tid, cid in c_res.all():
-                    tax_cats_map.setdefault(tid, []).append(cid)
+                tax_cats_map: Dict[str, List[str]] = {}
+                tax_items_map: Dict[str, List[str]] = {}
+                if active_taxes:
+                    tax_ids = [t.id for t in active_taxes]
+                    c_res = await db.execute(select(TaxCategory.tax_id, TaxCategory.category_id).where(TaxCategory.tax_id.in_(tax_ids)))
+                    for tid, cid in c_res.all():
+                        tax_cats_map.setdefault(tid, []).append(cid)
 
-                i_res = await db.execute(select(TaxMenuItem.tax_id, TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id.in_(tax_ids)))
-                for tid, mid in i_res.all():
-                    tax_items_map.setdefault(tid, []).append(mid)
+                    i_res = await db.execute(select(TaxMenuItem.tax_id, TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id.in_(tax_ids)))
+                    for tid, mid in i_res.all():
+                        tax_items_map.setdefault(tid, []).append(mid)
+
+                _ORDER_TAX_CACHE[restaurant.id] = (now_mono, (active_taxes, tax_cats_map, tax_items_map))
 
             calc = calculate_taxes(
                 items=items_list_dict,
@@ -295,6 +320,7 @@ async def create_order(
             eta_target_timestamp=None,
             items_json=items_list_dict,
             tax_breakdown_json=tax_breakdown,
+            created_at=now_utc,
         )
         db.add(new_order)
 
@@ -347,7 +373,6 @@ async def create_order(
 
         await db.commit()
         print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={restaurant.id} total={total}")
-        await db.refresh(new_order)
         resp_data = format_order_response(new_order)
 
         try:
