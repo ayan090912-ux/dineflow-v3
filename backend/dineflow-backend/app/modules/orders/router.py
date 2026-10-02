@@ -235,7 +235,6 @@ async def create_order(
         tbl_id = payload.tableId or f"tbl-{restaurant.id}-{(tbl_num).lower().replace(' ', '_')}"
 
         existing_tbl = None
-        # If explicit tableId provided, verify it belongs to this restaurant
         if payload.tableId:
             res_tbl_check = await db.execute(select(Table).where(Table.id == payload.tableId))
             existing_tbl = res_tbl_check.scalar_one_or_none()
@@ -244,8 +243,18 @@ async def create_order(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Table '{payload.tableId}' does not belong to restaurant '{restaurant.id}'"
                 )
+        else:
+            res_tbl_check = await db.execute(select(Table).where(
+                (Table.restaurant_id == restaurant.id) & 
+                ((Table.table_number == tbl_num) | (Table.table_number == f"Table {tbl_num}"))
+            ))
+            existing_tbl = res_tbl_check.scalar_one_or_none()
 
-        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id}-{int(now_utc.timestamp())}"
+        if existing_tbl:
+            tbl_id = existing_tbl.id
+            tbl_num = existing_tbl.table_number
+
+        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id}-{int(now_utc.timestamp() * 1000)}"
 
         try:
             from sqlalchemy import case
@@ -267,19 +276,22 @@ async def create_order(
 
             if matched_sess and matched_sess.status == "ACTIVE":
                 session_id = matched_sess.id
-            else:
-                new_sess_id = session_id if not matched_sess else f"sess-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
-                new_sess = TableSession(
-                    id=new_sess_id,
-                    restaurant_id=restaurant.id,
-                    table_id=tbl_id,
-                    table_number=tbl_num,
-                    status="ACTIVE",
-                    session_started_at=now_utc
-                )
-                db.add(new_sess)
-                await db.flush()
-                session_id = new_sess.id
+            elif existing_tbl:
+                try:
+                    async with db.begin_nested():
+                        new_sess = TableSession(
+                            id=session_id,
+                            restaurant_id=restaurant.id,
+                            table_id=tbl_id,
+                            table_number=tbl_num,
+                            status="ACTIVE",
+                            session_started_at=now_utc
+                        )
+                        db.add(new_sess)
+                        await db.flush()
+                        session_id = new_sess.id
+                except Exception as flush_err:
+                    print("[SESSION_CREATION_RACE_HANDLED]:", flush_err)
         except Exception as sess_err:
             print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
 

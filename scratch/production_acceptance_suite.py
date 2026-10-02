@@ -212,7 +212,12 @@ async def run_suite():
         res_close_sess = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{table_id}/close-session", headers=w_headers)
         print(f"Close session response: {res_close_sess.status_code} {res_close_sess.text}", flush=True)
         assert res_close_sess.status_code in [200, 201]
-        print(f"✅ 17. Table Session Closed -> Table 01 Reset to AVAILABLE", flush=True)
+
+        # Verify table status is reset to AVAILABLE
+        res_t_after = await client.get(f"/api/v1/restaurants/{rest_id}/tables")
+        t_after = next((t for t in res_t_after.json() if t["id"] == table_id), None)
+        assert t_after is not None and t_after.get("status") == "AVAILABLE", f"Table {table_num} status was not reset to AVAILABLE: {t_after}"
+        print(f"✅ 17. Table Session Closed -> {table_num} Reset to AVAILABLE (Status={t_after.get('status')})", flush=True)
 
         # Verification of Persistence
         res_check_ord = await client.get(f"/api/v1/orders/{order_id}", headers=k_headers)
