@@ -48,7 +48,14 @@ class SlidingWindowRateLimiter:
         self._lock = asyncio.Lock()
 
     def _get_rule(self, method: str, path: str) -> Tuple[str, int, int]:
+        # Exact match for restaurant creation endpoint
+        if method == "POST" and path.rstrip("/") == "/api/v1/restaurants":
+            return "/api/v1/restaurants", 10, 60
+
         for m, prefix, limit, window in RATE_LIMIT_RULES:
+            # Don't let root /api/v1/restaurants swallow sub-resource paths
+            if prefix == "/api/v1/restaurants" and path.rstrip("/") != "/api/v1/restaurants":
+                continue
             if (m == "*" or m == method) and path.startswith(prefix):
                 return prefix, limit, window
         return "default", DEFAULT_RATE_LIMIT[0], DEFAULT_RATE_LIMIT[1]

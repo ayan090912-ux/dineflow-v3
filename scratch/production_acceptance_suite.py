@@ -52,11 +52,13 @@ async def run_suite():
         tables = res_tables.json()
         table_01 = next((t for t in tables if "1" in str(t.get("tableNumber")) or "01" in str(t.get("tableNumber"))), tables[0])
         table_id = table_01["id"]
-        table_num = table_01.get("tableNumber", "01")
-        print(f"✅ 3. Table Identified: Table {table_num} (ID: {table_id}) ({latency_tables}ms)", flush=True)
+        table_num = table_01.get("tableNumber", "Table 01")
+        print(f"✅ 3. Table Identified: {table_num} (ID: {table_id}, Status: {table_01.get('status')}) ({latency_tables}ms)", flush=True)
 
         # Table session
         res_sess = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{table_id}/session?table_number={table_num}")
+        if res_sess.status_code not in [200, 201]:
+            print(f"Session creation failed: {res_sess.status_code} {res_sess.text}", flush=True)
         assert res_sess.status_code in [200, 201]
         session_id = res_sess.json().get("id") or res_sess.json().get("sessionId")
         print(f"✅ 4. Active Table Session Created: ID='{session_id}'", flush=True)
@@ -201,6 +203,7 @@ async def run_suite():
         print(f"✅ 16. Billing Payment Settled: Order ₹{order_total} == Invoice ₹{grand_total} == Payment ₹{paid_amount} (PAID)", flush=True)
 
         res_close_sess = await client.post(f"/api/v1/restaurants/{rest_id}/tables/{table_id}/close-session", headers=w_headers)
+        print(f"Close session response: {res_close_sess.status_code} {res_close_sess.text}", flush=True)
         assert res_close_sess.status_code in [200, 201]
         print(f"✅ 17. Table Session Closed -> Table 01 Reset to AVAILABLE", flush=True)
 
