@@ -79,6 +79,16 @@ async def db_session():
 
 
 
+from app.core.middlewares.rate_limit import limiter
+
+@pytest.fixture(scope="function", autouse=True)
+def bypass_rate_limiter(request, monkeypatch):
+    if "rate_limiting_triggers" in request.node.name:
+        return
+    async def mock_is_allowed(*args, **kwargs):
+        return True, 10000, 10000, 0
+    monkeypatch.setattr(limiter, "is_allowed", mock_is_allowed)
+
 @pytest.fixture(scope="function", autouse=True)
 def override_get_db(db_session):
     async def _get_db():
