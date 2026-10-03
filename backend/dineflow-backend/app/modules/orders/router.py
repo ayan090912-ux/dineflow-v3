@@ -261,7 +261,23 @@ async def create_order(
 
         try:
             from sqlalchemy import case
-            if tbl_id:
+            if payload.tableSessionId:
+                res_direct_sess = await db.execute(
+                    select(TableSession).where(
+                        (TableSession.restaurant_id == restaurant.id) &
+                        (TableSession.id == payload.tableSessionId) &
+                        (TableSession.status == "ACTIVE")
+                    )
+                )
+                direct_sess = res_direct_sess.scalar_one_or_none()
+                if direct_sess:
+                    actual_session_id = direct_sess.id
+                    if direct_sess.table_id and not tbl_id:
+                        tbl_id = direct_sess.table_id
+                    if direct_sess.table_number:
+                        tbl_num = direct_sess.table_number
+
+            if not actual_session_id and tbl_id:
                 query_sess = select(TableSession).where(
                     (TableSession.restaurant_id == restaurant.id) &
                     (

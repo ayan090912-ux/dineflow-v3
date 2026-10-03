@@ -67,14 +67,14 @@ TEST_TABLES = [
 async def db_session():
     async with engine.begin() as conn:
         await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
-        await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=TEST_TABLES))
+        await conn.run_sync(Base.metadata.create_all)
 
     async with TestingSessionLocal() as session:
         yield session
         await session.rollback()
 
     async with engine.begin() as conn:
-        await conn.run_sync(lambda c: Base.metadata.drop_all(c, tables=TEST_TABLES))
+        await conn.run_sync(Base.metadata.drop_all)
 
 
 
