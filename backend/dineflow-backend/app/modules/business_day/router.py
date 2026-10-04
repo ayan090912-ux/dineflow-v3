@@ -1,7 +1,7 @@
 import uuid
 import logging
-from datetime import datetime, timezone
-from typing import Optional, List
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, or_, func
@@ -15,10 +15,25 @@ from app.modules.orders.models import Order, Bill
 from app.modules.tables.models import Table, TableSession
 from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.websocket.manager import ws_manager
+from app.modules.admin.audit_service import AdminAuditLogger
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def compute_next_business_date(current_date_str: str) -> str:
+    """
+    Authoritative computation of next business date from a date formatted as '%d %b %Y' (e.g. '04 Oct 2026').
+    Safely advances the calendar day and supports cross-midnight operational shifts.
+    """
+    try:
+        dt = datetime.strptime(current_date_str.strip(), "%d %b %Y")
+        next_dt = dt + timedelta(days=1)
+        return next_dt.strftime("%d %b %Y")
+    except Exception:
+        now_utc = datetime.now(timezone.utc)
+        return (now_utc + timedelta(days=1)).strftime("%d %b %Y")
 
 
 async def _resolve_restaurant(restaurant_id: str, db: AsyncSession) -> Restaurant:
@@ -40,12 +55,20 @@ async def _resolve_restaurant(restaurant_id: str, db: AsyncSession) -> Restauran
 
 
 def _format_business_day(bday: BusinessDay) -> dict:
+    next_date = compute_next_business_date(bday.business_date) if bday.business_date else None
+    avg_order_val = round(bday.total_sales / bday.total_orders, 2) if bday.total_orders > 0 else 0.0
+
     return {
         "id": bday.id,
         "restaurant_id": bday.restaurant_id,
         "restaurantId": bday.restaurant_id,
         "business_date": bday.business_date,
+        "businessDate": bday.business_date,
         "date": bday.business_date,
+        "current_business_date": bday.business_date,
+        "currentBusinessDate": bday.business_date,
+        "next_business_date": next_date,
+        "nextBusinessDate": next_date,
         "status": bday.status,
         "opened_at": bday.opened_at.isoformat() if bday.opened_at else None,
         "openedAt": bday.opened_at.isoformat() if bday.opened_at else None,
@@ -81,9 +104,24 @@ def _format_business_day(bday: BusinessDay) -> dict:
         "cardSales": bday.card_sales,
         "upi_sales": bday.upi_sales,
         "upiSales": bday.upi_sales,
+        "average_order_value": avg_order_val,
+        "averageOrderValue": avg_order_val,
         "closing_notes": bday.closing_notes,
         "closingNotes": bday.closing_notes,
-        "summary": bday.summary_json or {},
+        "summary": bday.summary_json or {
+            "totalOrders": bday.total_orders,
+            "completedOrders": bday.completed_orders,
+            "cancelledOrders": bday.cancelled_orders,
+            "totalSales": bday.total_sales,
+            "foodSales": bday.food_sales,
+            "barSales": bday.bar_sales,
+            "cashSales": bday.cash_sales,
+            "cardSales": bday.card_sales,
+            "upiSales": bday.upi_sales,
+            "taxAmount": bday.tax_amount,
+            "discountAmount": bday.discount_amount,
+            "averageOrderValue": avg_order_val,
+        },
     }
 
 
@@ -103,24 +141,96 @@ async def get_current_business_day(
     res = await db.execute(query)
     current_bday = res.scalar_one_or_none()
 
-    # If no open business day exists, auto-initialize today's business day
     if not current_bday:
-        now_utc = datetime.now(timezone.utc)
-        today_str = now_utc.strftime("%d %b %Y")
-        new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
-        current_bday = BusinessDay(
-            id=new_id,
-            restaurant_id=rest.id,
-            business_date=today_str,
-            status="OPEN",
-            opened_at=now_utc,
-            opened_by=caller.email or caller.role or "System / Auto-Init",
+        # Check if restaurant has any existing closed business days
+        any_day_res = await db.execute(
+            select(BusinessDay).where(
+                BusinessDay.restaurant_id == rest.id
+            ).order_by(BusinessDay.closed_at.desc(), BusinessDay.opened_at.desc()).limit(1)
         )
-        db.add(current_bday)
-        await db.commit()
-        await db.refresh(current_bday)
+        latest_bday = any_day_res.scalar_one_or_none()
+        if not latest_bday:
+            # Brand new restaurant with no business day records at all: auto-initialize initial day
+            now_utc = datetime.now(timezone.utc)
+            today_str = now_utc.strftime("%d %b %Y")
+            new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
+            current_bday = BusinessDay(
+                id=new_id,
+                restaurant_id=rest.id,
+                business_date=today_str,
+                status="OPEN",
+                opened_at=now_utc,
+                opened_by=caller.email or caller.role or "System / Auto-Init",
+            )
+            db.add(current_bday)
+            await db.commit()
+            await db.refresh(current_bday)
+        else:
+            # Return the latest business day (which is currently CLOSED)
+            current_bday = latest_bday
 
-    return _format_business_day(current_bday)
+    formatted = _format_business_day(current_bday)
+
+    # Enrich with live operational counters
+    tbl_res = await db.execute(
+        select(func.count(Table.id)).where(Table.restaurant_id == rest.id, Table.status == "OCCUPIED")
+    )
+    active_tables_count = tbl_res.scalar() or 0
+    formatted["active_tables_count"] = active_tables_count
+    formatted["activeTablesCount"] = active_tables_count
+
+    sess_res = await db.execute(
+        select(func.count(TableSession.id)).where(TableSession.restaurant_id == rest.id, TableSession.status == "ACTIVE")
+    )
+    active_sessions_count = sess_res.scalar() or 0
+    formatted["active_sessions_count"] = active_sessions_count
+    formatted["activeSessionsCount"] = active_sessions_count
+
+    bills_res = await db.execute(
+        select(func.count(Bill.id)).where(
+            Bill.restaurant_id == rest.id,
+            or_(
+                Bill.status.in_(["OPEN", "PENDING", "BILL_REQUESTED", "PAYMENT_PENDING"]),
+                Bill.payment_status.in_(["UNPAID", "PAYMENT_PENDING", "PAYMENT_VERIFICATION_REQUIRED", "PENDING"])
+            ),
+            Bill.status.notin_(["CANCELLED", "PAID"])
+        )
+    )
+    unpaid_bills_count = bills_res.scalar() or 0
+    formatted["unpaid_bills_count"] = unpaid_bills_count
+    formatted["unpaidBillsCount"] = unpaid_bills_count
+
+    k_res = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.restaurant_id == rest.id,
+            Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+        )
+    )
+    kitchen_pending_count = k_res.scalar() or 0
+    formatted["kitchen_pending_count"] = kitchen_pending_count
+    formatted["kitchenPendingCount"] = kitchen_pending_count
+
+    b_res = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.restaurant_id == rest.id,
+            Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+        )
+    )
+    bar_pending_count = b_res.scalar() or 0
+    formatted["bar_pending_count"] = bar_pending_count
+    formatted["barPendingCount"] = bar_pending_count
+
+    w_res = await db.execute(
+        select(func.count(CustomerRequestModel.id)).where(
+            CustomerRequestModel.restaurant_id == rest.id,
+            CustomerRequestModel.status == "PENDING"
+        )
+    )
+    waiter_pending_count = w_res.scalar() or 0
+    formatted["waiter_pending_count"] = waiter_pending_count
+    formatted["waiterPendingCount"] = waiter_pending_count
+
+    return formatted
 
 
 @router.get("/precheck")
@@ -132,10 +242,11 @@ async def get_business_day_precheck(
     rest = await _resolve_restaurant(restaurant_id, db)
 
     # 1. Open Tables
-    tbl_res = await db.execute(
-        select(func.count(Table.id)).where(Table.restaurant_id == rest.id, Table.status == "OCCUPIED")
+    tbl_rows_res = await db.execute(
+        select(Table).where(Table.restaurant_id == rest.id, Table.status == "OCCUPIED")
     )
-    open_tables_count = tbl_res.scalar() or 0
+    occupied_tables = tbl_rows_res.scalars().all()
+    open_tables_count = len(occupied_tables)
 
     # 2. Active Table Sessions
     sess_res = await db.execute(
@@ -180,8 +291,8 @@ async def get_business_day_precheck(
     open_waiter_requests_count = w_res.scalar() or 0
 
     # 7. Unpaid Bills
-    bills_res = await db.execute(
-        select(func.count(Bill.id)).where(
+    bills_rows_res = await db.execute(
+        select(Bill).where(
             Bill.restaurant_id == rest.id,
             or_(
                 Bill.status.in_(["OPEN", "PENDING", "BILL_REQUESTED", "PAYMENT_PENDING"]),
@@ -190,7 +301,8 @@ async def get_business_day_precheck(
             Bill.status.notin_(["CANCELLED", "PAID"])
         )
     )
-    unpaid_bills_count = bills_res.scalar() or 0
+    unpaid_bills = bills_rows_res.scalars().all()
+    unpaid_bills_count = len(unpaid_bills)
 
     # Summary metrics today
     curr_bday_res = await db.execute(
@@ -212,14 +324,36 @@ async def get_business_day_precheck(
     total_sales_today = float(ord_row[1]) if ord_row else 0.0
 
     warnings = []
-    if open_tables_count > 0:
-        warnings.append(f"{open_tables_count} active dining table(s) currently occupied.")
+    blocking_reasons: List[Dict[str, Any]] = []
+
+    for t in occupied_tables:
+        label = f"Table {t.table_number} is still occupied."
+        warnings.append(label)
+        blocking_reasons.append({
+            "type": "TABLE",
+            "id": t.id,
+            "table_number": t.table_number,
+            "label": label,
+            "link": "/tables",
+        })
+
+    for b in unpaid_bills:
+        inv = b.invoice_number or b.id[:8]
+        label = f"Bill #{inv} for Table {b.table_number} is unpaid."
+        warnings.append(label)
+        blocking_reasons.append({
+            "type": "BILL",
+            "id": b.id,
+            "table_number": b.table_number,
+            "amount": b.grand_total,
+            "label": label,
+            "link": "/billing",
+        })
+
     if uncompleted_kitchen_count > 0:
         warnings.append(f"{uncompleted_kitchen_count} order(s) still in preparation in Kitchen KDS.")
     if uncompleted_bar_count > 0:
         warnings.append(f"{uncompleted_bar_count} beverage order(s) pending in Bar station.")
-    if unpaid_bills_count > 0:
-        warnings.append(f"{unpaid_bills_count} table bill(s) await cashier payment settlement.")
     if open_waiter_requests_count > 0:
         warnings.append(f"{open_waiter_requests_count} customer service request(s) open.")
 
@@ -245,6 +379,7 @@ async def get_business_day_precheck(
         "totalSalesToday": total_sales_today,
         "total_sales_today": total_sales_today,
         "warnings": warnings,
+        "blocking_reasons": blocking_reasons,
     }
 
 
@@ -287,12 +422,41 @@ async def close_business_day(
                 detail="No active open business day found. The current business day is already closed."
             )
 
+    # Precheck enforcement: if force_close is not set, verify that active tables / unpaid bills do not block closing
+    is_force_close = bool(payload.force_close or payload.forceCloseActiveTables)
+    if not is_force_close:
+        tbl_res = await db.execute(
+            select(func.count(Table.id)).where(Table.restaurant_id == rest.id, Table.status == "OCCUPIED")
+        )
+        occupied_count = tbl_res.scalar() or 0
+
+        bills_res = await db.execute(
+            select(func.count(Bill.id)).where(
+                Bill.restaurant_id == rest.id,
+                or_(
+                    Bill.status.in_(["OPEN", "PENDING", "BILL_REQUESTED", "PAYMENT_PENDING"]),
+                    Bill.payment_status.in_(["UNPAID", "PAYMENT_PENDING", "PAYMENT_VERIFICATION_REQUIRED", "PENDING"])
+                ),
+                Bill.status.notin_(["CANCELLED", "PAID"])
+            )
+        )
+        unpaid_count = bills_res.scalar() or 0
+
+        if occupied_count > 0 or unpaid_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot close day yet. {occupied_count} table(s) are occupied and {unpaid_count} bill(s) are unpaid. Please settle them or confirm force close."
+            )
+
     now_utc = datetime.now(timezone.utc)
     since_time = current_bday.opened_at
 
     # 2. Calculate authoritative operational and financial summary for the day
     orders_res = await db.execute(
-        select(Order).where(Order.restaurant_id == rest.id, Order.created_at >= since_time)
+        select(Order).where(
+            Order.restaurant_id == rest.id,
+            or_(Order.created_at >= since_time, Order.business_day_id == current_bday.id)
+        )
     )
     day_orders = orders_res.scalars().all()
 
@@ -307,7 +471,11 @@ async def close_business_day(
     bar_orders = 0
     tax_amount = 0.0
 
+    tables_served_set = set()
+
     for o in day_orders:
+        if o.table_id:
+            tables_served_set.add(o.table_id)
         if o.status != "CANCELLED":
             total_sales += o.total_amount or 0.0
             tax_amount += o.tax_amount or 0.0
@@ -338,6 +506,9 @@ async def close_business_day(
     cash_sales = sum(b.grand_total for b in paid_bills if b.payment_method == "CASH")
     card_sales = sum(b.grand_total for b in paid_bills if b.payment_method == "CARD")
     upi_sales = sum(b.grand_total for b in paid_bills if b.payment_method == "UPI")
+    discount_amount = sum(b.discount_amount for b in paid_bills)
+
+    avg_order_val = round(total_sales / total_orders, 2) if total_orders > 0 else 0.0
 
     # 3. Finalize current BusinessDay
     current_bday.status = "CLOSED"
@@ -352,15 +523,17 @@ async def close_business_day(
     current_bday.food_sales = food_sales
     current_bday.bar_sales = bar_sales
     current_bday.tax_amount = tax_amount
+    current_bday.discount_amount = discount_amount
     current_bday.cash_sales = cash_sales
     current_bday.card_sales = card_sales
     current_bday.upi_sales = upi_sales
-    current_bday.closing_notes = payload.closingNotes
+    current_bday.closing_notes = payload.closingNotes or payload.notes
     current_bday.summary_json = {
         "closedAt": now_utc.isoformat(),
         "closedBy": current_bday.closed_by,
         "totalOrders": total_orders,
         "completedOrders": completed_orders,
+        "cancelledOrders": cancelled_orders,
         "totalSales": total_sales,
         "foodSales": food_sales,
         "barSales": bar_sales,
@@ -368,6 +541,10 @@ async def close_business_day(
         "cardSales": card_sales,
         "upiSales": upi_sales,
         "taxAmount": tax_amount,
+        "discountAmount": discount_amount,
+        "tablesServed": len(tables_served_set),
+        "averageOrderValue": avg_order_val,
+        "paidBillsCount": len(paid_bills),
     }
 
     # 4. Clean Operational Reset for the NEXT business day (Non-destructive to history!)
@@ -375,7 +552,8 @@ async def close_business_day(
     await db.execute(
         update(Table).where(Table.restaurant_id == rest.id).values(
             status="AVAILABLE",
-            is_occupied=False
+            is_occupied=False,
+            active_session_id=None,
         )
     )
 
@@ -417,13 +595,45 @@ async def close_business_day(
     await db.refresh(current_bday)
 
     closed_formatted = _format_business_day(current_bday)
+    next_business_date = compute_next_business_date(current_bday.business_date)
+    closed_formatted["next_business_date"] = next_business_date
+    closed_formatted["nextBusinessDate"] = next_business_date
+    closed_formatted["previous_business_date"] = current_bday.business_date
+    closed_formatted["previousBusinessDate"] = current_bday.business_date
 
-    # 5. Broadcast DayClosed Realtime Event across all connected terminal sessions
+    # 5. Audit Log (Never log tokens or passwords)
+    AdminAuditLogger.log_action(
+        admin_uid=caller.uid or caller.email or "unknown",
+        action="DAY_CLOSED",
+        target_resource="BusinessDay",
+        target_id=current_bday.id,
+        details={
+            "restaurant_id": rest.id,
+            "business_day_id": current_bday.id,
+            "business_date": current_bday.business_date,
+            "actor_id": caller.uid or caller.email,
+            "actor_role": caller.role,
+            "total_sales": total_sales,
+            "total_orders": total_orders,
+        }
+    )
+    logger.info(
+        f"[AUDIT] DAY_CLOSED: restaurant_id={rest.id} business_day_id={current_bday.id} "
+        f"business_date={current_bday.business_date} actor={caller.email or caller.role}"
+    )
+
+    # 6. Broadcast Realtime Events across all connected terminals
+    event_id = f"evt-{uuid.uuid4().hex[:10]}"
     try:
         await ws_manager.broadcast_event(
             restaurant_id=rest.id,
-            event_type="DayClosed",
+            event_type="BusinessDayClosed",
             payload={
+                "event_id": event_id,
+                "restaurant_id": rest.id,
+                "business_day_id": current_bday.id,
+                "business_date": current_bday.business_date,
+                "next_business_date": next_business_date,
                 "closedDay": closed_formatted,
                 "timestamp": now_utc.isoformat(),
             },
@@ -431,8 +641,13 @@ async def close_business_day(
         )
         await ws_manager.broadcast_event(
             restaurant_id=rest.id,
-            event_type="BusinessDayClosed",
+            event_type="DayClosed",
             payload={
+                "event_id": event_id,
+                "restaurant_id": rest.id,
+                "business_day_id": current_bday.id,
+                "business_date": current_bday.business_date,
+                "next_business_date": next_business_date,
                 "closedDay": closed_formatted,
                 "timestamp": now_utc.isoformat(),
             },
@@ -446,6 +661,8 @@ async def close_business_day(
         "success": True,
         "message": f"Business Day {current_bday.business_date} successfully closed.",
         "closedDay": closed_formatted,
+        "nextBusinessDate": next_business_date,
+        "previousBusinessDate": current_bday.business_date,
     }
 
 
@@ -458,7 +675,7 @@ async def open_business_day(
 ):
     rest = await _resolve_restaurant(restaurant_id, db)
 
-    # Check if an open business day already exists
+    # 1. Check if an open business day already exists (Strictly idempotent!)
     query = select(BusinessDay).where(
         BusinessDay.restaurant_id == rest.id,
         BusinessDay.status == "OPEN"
@@ -469,26 +686,107 @@ async def open_business_day(
         return _format_business_day(existing)
 
     now_utc = datetime.now(timezone.utc)
-    today_str = now_utc.strftime("%d %b %Y")
+    
+    # 2. Authoritative determination of business date:
+    # A. If explicitly provided in payload and valid, use it
+    # B. Otherwise determine from last closed business day (+ 1 day) or current calendar date
+    chosen_date: Optional[str] = None
+    input_date = payload.business_date or payload.businessDate
+    if input_date and input_date.strip():
+        chosen_date = input_date.strip()
+    else:
+        # Check last closed day
+        last_closed_query = select(BusinessDay).where(
+            BusinessDay.restaurant_id == rest.id,
+            BusinessDay.status == "CLOSED"
+        ).order_by(BusinessDay.closed_at.desc(), BusinessDay.opened_at.desc()).limit(1)
+        last_closed_res = await db.execute(last_closed_query)
+        last_closed = last_closed_res.scalar_one_or_none()
+        if last_closed and last_closed.business_date:
+            chosen_date = compute_next_business_date(last_closed.business_date)
+        else:
+            chosen_date = now_utc.strftime("%d %b %Y")
+
     new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
     new_bday = BusinessDay(
         id=new_id,
         restaurant_id=rest.id,
-        business_date=today_str,
+        business_date=chosen_date,
         status="OPEN",
         opened_at=now_utc,
         opened_by=caller.email or caller.role or payload.openedBy or "Manager",
     )
     db.add(new_bday)
+
+    # Clean operational baseline for the new open day
+    await db.execute(
+        update(Table).where(Table.restaurant_id == rest.id).values(
+            status="AVAILABLE",
+            is_occupied=False,
+            active_session_id=None,
+        )
+    )
+    await db.execute(
+        update(TableSession).where(
+            TableSession.restaurant_id == rest.id,
+            TableSession.status == "ACTIVE"
+        ).values(
+            status="CLOSED",
+            session_closed_at=now_utc
+        )
+    )
+
     await db.commit()
     await db.refresh(new_bday)
 
     formatted = _format_business_day(new_bday)
+
+    # Audit Log
+    AdminAuditLogger.log_action(
+        admin_uid=caller.uid or caller.email or "unknown",
+        action="DAY_OPENED",
+        target_resource="BusinessDay",
+        target_id=new_bday.id,
+        details={
+            "restaurant_id": rest.id,
+            "business_day_id": new_bday.id,
+            "business_date": new_bday.business_date,
+            "actor_id": caller.uid or caller.email,
+            "actor_role": caller.role,
+        }
+    )
+    logger.info(
+        f"[AUDIT] DAY_OPENED: restaurant_id={rest.id} business_day_id={new_bday.id} "
+        f"business_date={new_bday.business_date} actor={caller.email or caller.role}"
+    )
+
+    # Broadcast Realtime Event
+    event_id = f"evt-{uuid.uuid4().hex[:10]}"
     try:
         await ws_manager.broadcast_event(
             restaurant_id=rest.id,
             event_type="BusinessDayOpened",
-            payload={"businessDay": formatted, "timestamp": now_utc.isoformat()},
+            payload={
+                "event_id": event_id,
+                "restaurant_id": rest.id,
+                "business_day_id": new_bday.id,
+                "business_date": new_bday.business_date,
+                "businessDay": formatted,
+                "timestamp": now_utc.isoformat()
+            },
+            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=rest.id,
+            event_type="DayOpened",
+            payload={
+                "event_id": event_id,
+                "restaurant_id": rest.id,
+                "business_day_id": new_bday.id,
+                "business_date": new_bday.business_date,
+                "businessDay": formatted,
+                "timestamp": now_utc.isoformat()
+            },
             target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR"]
         )
     except Exception as e:
@@ -507,7 +805,31 @@ async def get_business_day_history(
     query = select(BusinessDay).where(
         BusinessDay.restaurant_id == rest.id,
         BusinessDay.status == "CLOSED"
-    ).order_by(BusinessDay.closed_at.desc()).limit(30)
+    ).order_by(BusinessDay.closed_at.desc(), BusinessDay.opened_at.desc()).limit(30)
     res = await db.execute(query)
     days = res.scalars().all()
     return [_format_business_day(d) for d in days]
+
+
+@router.get("/history/{day_id}")
+async def get_historical_business_day_detail(
+    restaurant_id: str,
+    day_id: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    rest = await _resolve_restaurant(restaurant_id, db)
+    clean_day_id = (day_id or "").strip()
+    query = select(BusinessDay).where(
+        BusinessDay.restaurant_id == rest.id,
+        or_(
+            BusinessDay.id == clean_day_id,
+            BusinessDay.business_date == clean_day_id,
+        )
+    )
+    res = await db.execute(query)
+    bday = res.scalar_one_or_none()
+    if not bday:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historical business day record not found.")
+
+    return _format_business_day(bday)

@@ -90,6 +90,7 @@ import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloade
 import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
+import { DayManagementView } from './DayManagementView';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
 
@@ -107,7 +108,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   onNavigate,
 }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'workspace_settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings'>(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname.toLowerCase();
       if (p.includes('/menu')) return 'menu';
@@ -120,6 +121,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (p.includes('/waiter')) return 'waiter';
       if (p.includes('/kitchen')) return 'kitchen';
       if (p.includes('/bar')) return 'bar';
+      if (p.includes('/day-management') || p.includes('/daily-closing') || p.includes('/day') || p.includes('/closing')) return 'day_management';
       if (p.includes('/workspace_settings') || p.includes('/settings')) return 'workspace_settings';
     }
     return 'dashboard';
@@ -1569,6 +1571,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
                     { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
                     {
+                      id: 'day_management',
+                      label: 'Day Management',
+                      icon: <RotateCcw className="w-4 h-4 text-amber-400" />,
+                      badge: currentBusinessDay?.status === 'OPEN' ? 'OPEN' : 'CLOSED',
+                    },
+                    {
                       id: 'business_day',
                       label: 'Daily Closing',
                       icon: <Calendar className="w-4 h-4 text-amber-400" />,
@@ -1759,7 +1767,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'staff' && 'Employee Clock-In & Shifts'}
               {activeTab === 'inventory' && 'Raw Material Inventory'}
               {activeTab === 'billing' && 'Billing, Taxes & Invoices'}
-              {activeTab === 'business_day' && 'Business Day & Daily Closing'}
+              {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management & Daily Closing'}
               {activeTab === 'theme' && 'Brand Identity & Styling'}
               {activeTab === 'workspace_settings' && 'Terminals & Settings'}
             </h2>
@@ -1773,7 +1781,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'staff' && 'Employee profiles, shift schedules, role-based pin credentials, and clock-in status.'}
               {activeTab === 'inventory' && 'Track kitchen and bar stock levels, minimum reorder thresholds, and suppliers.'}
               {activeTab === 'billing' && 'Table checkouts, split bills, GST/tax management, and payment receipts.'}
-              {activeTab === 'business_day' && 'Shift register reconcile, cash float tracking, payment summaries, and daily Z-report closing.'}
+              {(activeTab === 'business_day' || activeTab === 'day_management') && 'Authoritative operational business-day lifecycle, shift register reconciliation, station prechecks, and daily closing.'}
               {activeTab === 'theme' && "Customize your restaurant's digital storefront, logo, accent colors, and typography."}
               {activeTab === 'workspace_settings' && 'Manage active operational modules, terminal access URLs, and branch configuration.'}
             </p>
@@ -4201,389 +4209,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           />
         )}
 
-        {/* Tab: Business Day & Daily Closing */}
-        {activeTab === 'business_day' && (
-          <div className="space-y-6">
-            {/* Live Business Day Overview Banner */}
-            {(() => {
-              const openBday = currentBusinessDay;
-              const dayOrders = orders.filter(
-                (o) => o.restaurantId === currentRestaurant?.id && (openBday ? o.businessDayId === openBday.id || new Date(o.createdAt).getTime() >= new Date(openBday.openedAt).getTime() : true)
-              );
-              const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
-              const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
-              const foodOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
-              const barOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'));
-
-              let foodSales = 0;
-              let barSales = 0;
-              dayOrders.forEach((o) => {
-                if (o.status !== 'CANCELLED') {
-                  o.items.forEach((item) => {
-                    const itemTotal = item.price * item.quantity;
-                    if (getFulfillmentStation(item) === 'BAR') barSales += itemTotal;
-                    else foodSales += itemTotal;
-                  });
-                }
-              });
-              const totalSales = foodSales + barSales;
-
-              return (
-                <>
-                  <Card className="bg-[#12151b] border-[#1e232e] p-6 space-y-6 rounded-xl shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1e232e] pb-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                            <Calendar className="w-5 h-5 text-emerald-400" /> Business Day: {currentBusinessDay?.date || 'Today'}
-                          </h3>
-                          <Badge variant={currentBusinessDay?.status === 'OPEN' ? 'success' : 'warning'} className="font-mono">
-                            {currentBusinessDay?.status === 'OPEN' ? 'STATUS: OPEN' : 'STATUS: CLOSED'}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Operational summary and sales ledger for current business day.
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {currentBusinessDay?.status === 'OPEN' ? (
-                          <Button
-                            variant="danger"
-                            onClick={() => setIsCloseDayModalOpen(true)}
-                            className="text-xs font-semibold py-2 px-4"
-                          >
-                            <span>CLOSE BUSINESS DAY 🌅</span>
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="brand"
-                            onClick={async () => {
-                              await api.openBusinessDay(currentRestaurant?.id, currentUser?.name);
-                              addToast('success', 'New Business Day Opened ☀️', 'Now recording orders for new business day.');
-                              await loadData();
-                            }}
-                            className="text-xs font-semibold py-2 px-4"
-                          >
-                            <span>OPEN NEW BUSINESS DAY ☀️</span>
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono">
-                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Sales Today</span>
-                        <p className="text-2xl font-bold text-emerald-400 mt-1">{formatCurrency(totalSales, theme.currency)}</p>
-                        <span className="text-[10px] text-slate-400">{dayOrders.length} Total Orders</span>
-                      </div>
-
-                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Food Sales</span>
-                        <p className="text-2xl font-bold text-white mt-1">{formatCurrency(foodSales, theme.currency)}</p>
-                        <span className="text-[10px] text-emerald-400">{foodOrders.length} Food Orders</span>
-                      </div>
-
-                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Bar Sales</span>
-                        <p className="text-2xl font-bold text-purple-400 mt-1">{formatCurrency(barSales, theme.currency)}</p>
-                        <span className="text-[10px] text-purple-300">{barOrders.length} Bar Orders</span>
-                      </div>
-
-                      <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e]">
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Completed vs Cancelled</span>
-                        <p className="text-2xl font-bold text-sky-400 mt-1">{completed.length} / {cancelled.length}</p>
-                        <span className="text-[10px] text-slate-400">{completed.length} Delivered</span>
-                      </div>
-                    </div>
-                  </Card>
-
-                  {/* Historical Daily Summaries Table */}
-                  <Card className="bg-[#12151b] border-[#1e232e] p-6 space-y-4 rounded-xl shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-base font-bold text-white flex items-center gap-2">
-                        <History className="w-5 h-5 text-emerald-400" /> Daily Summary History Ledger
-                      </h3>
-                      <Badge variant="outline" className="border-[#1e232e] text-slate-300 font-mono">
-                        {businessDayHistory.length} Past Days Saved
-                      </Badge>
-                    </div>
-
-                    {businessDayHistory.length === 0 ? (
-                      <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-dashed border-[#1e232e] text-xs text-slate-400">
-                        No closed business day history records yet. When a business day is closed, its summary report will be archived here.
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs font-mono">
-                          <thead>
-                            <tr className="border-b border-[#1e232e] text-slate-400 uppercase text-[10px]">
-                              <th className="pb-3 px-3">Date</th>
-                              <th className="pb-3 px-3">Status</th>
-                              <th className="pb-3 px-3">Total Orders</th>
-                              <th className="pb-3 px-3">Food Sales</th>
-                              <th className="pb-3 px-3">Bar Sales</th>
-                              <th className="pb-3 px-3">Total Sales</th>
-                              <th className="pb-3 px-3 text-right">Closed By</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[#1e232e]">
-                            {businessDayHistory.map((b) => (
-                              <tr key={b.id} className="hover:bg-[#141822]/60 transition-colors">
-                                <td className="py-3 px-3 font-bold text-white">{b.date}</td>
-                                <td className="py-3 px-3">
-                                  <Badge variant="outline" className="text-[10px] border-[#1e232e] text-slate-300">
-                                    {b.status}
-                                  </Badge>
-                                </td>
-                                <td className="py-3 px-3 text-slate-300">{b.summary?.totalOrders || 0}</td>
-                                <td className="py-3 px-3 text-emerald-400">{formatCurrency(b.summary?.foodSales || 0, theme.currency)}</td>
-                                <td className="py-3 px-3 text-purple-400">{formatCurrency(b.summary?.barSales || 0, theme.currency)}</td>
-                                <td className="py-3 px-3 font-bold text-emerald-400">{formatCurrency(b.summary?.totalSales || 0, theme.currency)}</td>
-                                <td className="py-3 px-3 text-right text-slate-400">{b.closedBy || 'Owner'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </Card>
-                </>
-              );
-            })()}
-          </div>
+        {/* Tab: Business Day & Day Management */}
+        {(activeTab === 'business_day' || activeTab === 'day_management') && (
+          <DayManagementView
+            currentRestaurant={currentRestaurant}
+            currentBusinessDay={currentBusinessDay}
+            businessDayHistory={businessDayHistory}
+            orders={orders}
+            tables={tables}
+            bills={bills}
+            theme={theme}
+            currentUser={currentUser}
+            onNavigateTab={(tab) => setActiveTab(tab as any)}
+            onRefreshData={loadData}
+            addToast={addToast}
+          />
         )}
       </main>
-
-      {/* Close Business Day Confirmation Modal */}
-      <Modal
-        isOpen={isCloseDayModalOpen}
-        onClose={() => setIsCloseDayModalOpen(false)}
-        title="Close Business Day Confirmation"
-        maxWidth="md"
-      >
-        <div className="space-y-4 font-sans">
-          {/* Header Notice */}
-          <div className="p-4 bg-amber-950/30 border border-amber-800/40 rounded-xl space-y-1 text-amber-200">
-            <h4 className="font-bold text-sm flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400" /> End-of-Day Operating Cycle
-            </h4>
-            <p className="text-xs text-amber-300/80">
-              Closing the business day permanently seals daily sales, archives operational records, and resets active tables and station queues for the next business day without destroying historical records.
-            </p>
-          </div>
-
-          {/* Operational Pre-Check Checklist (Phase 16) */}
-          <div className="space-y-2">
-            <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-              <span>Operational Pre-Check</span>
-              {dayClosePrecheck && (
-                <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
-                  dayClosePrecheck.warning_count > 0
-                    ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                }`}>
-                  {dayClosePrecheck.warning_count > 0 ? `${dayClosePrecheck.warning_count} active items` : 'All clear'}
-                </span>
-              )}
-            </h5>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <div className="p-2.5 bg-[#0e1117] border border-[#1e232e] rounded-lg">
-                <span className="text-[10px] text-slate-400 uppercase font-mono block">Open Tables</span>
-                <span className={`text-base font-bold font-mono ${
-                  (dayClosePrecheck?.open_tables_count || 0) > 0 ? 'text-amber-400' : 'text-slate-300'
-                }`}>
-                  {dayClosePrecheck?.open_tables_count ?? tables.filter(t => t.status === 'OCCUPIED' || t.isOccupied).length}
-                </span>
-              </div>
-
-              <div className="p-2.5 bg-[#0e1117] border border-[#1e232e] rounded-lg">
-                <span className="text-[10px] text-slate-400 uppercase font-mono block">Active Orders</span>
-                <span className={`text-base font-bold font-mono ${
-                  (dayClosePrecheck?.active_orders_count || 0) > 0 ? 'text-amber-400' : 'text-slate-300'
-                }`}>
-                  {dayClosePrecheck?.active_orders_count ?? orders.filter(o => o.status === 'PENDING' || o.status === 'PREPARING').length}
-                </span>
-              </div>
-
-              <div className="p-2.5 bg-[#0e1117] border border-[#1e232e] rounded-lg">
-                <span className="text-[10px] text-slate-400 uppercase font-mono block">Kitchen Tickets</span>
-                <span className={`text-base font-bold font-mono ${
-                  (dayClosePrecheck?.active_kitchen_tickets_count || 0) > 0 ? 'text-amber-400' : 'text-slate-300'
-                }`}>
-                  {dayClosePrecheck?.active_kitchen_tickets_count ?? orders.filter(o => o.kitchenStatus === 'PREPARING' || o.kitchenStatus === 'PENDING').length}
-                </span>
-              </div>
-
-              <div className="p-2.5 bg-[#0e1117] border border-[#1e232e] rounded-lg">
-                <span className="text-[10px] text-slate-400 uppercase font-mono block">Bar Tickets</span>
-                <span className={`text-base font-bold font-mono ${
-                  (dayClosePrecheck?.active_bar_tickets_count || 0) > 0 ? 'text-amber-400' : 'text-slate-300'
-                }`}>
-                  {dayClosePrecheck?.active_bar_tickets_count ?? orders.filter(o => o.barStatus === 'PREPARING' || o.barStatus === 'PENDING').length}
-                </span>
-              </div>
-
-              <div className="p-2.5 bg-[#0e1117] border border-[#1e232e] rounded-lg">
-                <span className="text-[10px] text-slate-400 uppercase font-mono block">Waiter Calls</span>
-                <span className={`text-base font-bold font-mono ${
-                  (dayClosePrecheck?.open_waiter_requests_count || 0) > 0 ? 'text-amber-400' : 'text-slate-300'
-                }`}>
-                  {dayClosePrecheck?.open_waiter_requests_count ?? 0}
-                </span>
-              </div>
-
-              <div className="p-2.5 bg-[#0e1117] border border-[#1e232e] rounded-lg">
-                <span className="text-[10px] text-slate-400 uppercase font-mono block">Unpaid Bills</span>
-                <span className={`text-base font-bold font-mono ${
-                  (dayClosePrecheck?.unpaid_bills_count || 0) > 0 ? 'text-amber-400' : 'text-slate-300'
-                }`}>
-                  {dayClosePrecheck?.unpaid_bills_count ?? 0}
-                </span>
-              </div>
-            </div>
-
-            {dayClosePrecheck && dayClosePrecheck.warning_count > 0 && (
-              <p className="text-[11px] text-amber-300/80 bg-amber-500/5 p-2 rounded border border-amber-500/15">
-                ℹ️ Note: Proceeding will safely finalize all active tables and open tickets into the closed shift record, cleanly preparing your restaurant for the next day.
-              </p>
-            )}
-          </div>
-
-          {/* Business Day Summary */}
-          {(() => {
-            const openBday = currentBusinessDay;
-            const dayOrders = orders.filter(
-              (o) => o.restaurantId === currentRestaurant?.id && (openBday ? o.businessDayId === openBday.id || new Date(o.createdAt).getTime() >= new Date(openBday.openedAt).getTime() : true)
-            );
-            const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
-            const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
-            const foodOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
-            const barOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'));
-
-            let foodSales = 0;
-            let barSales = 0;
-            dayOrders.forEach((o) => {
-              if (o.status !== 'CANCELLED') {
-                o.items.forEach((item) => {
-                  const itemTotal = item.price * item.quantity;
-                  if (getFulfillmentStation(item) === 'BAR') barSales += itemTotal;
-                  else foodSales += itemTotal;
-                });
-              }
-            });
-            const totalSales = foodSales + barSales;
-
-            return (
-              <div className="space-y-2 bg-[#0e1117] border border-[#1e232e] p-4 rounded-xl text-xs font-mono">
-                <div className="flex justify-between items-center pb-2 border-b border-[#1e232e]">
-                  <span className="text-slate-400">Business Date:</span>
-                  <span className="font-bold text-white">{currentBusinessDay?.date || 'Today'}</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-400">Total Orders Processed:</span>
-                  <span className="font-bold text-white">{dayOrders.length} ({completed.length} completed, {cancelled.length} cancelled)</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-400">Food Orders / Sales:</span>
-                  <span className="font-bold text-emerald-400">{foodOrders.length} orders • {formatCurrency(foodSales, theme.currency)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-400">Bar Orders / Sales:</span>
-                  <span className="font-bold text-purple-400">{barOrders.length} orders • {formatCurrency(barSales, theme.currency)}</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-[#1e232e] text-sm">
-                  <span className="font-bold text-white">EXPECTED CLOSING TOTAL:</span>
-                  <span className="font-bold text-emerald-400 text-base">{formatCurrency(totalSales, theme.currency)}</span>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Multi-Stage UX Status Feedback (Phase 28) */}
-          {dayCloseStage !== 'IDLE' && (
-            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-center space-y-1.5 animate-pulse">
-              <div className="flex items-center justify-center gap-2 font-bold text-xs text-white">
-                <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                <span>
-                  {dayCloseStage === 'CLOSING' && 'Closing business day in database...'}
-                  {dayCloseStage === 'RESETTING' && 'Business Day Closed. Preparing next business day...'}
-                  {dayCloseStage === 'READY' && 'Restaurant Ready! 🚀'}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 font-mono">
-                {dayCloseStage === 'CLOSING' && 'Archiving transactions & financial totals'}
-                {dayCloseStage === 'RESETTING' && 'Resetting live operational tables & queues'}
-                {dayCloseStage === 'READY' && 'New business day opened cleanly'}
-              </p>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              variant="outline"
-              disabled={dayCloseStage !== 'IDLE'}
-              onClick={() => setIsCloseDayModalOpen(false)}
-              className="border-slate-800 text-slate-300"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="brand"
-              disabled={dayCloseStage !== 'IDLE' || isClosingDayLoading}
-              onClick={async () => {
-                setIsClosingDayLoading(true);
-                try {
-                  setDayCloseStage('CLOSING');
-                  await api.closeBusinessDay(currentRestaurant?.id, currentUser?.name);
-                  setDayCloseStage('RESETTING');
-
-                  // Immediate non-destructive operational reset in memory
-                  api.invalidateQueryCache('tables');
-                  api.invalidateQueryCache('active-sessions');
-                  api.invalidateQueryCache('orders');
-                  setTables((prev) =>
-                    prev.map((t) => ({
-                      ...t,
-                      status: 'AVAILABLE',
-                      isOccupied: false,
-                      activeSessionId: undefined,
-                    }))
-                  );
-                  setActiveSessions([]);
-                  setOrders((prev) =>
-                    prev.map((o) => (o.status !== 'CANCELLED' ? { ...o, status: 'COMPLETED' } : o))
-                  );
-
-                  setDayCloseStage('READY');
-                  addToast('success', 'Business Day Closed 🌅', 'Daily summary stored safely. Next business day ready.');
-
-                  setTimeout(async () => {
-                    setIsCloseDayModalOpen(false);
-                    setDayCloseStage('IDLE');
-                    await loadData();
-                  }, 1200);
-                } catch (err: any) {
-                  setDayCloseStage('IDLE');
-                  addToast('error', 'Closing Error', err.message || 'Failed to close business day');
-                } finally {
-                  setIsClosingDayLoading(false);
-                }
-              }}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-bold"
-            >
-              {dayCloseStage === 'CLOSING'
-                ? 'Closing Day...'
-                : dayCloseStage === 'RESETTING'
-                ? 'Preparing Next Day...'
-                : dayCloseStage === 'READY'
-                ? 'Restaurant Ready!'
-                : 'CONFIRM & CLOSE BUSINESS DAY'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* QR Code Modal */}
       <Modal
