@@ -242,6 +242,57 @@ async def unhandled_exception_handler(request, exc):
 
 from sqlalchemy import text
 from app.core.database.connection import AsyncSessionLocal
+import os
+import subprocess
+
+_CACHED_COMMIT_SHA: str | None = None
+
+def get_git_commit() -> str:
+    global _CACHED_COMMIT_SHA
+    if _CACHED_COMMIT_SHA:
+        return _CACHED_COMMIT_SHA
+
+    # 1. Environment variable
+    commit = os.environ.get("GIT_COMMIT_SHA") or os.environ.get("COMMIT_SHA")
+    if commit and commit.strip():
+        _CACHED_COMMIT_SHA = commit.strip()
+        return _CACHED_COMMIT_SHA
+
+    # 2. File in app root or candidate paths
+    candidate_paths = [
+        os.path.join(os.path.dirname(__file__), "..", ".git_commit"),
+        os.path.join(os.path.dirname(__file__), ".git_commit"),
+        "/app/.git_commit",
+        ".git_commit"
+    ]
+    for p in candidate_paths:
+        try:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        _CACHED_COMMIT_SHA = content
+                        return _CACHED_COMMIT_SHA
+        except Exception:
+            pass
+
+    # 3. Direct git query
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=os.path.dirname(__file__)
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            _CACHED_COMMIT_SHA = res.stdout.strip()
+            return _CACHED_COMMIT_SHA
+    except Exception:
+        pass
+
+    _CACHED_COMMIT_SHA = "unknown"
+    return _CACHED_COMMIT_SHA
 
 # Health & Readiness checks
 @app.get("/healthz")
@@ -252,7 +303,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": settings.APP_VERSION,
-        "commit": "v3-hardening-prod-1"
+        "commit": get_git_commit()
     }
 
 @app.get("/readyz")
@@ -271,7 +322,8 @@ async def readiness_check():
     return {
         "status": "ready" if db_status == "connected" else "degraded",
         "database": db_status,
-        "version": settings.APP_VERSION
+        "version": settings.APP_VERSION,
+        "commit": get_git_commit()
     }
 
 from app.modules.restaurants.router import router as restaurant_router

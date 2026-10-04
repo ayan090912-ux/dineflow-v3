@@ -18,6 +18,7 @@ services:
       - FIREBASE_PROJECT_ID=dinely-cd6cd
       - AWS_REGION=ap-south-1
       - AWS_S3_BUCKET=${AWS_S3_BUCKET:-dinely-production-uploads}
+      - GIT_COMMIT_SHA=${GIT_COMMIT_SHA:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 10s
