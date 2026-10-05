@@ -235,22 +235,27 @@ class RealTimeEventBus {
   public connect(restaurantId: string, role: string = 'CUSTOMER', tableSessionId?: string, explicitToken?: string, channel?: string) {
     if (!restaurantId) return;
 
+    const cleanRest = restaurantId.trim();
+    const cleanRole = (role || 'CUSTOMER').trim().toUpperCase();
+    const normalizedRole = cleanRole === 'RESTAURANT_OWNER' ? 'OWNER' : cleanRole;
+    const currentNormalizedRole = (this.currentRole || 'CUSTOMER').trim().toUpperCase() === 'RESTAURANT_OWNER' ? 'OWNER' : (this.currentRole || 'CUSTOMER').trim().toUpperCase();
+
+    // Prevent redundant socket recreation if already connected or connecting to this tenant & role
     if (
       this.ws &&
-      this.currentRestaurantId === restaurantId &&
-      this.currentRole === role &&
-      this.currentTableSessionId === tableSessionId &&
-      (!explicitToken || this.currentExplicitToken === explicitToken) &&
-      (!channel || this.currentChannel === channel) &&
-      this.ws.readyState === WebSocket.OPEN
+      (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) &&
+      this.currentRestaurantId === cleanRest &&
+      currentNormalizedRole === normalizedRole &&
+      this.currentTableSessionId === (tableSessionId || null) &&
+      (!channel || this.currentChannel === channel)
     ) {
       return;
     }
 
     this.disconnect();
 
-    this.currentRestaurantId = restaurantId;
-    this.currentRole = role;
+    this.currentRestaurantId = cleanRest;
+    this.currentRole = normalizedRole;
     this.currentTableSessionId = tableSessionId || null;
     this.currentChannel = channel || null;
     if (explicitToken !== undefined) {
@@ -263,7 +268,7 @@ class RealTimeEventBus {
         if (this.channel) {
           this.channel.close();
         }
-        this.channel = new BroadcastChannel(`dinely_realtime_${restaurantId}`);
+        this.channel = new BroadcastChannel(`dinely_realtime_${cleanRest}`);
         this.channel.onmessage = (e) => {
           if (e.data && e.data.type) {
             this.notifyListeners(e.data, false);
@@ -276,18 +281,22 @@ class RealTimeEventBus {
 
     this.setStatus(this.reconnectAttempts > 0 ? 'RECONNECTING' : 'CONNECTING');
 
-    const wsUrl = getWebSocketUrl(restaurantId, role, tableSessionId, this.currentExplicitToken || undefined, this.currentChannel || undefined);
+    const wsUrl = getWebSocketUrl(cleanRest, normalizedRole, tableSessionId, this.currentExplicitToken || undefined, this.currentChannel || undefined);
     console.log('[WS_CONNECTING] URL:', wsUrl.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]'));
 
     try {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('[WS_CONNECTED] Scoped to restaurant:', restaurantId, 'role:', role, 'channel:', this.currentChannel || 'auto');
+        console.log('[WS_CONNECTED] Scoped to restaurant:', cleanRest, 'role:', normalizedRole, 'channel:', this.currentChannel || 'auto');
         const wasReconnecting = this.reconnectAttempts > 0;
         this.setStatus('CONNECTED');
         this.reconnectAttempts = 0;
         this.consecutiveAuthFailures = 0;
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
 
         if (this.pingInterval) clearInterval(this.pingInterval);
         this.pingInterval = setInterval(() => {
@@ -299,7 +308,7 @@ class RealTimeEventBus {
         if (wasReconnecting) {
           this.notifyListeners({
             type: 'RECONNECTED',
-            restaurantId,
+            restaurantId: cleanRest,
             timestamp: new Date().toISOString(),
           }, false);
         }
@@ -347,7 +356,10 @@ class RealTimeEventBus {
 
       this.ws.onclose = async (event: CloseEvent) => {
         this.setStatus('DISCONNECTED');
-        if (this.pingInterval) clearInterval(this.pingInterval);
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
+        }
 
         // If closed with code 1008 (Unauthorized / token expired), attempt token refresh
         if (event.code === 1008) {
@@ -392,13 +404,13 @@ class RealTimeEventBus {
         this.reconnectAttempts++;
 
         // Bound maximum reconnect attempts across all network errors
-        if (this.reconnectAttempts > 8) {
+        if (this.reconnectAttempts > 6) {
           console.warn('[WS_RECONNECT_CEILING] Halting automatic WebSocket reconnection due to maximum attempts reached.');
           this.setStatus('DISCONNECTED');
           return;
         }
 
-        const backoffMs = Math.min(1000 * Math.pow(1.4, Math.min(this.reconnectAttempts, 6)) + Math.random() * 300, 8000);
+        const backoffMs = Math.min(2000 * Math.pow(1.5, Math.min(this.reconnectAttempts, 5)), 10000);
         console.log(`[WS_DISCONNECTED] Reconnecting attempt #${this.reconnectAttempts} in ${Math.round(backoffMs)}ms... (code: ${event.code})`);
         this.setStatus('RECONNECTING');
 
@@ -416,7 +428,7 @@ class RealTimeEventBus {
         }, backoffMs);
       };
 
-      this.ws.onerror = (err) => {
+      this.ws.onerror = (_err) => {
         console.warn('[WS_ERROR]: Network or socket issue encountered');
       };
     } catch (e) {
@@ -447,12 +459,23 @@ class RealTimeEventBus {
   }
 
   public disconnect() {
-    if (this.pingInterval) clearInterval(this.pingInterval);
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     if (this.ws) {
+      // Detach all handlers before closing to prevent unwanted onclose event execution
+      this.ws.onopen = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.onmessage = null;
       try {
-        this.ws.close();
+        this.ws.close(1000, 'Intentional disconnect');
       } catch (e) {}
       this.ws = null;
     }

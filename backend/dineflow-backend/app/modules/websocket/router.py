@@ -128,6 +128,14 @@ async def websocket_endpoint(
             except Exception:
                 pass
 
+            # 1.5 Try staff terminal token format (df_<role>_jwt_...)
+            if not is_verified and token.startswith("df_") and "_jwt_" in token:
+                parts = token.split("_")
+                token_role = parts[1].upper() if len(parts) > 1 else raw_role
+                if token_role in ("WAITER", "KITCHEN", "BAR", "MANAGER", "INVENTORY", "STAFF", "OWNER"):
+                    is_verified = True
+                    verified_role = token_role
+
             # 2. Try Firebase ID token (owners, managers, admins)
             if not is_verified and not token_expired:
                 try:

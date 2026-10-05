@@ -663,6 +663,38 @@ async def close_table_session(
     res_sess = await db.execute(query_sess)
     active_sesses = res_sess.scalars().all()
 
+    # Financial Safety (Section 9): Check for active unpaid bills
+    all_target_session_ids = [s.id for s in active_sesses]
+    if target_session_id and target_session_id not in all_target_session_ids:
+        all_target_session_ids.append(target_session_id)
+
+    try:
+        from app.modules.orders.models import Bill
+        from sqlalchemy import or_
+        bill_conditions = []
+        if all_target_session_ids:
+            bill_conditions.append(Bill.table_session_id.in_(all_target_session_ids))
+        bill_conditions.append((Bill.table_id == tbl.id) | (Bill.table_number == tbl.table_number))
+
+        query_unpaid = select(Bill).where(
+            Bill.restaurant_id.in_(search_rest_ids),
+            or_(*bill_conditions),
+            Bill.payment_status != "PAID",
+            ~Bill.status.in_(["PAID", "CLOSED", "CANCELLED", "VOID"])
+        )
+        res_unpaid = await db.execute(query_unpaid)
+        unpaid_bills = res_unpaid.scalars().all()
+        if unpaid_bills:
+            ub = unpaid_bills[0]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot close table {tbl.table_number}: Bill #{ub.id} is unpaid (total: {ub.grand_total}, status: {ub.payment_status or ub.status}). Settle payment before closing table."
+            )
+    except HTTPException:
+        raise
+    except Exception as bill_err:
+        print("[BILL_VALIDATION_NOTICE]:", bill_err)
+
     closed_session_ids = []
     for sess in active_sesses:
         sess.status = "CLOSED"

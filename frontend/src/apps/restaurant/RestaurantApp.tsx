@@ -735,12 +735,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       }
     });
 
-    const unsubStatus = realtimeBus.subscribeStatus((status) => {
-      if (status === 'CONNECTED') {
-        loadData(false);
-      }
-    });
-
     // Gentle fallback sync every 60 seconds (replaces destructive 5s full-reload loop)
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
@@ -751,7 +745,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
     return () => {
       unsubscribe();
-      unsubStatus();
       clearInterval(interval);
     };
   }, [activeRestaurant?.id, currentRestaurant?.id]);

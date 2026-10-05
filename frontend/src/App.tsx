@@ -267,7 +267,7 @@ function AppContent() {
     return () => {
       isMounted = false;
     };
-  }, [domainResolution, cleanPath]);
+  }, [domainResolution]);
 
   // Sync route and user on navigation events
   const syncLocation = useCallback(() => {

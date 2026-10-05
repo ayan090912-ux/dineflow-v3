@@ -1064,16 +1064,18 @@ export class DinelyApiClient {
       token = await getValidFirebaseIdToken(false);
       if (!token && typeof window !== 'undefined') {
         token = localStorage.getItem('dinely_auth_token') ||
+                localStorage.getItem(`dinely_staff_token_${targetScope.toLowerCase()}`) ||
                 this.currentTokensByScope[targetScope]?.accessToken ||
                 this.currentTokensByScope['OWNER']?.accessToken || null;
       }
 
-      // Strict purge of any legacy synthetic tokens
-      if (token && (token.startsWith('df_jwt_') || token.startsWith('df_ref_'))) {
+      const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'].includes(targetScope);
+      // Strict purge of any legacy synthetic tokens if in non-staff scope
+      if (!isStaffScope && token && (token.startsWith('df_jwt_') || token.startsWith('df_ref_'))) {
         token = null;
       }
 
-      if (!token) {
+      if (!token && !isStaffScope) {
         this.clearAllAuthSessions();
         authStateMachine.handleSessionExpired();
         if (typeof window !== 'undefined') {
@@ -1088,8 +1090,10 @@ export class DinelyApiClient {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {}),
-      Authorization: `Bearer ${token}`,
     };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     if (typeof window !== 'undefined') {
       const resolution = getTenantFromHostname();
@@ -1100,12 +1104,13 @@ export class DinelyApiClient {
       }
     }
 
-    if (targetScope === 'KITCHEN' || targetScope === 'WAITER' || targetScope === 'BAR' || targetScope === 'INVENTORY') {
-      const staffRestId = this.currentRestaurantIdsByScope[targetScope] || this.resolveTenantRestaurantId();
-      if (staffRestId) {
-        headers['X-Staff-Restaurant-Id'] = staffRestId;
-        headers['X-Restaurant-Id'] = staffRestId;
-        headers['X-Staff-Role'] = targetScope;
+    const staffRestId = this.currentRestaurantIdsByScope[targetScope] || this.resolveTenantRestaurantId() || this.getCurrentRestaurantId();
+    if (staffRestId) {
+      headers['X-Staff-Restaurant-Id'] = staffRestId;
+      headers['X-Restaurant-Id'] = staffRestId;
+      headers['X-Staff-Role'] = this.currentUser?.role || targetScope;
+      if (this.currentUser?.id || this.currentUser?.name) {
+        headers['X-Staff-Id'] = this.currentUser?.id || this.currentUser?.name || 'staff';
       }
     }
 
@@ -3847,33 +3852,21 @@ export class DinelyApiClient {
       table_session_id: tableSessionId,
     });
 
-    const apiBase = getApiBaseUrl();
-    const url = new URL(`${apiBase}/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session`);
-    if (tableSessionId) {
-      url.searchParams.set('table_session_id', tableSessionId);
-    }
+    const targetScope = getPortalScopeFromPath();
+    const endpoint = `/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session${tableSessionId ? `?table_session_id=${encodeURIComponent(tableSessionId)}` : ''}`;
 
-    const res = await fetch(url.toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        table_session_id: tableSessionId,
-        waiter_name: waiterName || 'Staff',
-      }),
-    });
+    const data = await this.executeProtectedRequest<any>(
+      endpoint,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          table_session_id: tableSessionId,
+          waiter_name: waiterName || this.currentUser?.name || 'Staff',
+        }),
+      },
+      targetScope
+    );
 
-    if (!res.ok) {
-      let errMsg = `Failed to close table session (${res.status})`;
-      try {
-        const errJson = await res.json();
-        if (errJson && errJson.detail) {
-          errMsg = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
-        }
-      } catch (_) {}
-      throw new Error(errMsg);
-    }
-
-    const data = await res.json();
     console.log('[API_CLOSE_TABLE_SESSION_SUCCESS]', data);
 
     this.loadDatabase();

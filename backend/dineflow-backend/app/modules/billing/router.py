@@ -724,10 +724,13 @@ async def close_table_settlement(
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
 
-    bill.status = "CLOSED"
     if bill.payment_status != "PAID":
-        bill.payment_status = "PAID"
-        bill.payment_method = bill.payment_method or "CASH"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot close table settlement: Bill #{bill.id} is unpaid. Please record payment before closing."
+        )
+
+    bill.status = "CLOSED"
 
     # Close Table Session
     if bill.table_session_id:
