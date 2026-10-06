@@ -367,6 +367,15 @@ function AppContent() {
           if (token) {
             api.setSessionTokens({ accessToken: token, refreshToken: token, expiresIn: 3600, tokenType: 'Bearer' }, effectiveScope);
             authStateMachine.setAuthenticated(appUser, token);
+            // Authoritative server-side profile & tenant restoration from AWS RDS
+            api.fetchAuthMe(token).then((authMe) => {
+              if (authMe?.restaurant) {
+                setCurrentRestaurant(authMe.restaurant);
+                api.setCurrentRestaurantId(authMe.restaurant.id);
+              }
+            }).catch((err) => {
+              console.warn('[App] /auth/me bootstrap notice:', err);
+            });
           } else {
             authStateMachine.setUnauthenticated();
           }

@@ -1226,6 +1226,57 @@ export class DinelyApiClient {
   }
 
   /**
+   * Authoritative /auth/me bootstrap to resolve authenticated user, memberships,
+   * and restaurant context directly from AWS RDS without relying on local database cache.
+   */
+  async fetchAuthMe(providedToken?: string): Promise<any> {
+    const token = providedToken || await getValidFirebaseIdToken(false) || (typeof window !== 'undefined' ? localStorage.getItem('dinely_auth_token') : null);
+    if (!token) return null;
+
+    const apiBase = getApiBaseUrl();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+
+    if (typeof window !== 'undefined') {
+      const resolution = getTenantFromHostname();
+      if (resolution.isTenantSubdomain && resolution.slug) {
+        headers['X-Tenant-Domain'] = resolution.hostname;
+        headers['X-Tenant-Slug'] = resolution.slug;
+      }
+    }
+
+    try {
+      const res = await fetch(`${apiBase}/auth/me`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.restaurants && Array.isArray(data.restaurants)) {
+          const mappedList = data.restaurants.map((r: any) => this.mapBackendRestaurant(r));
+          this.restaurants = [
+            ...this.restaurants.filter((ex) => !mappedList.some((m) => m.id === ex.id)),
+            ...mappedList,
+          ];
+          this.saveDatabase();
+        }
+        if (data && data.restaurant) {
+          const mappedRest = this.mapBackendRestaurant(data.restaurant);
+          this.setCurrentRestaurantId(mappedRest.id);
+          const exIdx = this.restaurants.findIndex((r) => r.id === mappedRest.id);
+          if (exIdx >= 0) this.restaurants[exIdx] = mappedRest;
+          else this.restaurants.unshift(mappedRest);
+          this.saveDatabase();
+          data.restaurant = mappedRest;
+        }
+        return data;
+      }
+    } catch (e) {
+      console.warn('API /auth/me call warning:', e);
+    }
+    return null;
+  }
+
+  /**
    * Clears all active tokens, sessions, in-memory caches, and resets state machine.
    */
   clearAllAuthSessions() {
@@ -6261,13 +6312,15 @@ export class DinelyApiClient {
   }
 
   // Customer & Portal Helper APIs
-  async requestBill(tableNumber: string, restaurantId?: string) {
+  async requestBill(tableNumber: string, restaurantId?: string, tableId?: string, tableSessionId?: string) {
     const targetRestId = this.resolveTenantRestaurantId(restaurantId) || this.getCurrentRestaurantId();
     if (!targetRestId) throw new Error("No active restaurant selected");
     const req = {
       id: `req-${Date.now()}`,
       restaurantId: targetRestId,
       tableNumber,
+      tableId,
+      tableSessionId,
       requestType: 'BILL',
       message: `Table ${tableNumber} requested the final bill.`,
       status: 'PENDING',
@@ -6281,6 +6334,8 @@ export class DinelyApiClient {
         body: JSON.stringify({
           restaurantId: targetRestId,
           tableNumber,
+          tableId,
+          tableSessionId,
           requestType: 'BILL',
           message: `Table ${tableNumber} requested the final bill.`,
         }),

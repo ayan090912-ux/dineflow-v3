@@ -664,7 +664,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           prev.map((t) => (t.tableNumber === tblNum || (t as any).number === tblNum ? { ...t, status: 'AVAILABLE', isOccupied: false } : t))
         );
       } else if (event.type === 'BillRequested') {
-        addToast('success', 'Bill Request Received 🧾', `Table ${event.tableNumber} requested final check.`);
+        // Routine bill requests are handled by Waiter floor staff; silently refresh bills list for owner reports
         api.getBills(restId).then((b) => setBills(b || [])).catch(() => {});
       } else if (
         event.type === 'BillPaid' ||
@@ -1587,12 +1587,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       icon: <RotateCcw className="w-4 h-4 text-amber-400" />,
                       badge: currentBusinessDay?.status === 'OPEN' ? 'OPEN' : 'CLOSED',
                     },
-                    {
-                      id: 'business_day',
-                      label: 'Daily Closing',
-                      icon: <Calendar className="w-4 h-4 text-amber-400" />,
-                      badge: currentBusinessDay?.status === 'OPEN' ? 'OPEN' : 'CLOSED',
-                    },
                     { id: 'theme', label: 'Branding & Theme', icon: <Palette className="w-4 h-4" /> },
                     { id: 'workspace_settings', label: 'Terminals & Setup', icon: <Layers className="w-4 h-4 text-rose-400" /> },
                   ],
@@ -1778,7 +1772,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'staff' && 'Employee Clock-In & Shifts'}
               {activeTab === 'inventory' && 'Raw Material Inventory'}
               {activeTab === 'billing' && 'Billing, Taxes & Invoices'}
-              {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management & Daily Closing'}
+              {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management'}
               {activeTab === 'theme' && 'Brand Identity & Styling'}
               {activeTab === 'workspace_settings' && 'Terminals & Settings'}
             </h2>

@@ -112,14 +112,16 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
 
     req_dict = format_request_dict(new_req)
 
-    # Realtime Broadcast to Waiter and Owner terminals (non-blocking with error logging)
+    # Realtime Broadcast to floor Waiter (and Owner only for non-routine alerts)
     async def _safe_broadcast():
         try:
+            # Routine BILL requests belong strictly to WAITER terminal (Part 3)
+            aud = ["WAITER"] if req_type == "BILL" else ["WAITER", "OWNER"]
             await ws_manager.broadcast_event(
                 restaurant_id=canonical_rest_id,
                 event_type="service_request_created",
                 payload=req_dict,
-                target_audience=["WAITER", "OWNER"]
+                target_audience=aud
             )
         except Exception as e:
             logger.error(

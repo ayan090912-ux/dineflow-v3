@@ -198,10 +198,47 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       } else if (event.type === 'OrderAccepted') {
         addToast('success', 'Order Accepted', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
       } else if (event.type === 'OrderReady' || event.type === 'order_ready') {
+        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) => (o.id === oId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o))
+          );
+        }
         addToast('success', 'Order Ready', 'Your food/drinks are prepared and ready.');
-      } else if (event.type === 'OrderDelivered' || event.type === 'order_status_updated') {
-        if (event.status === 'DELIVERED') {
-          addToast('success', 'Order Served', 'Enjoy your order!');
+      } else if (event.type === 'OrderDelivered' || event.type === 'order_delivered') {
+        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) => (o.id === oId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED' } : o))
+          );
+        }
+        addToast('success', 'Order Served', 'Enjoy your meal!');
+      } else if (event.type === 'OrderCompleted' || event.type === 'order_completed') {
+        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) => (o.id === oId ? { ...o, status: 'COMPLETED', kitchenStatus: 'COMPLETED' } : o))
+          );
+        }
+      } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
+        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        const newStatus = (event as any).status || (event as any).payload?.status;
+        const newKitchenStatus = (event as any).kitchenStatus || (event as any).payload?.kitchenStatus;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) =>
+              o.id === oId
+                ? {
+                    ...o,
+                    status: newStatus || o.status,
+                    kitchenStatus: newKitchenStatus || o.kitchenStatus,
+                  }
+                : o
+            )
+          );
+        }
+        if (newStatus === 'DELIVERED') {
+          addToast('success', 'Order Served', 'Enjoy your meal!');
         }
       }
     });
@@ -571,7 +608,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   };
 
   const handleRequestBill = async () => {
-    await api.requestBill(selectedTableNum);
+    await api.requestBill(
+      selectedTableNum,
+      currentRestaurant?.id,
+      currentTable?.id,
+      currentTableSession?.id
+    );
     addToast('success', 'Bill Requested', `Your waiter is bringing the check for ${selectedTableNum}.`);
   };
 

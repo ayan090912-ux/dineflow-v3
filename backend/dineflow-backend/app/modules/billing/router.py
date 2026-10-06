@@ -681,33 +681,46 @@ async def record_bill_payment(
 
     # Broadcast Realtime Event
     try:
-        await ws_manager.broadcast_event(
-            restaurant_id=target_rest_id,
-            event_type="BillPaid",
-            payload={
-                "billId": bill.id,
-                "invoiceNumber": bill.invoice_number,
-                "tableNumber": bill.table_number,
-                "tableSessionId": bill.table_session_id,
-                "paymentMethod": bill.payment_method,
-                "paymentStatus": "PAID",
-                "grandTotal": bill.grand_total,
-                "data": formatted,
-            },
-            target_audience=["WAITER", "OWNER", "CUSTOMER"]
-        )
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payment_evt_id = f"evt-pay-{uuid.uuid4().hex[:12]}"
+        pay_id = bill.payment_reference or f"pay-{bill.id}"
+        event_payload = {
+            "event_id": payment_evt_id,
+            "eventId": payment_evt_id,
+            "restaurant_id": target_rest_id,
+            "restaurantId": target_rest_id,
+            "table_id": bill.table_id,
+            "tableId": bill.table_id,
+            "table_session_id": bill.table_session_id,
+            "tableSessionId": bill.table_session_id,
+            "table_number": bill.table_number,
+            "tableNumber": bill.table_number,
+            "bill_id": bill.id,
+            "billId": bill.id,
+            "payment_id": pay_id,
+            "paymentId": pay_id,
+            "status": "PAID",
+            "payment_status": "PAID",
+            "paymentStatus": "PAID",
+            "amount": float(bill.grand_total),
+            "grand_total": float(bill.grand_total),
+            "grandTotal": float(bill.grand_total),
+            "payment_method": bill.payment_method,
+            "paymentMethod": bill.payment_method,
+            "timestamp": now_iso,
+            "data": formatted,
+        }
         await ws_manager.broadcast_event(
             restaurant_id=target_rest_id,
             event_type="payment_status_updated",
-            payload={
-                "billId": bill.id,
-                "tableNumber": bill.table_number,
-                "tableSessionId": bill.table_session_id,
-                "paymentStatus": "PAID",
-                "grandTotal": bill.grand_total,
-                "data": formatted,
-            },
-            target_audience=["WAITER", "OWNER", "CUSTOMER"]
+            payload=event_payload,
+            target_audience=["WAITER", "OWNER", "CUSTOMER", "POS"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=target_rest_id,
+            event_type="BillPaid",
+            payload=event_payload,
+            target_audience=["WAITER", "OWNER", "CUSTOMER", "POS"]
         )
     except Exception:
         pass
@@ -754,15 +767,34 @@ async def report_customer_payment(
 
     formatted = format_bill_response(bill)
     try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payment_evt_id = f"evt-pay-await-{uuid.uuid4().hex[:12]}"
+        pay_id = bill.payment_reference or f"pay-await-{bill.id}"
         await ws_manager.broadcast_event(
             restaurant_id=target_rest_id,
             event_type="payment_status_updated",
             payload={
-                "billId": bill.id,
-                "tableNumber": bill.table_number,
+                "event_id": payment_evt_id,
+                "eventId": payment_evt_id,
+                "restaurant_id": target_rest_id,
+                "restaurantId": target_rest_id,
+                "table_id": bill.table_id,
+                "tableId": bill.table_id,
+                "table_session_id": bill.table_session_id,
                 "tableSessionId": bill.table_session_id,
+                "table_number": bill.table_number,
+                "tableNumber": bill.table_number,
+                "bill_id": bill.id,
+                "billId": bill.id,
+                "payment_id": pay_id,
+                "paymentId": pay_id,
+                "status": "PAYMENT_AWAITING_CONFIRMATION",
+                "payment_status": "PAYMENT_AWAITING_CONFIRMATION",
                 "paymentStatus": "PAYMENT_AWAITING_CONFIRMATION",
-                "grandTotal": bill.grand_total,
+                "amount": float(bill.grand_total),
+                "grand_total": float(bill.grand_total),
+                "grandTotal": float(bill.grand_total),
+                "timestamp": now_iso,
                 "data": formatted,
             },
             target_audience=["WAITER", "OWNER", "CUSTOMER"]

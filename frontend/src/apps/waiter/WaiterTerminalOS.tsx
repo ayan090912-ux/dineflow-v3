@@ -43,6 +43,8 @@ import {
   CustomerRequestStatus,
   WaiterNotification,
   getFulfillmentStation,
+  Bill,
+  PaymentMethod,
 } from '../../packages/types';
 import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
 import { matchTableNumber } from '../../packages/utils/tableUtils';
@@ -104,6 +106,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   const [tables, setTables] = useState<Table[]>([]);
   const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
   const [notifications, setNotifications] = useState<WaiterNotification[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +115,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   const [selectedTableForView, setSelectedTableForView] = useState<Table | null>(null);
   const [selectedTableForClose, setSelectedTableForClose] = useState<Table | null>(null);
   const [isClosingTableLoading, setIsClosingTableLoading] = useState(false);
+
+  // Bill & Payment Action Modal State
+  const [selectedBillForAction, setSelectedBillForAction] = useState<{
+    bill: Bill | null;
+    request?: CustomerRequest;
+    tableNumber: string;
+    tableSessionId?: string;
+  } | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('CASH');
+  const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
 
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<{
@@ -154,12 +167,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       if (!silent) setIsErrorState(false);
       const targetRestId = currentRestaurantId;
 
-      const [reqData, ordData, tblData, notifData, sessionData] = await Promise.all([
+      const [reqData, ordData, tblData, notifData, sessionData, billData] = await Promise.all([
         api.getCustomerRequests(targetRestId),
         api.getOrders(targetRestId),
         api.getTables(targetRestId),
         api.getWaiterNotifications(targetRestId),
         api.getActiveTableSessions(targetRestId),
+        api.getBills(targetRestId),
       ]);
 
       setRequests(reqData);
@@ -167,6 +181,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
       setTables(tblData);
       setNotifications(notifData);
       setActiveSessions(sessionData || []);
+      setBills(billData || []);
       setIsErrorState(false);
     } catch (err) {
       console.error('Failed to load Waiter Terminal data:', err);
@@ -403,7 +418,34 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           api.getActiveTableSessions(currentRestaurantId).then(setActiveSessions).catch(() => {});
           api.getTables(currentRestaurantId).then(setTables).catch(() => {});
         }
+      } else if (event.type === 'payment_status_updated' || event.type === 'BillPaid') {
+        const payloadData = (event as any).payload || event;
+        const bId = payloadData.bill_id || payloadData.billId || payloadData.id;
+        const newStatus = payloadData.status || payloadData.payment_status || payloadData.paymentStatus || 'PAID';
+        if (bId) {
+          setBills((prev) =>
+            prev.map((b) => (b.id === bId ? { ...b, status: newStatus, paymentStatus: newStatus } : b))
+          );
+        }
+        api.getBills(currentRestaurantId).then((fresh) => {
+          if (Array.isArray(fresh)) setBills(fresh);
+        }).catch(() => {});
+        showToast('Payment Update 💳', `Bill for ${tblNum} is ${newStatus}`, 'success');
       } else if (event.type === 'BillRequested' || event.type === 'bill_updated') {
+        const payloadData = (event as any).payload || event;
+        const incomingBill = payloadData.data || payloadData.bill || (payloadData.id ? payloadData : null);
+        if (incomingBill && incomingBill.id) {
+          setBills((prev) => {
+            if (prev.some((b) => b.id === incomingBill.id)) {
+              return prev.map((b) => (b.id === incomingBill.id ? incomingBill : b));
+            }
+            return [incomingBill, ...prev];
+          });
+        } else {
+          api.getBills(currentRestaurantId).then((fresh) => {
+            if (Array.isArray(fresh)) setBills(fresh);
+          }).catch(() => {});
+        }
         showToast('Bill Check Request 🧾', `${tblNum} requested final bill`, 'info');
       } else if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
         setRequests([]);
@@ -469,6 +511,77 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
     } catch (err: any) {
       showToast('Delivery Error ⚠️', err.message || 'Failed to deliver order', 'warning');
       loadData(true);
+    }
+  };
+
+  // Helper to find matching bill for a customer request
+  const getBillForRequest = (req: CustomerRequest): Bill | undefined => {
+    if (req.tableSessionId) {
+      const bySess = bills.find((b) => b.tableSessionId === req.tableSessionId);
+      if (bySess) return bySess;
+    }
+    return bills.find((b) => matchTableNumber(b.tableNumber, req.tableNumber));
+  };
+
+  // Helper to resolve amount for a customer request
+  const getAmountForRequest = (req: CustomerRequest, matchingBill?: Bill): number => {
+    if (matchingBill && matchingBill.grandTotal) return matchingBill.grandTotal;
+    const sess = activeSessions.find(
+      (s) => (req.tableSessionId && s.id === req.tableSessionId) || matchTableNumber(s.tableNumber, req.tableNumber)
+    );
+    if (sess) {
+      const tableOrders = orders.filter((o) => o.tableSessionId === sess.id);
+      const total = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+      if (total > 0) return total;
+    }
+    const ordersByTable = orders.filter(
+      (o) => matchTableNumber(o.tableNumber, req.tableNumber) && o.status !== 'CANCELLED'
+    );
+    return ordersByTable.reduce((sum, o) => sum + o.totalAmount, 0);
+  };
+
+  // Record Bill Payment (CASH / UPI / CARD) & Auto-complete Service Request
+  const handleRecordPayment = async (
+    billId: string | undefined,
+    tableNum: string,
+    sessionId?: string,
+    method: PaymentMethod = 'CASH',
+    requestId?: string
+  ) => {
+    setIsProcessingPayment(true);
+    try {
+      let activeBillId = billId;
+      if (!activeBillId) {
+        const b = await api.requestTableBill(currentRestaurantId, tableNum, sessionId);
+        if (b) activeBillId = b.id;
+      }
+
+      if (!activeBillId) {
+        showToast('Error', 'Unable to resolve bill for payment', 'warning');
+        return;
+      }
+
+      const updatedBill = await api.markBillPayment(currentRestaurantId, activeBillId, method, waiterName);
+
+      // Optimistic update of bills
+      if (updatedBill) {
+        setBills((prev) =>
+          prev.map((b) => (b.id === activeBillId ? { ...b, ...updatedBill, paymentStatus: 'PAID', status: 'PAID' } : b))
+        );
+      }
+
+      showToast('Payment Recorded 💳', `Bill for ${tableNum} marked as PAID via ${method}`, 'success');
+
+      if (requestId) {
+        await handleCompleteRequest(requestId);
+      }
+
+      setSelectedBillForAction(null);
+      await loadData(true);
+    } catch (err: any) {
+      showToast('Payment Error', err.message || 'Failed to record payment', 'warning');
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -971,50 +1084,138 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {pendingCallsList.slice(0, 4).map((req) => (
-                      <div
-                        key={req.id}
-                        className="bg-[#0e1117] p-3.5 rounded-xl border border-amber-500/30 hover:border-amber-500/50 transition-colors space-y-2.5"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-base font-bold text-white font-mono">{req.tableNumber}</span>
-                            <div className="mt-0.5">{getRequestBadge(req.requestType, req.customTitle)}</div>
+                    {pendingCallsList.slice(0, 4).map((req) => {
+                      const isBillReq = req.requestType === 'BILL';
+                      const matchingBill = isBillReq ? getBillForRequest(req) : undefined;
+                      const billAmt = isBillReq ? getAmountForRequest(req, matchingBill) : 0;
+                      const payStatus = matchingBill?.paymentStatus || 'UNPAID';
+
+                      return (
+                        <div
+                          key={req.id}
+                          className={`bg-[#0e1117] p-3.5 rounded-xl border transition-colors space-y-2.5 ${
+                            isBillReq
+                              ? 'border-amber-500/50 hover:border-amber-400 bg-amber-950/10'
+                              : 'border-amber-500/30 hover:border-amber-500/50'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-base font-bold text-white font-mono">{req.tableNumber}</span>
+                              <div className="mt-0.5">{getRequestBadge(req.requestType, req.customTitle)}</div>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 bg-[#141822] px-2 py-0.5 rounded border border-[#1e232e]">
+                              {getTimeElapsed(req.requestedAt)}
+                            </span>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-400 bg-[#141822] px-2 py-0.5 rounded border border-[#1e232e]">
-                            {getTimeElapsed(req.requestedAt)}
-                          </span>
-                        </div>
 
-                        {req.customerNotes && (
-                          <p className="text-xs text-slate-300 bg-[#12151b] p-2 rounded-lg border border-[#1e232e] italic">
-                            "{req.customerNotes}"
-                          </p>
-                        )}
+                          {isBillReq ? (
+                            <div className="bg-[#12151b] p-2 rounded-lg border border-[#1e232e] flex justify-between items-center text-xs font-mono">
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">BILL TOTAL</span>
+                                <span className="text-emerald-400 font-bold text-sm">₹{billAmt.toFixed(2)}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-slate-400 block text-[10px]">PAYMENT</span>
+                                {payStatus === 'PAID' ? (
+                                  <span className="text-emerald-400 font-semibold text-[11px]">PAID</span>
+                                ) : payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
+                                  <span className="text-amber-300 font-semibold text-[11px] animate-pulse">AWAITING VERIFY</span>
+                                ) : (
+                                  <span className="text-rose-400 font-semibold text-[11px]">UNPAID</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : req.customerNotes ? (
+                            <p className="text-xs text-slate-300 bg-[#12151b] p-2 rounded-lg border border-[#1e232e] italic">
+                              "{req.customerNotes}"
+                            </p>
+                          ) : null}
 
-                        <div className="flex items-center gap-2 pt-1">
-                          {req.status === 'PENDING' ? (
-                            <Button
-                              variant="brand"
-                              size="sm"
-                              className="w-full text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-7"
-                              onClick={() => handleAcceptRequest(req.id)}
-                            >
-                              Accept Call
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="success"
-                              size="sm"
-                              className="w-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
-                              onClick={() => handleCompleteRequest(req.id)}
-                            >
-                              Mark Completed
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-2 pt-1">
+                            {isBillReq ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-1/2 text-xs font-medium border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-7"
+                                  onClick={() =>
+                                    setSelectedBillForAction({
+                                      bill: matchingBill || null,
+                                      request: req,
+                                      tableNumber: req.tableNumber,
+                                      tableSessionId: req.tableSessionId,
+                                    })
+                                  }
+                                >
+                                  View Bill
+                                </Button>
+                                {payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
+                                  <Button
+                                    variant="brand"
+                                    size="sm"
+                                    className="w-1/2 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-7"
+                                    onClick={() =>
+                                      setSelectedBillForAction({
+                                        bill: matchingBill || null,
+                                        request: req,
+                                        tableNumber: req.tableNumber,
+                                        tableSessionId: req.tableSessionId,
+                                      })
+                                    }
+                                  >
+                                    Verify Payment
+                                  </Button>
+                                ) : payStatus === 'PAID' ? (
+                                  <Button
+                                    variant="success"
+                                    size="sm"
+                                    className="w-1/2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
+                                    onClick={() => handleCompleteRequest(req.id)}
+                                  >
+                                    Done ✓
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="brand"
+                                    size="sm"
+                                    className="w-1/2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
+                                    onClick={() =>
+                                      setSelectedBillForAction({
+                                        bill: matchingBill || null,
+                                        request: req,
+                                        tableNumber: req.tableNumber,
+                                        tableSessionId: req.tableSessionId,
+                                      })
+                                    }
+                                  >
+                                    Record Payment
+                                  </Button>
+                                )}
+                              </>
+                            ) : req.status === 'PENDING' ? (
+                              <Button
+                                variant="brand"
+                                size="sm"
+                                className="w-full text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-7"
+                                onClick={() => handleAcceptRequest(req.id)}
+                              >
+                                Accept Call
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="success"
+                                size="sm"
+                                className="w-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
+                                onClick={() => handleCompleteRequest(req.id)}
+                              >
+                                Mark Completed
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1258,66 +1459,163 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {pendingCallsList.map((req) => (
-                    <div
-                      key={req.id}
-                      className="bg-[#12151b] border border-amber-500/30 p-4 space-y-3 rounded-xl hover:border-amber-500/50 transition-colors"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="text-xl font-bold text-white font-mono tracking-tight">{req.tableNumber}</span>
-                          <div className="mt-1">{getRequestBadge(req.requestType, req.customTitle)}</div>
-                        </div>
-                        <span className="text-xs font-mono text-slate-400 bg-[#0c0e14] px-2 py-0.5 rounded border border-[#1e232e]">
-                          {getTimeElapsed(req.requestedAt)}
-                        </span>
-                      </div>
+                  {pendingCallsList.map((req) => {
+                    const isBillReq = req.requestType === 'BILL';
+                    const matchingBill = isBillReq ? getBillForRequest(req) : undefined;
+                    const billAmt = isBillReq ? getAmountForRequest(req, matchingBill) : 0;
+                    const payStatus = matchingBill?.paymentStatus || 'UNPAID';
 
-                      <div className="space-y-1.5 bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] text-xs font-mono">
-                        <div className="flex justify-between items-center">
-                          <span className="text-slate-400">Status</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                            {req.status}
+                    return (
+                      <div
+                        key={req.id}
+                        className={`bg-[#12151b] p-4 space-y-3 rounded-xl border transition-colors shadow-sm ${
+                          isBillReq
+                            ? 'border-amber-500/50 hover:border-amber-400 bg-amber-950/10'
+                            : 'border-amber-500/30 hover:border-amber-500/50'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-xl font-bold text-white font-mono tracking-tight">{req.tableNumber}</span>
+                            <div className="mt-1">{getRequestBadge(req.requestType, req.customTitle)}</div>
+                          </div>
+                          <span className="text-xs font-mono text-slate-400 bg-[#0c0e14] px-2 py-0.5 rounded border border-[#1e232e]">
+                            {getTimeElapsed(req.requestedAt)}
                           </span>
                         </div>
 
-                        <div className="flex justify-between items-center pt-1 border-t border-[#1e232e]">
-                          <span className="text-slate-400">Assigned Waiter</span>
-                          <span className="text-slate-200">
-                            {req.assignedWaiterName || waiterName}
-                          </span>
-                        </div>
-                      </div>
-
-                      {req.customerNotes && (
-                        <p className="text-xs text-slate-300 bg-[#0c0e14] p-2.5 rounded-lg border border-[#1e232e] italic">
-                          "{req.customerNotes}"
-                        </p>
-                      )}
-
-                      <div className="pt-1">
-                        {req.status === 'PENDING' ? (
-                          <Button
-                            variant="brand"
-                            size="sm"
-                            className="w-full text-xs font-medium py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 h-8"
-                            onClick={() => handleAcceptRequest(req.id)}
-                          >
-                            Accept Call
-                          </Button>
+                        {isBillReq ? (
+                          <div className="space-y-2 bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] text-xs font-mono">
+                            <div className="flex justify-between items-center pb-1.5 border-b border-[#1e232e]">
+                              <span className="text-slate-400">Total Bill Amount</span>
+                              <span className="text-emerald-400 font-bold text-base">₹{billAmt.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center pt-0.5">
+                              <span className="text-slate-400">Payment Status</span>
+                              {payStatus === 'PAID' ? (
+                                <Badge variant="success">PAID</Badge>
+                              ) : payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
+                                <Badge variant="brand" className="animate-pulse">AWAITING CONFIRMATION</Badge>
+                              ) : (
+                                <Badge variant="warning">UNPAID</Badge>
+                              )}
+                            </div>
+                            {req.customerNotes && (
+                              <p className="text-[11px] text-slate-300 pt-1 border-t border-[#1e232e] italic">
+                                "{req.customerNotes}"
+                              </p>
+                            )}
+                          </div>
                         ) : (
-                          <Button
-                            variant="success"
-                            size="sm"
-                            className="w-full text-xs font-medium py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-8"
-                            onClick={() => handleCompleteRequest(req.id)}
-                          >
-                            Mark Completed
-                          </Button>
+                          <>
+                            <div className="space-y-1.5 bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] text-xs font-mono">
+                              <div className="flex justify-between items-center">
+                                <span className="text-slate-400">Status</span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                                  {req.status}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between items-center pt-1 border-t border-[#1e232e]">
+                                <span className="text-slate-400">Assigned Waiter</span>
+                                <span className="text-slate-200">
+                                  {req.assignedWaiterName || waiterName}
+                                </span>
+                              </div>
+                            </div>
+
+                            {req.customerNotes && (
+                              <p className="text-xs text-slate-300 bg-[#0c0e14] p-2.5 rounded-lg border border-[#1e232e] italic">
+                                "{req.customerNotes}"
+                              </p>
+                            )}
+                          </>
                         )}
+
+                        <div className="pt-1">
+                          {isBillReq ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full text-xs font-medium border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-8"
+                                onClick={() =>
+                                  setSelectedBillForAction({
+                                    bill: matchingBill || null,
+                                    request: req,
+                                    tableNumber: req.tableNumber,
+                                    tableSessionId: req.tableSessionId,
+                                  })
+                                }
+                              >
+                                View Bill
+                              </Button>
+                              {payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
+                                <Button
+                                  variant="brand"
+                                  size="sm"
+                                  className="w-full text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-8"
+                                  onClick={() =>
+                                    setSelectedBillForAction({
+                                      bill: matchingBill || null,
+                                      request: req,
+                                      tableNumber: req.tableNumber,
+                                      tableSessionId: req.tableSessionId,
+                                    })
+                                  }
+                                >
+                                  Verify Payment
+                                </Button>
+                              ) : payStatus === 'PAID' ? (
+                                <Button
+                                  variant="success"
+                                  size="sm"
+                                  className="w-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-8"
+                                  onClick={() => handleCompleteRequest(req.id)}
+                                >
+                                  Done ✓
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="brand"
+                                  size="sm"
+                                  className="w-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-8"
+                                  onClick={() =>
+                                    setSelectedBillForAction({
+                                      bill: matchingBill || null,
+                                      request: req,
+                                      tableNumber: req.tableNumber,
+                                      tableSessionId: req.tableSessionId,
+                                    })
+                                  }
+                                >
+                                  Record Payment
+                                </Button>
+                              )}
+                            </div>
+                          ) : req.status === 'PENDING' ? (
+                            <Button
+                              variant="brand"
+                              size="sm"
+                              className="w-full text-xs font-medium py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 h-8"
+                              onClick={() => handleAcceptRequest(req.id)}
+                            >
+                              Accept Call
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="success"
+                              size="sm"
+                              className="w-full text-xs font-medium py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-8"
+                              onClick={() => handleCompleteRequest(req.id)}
+                            >
+                              Mark Completed
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1414,6 +1712,220 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           )}
         </main>
       </div>
+
+      {/* BILL & PAYMENT ACTION MODAL */}
+      {selectedBillForAction && (
+        <Modal
+          isOpen={Boolean(selectedBillForAction)}
+          onClose={() => setSelectedBillForAction(null)}
+          title={`Bill & Payment — ${selectedBillForAction.tableNumber}`}
+          maxWidth="md"
+        >
+          {(() => {
+            const bill = selectedBillForAction.bill;
+            const tableNum = selectedBillForAction.tableNumber;
+            const sessId = selectedBillForAction.tableSessionId;
+            const req = selectedBillForAction.request;
+
+            const activeSession = activeSessions.find(
+              (s) => (sessId && s.id === sessId) || matchTableNumber(s.tableNumber, tableNum)
+            );
+            const sessionOrders = activeSession
+              ? orders.filter((o) => o.tableSessionId === activeSession.id)
+              : orders.filter((o) => matchTableNumber(o.tableNumber, tableNum));
+            const calculatedTotal =
+              bill?.grandTotal || sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+            const currentPayStatus =
+              bill?.paymentStatus ||
+              (sessionOrders.length > 0 && sessionOrders.every((o) => o.paymentStatus === 'PAID')
+                ? 'PAID'
+                : 'UNPAID');
+
+            return (
+              <div className="space-y-4 font-sans text-slate-100">
+                <div className="flex justify-between items-center bg-[#0c0e14] p-3.5 rounded-xl border border-[#1e232e]">
+                  <div>
+                    <h3 className="text-base font-bold text-white font-mono">{tableNum}</h3>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      Invoice: {bill?.invoiceNumber || 'Provisional Bill'}{' '}
+                      {activeSession ? `• #${activeSession.id.slice(-6)}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-[10px] font-mono text-slate-400">Payment Status</span>
+                    {currentPayStatus === 'PAID' ? (
+                      <Badge variant="success">PAID</Badge>
+                    ) : currentPayStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
+                      <Badge variant="brand" className="animate-pulse">
+                        AWAITING CONFIRMATION
+                      </Badge>
+                    ) : (
+                      <Badge variant="warning">UNPAID</Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Items Breakdown */}
+                <div className="space-y-2 bg-[#0c0e14] p-3.5 rounded-xl border border-[#1e232e]">
+                  <p className="text-[10px] font-mono uppercase text-slate-400 border-b border-[#1e232e] pb-1.5">
+                    Order Items Breakdown:
+                  </p>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                    {bill?.items && bill.items.length > 0 ? (
+                      bill.items.map((it: any, idx: number) => (
+                        <div key={idx} className="flex justify-between text-xs text-slate-200">
+                          <span>
+                            {it.quantity}x {it.name || it.itemName}
+                          </span>
+                          <span className="font-mono text-slate-300">
+                            ₹{((it.price || it.unitPrice || 0) * (it.quantity || 1)).toFixed(2)}
+                          </span>
+                        </div>
+                      ))
+                    ) : sessionOrders.length > 0 ? (
+                      sessionOrders
+                        .flatMap((o) => o.items)
+                        .map((it, idx) => (
+                          <div key={idx} className="flex justify-between text-xs text-slate-200">
+                            <span>
+                              {it.quantity}x {it.name}
+                            </span>
+                            <span className="font-mono text-slate-300">
+                              ₹{(it.price * it.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                        ))
+                    ) : (
+                      <p className="text-xs text-slate-500 py-2 text-center">
+                        No orders recorded for this session.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Summary Totals */}
+                  <div className="border-t border-[#1e232e] pt-2 space-y-1 text-xs font-mono">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Subtotal:</span>
+                      <span>₹{(bill?.subtotal || calculatedTotal).toFixed(2)}</span>
+                    </div>
+                    {bill && bill.discountAmount ? (
+                      <div className="flex justify-between text-emerald-400">
+                        <span>Discount:</span>
+                        <span>-₹{bill.discountAmount.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {bill && bill.taxAmount ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>GST / Taxes:</span>
+                        <span>₹{bill.taxAmount.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {bill && bill.serviceChargeAmount ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Service Charge:</span>
+                        <span>₹{bill.serviceChargeAmount.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between items-center text-sm font-bold text-white pt-1.5 border-t border-[#1e232e]">
+                      <span>Grand Total:</span>
+                      <span className="text-emerald-400 font-mono text-base">
+                        ₹{calculatedTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Actions */}
+                {currentPayStatus !== 'PAID' ? (
+                  <div className="space-y-3 pt-2 border-t border-[#1e232e]">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">
+                        Select Payment Method:
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(['CASH', 'UPI', 'CARD'] as PaymentMethod[]).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setSelectedPaymentMethod(m)}
+                            className={`py-2 px-3 rounded-lg text-xs font-mono font-semibold transition-colors border ${
+                              selectedPaymentMethod === m
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                                : 'bg-[#12151b] text-slate-400 border-[#1e232e] hover:text-white'
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setSelectedBillForAction(null)}
+                        disabled={isProcessingPayment}
+                        className="text-xs border-[#1e232e] text-slate-300"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="success"
+                        disabled={isProcessingPayment}
+                        onClick={() =>
+                          handleRecordPayment(
+                            bill?.id,
+                            tableNum,
+                            sessId,
+                            selectedPaymentMethod,
+                            req?.id
+                          )
+                        }
+                        className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+                      >
+                        {isProcessingPayment
+                          ? 'Recording...'
+                          : currentPayStatus === 'PAYMENT_AWAITING_CONFIRMATION'
+                          ? `Verify & Confirm Payment (₹${calculatedTotal.toFixed(2)})`
+                          : `Record ${selectedPaymentMethod} Payment (₹${calculatedTotal.toFixed(2)})`}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center pt-2 border-t border-[#1e232e]">
+                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" /> Payment Confirmed & Completed
+                    </span>
+                    <div className="flex gap-2">
+                      {req && req.status !== 'COMPLETED' && (
+                        <Button
+                          variant="success"
+                          size="sm"
+                          onClick={() => {
+                            handleCompleteRequest(req.id);
+                            setSelectedBillForAction(null);
+                          }}
+                          className="text-xs"
+                        >
+                          Complete Request ✓
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedBillForAction(null)}
+                        className="text-xs border-[#1e232e] text-slate-300"
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
 
       {/* VIEW TABLE DETAILS MODAL */}
       {selectedTableForView && (

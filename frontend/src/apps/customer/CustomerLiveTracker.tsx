@@ -23,36 +23,53 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
   // Listen to Real-Time Bus events for instant updates
   useEffect(() => {
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
-      const evtOrdId = event.orderId || (event as any).id || (event as any).payload?.id || (event as any).payload?.orderId;
+      const p = (event as any).payload || (event as any).data || event;
+      const evtOrdId = (event as any).orderId || (event as any).order_id || (event as any).id || p?.id || p?.orderId || p?.order_id || p?.order?.id;
       if (evtOrdId && String(evtOrdId) === String(currentOrder.id)) {
-        const updatedObj = event.data || (event as any).payload || (typeof event === 'object' ? event : null);
-        if (updatedObj && (updatedObj.status || updatedObj.kitchenStatus || updatedObj.barStatus)) {
-          setCurrentOrder((prev) => ({
-            ...prev,
-            ...updatedObj,
-            status: updatedObj.status || prev.status,
-            kitchenStatus: updatedObj.kitchenStatus || updatedObj.kitchen_status || prev.kitchenStatus,
-            barStatus: updatedObj.barStatus || updatedObj.bar_status || prev.barStatus,
-            etaTargetTimestamp: updatedObj.etaTargetTimestamp || updatedObj.eta_target_timestamp || prev.etaTargetTimestamp,
-          }));
-          if (onUpdateOrder && updatedObj.status) {
-            onUpdateOrder({
-              ...currentOrder,
-              ...updatedObj,
-            });
-          }
+        let newStatus = p.status;
+        let newKitchenStatus = p.kitchenStatus || p.kitchen_status;
+        let newBarStatus = p.barStatus || p.bar_status;
+
+        if (event.type === 'order_ready' || event.type === 'OrderReady') {
+          newStatus = 'READY';
+          newKitchenStatus = 'READY';
+        } else if (event.type === 'order_delivered' || event.type === 'OrderDelivered') {
+          newStatus = 'DELIVERED';
+        } else if (event.type === 'order_completed' || event.type === 'OrderCompleted') {
+          newStatus = 'COMPLETED';
         }
+
+        setCurrentOrder((prev) => {
+          const updated = {
+            ...prev,
+            ...p,
+            status: newStatus || p.status || prev.status,
+            kitchenStatus: newKitchenStatus || prev.kitchenStatus,
+            barStatus: newBarStatus || prev.barStatus,
+            etaTargetTimestamp: p.etaTargetTimestamp || p.eta_target_timestamp || prev.etaTargetTimestamp,
+          };
+          if (onUpdateOrder) {
+            onUpdateOrder(updated);
+          }
+          return updated;
+        });
       }
     });
     return () => unsubscribe();
   }, [currentOrder.id, onUpdateOrder]);
+
+  // Canonical lifecycle flags derived strictly from authoritative backend state
+  const isOrderDelivered = currentOrder.status === 'DELIVERED' || currentOrder.status === 'COMPLETED';
+  const isOrderReady = isOrderDelivered || currentOrder.status === 'READY' || currentOrder.kitchenStatus === 'READY' || currentOrder.barStatus === 'READY';
+  const isOrderPreparing = isOrderReady || currentOrder.status === 'PREPARING' || currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING' || currentOrder.barStatus === 'PREPARING';
+  const isOrderReceived = true;
 
   // Live countdown timer derived strictly from server state
   useEffect(() => {
     const calculateSecondsLeft = () => {
       if (currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp) {
         setRemainingSeconds(0);
-        setEtaMessage('Order transmitted • Awaiting kitchen confirmation');
+        setEtaMessage('Order received • Queued for kitchen preparation');
         return;
       }
 
@@ -68,23 +85,27 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       const diffSec = Math.max(0, Math.floor((target - now) / 1000));
       setRemainingSeconds(diffSec);
 
-      if (currentOrder.status === 'READY') {
+      if (isOrderDelivered) {
+        setEtaMessage('Served at your table • Enjoy your meal!');
+      } else if (isOrderReady) {
         setEtaMessage('Plated & ready • Floor staff is bringing your order.');
-      } else if (currentOrder.status === 'DELIVERED') {
-        setEtaMessage('Served at your table. Enjoy your meal!');
-      } else if (diffSec <= 180 && diffSec > 0) {
-        setEtaMessage('Final plating & garnishes in progress.');
-      } else if (diffSec === 0 && (currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING')) {
-        setEtaMessage('Chef is adding final touches...');
+      } else if (isOrderPreparing) {
+        if (diffSec <= 180 && diffSec > 0) {
+          setEtaMessage('Final plating & garnishes in progress.');
+        } else if (diffSec === 0) {
+          setEtaMessage('Chef is adding final touches...');
+        } else {
+          setEtaMessage('Active preparation in progress by kitchen & bar staff.');
+        }
       } else {
-        setEtaMessage('Active preparation in progress.');
+        setEtaMessage('Order transmitted • Preparing to cook.');
       }
     };
 
     calculateSecondsLeft();
     const interval = setInterval(calculateSecondsLeft, 1000);
     return () => clearInterval(interval);
-  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus]);
+  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus, isOrderDelivered, isOrderReady, isOrderPreparing]);
 
   const formatCountdown = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -93,13 +114,6 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
   };
 
   const minutesRemaining = Math.ceil(remainingSeconds / 60);
-
-  const isReceived = true;
-  const isCooking = currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING' || currentOrder.status === 'READY' || currentOrder.status === 'DELIVERED';
-  const isPreparing = (currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING') && remainingSeconds <= 300;
-  const isReady = currentOrder.status === 'READY' || currentOrder.status === 'DELIVERED';
-  const isDelivered = currentOrder.status === 'DELIVERED';
-
   const isPendingServerAcceptance = currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp;
 
   return (
@@ -187,33 +201,33 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
         <div className="grid grid-cols-4 gap-2 text-center">
           {/* Step 1: Order Received */}
           <div className="space-y-1">
-            <div className={`h-1.5 rounded-full transition-all ${isReceived ? 'bg-amber-400' : 'bg-white/[0.06]'}`} />
-            <span className={`text-[10px] font-mono block ${isReceived ? 'text-white' : 'text-white/30'}`}>
-              Received
+            <div className={`h-1.5 rounded-full transition-all ${isOrderPreparing ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className={`text-[10px] font-mono block ${isOrderPreparing ? 'text-emerald-400 font-medium' : 'text-white'}`}>
+              ✓ Received
             </span>
           </div>
 
-          {/* Step 2: Cooking */}
+          {/* Step 2: Preparing */}
           <div className="space-y-1">
-            <div className={`h-1.5 rounded-full transition-all ${isCooking ? 'bg-amber-400' : 'bg-white/[0.06]'}`} />
-            <span className={`text-[10px] font-mono block ${isCooking ? 'text-white' : 'text-white/30'}`}>
-              Preparing
+            <div className={`h-1.5 rounded-full transition-all ${isOrderReady ? 'bg-emerald-400' : isOrderPreparing ? 'bg-amber-400 animate-pulse' : 'bg-white/[0.06]'}`} />
+            <span className={`text-[10px] font-mono block ${isOrderReady ? 'text-emerald-400 font-medium' : isOrderPreparing ? 'text-amber-300 font-semibold' : 'text-white/30'}`}>
+              {isOrderReady ? '✓ Preparing' : isOrderPreparing ? '● Preparing' : '○ Preparing'}
             </span>
           </div>
 
-          {/* Step 3: Preparing / Plating */}
+          {/* Step 3: Plated & Ready */}
           <div className="space-y-1">
-            <div className={`h-1.5 rounded-full transition-all ${isReady ? 'bg-emerald-400' : isPreparing ? 'bg-amber-400/60 animate-pulse' : 'bg-white/[0.06]'}`} />
-            <span className={`text-[10px] font-mono block ${isReady ? 'text-emerald-400' : isPreparing ? 'text-amber-300' : 'text-white/30'}`}>
-              Ready
+            <div className={`h-1.5 rounded-full transition-all ${isOrderDelivered ? 'bg-emerald-400' : isOrderReady ? 'bg-emerald-400 animate-pulse' : 'bg-white/[0.06]'}`} />
+            <span className={`text-[10px] font-mono block ${isOrderDelivered ? 'text-emerald-400 font-medium' : isOrderReady ? 'text-emerald-300 font-bold' : 'text-white/30'}`}>
+              {isOrderDelivered ? '✓ Ready' : isOrderReady ? '● Ready' : '○ Ready'}
             </span>
           </div>
 
           {/* Step 4: Delivered */}
           <div className="space-y-1">
-            <div className={`h-1.5 rounded-full transition-all ${isDelivered ? 'bg-emerald-400' : 'bg-white/[0.06]'}`} />
-            <span className={`text-[10px] font-mono block ${isDelivered ? 'text-emerald-400' : 'text-white/30'}`}>
-              Delivered
+            <div className={`h-1.5 rounded-full transition-all ${isOrderDelivered ? 'bg-emerald-400' : 'bg-white/[0.06]'}`} />
+            <span className={`text-[10px] font-mono block ${isOrderDelivered ? 'text-emerald-400 font-bold' : 'text-white/30'}`}>
+              {isOrderDelivered ? '✓ Delivered' : '○ Delivered'}
             </span>
           </div>
         </div>

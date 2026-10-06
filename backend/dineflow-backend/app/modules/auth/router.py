@@ -207,7 +207,109 @@ async def logout_all(
     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Logout-all coming in Sprint 1")
 
 
-@router.get("/me", response_model=AuthMeResponse)
-async def get_me():
-    # TODO: Implement /me endpoint
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Auth me coming in Sprint 1")
+from app.core.security.tenant_auth import get_caller_context, CallerContext
+from app.modules.restaurants.models import RestaurantMembership
+from sqlalchemy import func
+
+@router.get("/me")
+@router.post("/me")
+async def get_auth_me(
+    request: Request,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    if not caller.is_authenticated or (not caller.uid and not caller.email):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required: No valid session token provided."
+        )
+
+    target_email = (caller.email or "").strip().lower()
+    target_uid = (caller.uid or "").strip()
+
+    # Query all memberships
+    mem_conditions = []
+    if target_uid:
+        mem_conditions.append(RestaurantMembership.user_uid == target_uid)
+    if target_email:
+        mem_conditions.append(func.lower(RestaurantMembership.user_email) == target_email)
+
+    memberships_list = []
+    mem_rest_ids = []
+    if mem_conditions:
+        mem_stmt = select(RestaurantMembership).where(or_(*mem_conditions))
+        mem_res = await db.execute(mem_stmt)
+        for m in mem_res.scalars().all():
+            memberships_list.append({
+                "id": m.id,
+                "restaurant_id": m.restaurant_id,
+                "user_uid": m.user_uid,
+                "user_email": m.user_email,
+                "role": m.role,
+            })
+            mem_rest_ids.append(m.restaurant_id)
+
+    # Query all accessible restaurants
+    rest_conditions = []
+    if target_email:
+        rest_conditions.append(func.lower(Restaurant.owner_email) == target_email)
+    if target_uid:
+        rest_conditions.append(Restaurant.owner_uid == target_uid)
+    if mem_rest_ids:
+        rest_conditions.append(Restaurant.id.in_(mem_rest_ids))
+
+    restaurants_list = []
+    if rest_conditions:
+        q_rests = select(Restaurant).where(
+            or_(*rest_conditions),
+            Restaurant.deleted_at.is_(None)
+        ).order_by(Restaurant.created_at.desc())
+        r_res = await db.execute(q_rests)
+        for r in r_res.scalars().all():
+            restaurants_list.append({
+                "id": r.id,
+                "name": r.name,
+                "slug": r.slug,
+                "publicSlug": r.public_slug or r.slug,
+                "status": r.status,
+                "lifecycleStatus": r.lifecycle_status,
+                "isApproved": r.is_approved,
+                "ownerEmail": r.owner_email,
+                "ownerUid": r.owner_uid,
+                "businessType": r.business_type,
+            })
+
+    # Resolve active/current restaurant context
+    current_restaurant = None
+    req_host = request.headers.get("x-tenant-domain") or request.headers.get("x-forwarded-host") or request.headers.get("host")
+    req_slug = request.headers.get("x-tenant-slug")
+    if req_slug:
+        current_restaurant = next((r for r in restaurants_list if (r.get("slug") == req_slug or r.get("publicSlug") == req_slug or r.get("id") == req_slug)), None)
+    if not current_restaurant and req_host:
+        clean_h = req_host.split(":")[0].strip().lower()
+        if clean_h.endswith(".dinely.food"):
+            sub_slug = clean_h[:-len(".dinely.food")].strip()
+            current_restaurant = next((r for r in restaurants_list if (r.get("slug") == sub_slug or r.get("publicSlug") == sub_slug or r.get("id") == sub_slug)), None)
+
+    if not current_restaurant and restaurants_list:
+        current_restaurant = next((r for r in restaurants_list if r.get("lifecycleStatus") == "LIVE" or r.get("isApproved")), restaurants_list[0])
+
+    return {
+        "id": caller.uid or "usr-anon",
+        "uid": caller.uid or "usr-anon",
+        "email": caller.email or "",
+        "role": caller.role,
+        "isAdmin": caller.is_admin,
+        "is_admin": caller.is_admin,
+        "user": {
+            "id": caller.uid or "usr-anon",
+            "email": caller.email or "",
+            "name": (caller.email.split("@")[0] if caller.email else "User").replace(".", " ").title(),
+            "role": caller.role,
+        },
+        "memberships": memberships_list,
+        "restaurants": restaurants_list,
+        "restaurant": current_restaurant,
+        "restaurant_id": current_restaurant["id"] if current_restaurant else caller.restaurant_id,
+        "status": "authenticated",
+    }
