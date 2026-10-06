@@ -533,11 +533,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     onRefreshOrdersRef.current?.();
   };
 
-  const handleDeliverOrder = async (orderId: string) => {
-    await api.deliverOrder(orderId);
-    showToast(`Order #${orderId} Delivered to Table. Completed!`, 'success');
-    onRefreshOrdersRef.current?.();
-  };
 
   const handleRecallOrder = async (order: Order) => {
     await api.updateOrderStatus(order.id, 'IN_KITCHEN');
@@ -1068,15 +1063,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       ))}
                     </div>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 font-semibold py-2 rounded-lg text-xs"
-                      onClick={() => handleDeliverOrder(order.id)}
-                      icon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                    >
-                      Table Served (Complete Ticket)
-                    </Button>
+                    <div className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30">
+                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Plated & Ready • Awaiting Waiter Pickup</span>
+                    </div>
                   </div>
                 ))
               )}
@@ -1125,15 +1115,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     ))}
                   </div>
 
-                  <Button
-                    variant="brand"
-                    size="sm"
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-lg text-xs"
-                    onClick={() => handleDeliverOrder(order.id)}
-                    icon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                  >
-                    Mark Table Served
-                  </Button>
+                  <div className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30">
+                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Ready at Pass Window • Floor Staff Delivering</span>
+                  </div>
                 </div>
               ))}
 

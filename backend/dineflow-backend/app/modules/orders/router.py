@@ -90,7 +90,9 @@ def format_order_response(order: Order) -> dict:
         "tableSessionId": sess_id,
         "status": getattr(order, "status", "PENDING"),
         "kitchen_status": getattr(order, "kitchen_status", "PENDING"),
+        "kitchenStatus": getattr(order, "kitchen_status", "PENDING"),
         "bar_status": getattr(order, "bar_status", "PENDING"),
+        "barStatus": getattr(order, "bar_status", "PENDING"),
         "customer_name": cust_name,
         "customerName": cust_name,
         "notes": getattr(order, "notes", ""),
@@ -678,8 +680,26 @@ async def update_order_status(
     if payload.barStatus and (r_obj.has_bar is False or (r_obj.enabled_modules and "bar" not in r_obj.enabled_modules)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bar terminal is disabled for this restaurant.")
 
+    # Role-based delivery authorization (Part A & Part F)
+    # Kitchen responsibilities end at: NEW -> PREPARING -> READY
+    # Kitchen and Bar roles must NOT be able to deliver plates to customer tables.
+    # Only WAITER, SERVER, OWNER, RESTAURANT_OWNER, and MANAGER can mark an order DELIVERED.
+    target_status = (payload.status or "").upper()
+    target_kitchen = (payload.kitchenStatus or "").upper()
+    is_delivery_attempt = target_status in ["DELIVERED", "COMPLETED"] or target_kitchen in ["DELIVERED", "COMPLETED"]
+    if is_delivery_attempt:
+        caller_role = (caller.role or "").upper()
+        allowed_delivery_roles = ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER"]
+        if not caller.is_admin and caller_role not in allowed_delivery_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: Kitchen staff cannot deliver orders to tables. Role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
+            )
+
     if payload.status:
         order.status = payload.status
+        if payload.status == "DELIVERED":
+            order.delivered_at = datetime.now(timezone.utc)
     if payload.kitchenStatus:
         order.kitchen_status = payload.kitchenStatus
     if payload.barStatus:
@@ -709,11 +729,42 @@ async def update_order_status(
     try:
         from app.modules.websocket.manager import ws_manager
         if payload.status == "READY" or payload.kitchenStatus == "READY" or payload.barStatus == "READY":
+            ready_payload = {
+                **resp_data,
+                "orderId": order.id,
+                "order_id": order.id,
+                "order": resp_data,
+                "table_id": order.table_id,
+                "tableId": order.table_id,
+                "table_number": order.table_number,
+                "tableNumber": order.table_number,
+                "table_session_id": order.table_session_id,
+                "tableSessionId": order.table_session_id,
+            }
             await ws_manager.broadcast_event(
                 restaurant_id=order.restaurant_id,
                 event_type="order_ready",
-                payload=resp_data,
+                payload=ready_payload,
                 target_audience=["WAITER", "CUSTOMER", "OWNER"]
+            )
+        if payload.status == "DELIVERED":
+            delivered_payload = {
+                **resp_data,
+                "orderId": order.id,
+                "order_id": order.id,
+                "order": resp_data,
+                "table_id": order.table_id,
+                "tableId": order.table_id,
+                "table_number": order.table_number,
+                "tableNumber": order.table_number,
+                "table_session_id": order.table_session_id,
+                "tableSessionId": order.table_session_id,
+            }
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="order_delivered",
+                payload=delivered_payload,
+                target_audience=["WAITER", "CUSTOMER", "OWNER", "POS"]
             )
         if payload.estimatedPrepTimeMinutes is not None or payload.etaTargetTimestamp is not None:
             await ws_manager.broadcast_event(

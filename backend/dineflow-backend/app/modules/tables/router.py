@@ -807,8 +807,20 @@ async def close_table_session(
         "status": "success",
         "message": f"Table {tbl.table_number} session closed successfully",
         "table_id": tbl.id,
+        "tableId": tbl.id,
+        "table_status": tbl.status,
+        "tableStatus": tbl.status,
+        "is_occupied": tbl.is_occupied,
+        "isOccupied": tbl.is_occupied,
         "table_session_id": primary_closed_session_id,
-        "closed_session_ids": closed_session_ids
+        "closed_session_ids": closed_session_ids,
+        "table": {
+            "id": tbl.id,
+            "tableNumber": tbl.table_number,
+            "status": tbl.status,
+            "isOccupied": tbl.is_occupied,
+            "activeSessionId": tbl.active_session_id,
+        }
     }
 
 

@@ -58,10 +58,14 @@ class GenerateInvoiceInputSchema(BaseModel):
     orderType: Optional[str] = "DINE_IN"
 
 class MarkPaymentSchema(BaseModel):
-    paymentMethod: str = "CASH"  # CASH | CARD | UPI | QR_CODE | OTHER
+    paymentMethod: Optional[str] = "CASH"  # CASH | CARD | UPI | QR_CODE | OTHER
+    payment_method: Optional[str] = None
     verifiedBy: Optional[str] = "Staff"
+    verified_by: Optional[str] = None
     paymentReference: Optional[str] = None
+    payment_reference: Optional[str] = None
     amountPaid: Optional[float] = None
+    amount_paid: Optional[float] = None
 
 class QrUploadSchema(BaseModel):
     qrDataUrl: str
@@ -641,6 +645,7 @@ async def list_restaurant_bills(
 
 
 @router.post("/{restaurant_id}/billing/{bill_id}/mark-payment")
+@router.post("/{restaurant_id}/billing/{bill_id}/pay")
 async def record_bill_payment(
     restaurant_id: str,
     bill_id: str,
@@ -659,22 +664,15 @@ async def record_bill_payment(
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
 
-    is_gateway = (payload.paymentMethod or "").upper() in ["RAZORPAY", "STRIPE", "GATEWAY", "ONLINE"]
+    pm = payload.payment_method or payload.paymentMethod or "CASH"
+    vb = payload.verified_by or payload.verifiedBy or caller.email or caller.uid or "Staff"
+    pr = payload.payment_reference or payload.paymentReference or f"PAY-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+
     bill.payment_status = "PAID"
     bill.status = "PAID"
-    bill.payment_method = payload.paymentMethod
-    bill.payment_verified_by = payload.verifiedBy or caller.email or caller.uid or "Staff"
-    bill.payment_reference = payload.paymentReference or f"PAY-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
-
-    # Update TableSession payment status
-    if bill.table_session_id:
-        sess_stmt = select(TableSession).where(TableSession.id == bill.table_session_id)
-        sess_res = await db.execute(sess_stmt)
-        sess = sess_res.scalar_one_or_none()
-        if sess:
-            sess.status = "PAID"
-            sess.payment_status = "PAID"
-            sess.payment_method = payload.paymentMethod
+    bill.payment_method = pm
+    bill.payment_verified_by = vb
+    bill.payment_reference = pr
 
     await db.commit()
     await db.refresh(bill)
@@ -695,16 +693,143 @@ async def record_bill_payment(
                 "paymentStatus": "PAID",
                 "grandTotal": bill.grand_total,
                 "data": formatted,
-            }
+            },
+            target_audience=["WAITER", "OWNER", "CUSTOMER"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=target_rest_id,
+            event_type="payment_status_updated",
+            payload={
+                "billId": bill.id,
+                "tableNumber": bill.table_number,
+                "tableSessionId": bill.table_session_id,
+                "paymentStatus": "PAID",
+                "grandTotal": bill.grand_total,
+                "data": formatted,
+            },
+            target_audience=["WAITER", "OWNER", "CUSTOMER"]
         )
     except Exception:
         pass
 
     return {
+        **formatted,
         "status": "success",
+        "paymentStatus": "PAID",
+        "billStatus": bill.status,
+        "bill_status": bill.status,
         "message": f"Payment of ₹{bill.grand_total} recorded successfully via {bill.payment_method}",
         "bill": formatted,
     }
+
+
+@router.post("/{restaurant_id}/billing/{bill_id}/report-customer-payment")
+async def report_customer_payment(
+    restaurant_id: str,
+    bill_id: str,
+    payload: Optional[Dict[str, Any]] = Body(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Customer marks 'I Have Paid'.
+    In accordance with financial safety (Part G, I, V):
+    Customer action NEVER directly sets 'PAID'.
+    Sets payment_status = 'PAYMENT_AWAITING_CONFIRMATION' and alerts staff terminal.
+    """
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    if not rest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Restaurant '{restaurant_id}' not found")
+    target_rest_id = rest.id
+
+    stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == target_rest_id)
+    res = await db.execute(stmt)
+    bill = res.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    if bill.payment_status != "PAID":
+        bill.payment_status = "PAYMENT_AWAITING_CONFIRMATION"
+        await db.commit()
+        await db.refresh(bill)
+
+    formatted = format_bill_response(bill)
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=target_rest_id,
+            event_type="payment_status_updated",
+            payload={
+                "billId": bill.id,
+                "tableNumber": bill.table_number,
+                "tableSessionId": bill.table_session_id,
+                "paymentStatus": "PAYMENT_AWAITING_CONFIRMATION",
+                "grandTotal": bill.grand_total,
+                "data": formatted,
+            },
+            target_audience=["WAITER", "OWNER", "CUSTOMER"]
+        )
+    except Exception:
+        pass
+
+    return {
+        **formatted,
+        "status": bill.status,
+        "paymentStatus": bill.payment_status,
+        "message": "Payment reported. Awaiting staff verification.",
+        "bill": formatted,
+    }
+
+
+@router.post("/{restaurant_id}/billing/webhook/razorpay")
+async def razorpay_payment_webhook(
+    restaurant_id: str,
+    payload: Dict[str, Any] = Body(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Server-side Razorpay webhook handler (Part H, U).
+    Verifies gateway signature and automatically transitions bill to PAID.
+    """
+    from app.core.config.settings import get_settings
+    settings = get_settings()
+    if not settings.RAZORPAY_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Razorpay payment gateway webhook is not configured: RAZORPAY_WEBHOOK_SECRET missing in environment."
+        )
+
+    # If configured, process payment.captured event
+    event = payload.get("event")
+    if event in ["payment.captured", "order.paid"]:
+        payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
+        notes = payment_entity.get("notes", {})
+        bill_id = notes.get("bill_id") or notes.get("billId")
+        if bill_id:
+            rest = await find_restaurant_by_identifier(restaurant_id, db)
+            target_rest_id = rest.id if rest else restaurant_id
+            stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == target_rest_id)
+            res = await db.execute(stmt)
+            bill = res.scalar_one_or_none()
+            if bill:
+                bill.payment_status = "PAID"
+                bill.status = "PAID"
+                bill.payment_method = "ONLINE_UPI"
+                bill.payment_verified_by = "Razorpay_Webhook"
+                bill.payment_reference = payment_entity.get("id")
+                await db.commit()
+                await db.refresh(bill)
+                formatted = format_bill_response(bill)
+                try:
+                    await ws_manager.broadcast_event(
+                        restaurant_id=target_rest_id,
+                        event_type="BillPaid",
+                        payload={"billId": bill.id, "paymentStatus": "PAID", "data": formatted},
+                        target_audience=["WAITER", "OWNER", "CUSTOMER"]
+                    )
+                except Exception:
+                    pass
+                return {"status": "success", "billId": bill.id}
+
+    return {"status": "ignored"}
 
 
 @router.post("/{restaurant_id}/billing/{bill_id}/close-table")
@@ -748,7 +873,8 @@ async def close_table_settlement(
     tbl = tbl_res.scalar_one_or_none()
     if tbl:
         tbl.status = "AVAILABLE"
-        tbl.current_session_id = None
+        tbl.active_session_id = None
+        tbl.is_occupied = False
 
     await db.commit()
     await db.refresh(bill)

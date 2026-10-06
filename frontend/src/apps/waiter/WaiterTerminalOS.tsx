@@ -319,23 +319,54 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           api.getOrders(currentRestaurantId).then(setOrders).catch(() => {});
         }
       } else if (event.type === 'order_ready' || event.type === 'OrderReady') {
-        const orderId = (event as any).orderId || (event as any).order_id || (event as any).payload?.orderId;
-        if (orderId) {
-          setOrders((prev) =>
-            prev.map((o) => (o.id === orderId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o))
-          );
+        const payloadData = (event as any).payload || event;
+        const incomingOrder = payloadData.order || (payloadData.id ? payloadData : (event as any).order);
+        const orderId = payloadData.orderId || payloadData.order_id || incomingOrder?.id || (event as any).orderId || (event as any).order_id;
+        if (incomingOrder && incomingOrder.id) {
+          setOrders((prev) => {
+            const exists = prev.some((o) => o.id === incomingOrder.id);
+            if (exists) {
+              return prev.map((o) => (o.id === incomingOrder.id ? { ...o, ...incomingOrder, status: 'READY', kitchenStatus: 'READY' } : o));
+            }
+            return [{ ...incomingOrder, status: 'READY', kitchenStatus: 'READY' }, ...prev];
+          });
+        } else if (orderId) {
+          setOrders((prev) => {
+            const exists = prev.some((o) => o.id === orderId);
+            if (exists) {
+              return prev.map((o) => (o.id === orderId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o));
+            }
+            return prev;
+          });
+          api.getOrders(currentRestaurantId).then((fresh) => {
+            if (fresh && Array.isArray(fresh)) setOrders(fresh);
+          }).catch(() => {});
+        } else {
+          api.getOrders(currentRestaurantId).then((fresh) => {
+            if (fresh && Array.isArray(fresh)) setOrders(fresh);
+          }).catch(() => {});
         }
         showToast(
           'Order Plated & Ready 🔥',
           `Order for ${tblNum} is ready for pickup`,
           'success'
         );
-      } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
-        const orderId = (event as any).orderId || (event as any).order_id || (event as any).payload?.orderId;
-        const newStatus = (event as any).status || (event as any).payload?.status;
-        if (orderId && newStatus) {
+      } else if (event.type === 'order_delivered' || event.type === 'OrderDelivered') {
+        const payloadData = (event as any).payload || event;
+        const orderId = payloadData.orderId || payloadData.order_id || payloadData.id || (event as any).orderId || (event as any).order_id;
+        if (orderId) {
           setOrders((prev) =>
-            prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+            prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED' } : o))
+          );
+        }
+      } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
+        const payloadData = (event as any).payload || event;
+        const orderId = (event as any).orderId || (event as any).order_id || payloadData.orderId || payloadData.order_id || payloadData.id;
+        const newStatus = (event as any).status || payloadData.status;
+        const newKitchenStatus = (event as any).kitchenStatus || payloadData.kitchenStatus;
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, status: newStatus || o.status, kitchenStatus: newKitchenStatus || o.kitchenStatus } : o))
           );
         }
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
@@ -426,12 +457,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   };
 
   // Order Delivery Handler (Valid transition: READY -> DELIVERED)
-  const handleDeliverOrder = async (orderId: string) => {
+  const handleDeliverOrder = async (orderId: string, tableNumber?: string) => {
     // Instant optimistic state update
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED' } : o))
+      prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED' } : o))
     );
-    showToast('Order Delivered 🎉', `Order #${orderId} delivered to customer`, 'success');
+    const tblFormatted = tableNumber ? (tableNumber.startsWith('Table') ? tableNumber : `Table ${tableNumber}`) : 'Table';
+    showToast('Order Delivered 🎉', `Order delivered to ${tblFormatted}`, 'success');
     try {
       await api.deliverOrder(orderId);
     } catch (err: any) {
@@ -486,14 +518,17 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
 
   const readyPlatesList = useMemo(() => {
     return orders.filter((o) => {
-      if (o.status !== 'READY') return false;
+      const isReady = (o.status === 'READY' || o.kitchenStatus === 'READY');
+      const isDone = o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED';
+      if (!isReady || isDone) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
           o.id.toLowerCase().includes(q) ||
-          o.tableNumber.toLowerCase().includes(q) ||
-          o.items.some((i) => i.name.toLowerCase().includes(q))
+          (o.tableNumber && o.tableNumber.toLowerCase().includes(q)) ||
+          (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+          (o.items || []).some((i) => i.name.toLowerCase().includes(q))
         );
       }
       return true;
@@ -733,8 +768,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
               }`}
             >
               <div className="flex items-center gap-2.5">
-                <Flame className="w-4 h-4 text-orange-400" />
-                <span>Ready Plates</span>
+                <Flame className="w-4 h-4 text-emerald-400" />
+                <span>Ready for Delivery</span>
               </div>
               {readyPlatesList.length > 0 && (
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
@@ -989,13 +1024,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                 <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
                   <div className="flex items-center gap-2">
                     <Flame className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-sm font-semibold text-white">Kitchen Ready Plates Pass</h2>
+                    <h2 className="text-sm font-semibold text-white">READY FOR DELIVERY</h2>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
                       {readyPlatesList.length} Ready
                     </span>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setActiveTab('ready-plates')} className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-7">
-                    <span>View Ready Plates</span>
+                    <span>View All Ready</span>
                     <ChevronRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </div>
@@ -1015,16 +1050,31 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-xs font-mono text-emerald-400 font-semibold block">ORDER #{order.id}</span>
-                            <h3 className="text-base font-bold text-white font-mono">{order.tableNumber}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-bold text-white font-mono">
+                                {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter'}
+                              </h3>
+                              <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                                #{order.id.length > 8 ? order.id.slice(-6) : order.id}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 mt-0.5">
+                              Guest: <span className="text-white font-medium">{order.customerName || 'Walk-in'}</span>
+                            </p>
                           </div>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                            READY
-                          </span>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-bold">
+                              Kitchen: READY
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {getTimeElapsed(order.readyAt || order.updatedAt)}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="bg-[#12151b] p-2.5 rounded-lg border border-[#1e232e] space-y-1">
-                          {order.items.map((item) => (
+                          <p className="text-[10px] font-mono uppercase text-slate-400 border-b border-[#1e232e] pb-1">Items to Deliver:</p>
+                          {(order.items || []).map((item) => (
                             <div key={item.id} className="flex justify-between items-center text-xs text-slate-200">
                               <span>{item.name}</span>
                               <span className="font-mono text-emerald-400 font-semibold">x{item.quantity}</span>
@@ -1035,10 +1085,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                         <Button
                           variant="success"
                           size="sm"
-                          className="w-full text-xs font-medium py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-8"
-                          onClick={() => handleDeliverOrder(order.id)}
+                          className="w-full text-xs font-semibold py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-8 flex items-center justify-center gap-1.5"
+                          onClick={() => handleDeliverOrder(order.id, order.tableNumber)}
                         >
-                          Deliver to Table
+                          <CheckSquare className="w-3.5 h-3.5" />
+                          <span>MARK DELIVERED</span>
                         </Button>
                       </div>
                     ))}
@@ -1272,16 +1323,19 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
             </div>
           )}
 
-          {/* TAB 4: READY PLATES */}
+          {/* TAB 4: READY PLATES / READY FOR DELIVERY */}
           {activeTab === 'ready-plates' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-white tracking-tight">Ready Kitchen Plates Pass</h2>
-                  <p className="text-xs text-slate-400">Orders marked READY by Kitchen waiting for floor delivery</p>
+                  <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-emerald-400" />
+                    READY FOR DELIVERY
+                  </h2>
+                  <p className="text-xs text-slate-400">Kitchen-plated orders marked READY waiting for floor delivery</p>
                 </div>
-                <span className="text-xs font-mono px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                  {readyPlatesList.length} Ready
+                <span className="text-xs font-mono px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-semibold">
+                  {readyPlatesList.length} Ready for Delivery
                 </span>
               </div>
 
@@ -1298,18 +1352,28 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                   {readyPlatesList.map((order) => (
                     <div
                       key={order.id}
-                      className="bg-[#12151b] border border-emerald-500/30 p-4 space-y-3 rounded-xl hover:border-emerald-500/60 transition-colors"
+                      className="bg-[#12151b] border border-emerald-500/30 p-4 space-y-3 rounded-xl hover:border-emerald-500/60 transition-colors shadow-lg"
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="text-xs font-mono text-emerald-400 font-semibold block">ORDER #{order.id}</span>
-                          <h3 className="text-xl font-bold text-white font-mono tracking-tight">{order.tableNumber}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xl font-bold text-white font-mono tracking-tight">
+                              {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter'}
+                            </h3>
+                            <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                              #{order.id.length > 8 ? order.id.slice(-6) : order.id}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 font-medium mt-1">
+                            Guest: <span className="text-white">{order.customerName || 'Walk-in'}</span>
+                          </p>
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                            READY
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                            Kitchen: READY
                           </span>
-                          <span className="text-[10px] font-mono text-slate-400">
+                          <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-500" />
                             {getTimeElapsed(order.readyAt || order.updatedAt)}
                           </span>
                         </div>
@@ -1318,10 +1382,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                       {/* Food Items & Quantity */}
                       <div className="bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] space-y-1.5">
                         <span className="text-[10px] font-mono uppercase text-slate-400 block border-b border-[#1e232e] pb-1">
-                          Items to Deliver
+                          Plated Items to Deliver
                         </span>
-                        <div className="space-y-1">
-                          {order.items.map((item) => (
+                        <div className="space-y-1 max-h-36 overflow-y-auto">
+                          {(order.items || []).map((item) => (
                             <div key={item.id} className="flex justify-between items-center text-xs text-slate-200">
                               <span>{item.name}</span>
                               <span className="font-mono text-emerald-400 font-semibold">
@@ -1332,15 +1396,15 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
                         </div>
                       </div>
 
-                      {/* DELIVER Action */}
+                      {/* MARK DELIVERED Action */}
                       <Button
                         variant="success"
                         size="sm"
-                        className="w-full text-xs font-medium py-2 bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 h-8"
-                        onClick={() => handleDeliverOrder(order.id)}
+                        className="w-full text-xs font-semibold py-2 bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 h-9 rounded-lg shadow-sm"
+                        onClick={() => handleDeliverOrder(order.id, order.tableNumber)}
                       >
-                        <CheckSquare className="w-3.5 h-3.5" />
-                        <span>Deliver to Table</span>
+                        <CheckSquare className="w-4 h-4" />
+                        <span>MARK DELIVERED</span>
                       </Button>
                     </div>
                   ))}

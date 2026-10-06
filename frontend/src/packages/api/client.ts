@@ -2835,21 +2835,15 @@ export class DinelyApiClient {
     if (!targetId) return [];
 
     try {
-      const apiBase = getApiBaseUrl();
-      const headers = this.getAuthHeader('OWNER');
-      const res = await fetch(`${apiBase}/orders/restaurant/${encodeURIComponent(targetId)}`, {
-        headers,
-      });
-      if (res.ok) {
-        const rawOrds = await res.json();
-        if (Array.isArray(rawOrds)) {
-          const remoteOrds: Order[] = rawOrds.map((data: any) => normalizeOrder(data));
-          this.orders = this.orders.filter((o) => o.restaurantId !== targetId).concat(remoteOrds);
-          this.saveDatabase();
-          return remoteOrds;
-        }
-      } else {
-        console.warn(`[getOrders] API returned ${res.status} for restaurant ${targetId}`);
+      const rawOrds = await this.executeProtectedRequest<any[]>(
+        `/orders/restaurant/${encodeURIComponent(targetId)}`,
+        { method: 'GET' }
+      );
+      if (Array.isArray(rawOrds)) {
+        const remoteOrds: Order[] = rawOrds.map((data: any) => normalizeOrder(data));
+        this.orders = this.orders.filter((o) => o.restaurantId !== targetId).concat(remoteOrds);
+        this.saveDatabase();
+        return remoteOrds;
       }
     } catch (e) {
       console.warn('API fetch for getOrders failed:', e);
@@ -4453,25 +4447,23 @@ export class DinelyApiClient {
 
   async markBillPayment(restaurantId: string, billId: string, paymentMethod: PaymentMethod = 'CASH', verifiedBy: string = 'Staff', paymentReference?: string): Promise<Bill> {
     const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
-    const apiBase = getApiBaseUrl();
     try {
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/mark-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentMethod,
-          verifiedBy,
-          paymentReference,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.bill) {
-          const idx = this.bills.findIndex((b) => b.id === billId);
-          if (idx >= 0) this.bills[idx] = data.bill;
-          this.saveDatabase();
-          return data.bill;
+      const res = await this.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/mark-payment`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            paymentMethod,
+            verifiedBy,
+            paymentReference,
+          }),
         }
+      );
+      if (res && res.bill) {
+        const idx = this.bills.findIndex((b) => b.id === billId);
+        if (idx >= 0) this.bills[idx] = res.bill;
+        this.saveDatabase();
+        return res.bill;
       }
     } catch (e) {
       console.warn('Failed to record payment via backend:', e);
@@ -4480,15 +4472,35 @@ export class DinelyApiClient {
     return b!;
   }
 
-  async closeTableSettlement(restaurantId: string, billId: string, closedBy: string = 'Staff') {
+  async reportCustomerPayment(restaurantId: string, billId: string, details?: any): Promise<any> {
     const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
     const apiBase = getApiBaseUrl();
     try {
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/close-table?closed_by=${encodeURIComponent(closedBy)}`, {
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/report-customer-payment`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(details || {}),
       });
       if (res.ok) {
         return await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to report customer payment:', e);
+    }
+    return { status: 'success', paymentStatus: 'PAYMENT_AWAITING_CONFIRMATION' };
+  }
+
+  async closeTableSettlement(restaurantId: string, billId: string, closedBy: string = 'Staff') {
+    const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
+    try {
+      const res = await this.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/close-table?closed_by=${encodeURIComponent(closedBy)}`,
+        {
+          method: 'POST',
+        }
+      );
+      if (res) {
+        return res;
       }
     } catch (e) {
       console.warn('Failed to close table via backend:', e);
@@ -4504,22 +4516,19 @@ export class DinelyApiClient {
     const targetId = this.resolveTenantRestaurantId(restaurantId) || restaurantId;
     if (!targetId) return [];
 
-    const apiBase = getApiBaseUrl();
-    let url = `${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/bills`;
+    let endpoint = `/restaurants/${encodeURIComponent(targetId)}/billing/bills`;
     const params = new URLSearchParams();
     if (statusFilter && statusFilter !== 'ALL') params.append('status_filter', statusFilter);
     if (paymentStatus && paymentStatus !== 'ALL') params.append('payment_status', paymentStatus);
     if (tableNumber) params.append('table_number', tableNumber);
-    if (params.toString()) url += `?${params.toString()}`;
+    if (params.toString()) endpoint += `?${params.toString()}`;
 
     try {
-      const headers = this.getAuthHeader('OWNER');
-      const res = await fetch(url, { headers });
-      if (res.ok) {
-        const items = await res.json();
-        if (Array.isArray(items) && items.length > 0) {
-          return items;
-        }
+      const items = await this.executeProtectedRequest<any[]>(endpoint, { method: 'GET' });
+      if (Array.isArray(items)) {
+        this.bills = this.bills.filter((b) => b.restaurantId !== targetId).concat(items);
+        this.saveDatabase();
+        return items;
       }
     } catch (e) {
       console.warn('Failed to fetch remote bills:', e);
@@ -5648,7 +5657,8 @@ export class DinelyApiClient {
         {
           method: 'PUT',
           body: JSON.stringify({ status: 'DELIVERED', kitchenStatus: 'COMPLETED' }),
-        }
+        },
+        'WAITER'
       );
     } catch (e) {
       console.warn('API PUT for deliverOrder failed:', e);
@@ -5694,6 +5704,24 @@ export class DinelyApiClient {
 
   async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
     const order = this.orders.find((o) => o.id === orderId);
+    const orderStatus = status === 'READY' ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : undefined);
+
+    try {
+      await this.executeProtectedRequest<any>(
+        `/orders/${encodeURIComponent(orderId)}/status`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+            kitchenStatus: status,
+          }),
+        },
+        'KITCHEN'
+      );
+    } catch (e) {
+      console.warn('API PUT for updateKitchenStatus failed:', e);
+    }
+
     if (order) {
       order.kitchenStatus = status;
       if (status === 'COMPLETED') {
@@ -5710,19 +5738,6 @@ export class DinelyApiClient {
         }
       }
 
-      try {
-        await this.executeProtectedRequest<any>(
-          `/orders/${encodeURIComponent(orderId)}/status`,
-          {
-            method: 'PUT',
-            body: JSON.stringify({ status: order.status, kitchenStatus: status }),
-          },
-          'KITCHEN'
-        );
-      } catch (e) {
-        console.warn('API PUT for updateKitchenStatus failed:', e);
-      }
-
       order.updatedAt = new Date().toISOString();
       this.saveDatabase();
 
@@ -5734,7 +5749,7 @@ export class DinelyApiClient {
         data: order,
       });
 
-      if (order.status === 'READY') {
+      if (order.status === 'READY' || status === 'READY') {
         realtimeBus.emit('OrderReady' as any, {
           orderId: order.id,
           restaurantId: order.restaurantId,

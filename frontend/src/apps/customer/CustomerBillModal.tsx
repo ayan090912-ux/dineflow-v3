@@ -85,6 +85,8 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
         event.type === 'OrderCreated' ||
         event.type === 'BillRequested' ||
         event.type === 'BillPaid' ||
+        event.type === 'payment_status_updated' ||
+        event.type === 'payment_updated' ||
         event.type === 'TableSessionClosed' ||
         event.type === 'OrderAccepted' ||
         event.type === 'OrderDelivered'
@@ -125,28 +127,35 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     }
   };
 
-  // Customer Claimed Paid Online -> Alert Waiter
+  // Customer Claimed Paid Online -> Submit Verification & Alert Waiter
   const handleCustomerClaimedPaid = async () => {
     setIsLoading(true);
-    setNotificationToast('Alerting floor staff...');
+    setNotificationToast('Payment submitted. Verifying...');
     try {
       const amountStr = bill ? `₹${bill.grandTotal.toFixed(2)}` : '';
+      if (bill) {
+        await api.reportCustomerPayment(restId, bill.id, {
+          payment_method: 'UPI',
+          table_session_id: tableSession?.id,
+          amount: bill.grandTotal,
+        });
+      }
       await api.createCustomerRequest({
         restaurantId: restId,
         tableNumber: standardTable,
         requestType: 'BILL',
         customTitle: 'UPI Payment Verification',
-        message: `Customer at ${standardTable} has paid ${amountStr} via UPI (${activeUpiId || 'UPI QR'}). Please verify & confirm.`,
+        message: `Customer at ${standardTable} reported payment ${amountStr} via UPI (${activeUpiId || 'UPI QR'}). Verification pending.`,
         customerNotes: `UPI ID: ${activeUpiId || 'Merchant QR'} | Amount: ${amountStr}`,
         priority: 'HIGH',
         tableSessionId: tableSession?.id,
       });
-      await api.requestTableBill(restId, tableNumber, tableSession?.id);
-      setNotificationToast('Payment notification sent to cashier terminal.');
+      setBill((prev) => prev ? { ...prev, paymentStatus: 'PAYMENT_AWAITING_CONFIRMATION' } : prev);
+      setNotificationToast('Payment submitted. Verifying...');
       setTimeout(() => setNotificationToast(null), 4000);
     } catch (err: any) {
       console.warn('Paid alert error:', err);
-      setNotificationToast('Floor staff alerted.');
+      setNotificationToast('Payment submitted. Verifying...');
       setTimeout(() => setNotificationToast(null), 3000);
     } finally {
       setIsLoading(false);
@@ -182,21 +191,6 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     }
   };
 
-  // Online Payment Handler Simulation (Gateway Abstraction)
-  const handleProcessOnlinePayment = async () => {
-    setPaymentState('PROCESSING');
-    setTimeout(async () => {
-      if (bill) {
-        const updatedBill = await api.recordBillPayment(bill.id, selectedPaymentMethod);
-        setBill(updatedBill);
-        setPaymentState('SUCCESS');
-        setTimeout(() => {
-          setIsPayOnlineModalOpen(false);
-          setPaymentState('IDLE');
-        }, 1500);
-      }
-    }, 1200);
-  };
 
   // Instant Digital Receipt PNG Exporter Trigger (Mobile iOS & Android Compatible)
   const handleDownloadReceipt = () => {
@@ -278,7 +272,27 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               </div>
 
               {/* STATUS BANNER */}
-              {bill.status === 'BILL_REQUESTED' ? (
+              {bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <div>
+                    <p className="font-semibold text-xs">Payment Status: PAID</p>
+                    <p className="text-[10px] text-white/50">
+                      Payment verified & received via {bill.paymentMethod || 'UPI'}. Thank you for dining with us!
+                    </p>
+                  </div>
+                </div>
+              ) : bill.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION' || bill.paymentStatus === 'PAYMENT_PROCESSING' ? (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 flex items-center gap-2">
+                  <Clock className="w-4 h-4 shrink-0 text-amber-400 animate-pulse" />
+                  <div>
+                    <p className="font-semibold text-xs">Payment Status: Payment Processing / Verifying...</p>
+                    <p className="text-[10px] text-white/50">
+                      Payment submitted. Floor staff or gateway verification in progress.
+                    </p>
+                  </div>
+                </div>
+              ) : bill.status === 'BILL_REQUESTED' ? (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 shrink-0 text-amber-400" />
@@ -290,20 +304,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                     </div>
                   </div>
                 </div>
-              ) : bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                  <div>
-                    <p className="font-medium text-xs">Paid & Settled</p>
-                    <p className="text-[10px] text-white/50">
-                      Payment received via {bill.paymentMethod || 'UPI'}. Thank you for dining with us.
-                    </p>
-                  </div>
-                </div>
               ) : (
                 <div className="p-2 bg-white/[0.02] rounded-lg border border-white/[0.04] text-white/40 flex items-center justify-between text-[11px] font-mono">
-                  <span>Current Running Balance</span>
-                  <span className="text-emerald-400 font-medium">OPEN</span>
+                  <span>Payment Status</span>
+                  <span className="text-amber-400 font-medium">Unpaid</span>
                 </div>
               )}
             </div>

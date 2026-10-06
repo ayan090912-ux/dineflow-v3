@@ -644,6 +644,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       } else if (
         event.type === 'order_status_updated' ||
         event.type === 'order_ready' ||
+        event.type === 'order_delivered' ||
+        event.type === 'OrderDelivered' ||
         event.type === 'OrderStatusUpdated' ||
         event.type === 'KitchenStatusUpdated' ||
         event.type === 'BarStatusUpdated'
@@ -664,6 +666,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       } else if (event.type === 'BillRequested') {
         addToast('success', 'Bill Request Received 🧾', `Table ${event.tableNumber} requested final check.`);
         api.getBills(restId).then((b) => setBills(b || [])).catch(() => {});
+      } else if (
+        event.type === 'BillPaid' ||
+        event.type === 'payment_updated' ||
+        event.type === 'payment_status_updated' ||
+        event.type === 'BillPaymentRecorded'
+      ) {
+        const payloadData = (event as any).payload || event;
+        const paidBillId = payloadData.billId || payloadData.bill_id;
+        const newStatus = payloadData.paymentStatus || payloadData.payment_status || 'PAID';
+        if (paidBillId) {
+          setBills((prev) =>
+            prev.map((b) => (b.id === paidBillId ? { ...b, paymentStatus: newStatus, status: newStatus === 'PAID' ? 'CLOSED' : b.status } : b))
+          );
+        }
+        api.getBills(restId).then((b) => setBills(b || [])).catch(() => {});
+        addToast('success', 'Payment Received 💰', `Bill payment updated: ₹${payloadData.amount || payloadData.grandTotal || ''} (${newStatus})`);
       } else if (event.type === 'ETAUpdated') {
         addToast('info', 'ETA Adjusted ⏱️', `Order #${event.orderId} ETA set to ${event.estimatedPrepTimeMinutes}m`);
         setOrders((prev) =>
@@ -3765,7 +3783,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                         }}
                                         className="text-xs font-semibold"
                                       >
-                                        Mark Paid 💳
+                                        Record Manual Payment 💳
                                       </Button>
                                     ) : (
                                       <Button
@@ -3944,7 +3962,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                 variant={
                                   b.paymentStatus === 'PAID' || b.status === 'CLOSED'
                                     ? 'success'
-                                    : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED'
+                                    : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED' || b.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION'
                                     ? 'warning'
                                     : b.status === 'BILL_REQUESTED'
                                     ? 'warning'
@@ -3953,11 +3971,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                               >
                                 {b.paymentStatus === 'PAID' || b.status === 'CLOSED'
                                   ? 'PAID'
+                                  : b.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION'
+                                  ? 'AWAITING CONFIRMATION'
                                   : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED'
                                   ? 'VERIFY PAYMENT ⚠️'
                                   : b.status === 'BILL_REQUESTED'
                                   ? 'BILL REQUESTED'
-                                  : 'OPEN'}
+                                  : 'UNPAID'}
                               </Badge>
                             ),
                           },
@@ -3981,9 +4001,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                       setPaymentBillModal(b);
                                       setPaymentMethodInput('CASH');
                                     }}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2 py-1"
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 whitespace-nowrap"
                                   >
-                                    Pay 💳
+                                    Record Manual Payment 💳
                                   </Button>
                                 )}
                               </div>
@@ -5601,7 +5621,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   }}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
                 >
-                  Mark Payment 💳
+                  Record Manual Payment 💳
                 </Button>
               )}
 
