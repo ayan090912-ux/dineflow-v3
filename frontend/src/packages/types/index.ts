@@ -469,7 +469,7 @@ export interface Bill {
   grandTotal: number;
   status: BillStatus;
   paymentMethod?: PaymentMethod;
-  paymentStatus: 'UNPAID' | 'PAYMENT_PENDING' | 'PAYMENT_VERIFICATION_REQUIRED' | 'PAID' | 'FAILED';
+  paymentStatus: 'UNPAID' | 'PAYMENT_PENDING' | 'PAYMENT_VERIFICATION_REQUIRED' | 'PAYMENT_AWAITING_CONFIRMATION' | 'PAYMENT_PROCESSING' | 'PAID' | 'FAILED';
   paymentVerifiedBy?: string;
   paymentReference?: string;
   requestedAt?: string;

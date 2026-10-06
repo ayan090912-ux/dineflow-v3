@@ -628,7 +628,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               </thead>
               <tbody className="divide-y divide-[#1e232e]">
                 {businessDayHistory.map((b) => {
-                  const bSummary = b.summary || {};
+                  const bSummary = (b.summary || {}) as any;
                   const bOrders = bSummary.totalOrders ?? (b as any).totalOrders ?? (b as any).total_orders ?? 0;
                   const bFoodSales = bSummary.foodSales ?? (b as any).foodSales ?? (b as any).food_sales ?? 0;
                   const bBarSales = bSummary.barSales ?? (b as any).barSales ?? (b as any).bar_sales ?? 0;
@@ -857,7 +857,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 
             {/* Financial Summary Breakdown */}
             {(() => {
-              const summary = selectedHistoricalDay.summary || {};
+              const summary = (selectedHistoricalDay.summary || {}) as any;
               const tOrders = summary.totalOrders ?? (selectedHistoricalDay as any).total_orders ?? 0;
               const fSales = summary.foodSales ?? (selectedHistoricalDay as any).food_sales ?? 0;
               const bSales = summary.barSales ?? (selectedHistoricalDay as any).bar_sales ?? 0;

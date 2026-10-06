@@ -1444,6 +1444,24 @@ export class DinelyApiClient {
 
   getCurrentRestaurantId(): string {
     const scope = getPortalScopeFromPath();
+    // 1. Authoritative: on tenant subdomains (e.g. the-start.dinely.food), hostname identity always wins
+    if (typeof window !== 'undefined') {
+      const tenantRes = getTenantFromHostname();
+      if (tenantRes.isTenantSubdomain && tenantRes.slug) {
+        const found = this.restaurants.find(
+          (r) => !r.isDeleted && (r.slug === tenantRes.slug || r.publicSlug === tenantRes.slug)
+        );
+        if (found) {
+          return found.id;
+        }
+        if (this._currentRestaurantId) {
+          return this._currentRestaurantId;
+        }
+        return tenantRes.slug;
+      }
+    }
+
+    // 2. Fallback for platform domains (dinely.food) or dev
     let candidateId = this.currentRestaurantIdsByScope[scope] || this.getCurrentUser(scope)?.restaurantId || this._currentRestaurantId || '';
     if (!candidateId && typeof window !== 'undefined') {
       candidateId = localStorage.getItem('dinely_active_restaurant_id') || localStorage.getItem('dinely_restaurant_id') || sessionStorage.getItem('dinely_active_restaurant_id') || '';
@@ -2407,6 +2425,31 @@ export class DinelyApiClient {
   // --- Strict Tenant Scoped Data Getters ---
 
   private resolveTenantRestaurantId(providedId?: string): string | null {
+    // 1. Hostname is authoritative for tenant resolution: hostname -> slug -> restaurant_id
+    if (typeof window !== 'undefined') {
+      const tenantRes = getTenantFromHostname();
+      if (tenantRes.isTenantSubdomain && tenantRes.slug) {
+        const found = this.restaurants.find(
+          (r) => !r.isDeleted && (r.slug === tenantRes.slug || r.publicSlug === tenantRes.slug)
+        );
+        const hostnameId = found ? found.id : tenantRes.slug;
+
+        // If providedId was supplied, verify if it belongs to this hostname tenant; never let external/stale IDs override hostname authority
+        if (providedId && String(providedId).trim()) {
+          const cleanId = String(providedId).trim();
+          if (found && (cleanId === found.id || cleanId === found.slug || cleanId.toLowerCase() === found.id.toLowerCase())) {
+            return found.id;
+          }
+          if (cleanId === tenantRes.slug) {
+            return hostnameId;
+          }
+          // Stale / injected foreign ID: HOSTNAME ALWAYS WINS on tenant subdomains
+          return hostnameId;
+        }
+        return hostnameId;
+      }
+    }
+
     if (providedId && String(providedId).trim()) {
       const cleanId = String(providedId).trim();
       const targetRest = this.restaurants.find(
@@ -2416,20 +2459,6 @@ export class DinelyApiClient {
         return targetRest.id;
       }
       return cleanId;
-    }
-
-    // 1. Hostname is authoritative for tenant resolution: hostname -> slug -> restaurant_id
-    if (typeof window !== 'undefined') {
-      const tenantRes = getTenantFromHostname();
-      if (tenantRes.isTenantSubdomain && tenantRes.slug) {
-        const found = this.restaurants.find(
-          (r) => !r.isDeleted && (r.slug === tenantRes.slug || r.publicSlug === tenantRes.slug)
-        );
-        if (found) {
-          return found.id;
-        }
-        return tenantRes.slug;
-      }
     }
 
     // 2. Active in-memory restaurant context set by tenant route resolver

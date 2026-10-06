@@ -370,8 +370,12 @@ function AppContent() {
             // Authoritative server-side profile & tenant restoration from AWS RDS
             api.fetchAuthMe(token).then((authMe) => {
               if (authMe?.restaurant) {
-                setCurrentRestaurant(authMe.restaurant);
-                api.setCurrentRestaurantId(authMe.restaurant.id);
+                // On tenant subdomains (e.g. the-start.dinely.food), the hostname is authoritative.
+                // Only hydrate global restaurant state if on platform domain (dinely.food)
+                if (!domainResolution.isTenantSubdomain) {
+                  setCurrentRestaurant(authMe.restaurant);
+                  api.setCurrentRestaurantId(authMe.restaurant.id);
+                }
               }
             }).catch((err) => {
               console.warn('[App] /auth/me bootstrap notice:', err);
