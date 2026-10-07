@@ -197,5 +197,15 @@ Every tenant entity in PostgreSQL strictly references `restaurant_id`:
 ## 9. Known Technical Debt & Immediate Priorities
 
 1. **Domain Wildcard Mapping**: Needs production verification that `*.dinely.app` CNAME points cleanly to Firebase Hosting with wildcard SSL.
-2. **Unified API Client Refactoring**: `frontend/src/packages/api/client.ts` is large (>2,100 lines) and should progressively be split into dedicated domain clients (`RestaurantApiClient`, `AdminApiClient`, `CustomerApiClient`, `BillingApiClient`).
+2. **Unified API Client Refactoring (COMPLETED)**:
+   - Split `frontend/src/packages/api/client.ts` into a modular domain-driven architecture under `frontend/src/packages/api/`:
+     - `core/helpers.ts`: Scope resolution, token keys, order normalization, and URL builders.
+     - `core/baseClient.ts`: Shared in-memory data store, caching, persistence, and HTTP auth wrappers (`executeProtectedRequest`, `executeAdminRequest`).
+     - `domains/authClient.ts`: Owner, admin, and terminal authentication and session management.
+     - `domains/adminClient.ts`: Platform stats, moderation, restaurant approvals/rejections, notifications, audit logs.
+     - `domains/restaurantClient.ts`: Multi-tenant restaurant entity management, tables, menu, inventory, staff, and day cycles.
+     - `domains/orderClient.ts`: Order dispatch, KDS & Bar tickets, prep timers, smart ETA, status transitions.
+     - `domains/billingClient.ts`: Bill generation, UPI, tax calculations, invoice generation, table settlements.
+     - `domains/customerClient.ts`: Waiter calling, customer requests, and guest bill requests.
+     - `client.ts`: Unified Facade composition root preserving 100% backward compatibility for all existing call sites (`api.*`) and exporting domain-specific singletons (`authApi`, `adminApi`, `restaurantApi`, `orderApi`, `billingApi`, `customerApi`).
 3. **Session Reconnection Protocol**: WebSocket reconnection logic should fetch authoritative missed events after reconnect to guarantee zero dropped KDS tickets.
