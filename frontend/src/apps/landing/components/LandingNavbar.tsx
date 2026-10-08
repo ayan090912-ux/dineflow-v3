@@ -97,44 +97,43 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
 
             {/* Auth / Workspace CTAs */}
             <div className="flex items-center gap-2 ml-3">
+              <button
+                type="button"
+                onClick={onLogin}
+                id="nav-owner-login-btn"
+                className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/75 transition-colors hover:text-white hover:bg-white/[0.08] cursor-pointer bg-transparent border-none"
+              >
+                Owner Login
+              </button>
+              <button
+                type="button"
+                onClick={onStaffLogin || (() => window.location.href = '/staff/login')}
+                id="nav-staff-login-btn"
+                className="rounded-full px-3.5 py-2 text-[13px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors hover:bg-emerald-500/[0.1] cursor-pointer bg-transparent border border-emerald-500/25"
+              >
+                Staff Login
+              </button>
               {currentUser ? (
                 <button
                   type="button"
                   onClick={onOpenWorkspace}
+                  id="nav-my-workspace-btn"
                   className="rounded-full px-5 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.01] active:scale-[0.99] cursor-pointer border border-white/[0.14] shadow-sm shadow-black/60"
                   style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
                 >
                   My Workspace
                 </button>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={onLogin}
-                    id="nav-owner-login-btn"
-                    className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/75 transition-colors hover:text-white hover:bg-white/[0.08] cursor-pointer bg-transparent border-none"
-                  >
-                    Owner Login
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onStaffLogin || (() => window.location.href = '/staff/login')}
-                    id="nav-staff-login-btn"
-                    className="rounded-full px-3.5 py-2 text-[13px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors hover:bg-emerald-500/[0.1] cursor-pointer bg-transparent border border-emerald-500/25"
-                  >
-                    Staff Login
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onStartTrial}
-                    id="nav-create-rest-btn"
-                    className="group inline-flex items-center gap-2 rounded-full px-5 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer border border-white/[0.14] shadow-sm shadow-black/60"
-                    style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
-                  >
-                    <span>Create your restaurant</span>
-                    <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={onStartTrial}
+                  id="nav-create-rest-btn"
+                  className="group inline-flex items-center gap-2 rounded-full px-5 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer border border-white/[0.14] shadow-sm shadow-black/60"
+                  style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
+                >
+                  <span>Create your restaurant</span>
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                </button>
               )}
             </div>
           </nav>
@@ -181,7 +180,28 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             </div>
 
             {/* Mobile Drawer Bottom CTAs */}
-            <div className="mt-auto px-6 pb-10 flex flex-col gap-3">
+            <div className="mt-auto px-6 pb-10 flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onLogin();
+                }}
+                className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-white/85 hover:text-white transition-colors bg-white/[0.05] border border-white/[0.08] cursor-pointer"
+              >
+                Owner Login
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onStaffLogin) onStaffLogin();
+                  else window.location.href = '/staff/login';
+                }}
+                className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/[0.08] border border-emerald-500/25 cursor-pointer"
+              >
+                Staff Login
+              </button>
               {currentUser ? (
                 <button
                   type="button"
@@ -189,46 +209,23 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
                     setMobileMenuOpen(false);
                     onOpenWorkspace();
                   }}
-                  className="w-full rounded-full py-3 text-center text-[14px] font-medium text-white transition-opacity hover:opacity-90 cursor-pointer border border-white/[0.14]"
+                  className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-white transition-opacity hover:opacity-90 cursor-pointer border border-white/[0.14]"
                   style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
                 >
                   My Workspace
                 </button>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      onLogin();
-                    }}
-                    className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-white/85 hover:text-white transition-colors bg-white/[0.05] border border-white/[0.08] cursor-pointer"
-                  >
-                    Owner Login
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      if (onStaffLogin) onStaffLogin();
-                      else window.location.href = '/staff/login';
-                    }}
-                    className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/[0.08] border border-emerald-500/25 cursor-pointer"
-                  >
-                    Staff Login
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      onStartTrial();
-                    }}
-                    className="w-full rounded-full py-3 text-center text-[14px] font-medium text-white transition-opacity hover:opacity-90 cursor-pointer border border-white/[0.14]"
-                    style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
-                  >
-                    Create your restaurant
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onStartTrial();
+                  }}
+                  className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-white transition-opacity hover:opacity-90 cursor-pointer border border-white/[0.14]"
+                  style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
+                >
+                  Create your restaurant
+                </button>
               )}
             </div>
           </aside>
