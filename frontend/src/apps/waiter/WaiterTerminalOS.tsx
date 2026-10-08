@@ -45,6 +45,7 @@ import {
   getFulfillmentStation,
   Bill,
   PaymentMethod,
+  Restaurant,
 } from '../../packages/types';
 import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
 import { matchTableNumber } from '../../packages/utils/tableUtils';
@@ -82,10 +83,11 @@ const playNotificationChime = () => {
 };
 
 interface WaiterTerminalOSProps {
+  restaurant?: Restaurant;
   onLogout?: () => void;
 }
 
-export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) => {
+export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, onLogout }) => {
   const { formatPrice } = useTheme();
 
   // Navigation tab state - ONLY the 4 required views allowed in Waiter Terminal MVP
@@ -143,10 +145,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
   };
 
   // Authenticated user & restaurant resolution
-  const currentUser = api.getCurrentUser();
+  const currentUser = api.getCurrentUser('WAITER') || api.getCurrentUser('STAFF') || api.getCurrentUser();
   const urlRestParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('restaurant') || new URLSearchParams(window.location.search).get('restaurantId') : null;
-  const currentRestaurantId = urlRestParam || api.getCurrentRestaurantId() || currentUser?.restaurantId || '';
+  const currentRestaurantId = restaurant?.id || urlRestParam || api.getCurrentRestaurantId() || currentUser?.restaurantId || '';
+  const restaurantName = restaurant?.name || api.restaurants.find((r) => r.id === currentRestaurantId)?.name || 'THE START';
   const waiterName = currentUser?.name || 'Ayaan';
+  const assignedTerminal = (currentUser as any)?.assignedTerminal || 'WAITER-01';
 
   // Live Clock Tick
   useEffect(() => {
@@ -734,8 +738,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ onLogout }) 
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <DinelyLogo size="sm" />
-              <h1 className="text-base font-semibold text-white tracking-tight">Waiter Terminal</h1>
+              <h1 className="text-base font-bold text-white tracking-tight uppercase">{restaurantName}</h1>
               <Badge variant="brand">WAITER TERMINAL</Badge>
+              <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px] font-mono">{assignedTerminal}</Badge>
               {wsStatus === 'CONNECTED' ? (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live

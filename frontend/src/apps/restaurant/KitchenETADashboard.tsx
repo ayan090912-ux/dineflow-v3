@@ -199,6 +199,7 @@ const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, o
 });
 
 interface KitchenETADashboardProps {
+  restaurant?: any;
   orders?: Order[];
   onRefreshOrders?: () => void;
   activeRole?: 'KITCHEN' | 'WAITER' | 'OWNER';
@@ -206,6 +207,7 @@ interface KitchenETADashboardProps {
 }
 
 export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
+  restaurant,
   orders: initialOrders,
   onRefreshOrders,
   activeRole = 'KITCHEN',
@@ -622,10 +624,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <DinelyLogo size="sm" />
-                <h1 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
-                  Kitchen Station
+                <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-2 uppercase">
+                  {restaurant?.name || 'THE START'}
                 </h1>
-                <Badge variant="brand">KITCHEN KDS</Badge>
+                <Badge variant="brand">KITCHEN TERMINAL</Badge>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
                 </span>

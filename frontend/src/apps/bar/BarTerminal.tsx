@@ -30,10 +30,11 @@ import { Order, OrderItem, OrderStatus, getFulfillmentStation } from '../../pack
 import { realtimeBus } from '../../packages/api/realtime';
 
 interface BarTerminalProps {
+  restaurant?: any;
   onLogout?: () => void;
 }
 
-export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
+export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -250,7 +251,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ onLogout }) => {
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <DinelyLogo size="sm" />
-              <h1 className="text-base font-semibold text-white tracking-tight">Bar Station</h1>
+              <h1 className="text-base font-bold text-white tracking-tight uppercase">{restaurant?.name || 'THE START'}</h1>
               <Badge variant="brand">BAR TERMINAL</Badge>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live

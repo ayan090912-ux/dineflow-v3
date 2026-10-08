@@ -120,9 +120,33 @@ async def websocket_endpoint(
                 st = get_settings()
                 payload = jose_jwt.decode(token, st.JWT_ACCESS_SECRET_KEY, algorithms=[st.JWT_ALGORITHM])
                 token_rest_id = str(payload.get("restaurant_id", "")).strip()
-                if not token_rest_id or token_rest_id.lower() == effective_rest_id.lower() or token_rest_id.lower() == (restaurant_id or "").lower():
-                    is_verified = True
-                    verified_role = str(payload.get("role", raw_role)).upper()
+                token_scope = str(payload.get("scope", "STAFF")).upper()
+                token_role = str(payload.get("role", raw_role)).upper()
+
+                # Cross-tenant rejection
+                if token_rest_id and token_rest_id.lower() != effective_rest_id.lower() and token_rest_id.lower() != (restaurant_id or "").lower():
+                    await websocket.close(code=1008, reason="Cross-tenant WebSocket access denied")
+                    return
+
+                # Staff account cannot subscribe to OWNER channel
+                if raw_role == "OWNER" and token_scope == "STAFF":
+                    await websocket.close(code=1008, reason="Staff account cannot subscribe to Owner WebSocket")
+                    return
+
+                # Role-scoped operational terminal enforcement
+                if token_scope == "STAFF" and raw_role in ("WAITER", "KITCHEN", "BAR", "INVENTORY"):
+                    role_alias_matches = (
+                        (raw_role == "KITCHEN" and token_role in ("KITCHEN", "CHEF", "COOK")) or
+                        (raw_role == "BAR" and token_role in ("BAR", "BARTENDER")) or
+                        (raw_role == "WAITER" and token_role in ("WAITER", "SERVER", "HOST")) or
+                        (raw_role == "INVENTORY" and token_role in ("INVENTORY", "STOCK_MANAGER"))
+                    )
+                    if not role_alias_matches:
+                        await websocket.close(code=1008, reason=f"Staff role '{token_role}' cannot subscribe to '{raw_role}' channel")
+                        return
+
+                is_verified = True
+                verified_role = token_role
             except ExpiredSignatureError:
                 token_expired = True
             except Exception:

@@ -663,6 +663,10 @@ async def get_owner_restaurants(
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
+    # Staff accounts cannot query owner workspaces
+    if caller.scope == "STAFF":
+        return []
+
     # Enforce strict IDOR protection: Non-admin authenticated callers cannot query another owner's tenants
     if caller.is_authenticated and not caller.is_admin:
         if owner_email and caller.email and owner_email.strip().lower() != caller.email.lower():
@@ -684,14 +688,17 @@ async def get_owner_restaurants(
     if not target_email and not target_uid:
         return []
 
-    # Find restaurant IDs user has membership for
+    # Find restaurant IDs user has OWNER membership for (staff roles are strictly excluded)
     mem_conditions = []
     if target_uid:
         mem_conditions.append(RestaurantMembership.user_uid == target_uid)
     if target_email:
         mem_conditions.append(func.lower(RestaurantMembership.user_email) == target_email)
 
-    mem_ids_stmt = select(RestaurantMembership.restaurant_id).where(or_(*mem_conditions))
+    mem_ids_stmt = select(RestaurantMembership.restaurant_id).where(
+        RestaurantMembership.role.in_(["OWNER", "RESTAURANT_OWNER"]),
+        or_(*mem_conditions)
+    )
     mem_ids_res = await db.execute(mem_ids_stmt)
     mem_rest_ids = mem_ids_res.scalars().all()
 

@@ -350,6 +350,7 @@ export class AuthClient {
       restaurantId: restId,
       tokens,
     };
+    (staffUser as any).scope = 'STAFF';
 
     const portalScope = (role === 'KITCHEN' || role === 'CHEF') ? 'KITCHEN'
       : (role === 'BAR' || role === 'BARTENDER') ? 'BAR'
@@ -357,11 +358,36 @@ export class AuthClient {
       : (role === 'CASHIER' || role === 'BILLING') ? 'ADMIN'
       : 'WAITER' as PortalScope;
 
-    this.base.saveSession(staffUser, tokens, restId, portalScope);
+    // 1. Clear any lingering owner session or platform admin state
+    this.base.clearSession('OWNER');
+    this.base.clearSession('ADMIN');
     if (typeof window !== 'undefined') {
+      localStorage.removeItem('dinely_user_owner');
+      sessionStorage.removeItem('dinely_user_owner');
+      localStorage.removeItem('dinely_user_admin');
+      sessionStorage.removeItem('dinely_user_admin');
+      localStorage.removeItem('dinely_owner_token');
+      localStorage.removeItem('dinely_platform_admin_id_token');
+      sessionStorage.removeItem('dinely_admin_token');
+    }
+
+    // 2. Sign out Firebase to eliminate any stale owner credentials
+    try {
+      const { signOutFirebase } = await import('../../auth/firebase');
+      await signOutFirebase();
+    } catch (_) {}
+
+    // 3. Save strictly scoped staff session
+    this.base.saveSession(staffUser, tokens, restId, portalScope);
+    this.base.saveSession(staffUser, tokens, restId, 'STAFF');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dinely_active_scope', 'STAFF');
+      localStorage.setItem('dinely_staff_token', token);
       localStorage.setItem(`dinely_staff_token_${portalScope.toLowerCase()}`, token);
       localStorage.setItem('dinely_auth_token', token);
       localStorage.setItem('dinely_active_restaurant_id', restId);
+      localStorage.setItem('dinely_user_staff', JSON.stringify(staffUser));
+      localStorage.setItem(`dinely_user_${portalScope.toLowerCase()}`, JSON.stringify(staffUser));
     }
     this.base.saveDatabase();
 

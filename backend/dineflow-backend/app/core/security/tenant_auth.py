@@ -23,6 +23,7 @@ class CallerContext:
         restaurant_id: Optional[str] = None,
         username: Optional[str] = None,
         terminal: Optional[str] = None,
+        scope: str = "USER",
     ):
         self.uid = uid
         self.email = (email or "").strip().lower() if email else None
@@ -31,6 +32,7 @@ class CallerContext:
         self.restaurant_id = (restaurant_id or "").strip() if restaurant_id else None
         self.username = username
         self.terminal = terminal
+        self.scope = (scope or "USER").strip().upper()
 
     @property
     def is_authenticated(self) -> bool:
@@ -84,6 +86,11 @@ async def get_caller_context(
                 rest_id = payload.get("restaurant_id")
                 username = payload.get("username")
                 terminal = payload.get("terminal") or payload.get("terminal_id")
+                raw_scope = payload.get("scope")
+                if raw_scope:
+                    token_scope = str(raw_scope).upper()
+                else:
+                    token_scope = "OWNER" if role in ("OWNER", "RESTAURANT_OWNER", "PLATFORM_ADMIN", "ADMIN") else "STAFF"
                 return CallerContext(
                     uid=uid,
                     email=email,
@@ -92,6 +99,7 @@ async def get_caller_context(
                     restaurant_id=rest_id,
                     username=username,
                     terminal=terminal,
+                    scope=token_scope,
                 )
             except Exception:
                 # Tampered, expired, or invalid HS256 token must fail authentication immediately
@@ -108,7 +116,8 @@ async def get_caller_context(
                 email=f"{staff_id}@staff.dinely.internal",
                 role=role_hint,
                 is_admin=False,
-                restaurant_id=staff_rest
+                restaurant_id=staff_rest,
+                scope="STAFF",
             )
 
         try:
@@ -133,7 +142,8 @@ async def get_caller_context(
                 email=email,
                 role="PLATFORM_ADMIN" if is_admin else role.upper(),
                 is_admin=is_admin,
-                restaurant_id=rest_id
+                restaurant_id=rest_id,
+                scope="ADMIN" if is_admin else "OWNER",
             )
         except Exception:
             pass
@@ -155,6 +165,7 @@ async def get_caller_context(
                 role=norm_role,
                 is_admin=False,
                 restaurant_id=x_staff_restaurant_id.strip(),
+                scope="STAFF",
             )
 
     return CallerContext()
@@ -259,7 +270,7 @@ async def verify_tenant_authorization(
     # 4. Check allowed_roles if specified
     if allowed_roles:
         norm_allowed = [r.strip().upper() for r in allowed_roles]
-        if effective_role not in norm_allowed and "OWNER" not in norm_allowed:
+        if effective_role not in norm_allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{effective_role}' is not authorized to perform this operation."
@@ -275,7 +286,12 @@ async def require_tenant_owner_or_admin(
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ) -> CallerContext:
-    """Enforces that caller is the owner or platform admin of the specified restaurant."""
+    """Enforces that caller is the owner or platform admin of the specified restaurant. Staff accounts are strictly forbidden."""
+    if caller.scope == "STAFF":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff accounts are not authorized to access restaurant owner or management endpoints."
+        )
     return await verify_tenant_authorization(
         restaurant_id=restaurant_id,
         allowed_roles=["OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN"],

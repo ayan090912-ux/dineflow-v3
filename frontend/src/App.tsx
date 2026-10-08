@@ -66,6 +66,29 @@ function PlatformTenantRedirector({
       try {
         setLoading(true);
         setError(null);
+
+        // Explicit Staff Guard: Staff accounts NEVER enter Owner Workspace selection
+        const isStaffUser = (user as any)?.scope === 'STAFF' ||
+          ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes(user?.role as string);
+
+        if (isStaffUser) {
+          const r = (user?.role || '').toUpperCase();
+          const terminalRoute = (
+            r === 'WAITER' ? '/waiter' :
+            r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
+            r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+            r === 'INVENTORY' ? '/inventory' : '/waiter'
+          );
+
+          const matchingRest = api.restaurants.find((res) => res.id === user?.restaurantId);
+          if (matchingRest?.slug) {
+            window.location.replace(`https://${matchingRest.slug}.dinely.food${terminalRoute}`);
+            return;
+          }
+          onNavigate(terminalRoute);
+          return;
+        }
+
         const list = await api.getOwnerRestaurants(user?.email, user?.id);
         if (!isMounted) return;
 
@@ -90,7 +113,9 @@ function PlatformTenantRedirector({
             return;
           }
 
-          const targetUrl = getTenantUrl(onlyRest, targetPath.startsWith('/restaurant') ? targetPath : '/restaurant/dashboard');
+          const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/inventory', '/billing'].some((r) => targetPath.startsWith(r));
+          const finalPath = targetPath.startsWith('/restaurant') || isStaffRoute ? targetPath : '/restaurant/dashboard';
+          const targetUrl = getTenantUrl(onlyRest, finalPath);
           window.location.replace(targetUrl);
           return;
         }
@@ -108,7 +133,7 @@ function PlatformTenantRedirector({
     return () => {
       isMounted = false;
     };
-  }, [user?.email, user?.id, targetPath, onNavigate]);
+  }, [user?.email, user?.id, (user as any)?.scope, user?.role, targetPath, onNavigate]);
 
   if (loading) {
     return (
@@ -152,7 +177,9 @@ function PlatformTenantRedirector({
             rest.lifecycleStatus !== 'SUSPENDED');
 
         if (isLive) {
-          window.location.href = getTenantUrl(rest, targetPath.startsWith('/restaurant') ? targetPath : '/restaurant/dashboard');
+          const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/inventory', '/billing'].some((r) => targetPath.startsWith(r));
+          const finalPath = targetPath.startsWith('/restaurant') || isStaffRoute ? targetPath : '/restaurant/dashboard';
+          window.location.href = getTenantUrl(rest, finalPath);
         } else {
           onNavigate('/restaurant/pending-approval');
         }
@@ -483,7 +510,10 @@ function AppContent() {
   const handleLogout = useCallback(async (redirectLoginPath: string = '/restaurant/login') => {
     const activeScope = getPortalScopeFromPath(cleanPath);
     await api.logout(activeScope);
-    await signOutFirebase();
+    try {
+      await signOutFirebase();
+    } catch (_) {}
+    api.clearAllAuthSessions();
     setCurrentUser(null);
     setCurrentRestaurant(null);
     navigateTo(redirectLoginPath);
@@ -658,12 +688,13 @@ function AppContent() {
 
         return (
           <KitchenETADashboard
+            restaurant={resolvedTenant}
             orders={kitchenOrders.length > 0 ? kitchenOrders : undefined}
             onRefreshOrders={() => {
               const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || resolvedTenant?.id || undefined;
               if (restId) api.getOrders(restId).then(setKitchenOrders).catch(() => {});
             }}
-            onLogout={() => handleLogout('/login')}
+            onLogout={() => handleLogout('/staff/login')}
           />
         );
       }
@@ -708,7 +739,7 @@ function AppContent() {
           );
         }
 
-        return <WaiterTerminalOS onLogout={() => handleLogout('/login')} />;
+        return <WaiterTerminalOS restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
       }
 
       // 4. Bar Terminal
@@ -751,7 +782,7 @@ function AppContent() {
           );
         }
 
-        return <BarTerminal onLogout={() => handleLogout('/login')} />;
+        return <BarTerminal restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
       }
 
       // 5. Inventory Terminal
@@ -794,7 +825,7 @@ function AppContent() {
           );
         }
 
-        return <InventoryTerminalOS onLogout={() => handleLogout('/login')} />;
+        return <InventoryTerminalOS restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
       }
 
       // 6. Billing / Operations Center
@@ -844,8 +875,31 @@ function AppContent() {
         return <RestaurantApp activeRestaurant={resolvedTenant} onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
       }
 
-      // 7. Settings / Tenant Management Dashboard
+      // 7. Settings / Tenant Management Dashboard (OWNER OS)
       if (tenantApp === 'SETTINGS') {
+        // Direct Staff Access Attack Check: Staff accounts MUST NEVER access Owner OS
+        const activeScope = typeof window !== 'undefined' ? localStorage.getItem('dinely_active_scope') : null;
+        const staffToken = typeof window !== 'undefined' ? (sessionStorage.getItem('dinely_staff_token') || localStorage.getItem('dinely_staff_token')) : null;
+        const staffUser = api.getCurrentUser('STAFF') || api.getCurrentUser('WAITER') || api.getCurrentUser('KITCHEN') || api.getCurrentUser('BAR') || api.getCurrentUser('INVENTORY');
+        const isStaffUser =
+          activeScope === 'STAFF' ||
+          !!staffToken ||
+          (currentUser as any)?.scope === 'STAFF' ||
+          (staffUser as any)?.scope === 'STAFF' ||
+          ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes(
+            ((currentUser?.role || staffUser?.role) as string)?.toUpperCase()
+          );
+
+        if (isStaffUser) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="RESTAURANT OWNER (STAFF ACCESS PROHIBITED)"
+              onLogout={() => handleLogout('/staff/login')}
+            />
+          );
+        }
+
         if (!currentUser) {
           return (
             <RoleLoginPage
@@ -861,12 +915,16 @@ function AppContent() {
 
         const isAuthorizedOwner =
           currentUser.role === 'SUPER_ADMIN' ||
-          (currentUser.restaurantId === resolvedTenant.id && ['OWNER', 'RESTAURANT_OWNER', 'MANAGER'].includes(currentUser.role)) ||
-          (currentUser.email && (
-            resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() ||
-            (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase() ||
-            (resolvedTenant as any).owner_email?.toLowerCase() === currentUser.email.toLowerCase()
-          ));
+          currentUser.role === 'PLATFORM_ADMIN' ||
+          ((currentUser as any)?.scope !== 'STAFF' &&
+            ['OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role) &&
+            currentUser.restaurantId === resolvedTenant.id) ||
+          ((currentUser as any)?.scope !== 'STAFF' &&
+            currentUser.email && (
+              resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() ||
+              (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase() ||
+              (resolvedTenant as any).owner_email?.toLowerCase() === currentUser.email.toLowerCase()
+            ));
 
         if (!isAuthorizedOwner) {
           return (
@@ -1240,6 +1298,26 @@ function AppContent() {
       cleanPath === '/settings' ||
       cleanPath.startsWith('/settings/')
     ) {
+      const isStaffUser = (currentUser as any)?.scope === 'STAFF' ||
+        ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes((currentUser?.role || '') as string);
+
+      if (isStaffUser) {
+        const r = (currentUser?.role || '').toUpperCase();
+        const terminalRoute = (
+          r === 'WAITER' ? '/waiter' :
+          r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
+          r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+          r === 'INVENTORY' ? '/inventory' : '/waiter'
+        );
+        const matchingRest = api.restaurants.find((res) => res.id === currentUser?.restaurantId);
+        if (matchingRest?.slug) {
+          window.location.replace(`https://${matchingRest.slug}.dinely.food${terminalRoute}`);
+          return null;
+        }
+        navigateTo(terminalRoute);
+        return null;
+      }
+
       if (!currentUser) {
         return (
           <RoleLoginPage
@@ -1259,7 +1337,9 @@ function AppContent() {
                     onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
                     onlyRest.lifecycleStatus !== 'REJECTED';
                   if (isLive) {
-                    window.location.href = getTenantUrl(onlyRest, cleanPath.startsWith('/restaurant') ? cleanPath : '/restaurant/dashboard');
+                    const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/inventory', '/billing'].some((r) => cleanPath.startsWith(r));
+                    const finalTarget = cleanPath.startsWith('/restaurant') || isStaffRoute ? cleanPath : '/restaurant/dashboard';
+                    window.location.href = getTenantUrl(onlyRest, finalTarget);
                   } else {
                     navigateTo('/restaurant/pending-approval');
                   }

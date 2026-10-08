@@ -18,6 +18,7 @@ import {
 import { DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
+import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { AuthPage } from './AuthPage';
 
 export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'admin' | 'staff';
@@ -161,6 +162,15 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       setSuccessMessage(`Authenticated successfully. Loading portal...`);
       setTimeout(() => {
         onLoginSuccess(result?.user?.role || portal, result?.user);
+
+        if (portal !== 'admin') {
+          const resolution = getTenantFromHostname();
+          if (!resolution.isTenantSubdomain && result?.restaurant?.slug) {
+            window.location.href = `https://${result.restaurant.slug}.dinely.food${destination}`;
+            return;
+          }
+        }
+
         onNavigate(destination);
       }, 350);
     } catch (err: any) {

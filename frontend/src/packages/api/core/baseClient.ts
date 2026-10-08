@@ -729,10 +729,20 @@ export class BaseApiClient {
                 localStorage.getItem('dinely_admin_token') ||
                 localStorage.getItem('dinely_auth_token')
               ) : null);
+    } else if (['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'].includes(targetScope)) {
+      token = this.currentTokensByScope[targetScope]?.accessToken ||
+              this.currentTokensByScope['STAFF']?.accessToken ||
+              (typeof window !== 'undefined' ? (
+                sessionStorage.getItem('dinely_staff_token') ||
+                localStorage.getItem('dinely_staff_token')
+              ) : null);
     } else {
+      // OWNER and default
       token = this.currentTokensByScope[targetScope]?.accessToken ||
               this.currentTokensByScope['OWNER']?.accessToken ||
               (typeof window !== 'undefined' ? (
+                sessionStorage.getItem('dinely_owner_token') ||
+                localStorage.getItem('dinely_owner_token') ||
                 localStorage.getItem('dinely_auth_token')
               ) : null);
     }
@@ -767,6 +777,18 @@ export class BaseApiClient {
       return null;
     }
 
+    if (targetScope === 'OWNER') {
+      const ownerUser = this.currentUsersByScope['OWNER'] || this.restoreSession('OWNER');
+      if (
+        ownerUser &&
+        (ownerUser as any).scope !== 'STAFF' &&
+        (ownerUser.role === 'RESTAURANT_OWNER' || ownerUser.role === 'OWNER' || ownerUser.role === 'MANAGER' || ownerUser.role === 'ADMIN')
+      ) {
+        return ownerUser;
+      }
+      return null;
+    }
+
     if (!this.currentUsersByScope[targetScope]) {
       this.restoreSession(targetScope);
     }
@@ -775,19 +797,17 @@ export class BaseApiClient {
       return directUser;
     }
 
-    const ownerUser = this.currentUsersByScope['OWNER'] || this.restoreSession('OWNER');
-    if (
-      ownerUser &&
-      (ownerUser.role === 'RESTAURANT_OWNER' || ownerUser.role === 'MANAGER' || ownerUser.role === 'ADMIN')
-    ) {
-      return ownerUser;
-    }
+    if (['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'].includes(targetScope)) {
+      const staffUser = this.currentUsersByScope['STAFF'] || this.restoreSession('STAFF');
+      if (staffUser) return staffUser;
 
-    for (const s of ['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'] as PortalScope[]) {
-      if (s !== targetScope && s !== 'ADMIN') {
-        const u = this.currentUsersByScope[s] || this.restoreSession(s);
-        if (u) return u;
+      for (const s of ['KITCHEN', 'WAITER', 'BAR', 'INVENTORY'] as PortalScope[]) {
+        if (s !== targetScope) {
+          const u = this.currentUsersByScope[s] || this.restoreSession(s);
+          if (u) return u;
+        }
       }
+      return null;
     }
 
     return null;
@@ -824,6 +844,27 @@ export class BaseApiClient {
       }
     }
     this.saveDatabase();
+  }
+
+  public clearSession(scope: PortalScope) {
+    delete this.currentUsersByScope[scope];
+    delete this.currentTokensByScope[scope];
+    delete this.currentRestaurantIdsByScope[scope];
+    if (typeof window !== 'undefined') {
+      const userKey = `dinely_user_${scope.toLowerCase()}`;
+      localStorage.removeItem(userKey);
+      sessionStorage.removeItem(userKey);
+      const sessionKey = SESSION_KEYS[scope];
+      if (sessionKey) {
+        localStorage.removeItem(sessionKey);
+        sessionStorage.removeItem(sessionKey);
+      }
+      const tokenKey = TOKEN_KEYS[scope];
+      if (tokenKey) {
+        localStorage.removeItem(tokenKey);
+        sessionStorage.removeItem(tokenKey);
+      }
+    }
   }
 
   public getCurrentRestaurantId(): string {
