@@ -733,6 +733,11 @@ export interface Employee {
   assignedSection?: string;
   shiftStart?: string;
   password?: string;
+  username?: string;
+  terminal?: string;
+  terminalId?: string;
+  staffUserId?: string;
+  isActive?: boolean;
   isAccountDisabled?: boolean;
   joinedDate?: string;
   createdAt?: string;

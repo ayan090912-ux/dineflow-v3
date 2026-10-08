@@ -1193,10 +1193,25 @@ async def upload_restaurant_image(
     }
 
 
+from app.core.security.password import hash_password
+
 class CreateStaffSchema(BaseModel):
-    email: str
+    name: str
+    username: Optional[str] = None
+    password: str
     role: str = "WAITER"
+    terminal: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    isActive: Optional[bool] = True
+
+class UpdateStaffSchema(BaseModel):
     name: Optional[str] = None
+    role: Optional[str] = None
+    terminal: Optional[str] = None
+    isActive: Optional[bool] = None
+    password: Optional[str] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
 
 @router.get("/{restaurant_id}/staff")
@@ -1211,16 +1226,23 @@ async def get_restaurant_staff(
     except Exception:
         canonical_id = restaurant_id
 
-    stmt = select(RestaurantMembership).where(RestaurantMembership.restaurant_id == canonical_id).order_by(RestaurantMembership.created_at.desc())
+    stmt = select(RestaurantMembership).where(
+        RestaurantMembership.restaurant_id == canonical_id
+    ).order_by(RestaurantMembership.created_at.desc())
     res = await db.execute(stmt)
     members = res.scalars().all()
     return [
         {
             "id": m.id,
             "restaurantId": m.restaurant_id,
+            "staffUserId": m.user_uid,
+            "name": m.full_name or (m.username or m.user_email.split("@")[0]).title(),
+            "username": m.username or m.user_email.split("@")[0],
             "email": m.user_email,
-            "name": m.user_email.split("@")[0].title() if m.user_email else "Staff Member",
             "role": m.role,
+            "terminal": m.assigned_terminal or f"{m.role}-01",
+            "terminalId": m.assigned_terminal or f"{m.role}-01",
+            "isActive": m.is_active,
             "createdAt": m.created_at.isoformat() if m.created_at else None,
         }
         for m in members
@@ -1239,49 +1261,140 @@ async def create_restaurant_staff(
     except Exception:
         canonical_id = restaurant_id
 
-    clean_email = payload.email.strip().lower()
+    clean_name = payload.name.strip()
+    raw_username = payload.username
+    if not raw_username:
+        if payload.email:
+            raw_username = payload.email.split("@")[0]
+        else:
+            raw_username = re.sub(r"[^a-z0-9_-]", "", clean_name.lower().replace(" ", "_"))
+    clean_username = raw_username.strip().lower()
     clean_role = payload.role.strip().upper()
     valid_roles = {"OWNER", "MANAGER", "WAITER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF"}
     if clean_role not in valid_roles:
         clean_role = "WAITER"
 
-    stmt = select(RestaurantMembership).where(
-        RestaurantMembership.restaurant_id == canonical_id,
-        func.lower(RestaurantMembership.user_email) == clean_email
-    )
-    res = await db.execute(stmt)
-    existing = res.scalar_one_or_none()
-    if existing:
-        existing.role = clean_role
-        await db.commit()
-        await db.refresh(existing)
-        return {
-            "id": existing.id,
-            "restaurantId": existing.restaurant_id,
-            "email": existing.user_email,
-            "name": payload.name or existing.user_email.split("@")[0].title(),
-            "role": existing.role,
-            "createdAt": existing.created_at.isoformat() if existing.created_at else None,
-        }
+    if len(clean_username) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username must be at least 3 characters."
+        )
 
-    uid = f"usr-{uuid.uuid4().hex[:12]}"
+    if not re.match(r"^[a-z0-9_-]+$", clean_username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username may only contain letters, numbers, underscores, and hyphens."
+        )
+
+    if not payload.password or len(payload.password) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 4 characters."
+        )
+
+    # Enforce global username uniqueness
+    dup_stmt = select(RestaurantMembership).where(
+        RestaurantMembership.username.is_not(None),
+        func.lower(RestaurantMembership.username) == clean_username
+    ).limit(1)
+    dup_res = await db.execute(dup_stmt)
+    existing_user = dup_res.scalar_one_or_none()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Username '{clean_username}' is already in use. Please select a unique username."
+        )
+
+    hashed_pw = hash_password(payload.password)
+    clean_terminal = (payload.terminal or f"{clean_role}-01").strip().upper()
+    user_email = (payload.email or f"{clean_username}@staff.dinely.internal").strip().lower()
+    staff_uid = f"staff-{uuid.uuid4().hex[:12]}"
+
     new_mem = RestaurantMembership(
         id=f"mem-{canonical_id}-{uuid.uuid4().hex[:8]}",
         restaurant_id=canonical_id,
-        user_uid=uid,
-        user_email=clean_email,
+        user_uid=staff_uid,
+        user_email=user_email,
+        username=clean_username,
+        full_name=clean_name,
+        password_hash=hashed_pw,
         role=clean_role,
+        assigned_terminal=clean_terminal,
+        is_active=payload.isActive if payload.isActive is not None else True,
     )
     db.add(new_mem)
     await db.commit()
     await db.refresh(new_mem)
+
     return {
         "id": new_mem.id,
         "restaurantId": new_mem.restaurant_id,
+        "staffUserId": new_mem.user_uid,
+        "name": new_mem.full_name,
+        "username": new_mem.username,
         "email": new_mem.user_email,
-        "name": payload.name or new_mem.user_email.split("@")[0].title(),
         "role": new_mem.role,
+        "terminal": new_mem.assigned_terminal,
+        "terminalId": new_mem.assigned_terminal,
+        "isActive": new_mem.is_active,
         "createdAt": new_mem.created_at.isoformat() if new_mem.created_at else None,
+    }
+
+@router.put("/{restaurant_id}/staff/{membership_id}")
+async def update_restaurant_staff(
+    restaurant_id: str,
+    membership_id: str,
+    payload: UpdateStaffSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(RestaurantMembership).where(
+        RestaurantMembership.restaurant_id == canonical_id,
+        RestaurantMembership.id == membership_id
+    )
+    res = await db.execute(stmt)
+    mem = res.scalar_one_or_none()
+    if not mem:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Staff membership record not found."
+        )
+
+    if payload.name:
+        mem.full_name = payload.name.strip()
+    if payload.role:
+        clean_role = payload.role.strip().upper()
+        mem.role = clean_role
+    if payload.terminal:
+        mem.assigned_terminal = payload.terminal.strip().upper()
+    if payload.isActive is not None:
+        mem.is_active = payload.isActive
+    if payload.password and len(payload.password) >= 4:
+        mem.password_hash = hash_password(payload.password)
+    if payload.email:
+        mem.user_email = payload.email.strip().lower()
+
+    await db.commit()
+    await db.refresh(mem)
+
+    return {
+        "id": mem.id,
+        "restaurantId": mem.restaurant_id,
+        "staffUserId": mem.user_uid,
+        "name": mem.full_name,
+        "username": mem.username,
+        "email": mem.user_email,
+        "role": mem.role,
+        "terminal": mem.assigned_terminal,
+        "terminalId": mem.assigned_terminal,
+        "isActive": mem.is_active,
+        "createdAt": mem.created_at.isoformat() if mem.created_at else None,
     }
 
 @router.delete("/{restaurant_id}/staff/{membership_id}")

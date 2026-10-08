@@ -1771,13 +1771,18 @@ export class RestaurantClient {
           id: s.id,
           restaurantId: s.restaurantId || targetId,
           name: s.name,
+          username: s.username || (s.email ? s.email.split('@')[0] : ''),
           email: s.email,
           phone: s.phone || '',
           role: s.role,
+          terminal: s.terminal || s.terminalId || `${s.role}-01`,
+          terminalId: s.terminalId || s.terminal || `${s.role}-01`,
+          staffUserId: s.staffUserId || s.id,
           status: s.status || 'OFF_CLOCK',
           hourlyRate: s.hourlyRate || 18,
           joinedDate: s.joinedDate || (s.createdAt ? s.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]),
-          isAccountDisabled: s.isAccountDisabled || false,
+          isActive: s.isActive !== undefined ? s.isActive : true,
+          isAccountDisabled: s.isActive !== undefined ? !s.isActive : false,
           shift: s.shift || 'General Shift',
           assignedSection: s.assignedSection || 'Main Dining Floor',
         }));
@@ -1795,15 +1800,19 @@ export class RestaurantClient {
     const restId = this.base.resolveTenantRestaurantId(empData.restaurantId) || this.base.getCurrentRestaurantId();
     if (!restId) throw new Error("No active restaurant selected");
 
+    const cleanUsername = (empData.username || empData.name?.toLowerCase().replace(/\s+/g, '') || `staff_${Date.now()}`).trim().toLowerCase();
+    const cleanRole = (empData.role || 'WAITER').toUpperCase();
+    const cleanTerminal = (empData.terminal || empData.terminalId || `${cleanRole}-01`).trim().toUpperCase();
+
     const payload = {
       name: empData.name || 'Staff Member',
-      email: empData.email || `staff_${Date.now()}@restaurant.com`,
-      phone: empData.phone || '',
-      role: empData.role || 'WAITER',
-      hourlyRate: typeof empData.hourlyRate === 'number' ? empData.hourlyRate : (parseFloat(empData.hourlyRate as any) || 18),
-      shift: empData.shift || 'Evening (4PM - 12AM)',
-      assignedSection: empData.assignedSection || 'Main Dining Floor',
+      username: cleanUsername,
       password: empData.password || 'staff123',
+      role: cleanRole,
+      terminal: cleanTerminal,
+      email: empData.email || `${cleanUsername}@staff.dinely.internal`,
+      phone: empData.phone || '',
+      isActive: empData.isActive !== undefined ? empData.isActive : (!empData.isAccountDisabled),
     };
 
     const s = await this.base.executeProtectedRequest<any>(
@@ -1819,15 +1828,20 @@ export class RestaurantClient {
       id: s.id,
       restaurantId: s.restaurantId || restId,
       name: s.name,
+      username: s.username || cleanUsername,
       email: s.email,
       phone: s.phone || payload.phone,
       role: s.role,
+      terminal: s.terminal || cleanTerminal,
+      terminalId: s.terminalId || cleanTerminal,
+      staffUserId: s.staffUserId || s.id,
       status: s.status || 'OFF_CLOCK',
-      hourlyRate: s.hourlyRate || payload.hourlyRate,
+      hourlyRate: s.hourlyRate || 18,
       joinedDate: s.joinedDate || new Date().toISOString().split('T')[0],
-      isAccountDisabled: s.isAccountDisabled || false,
-      shift: s.shift || payload.shift,
-      assignedSection: s.assignedSection || payload.assignedSection,
+      isActive: s.isActive !== undefined ? s.isActive : true,
+      isAccountDisabled: s.isActive !== undefined ? !s.isActive : false,
+      shift: s.shift || 'Evening (4PM - 12AM)',
+      assignedSection: s.assignedSection || 'Main Dining Floor',
       password: payload.password,
     };
     this.base.employees.unshift(newEmp);
@@ -1836,33 +1850,56 @@ export class RestaurantClient {
   }
 
   async updateEmployee(empId: string, updates: Partial<Employee>) {
-    await delay(150);
+    await delay(100);
     const emp = this.base.employees.find((e) => e.id === empId);
+    const restId = emp?.restaurantId || this.base.resolveTenantRestaurantId() || this.base.getCurrentRestaurantId();
+
+    if (restId) {
+      try {
+        const body: any = {};
+        if (updates.name !== undefined) body.name = updates.name;
+        if (updates.role !== undefined) body.role = updates.role;
+        if (updates.terminal !== undefined || updates.terminalId !== undefined) {
+          body.terminal = updates.terminal || updates.terminalId;
+        }
+        if (updates.isActive !== undefined) body.isActive = updates.isActive;
+        if (updates.isAccountDisabled !== undefined) body.isActive = !updates.isAccountDisabled;
+        if (updates.password !== undefined) body.password = updates.password;
+        if (updates.email !== undefined) body.email = updates.email;
+        if (updates.phone !== undefined) body.phone = updates.phone;
+
+        await this.base.executeProtectedRequest<any>(
+          `/restaurants/${encodeURIComponent(restId)}/staff/${encodeURIComponent(empId)}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(body),
+          },
+          'OWNER'
+        );
+      } catch (err) {
+        console.warn('Backend staff update sync failed:', err);
+      }
+    }
+
     if (emp) {
       Object.assign(emp, updates);
+      if (updates.isActive !== undefined) emp.isAccountDisabled = !updates.isActive;
+      if (updates.isAccountDisabled !== undefined) emp.isActive = !updates.isAccountDisabled;
       this.base.saveDatabase();
     }
     return emp;
   }
 
   async toggleEmployeeAccountStatus(empId: string) {
-    await delay(100);
     const emp = this.base.employees.find((e) => e.id === empId);
-    if (emp) {
-      emp.isAccountDisabled = !emp.isAccountDisabled;
-      this.base.saveDatabase();
-    }
-    return emp;
+    if (!emp) return null;
+    const newActive = emp.isActive !== undefined ? !emp.isActive : !!emp.isAccountDisabled;
+    return this.updateEmployee(empId, { isActive: newActive, isAccountDisabled: !newActive });
   }
 
   async resetEmployeePassword(empId: string, customPass?: string) {
-    await delay(150);
     const newPass = customPass || `pass_${Math.floor(1000 + Math.random() * 9000)}`;
-    const emp = this.base.employees.find((e) => e.id === empId);
-    if (emp) {
-      emp.password = newPass;
-      this.base.saveDatabase();
-    }
+    await this.updateEmployee(empId, { password: newPass });
     return newPass;
   }
 

@@ -99,4 +99,9 @@ class RestaurantMembership(Base, TimestampMixin):
     user_uid: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     user_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(50), default="OWNER", nullable=False, index=True)
+    username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, unique=True, index=True)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_terminal: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

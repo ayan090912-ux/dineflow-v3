@@ -225,7 +225,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
   const [newStaff, setNewStaff] = useState({
     name: '',
+    username: '',
     role: 'WAITER' as Employee['role'],
+    terminal: 'WAITER-01',
     email: '',
     phone: '',
     shift: 'Evening (4PM - 12AM)',
@@ -1063,30 +1065,41 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       addToast('error', 'Validation Failed', 'Staff member name is required.');
       return;
     }
+    const cleanUsername = (newStaff.username || newStaff.name.toLowerCase().replace(/\s+/g, '')).trim().toLowerCase();
+    if (!cleanUsername) {
+      addToast('error', 'Validation Failed', 'Staff username is required.');
+      return;
+    }
     try {
       const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
       const initialPass = newStaffPassword || (newStaff.role === 'CHEF' ? 'kitchen123' : newStaff.role === 'WAITER' ? 'waiter123' : 'staff123');
       const created = await api.addEmployee({
         restaurantId: restId,
-        name: newStaff.name,
+        name: newStaff.name.trim(),
+        username: cleanUsername,
         role: newStaff.role,
-        email: newStaff.email || `${newStaff.name.toLowerCase().replace(/\s+/g, '')}@dinely.com`,
+        terminal: (newStaff.terminal || `${newStaff.role}-01`).trim().toUpperCase(),
+        terminalId: (newStaff.terminal || `${newStaff.role}-01`).trim().toUpperCase(),
+        email: newStaff.email || `${cleanUsername}@staff.dinely.internal`,
         phone: newStaff.phone || '+1 555-0100',
         status: 'OFF_CLOCK',
         shift: newStaff.shift,
         assignedSection: newStaff.assignedSection,
         hourlyRate: parseFloat(newStaff.hourlyRate) || 18,
         password: initialPass,
+        isActive: true,
         isAccountDisabled: false,
       });
 
       if (created) {
         setEmployees((prev) => [...prev.filter((e) => e.id !== created.id), created]);
-        addToast('success', 'Staff Member Created 🎉', `${created.name} (${created.role}) can now log in with password: ${initialPass}`);
+        addToast('success', 'Staff Member Created 🎉', `${created.name} (@${created.username}) assigned to ${created.terminal || created.role}`);
         setIsAddStaffModalOpen(false);
         setNewStaff({
           name: '',
+          username: '',
           role: 'WAITER',
+          terminal: 'WAITER-01',
           email: '',
           phone: '',
           shift: 'Evening (4PM - 12AM)',
@@ -1096,7 +1109,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         setNewStaffPassword('');
       }
     } catch (err: any) {
-      addToast('error', 'Employee Creation Failed ❌', err.message || 'Error persisting employee record to database.');
+      addToast('error', 'Staff Creation Failed ❌', err.message || 'Error persisting employee record to database.');
     }
   };
 
@@ -1105,11 +1118,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     const staffUpdates = {
       name: editingStaff.name,
       role: editingStaff.role,
+      terminal: editingStaff.terminal || editingStaff.terminalId || `${editingStaff.role}-01`,
+      terminalId: editingStaff.terminal || editingStaff.terminalId || `${editingStaff.role}-01`,
       email: editingStaff.email,
       phone: editingStaff.phone,
       shift: editingStaff.shift,
       assignedSection: editingStaff.assignedSection,
       hourlyRate: editingStaff.hourlyRate,
+      isActive: editingStaff.isActive,
     };
     await api.updateEmployee(editingStaff.id, staffUpdates);
     setEmployees((prev) =>
@@ -3085,9 +3101,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             )}
                           </div>
                           <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono flex-wrap">
-                            <span>User: <strong className="text-slate-200">{e.email}</strong></span>
-                            <span>• Pass: <strong className="text-amber-300">{e.password || '••••••••'}</strong></span>
-                            <span>• Tel: <strong className="text-slate-300">{e.phone}</strong></span>
+                            <span>Username: <strong className="text-amber-300 font-bold">@{e.username || (e.email ? e.email.split('@')[0] : 'staff')}</strong></span>
+                            <span>• Terminal: <strong className="text-emerald-300 font-bold">{e.terminal || e.terminalId || `${e.role}-01`}</strong></span>
+                            <span>• Tel: <strong className="text-slate-300">{e.phone || 'N/A'}</strong></span>
                           </div>
                         </div>
                       </div>
@@ -4532,6 +4548,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
+              label="Staff Username *"
+              placeholder="e.g. rahul01"
+              value={newStaff.username}
+              onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
+            />
+            <Input
+              label="Assigned Terminal *"
+              placeholder={newStaff.role === 'CHEF' ? 'KITCHEN-01' : newStaff.role === 'WAITER' ? 'WAITER-01' : `${newStaff.role}-01`}
+              value={newStaff.terminal}
+              onChange={(e) => setNewStaff({ ...newStaff, terminal: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
               label="Email Address *"
               placeholder="david@lumiere.com"
               value={newStaff.email}
@@ -4662,10 +4692,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
 
               <Input
-                label="Hourly Rate (₹ INR)"
-                type="number"
-                value={editingStaff.hourlyRate || 350}
-                onChange={(e) => setEditingStaff({ ...editingStaff, hourlyRate: parseFloat(e.target.value) || 350 })}
+                label="Assigned Terminal"
+                placeholder={editingStaff.role ? `${editingStaff.role}-01` : 'WAITER-01'}
+                value={editingStaff.terminal || editingStaff.terminalId || ''}
+                onChange={(e) => setEditingStaff({ ...editingStaff, terminal: e.target.value, terminalId: e.target.value })}
               />
             </div>
 

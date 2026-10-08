@@ -271,6 +271,121 @@ export class AuthClient {
     return rest || null;
   }
 
+  async loginStaff(username: string, password: string) {
+    const cleanUsername = username.trim().toLowerCase();
+    if (!cleanUsername || !password) {
+      throw new Error('Please enter both username and password.');
+    }
+
+    const apiBase = getApiBaseUrl();
+    let authResponse: any = null;
+
+    try {
+      const res = await fetch(`${apiBase}/staff/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          username: cleanUsername,
+          password: password,
+        }),
+      });
+
+      if (res.ok) {
+        authResponse = await res.json();
+      } else {
+        const errData = await res.json().catch(() => null);
+        const detail = errData?.detail || `Authentication failed with status ${res.status}`;
+        throw new Error(detail);
+      }
+    } catch (e: any) {
+      if (e.message && (e.message.includes('Invalid') || e.message.includes('deactivated') || e.message.includes('Access denied'))) {
+        throw e;
+      }
+      const res = await fetch(`${apiBase}/auth/staff/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          username: cleanUsername,
+          password: password,
+        }),
+      });
+      if (res.ok) {
+        authResponse = await res.json();
+      } else {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || e.message || 'Authentication failed');
+      }
+    }
+
+    const token = authResponse.access_token;
+    const restId = authResponse.restaurant_id;
+    const role = (authResponse.role || 'WAITER').toUpperCase();
+    const terminalId = authResponse.terminal_id || `${role}-01`;
+    const staffUserId = authResponse.staff_user_id || `staff-${cleanUsername}`;
+    const targetRoute = authResponse.target_route || (
+      role === 'WAITER' ? '/waiter' :
+      (role === 'KITCHEN' || role === 'CHEF') ? '/kitchen' :
+      (role === 'BAR' || role === 'BARTENDER') ? '/bar' :
+      role === 'INVENTORY' ? '/inventory' : '/billing'
+    );
+
+    const tokens: AuthTokens = {
+      accessToken: token,
+      refreshToken: token,
+      expiresIn: authResponse.expires_in || 86400,
+      tokenType: 'Bearer',
+    };
+
+    const staffUser: User = {
+      id: staffUserId,
+      name: authResponse.name || cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
+      email: authResponse.user?.email || `${cleanUsername}@staff.dinely.internal`,
+      role: (role === 'KITCHEN' ? 'CHEF' : role === 'BAR' ? 'BARTENDER' : role) as any,
+      restaurantId: restId,
+      tokens,
+    };
+
+    const portalScope = (role === 'KITCHEN' || role === 'CHEF') ? 'KITCHEN'
+      : (role === 'BAR' || role === 'BARTENDER') ? 'BAR'
+      : (role === 'INVENTORY') ? 'INVENTORY'
+      : (role === 'CASHIER' || role === 'BILLING') ? 'ADMIN'
+      : 'WAITER' as PortalScope;
+
+    this.base.saveSession(staffUser, tokens, restId, portalScope);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`dinely_staff_token_${portalScope.toLowerCase()}`, token);
+      localStorage.setItem('dinely_auth_token', token);
+      localStorage.setItem('dinely_active_restaurant_id', restId);
+    }
+    this.base.saveDatabase();
+
+    realtimeBus.emit('StaffStatusUpdated' as any, {
+      employeeId: staffUserId,
+      restaurantId: restId,
+      name: staffUser.name,
+      role: staffUser.role,
+      terminal: terminalId,
+      status: 'ON_CLOCK',
+      lastLoginAt: new Date().toISOString(),
+      data: staffUser,
+    } as any);
+
+    return {
+      user: staffUser,
+      tokens,
+      restaurant: { id: restId, name: authResponse.restaurant_name, slug: authResponse.restaurant_slug },
+      role,
+      terminalId,
+      targetRoute,
+    };
+  }
+
   async loginStaffTerminal(role: 'KITCHEN' | 'WAITER' | 'BAR' | 'INVENTORY', identifier: string, password?: string) {
     await delay(200);
     const targetRestId = this.base.getCurrentRestaurantId() || 'the-start';

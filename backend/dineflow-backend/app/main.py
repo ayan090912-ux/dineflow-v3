@@ -64,6 +64,12 @@ async def ensure_db_schema_columns(conn):
             updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT uq_restaurant_membership_user UNIQUE (restaurant_id, user_uid)
         );""",
+        """ALTER TABLE restaurant_memberships ADD COLUMN IF NOT EXISTS username VARCHAR(100);""",
+        """ALTER TABLE restaurant_memberships ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);""",
+        """ALTER TABLE restaurant_memberships ADD COLUMN IF NOT EXISTS password_hash TEXT;""",
+        """ALTER TABLE restaurant_memberships ADD COLUMN IF NOT EXISTS assigned_terminal VARCHAR(100);""",
+        """ALTER TABLE restaurant_memberships ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE NOT NULL;""",
+        """CREATE UNIQUE INDEX IF NOT EXISTS ix_restaurant_memberships_username ON restaurant_memberships (LOWER(username)) WHERE username IS NOT NULL;""",
         """CREATE TABLE IF NOT EXISTS business_days (
             id VARCHAR(255) PRIMARY KEY,
             restaurant_id VARCHAR(255) NOT NULL,
@@ -336,9 +342,12 @@ from app.modules.billing.router import router as billing_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.websocket.router import router as websocket_router
 from app.modules.business_day.router import router as business_day_router
+from app.modules.auth.staff_router import router as staff_auth_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(staff_auth_router, prefix="/api/v1/staff/auth", tags=["Staff Authentication"])
+app.include_router(staff_auth_router, prefix="/api/v1/auth/staff", tags=["Staff Authentication Alias"])
 app.include_router(platform_router, prefix="/api/v1/admin", tags=["Platform Admin"])
 app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Restaurants"])
 app.include_router(tax_router, prefix="/api/v1/restaurants", tags=["Taxes"])

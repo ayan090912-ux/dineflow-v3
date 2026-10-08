@@ -881,7 +881,33 @@ function AppContent() {
         return <RestaurantApp activeRestaurant={resolvedTenant} onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
       }
 
-      // 8. Auth inside tenant
+      // 8. Staff Auth inside tenant
+      if (
+        cleanPath === '/staff/login' ||
+        cleanPath === '/staff' ||
+        cleanPath === '/staff/signin' ||
+        cleanPath === '/staff-login'
+      ) {
+        return (
+          <RoleLoginPage
+            portal="staff"
+            onNavigate={navigateTo}
+            onLoginSuccess={(_, user) => {
+              setCurrentUser(user);
+              const r = (user?.role || '').toUpperCase();
+              const target = (
+                r === 'WAITER' ? '/waiter' :
+                r === 'CHEF' || r === 'KITCHEN' ? '/kitchen' :
+                r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+                r === 'INVENTORY' ? '/inventory' : '/billing'
+              );
+              navigateTo(target);
+            }}
+          />
+        );
+      }
+
+      // 8.1 Owner Auth inside tenant
       if (tenantApp === 'AUTH') {
         return (
           <AuthPage
@@ -1068,6 +1094,31 @@ function AppContent() {
           onLoginSuccess={(_, user) => {
             setCurrentUser(user);
             navigateTo('/inventory/terminal');
+          }}
+        />
+      );
+    }
+
+    if (
+      cleanPath === '/staff/login' ||
+      cleanPath === '/staff' ||
+      cleanPath === '/staff/signin' ||
+      cleanPath === '/staff-login'
+    ) {
+      return (
+        <RoleLoginPage
+          portal="staff"
+          onNavigate={navigateTo}
+          onLoginSuccess={(_, user) => {
+            setCurrentUser(user);
+            const r = (user?.role || '').toUpperCase();
+            const target = (
+              r === 'WAITER' ? '/waiter' :
+              r === 'CHEF' || r === 'KITCHEN' ? '/kitchen' :
+              r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+              r === 'INVENTORY' ? '/inventory' : '/billing'
+            );
+            navigateTo(target);
           }}
         />
       );

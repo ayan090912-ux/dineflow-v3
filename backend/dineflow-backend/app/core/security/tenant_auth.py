@@ -21,12 +21,16 @@ class CallerContext:
         role: str = "GUEST",
         is_admin: bool = False,
         restaurant_id: Optional[str] = None,
+        username: Optional[str] = None,
+        terminal: Optional[str] = None,
     ):
         self.uid = uid
         self.email = (email or "").strip().lower() if email else None
         self.role = (role or "GUEST").strip().upper()
         self.is_admin = is_admin
         self.restaurant_id = (restaurant_id or "").strip() if restaurant_id else None
+        self.username = username
+        self.terminal = terminal
 
     @property
     def is_authenticated(self) -> bool:
@@ -78,12 +82,16 @@ async def get_caller_context(
                 role = str(payload.get("role", "STAFF")).upper()
                 email = payload.get("email") or f"{uid}@staff.dinely.internal"
                 rest_id = payload.get("restaurant_id")
+                username = payload.get("username")
+                terminal = payload.get("terminal") or payload.get("terminal_id")
                 return CallerContext(
                     uid=uid,
                     email=email,
                     role=role,
                     is_admin=(role == "PLATFORM_ADMIN"),
-                    restaurant_id=rest_id
+                    restaurant_id=rest_id,
+                    username=username,
+                    terminal=terminal,
                 )
             except Exception:
                 # Tampered, expired, or invalid HS256 token must fail authentication immediately
@@ -238,6 +246,12 @@ async def verify_tenant_authorization(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Access denied: You do not have membership or ownership access to restaurant '{restaurant.name}'."
+        )
+
+    if membership and getattr(membership, "is_active", True) is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff account is deactivated. Please contact your restaurant manager."
         )
 
     effective_role = (membership.role if membership else "OWNER").upper()

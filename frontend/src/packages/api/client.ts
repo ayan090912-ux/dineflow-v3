@@ -171,6 +171,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.auth.loginInventoryTerminal(accessPin, restaurantId);
   }
 
+  async loginStaff(username: string, password?: string) {
+    return this.auth.loginStaff(username, password);
+  }
+
   async logout(scope?: PortalScope): Promise<void> {
     return this.auth.logout(scope);
   }

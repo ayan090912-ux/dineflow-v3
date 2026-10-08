@@ -20,7 +20,7 @@ import { api } from '../../packages/api/client';
 import { signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 import { AuthPage } from './AuthPage';
 
-export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'admin';
+export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'admin' | 'staff';
 
 interface RoleLoginPageProps {
   portal: PortalType;
@@ -48,6 +48,15 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     identifierLabel: 'Administrator Email / Key',
     identifierPlaceholder: 'admin@dinely.food',
   },
+  staff: {
+    title: 'Staff Portal Sign In',
+    subtitle: 'Sign in with your assigned staff username and password',
+    roleBadge: 'STAFF_MEMBER',
+    icon: <PhoneCall className="w-5 h-5 text-emerald-300" />,
+    targetDashboard: '/waiter',
+    identifierLabel: 'Staff Username',
+    identifierPlaceholder: 'e.g. rahul01',
+  },
   restaurant: {
     title: 'Restaurant Owner Login',
     subtitle: 'Manage your connected restaurant workspace',
@@ -63,8 +72,8 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     roleBadge: 'KITCHEN_STATION',
     icon: <ChefHat className="w-5 h-5 text-amber-300" />,
     targetDashboard: '/kitchen/dashboard',
-    identifierLabel: 'Staff ID or Email',
-    identifierPlaceholder: 'chef@restaurant.com or staff ID',
+    identifierLabel: 'Staff Username',
+    identifierPlaceholder: 'e.g. chef_john or username',
   },
   waiter: {
     title: 'Waiter Service Terminal',
@@ -72,8 +81,8 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     roleBadge: 'WAITER_TERMINAL',
     icon: <PhoneCall className="w-5 h-5 text-emerald-300" />,
     targetDashboard: '/waiter',
-    identifierLabel: 'Staff ID or Email',
-    identifierPlaceholder: 'server@restaurant.com or staff ID',
+    identifierLabel: 'Staff Username',
+    identifierPlaceholder: 'e.g. rahul01 or username',
   },
   bar: {
     title: 'Bar Mixology Terminal',
@@ -81,8 +90,8 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     roleBadge: 'BAR_TERMINAL',
     icon: <Wine className="w-5 h-5 text-indigo-300" />,
     targetDashboard: '/bar/dashboard',
-    identifierLabel: 'Staff ID or Email',
-    identifierPlaceholder: 'bartender@restaurant.com or staff ID',
+    identifierLabel: 'Staff Username',
+    identifierPlaceholder: 'e.g. bartender_sam or username',
   },
   inventory: {
     title: 'Inventory OS Terminal',
@@ -90,8 +99,8 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     roleBadge: 'INVENTORY_TERMINAL',
     icon: <Package className="w-5 h-5 text-rose-300" />,
     targetDashboard: '/inventory/terminal',
-    identifierLabel: 'Staff ID or Email',
-    identifierPlaceholder: 'inventory@restaurant.com or staff ID',
+    identifierLabel: 'Staff Username',
+    identifierPlaceholder: 'e.g. stock_lead or username',
   },
 };
 
@@ -113,7 +122,7 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
     );
   }
 
-  const config = PORTAL_CONFIGS[portal] || PORTAL_CONFIGS.kitchen;
+  const config = PORTAL_CONFIGS[portal] || PORTAL_CONFIGS.staff;
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -133,7 +142,7 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
 
     const cleanIdentifier = identifier.trim();
     if (!cleanIdentifier || !password) {
-      setErrorMessage('Please enter both your credentials and password.');
+      setErrorMessage('Please enter both your username and password.');
       return;
     }
 
@@ -143,21 +152,17 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       let result: any;
       if (portal === 'admin') {
         result = await api.loginPlatformAdmin(cleanIdentifier, password);
-      } else if (portal === 'kitchen') {
-        result = await api.loginKitchen(cleanIdentifier, password);
-      } else if (portal === 'waiter') {
-        result = await api.loginWaiter(cleanIdentifier, password);
-      } else if (portal === 'bar') {
-        result = await api.loginBar(cleanIdentifier, password);
-      } else if (portal === 'inventory') {
-        result = await api.loginInventory(cleanIdentifier, password);
+      } else {
+        // Real persisted staff username + password authentication
+        result = await api.loginStaff(cleanIdentifier, password);
       }
 
-      setSuccessMessage(`Authenticated successfully. Loading terminal...`);
+      const destination = result?.targetRoute || config.targetDashboard;
+      setSuccessMessage(`Authenticated successfully. Loading portal...`);
       setTimeout(() => {
         onLoginSuccess(result?.user?.role || portal, result?.user);
-        onNavigate(config.targetDashboard);
-      }, 400);
+        onNavigate(destination);
+      }, 350);
     } catch (err: any) {
       setErrorMessage(err.message || 'Authentication failed. Please verify your credentials.');
     } finally {
