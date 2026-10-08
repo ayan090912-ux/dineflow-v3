@@ -6,6 +6,7 @@ interface LandingNavbarProps {
   currentUser?: any;
   onStartTrial: () => void;
   onLogin: () => void;
+  onStaffLogin?: () => void;
   onOpenWorkspace: () => void;
   onNavigateSection: (sectionId: string) => void;
 }
@@ -14,6 +15,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
   currentUser,
   onStartTrial,
   onLogin,
+  onStaffLogin,
   onOpenWorkspace,
   onNavigateSection,
 }) => {
@@ -109,13 +111,23 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
                   <button
                     type="button"
                     onClick={onLogin}
-                    className="rounded-full px-4 py-2 text-[13px] font-medium text-white/75 transition-colors hover:text-white cursor-pointer bg-transparent border-none"
+                    id="nav-owner-login-btn"
+                    className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/75 transition-colors hover:text-white hover:bg-white/[0.08] cursor-pointer bg-transparent border-none"
                   >
-                    Sign in
+                    Owner Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onStaffLogin || (() => window.location.href = '/staff/login')}
+                    id="nav-staff-login-btn"
+                    className="rounded-full px-3.5 py-2 text-[13px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors hover:bg-emerald-500/[0.1] cursor-pointer bg-transparent border border-emerald-500/25"
+                  >
+                    Staff Login
                   </button>
                   <button
                     type="button"
                     onClick={onStartTrial}
+                    id="nav-create-rest-btn"
                     className="group inline-flex items-center gap-2 rounded-full px-5 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] cursor-pointer border border-white/[0.14] shadow-sm shadow-black/60"
                     style={{ background: 'linear-gradient(to bottom, #2B2B2B, #101010)' }}
                   >
@@ -190,9 +202,20 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
                       setMobileMenuOpen(false);
                       onLogin();
                     }}
-                    className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-white/75 hover:text-white transition-colors bg-white/[0.05] border border-white/[0.08] cursor-pointer"
+                    className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-white/85 hover:text-white transition-colors bg-white/[0.05] border border-white/[0.08] cursor-pointer"
                   >
-                    Sign in
+                    Owner Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      if (onStaffLogin) onStaffLogin();
+                      else window.location.href = '/staff/login';
+                    }}
+                    className="w-full rounded-full py-2.5 text-center text-[14px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/[0.08] border border-emerald-500/25 cursor-pointer"
+                  >
+                    Staff Login
                   </button>
                   <button
                     type="button"

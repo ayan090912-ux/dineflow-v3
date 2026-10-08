@@ -417,7 +417,7 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
                   </>
                 ) : (
                   <>
-                    <span>Authenticate Terminal</span>
+                    <span>Staff Sign In</span>
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -433,9 +433,20 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
                 <span>Internal control plane. Access strictly logged and monitored.</span>
               </p>
             ) : (
-              <p className="text-[12px] text-white/45">
-                Terminal credentials provided by your restaurant manager.
-              </p>
+              <div className="space-y-2">
+                <p className="text-[12px] text-white/45">
+                  Staff account credentials created by your restaurant owner.
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/restaurant/login')}
+                    className="text-[12px] text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer"
+                  >
+                    Restaurant Owner? Sign in to Owner Portal &rarr;
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

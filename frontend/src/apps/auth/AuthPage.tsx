@@ -654,6 +654,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </button>
                 </p>
               )}
+
+              {mode === 'login' && (
+                <div className="mt-4 pt-3 border-t border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={() => navigateTo('/staff/login')}
+                    className="text-[12.5px] text-emerald-400/90 hover:text-emerald-300 transition-colors bg-transparent border-none cursor-pointer"
+                  >
+                    Restaurant staff member? Sign in to Staff Portal &rarr;
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

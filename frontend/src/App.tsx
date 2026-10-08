@@ -995,6 +995,7 @@ function AppContent() {
             navigateTo('/wizard?mode=create');
           }}
           onLogin={() => navigateTo('/restaurant/login')}
+          onStaffLogin={() => navigateTo('/staff/login')}
           onOpenApp={(app) => {
             if (app === 'restaurant') navigateTo('/restaurant/login');
             else if (app === 'waiter') navigateTo('/waiter/login');

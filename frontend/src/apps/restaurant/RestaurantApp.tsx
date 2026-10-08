@@ -1799,7 +1799,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'bar' && 'Craft beverage dispensing queue, mixology timers, and floor pass dispatch.'}
               {activeTab === 'tables' && 'Interactive dining area floorplan, live table states, and printable QR standee cards.'}
               {activeTab === 'menu' && 'Food & beverage catalog, category classifications, variants, and live availability toggles.'}
-              {activeTab === 'staff' && 'Employee profiles, shift schedules, role-based pin credentials, and clock-in status.'}
+              {activeTab === 'staff' && 'Employee profiles, shift schedules, username & password credentials, and assigned terminal stations.'}
               {activeTab === 'inventory' && 'Track kitchen and bar stock levels, minimum reorder thresholds, and suppliers.'}
               {activeTab === 'billing' && 'Table checkouts, split bills, GST/tax management, and payment receipts.'}
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Authoritative operational business-day lifecycle, shift register reconciliation, station prechecks, and daily closing.'}

@@ -11,6 +11,7 @@ import { LandingFooter } from './components/LandingFooter';
 interface LandingWebsiteProps {
   onStartTrial: (ownerData?: any) => void;
   onLogin: () => void;
+  onStaffLogin?: () => void;
   onOpenApp: (app: 'restaurant' | 'waiter' | 'customer' | 'platform') => void;
   onNavigate?: (path: string) => void;
   onLogout?: () => void;
@@ -20,6 +21,7 @@ interface LandingWebsiteProps {
 export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
   onStartTrial,
   onLogin,
+  onStaffLogin,
   onOpenApp,
   onNavigate,
   onLogout,
@@ -77,6 +79,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         currentUser={currentUser}
         onStartTrial={handleStartTrial}
         onLogin={onLogin}
+        onStaffLogin={onStaffLogin || (() => onNavigate ? onNavigate('/staff/login') : window.location.href = '/staff/login')}
         onOpenWorkspace={handleOpenWorkspace}
         onNavigateSection={scrollToSection}
       />
