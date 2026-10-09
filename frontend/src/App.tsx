@@ -975,7 +975,6 @@ function AppContent() {
               (resolvedTenant.ownerUid && (currentUser.id === resolvedTenant.ownerUid || (currentUser as any).googleUid === resolvedTenant.ownerUid)) ||
               ((resolvedTenant as any).owner_uid && (currentUser.id === (resolvedTenant as any).owner_uid || (currentUser as any).googleUid === (resolvedTenant as any).owner_uid)) ||
               (currentUser.email && (
-                resolvedTenant.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
                 resolvedTenant.ownerEmail?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
                 (resolvedTenant as any).owner_email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim()
               ))
@@ -1029,7 +1028,7 @@ function AppContent() {
             onLoginSuccess={async (res) => {
               const user = res?.user || res;
               if (user) setCurrentUser(user);
-              navigateTo('/');
+              navigateTo('/restaurant/dashboard');
             }}
           />
         );

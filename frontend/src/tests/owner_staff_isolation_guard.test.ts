@@ -69,7 +69,6 @@ function evaluateOwnerOsAccess(currentUser: any, storage: Record<string, string>
       (
         (theStartTenant.ownerUid && (currentUser.id === theStartTenant.ownerUid || currentUser.googleUid === theStartTenant.ownerUid)) ||
         (currentUser.email && (
-          theStartTenant.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
           theStartTenant.ownerEmail?.toLowerCase().trim() === currentUser.email.toLowerCase().trim()
         ))
       ));
@@ -163,6 +162,19 @@ const res6 = evaluateOwnerOsAccess(null, {});
 assert.strictEqual(res6.status, 'REQUIRE_LOGIN');
 console.log('  ✓ PASSED: Unauthenticated visitor directed to login');
 
+// -----------------------------------------------------------------------------
+// TEST 7: General restaurant contact email MUST NOT grant ownership
+// -----------------------------------------------------------------------------
+console.log('\n[TEST 7] General restaurant contact email attempt');
+const contactUser = {
+  id: 'stranger-uid',
+  email: 'thestart@dinely.food', // matches generic restaurant.email, NOT ownerEmail
+  role: 'RESTAURANT_OWNER',
+};
+const res7 = evaluateOwnerOsAccess(contactUser, {});
+assert.strictEqual(res7.status, 'DENIED_CROSS_TENANT', 'General contact email must NOT grant ownership!');
+console.log('  ✓ PASSED: General restaurant contact email strictly rejected as owner identity');
+
 console.log('\n====================================================');
-console.log('ALL 6 OWNER VS STAFF ISOLATION TESTS PASSED (6/6)!');
+console.log('ALL 7 OWNER VS STAFF ISOLATION TESTS PASSED (7/7)!');
 console.log('====================================================\n');
