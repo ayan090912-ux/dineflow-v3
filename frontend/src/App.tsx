@@ -358,6 +358,16 @@ function AppContent() {
           let token = '';
           const lowerEmail = fbUser.email.toLowerCase();
           let isAdmin = scope === 'ADMIN' || lowerEmail === 'ayan090912@gmail.com' || lowerEmail === 'admin@dinely.food';
+
+          // Clear any stale staff session tokens so they never conflict with authenticated owner/admin
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('dinely_staff_token');
+            sessionStorage.removeItem('dinely_staff_token');
+            localStorage.removeItem('dinely_user_staff');
+            sessionStorage.removeItem('dinely_user_staff');
+            localStorage.setItem('dinely_active_scope', isAdmin ? 'ADMIN' : 'OWNER');
+          }
+
           try {
             const tokenResult = await fbUser.getIdTokenResult();
             token = tokenResult.token;
@@ -380,7 +390,7 @@ function AppContent() {
             }
           }
 
-          const effectiveScope = isAdmin ? 'ADMIN' : scope;
+          const effectiveScope = isAdmin ? 'ADMIN' : (scope === 'STAFF' ? 'OWNER' : scope);
           let appUser = api.getCurrentUser(effectiveScope);
           if (!appUser) {
             appUser = {
@@ -389,7 +399,13 @@ function AppContent() {
               email: lowerEmail,
               role: isAdmin ? 'PLATFORM_ADMIN' : 'RESTAURANT_OWNER',
             };
+            (appUser as any).googleUid = fbUser.uid;
+            (appUser as any).scope = effectiveScope;
             api.setCurrentUser(appUser, effectiveScope);
+          } else {
+            appUser.id = fbUser.uid;
+            (appUser as any).googleUid = fbUser.uid;
+            (appUser as any).scope = effectiveScope;
           }
           if (token) {
             api.setSessionTokens({ accessToken: token, refreshToken: token, expiresIn: 3600, tokenType: 'Bearer' }, effectiveScope);
@@ -397,6 +413,11 @@ function AppContent() {
             // Authoritative server-side profile & tenant restoration from AWS RDS
             api.fetchAuthMe(token).then((authMe) => {
               if (authMe?.restaurant) {
+                if (!appUser.restaurantId) {
+                  appUser.restaurantId = authMe.restaurant.id;
+                  api.setCurrentUser(appUser, effectiveScope);
+                  setCurrentUser({ ...appUser });
+                }
                 // On tenant subdomains (e.g. the-start.dinely.food), the hostname is authoritative.
                 // Only hydrate global restaurant state if on platform domain (dinely.food)
                 if (!domainResolution.isTenantSubdomain) {
@@ -856,10 +877,12 @@ function AppContent() {
         const isAuthorizedStaff =
           currentUser.role === 'SUPER_ADMIN' ||
           (currentUser.restaurantId === resolvedTenant.id && ['BILLING', 'CASHIER', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (resolvedTenant.ownerUid && (currentUser.id === resolvedTenant.ownerUid || (currentUser as any).googleUid === resolvedTenant.ownerUid)) ||
+          ((resolvedTenant as any).owner_uid && (currentUser.id === (resolvedTenant as any).owner_uid || (currentUser as any).googleUid === (resolvedTenant as any).owner_uid)) ||
           (currentUser.email && (
-            resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() ||
-            (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase() ||
-            (resolvedTenant as any).owner_email?.toLowerCase() === currentUser.email.toLowerCase()
+            resolvedTenant.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
+            resolvedTenant.ownerEmail?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
+            (resolvedTenant as any).owner_email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim()
           ));
 
         if (!isAuthorizedStaff) {
@@ -877,18 +900,46 @@ function AppContent() {
 
       // 7. Settings / Tenant Management Dashboard (OWNER OS)
       if (tenantApp === 'SETTINGS') {
+        // 1. Check if caller is authenticated as an Owner or Platform Admin
+        const isOwnerAuthenticated = Boolean(
+          currentUser &&
+          (currentUser as any).scope !== 'STAFF' &&
+          ['OWNER', 'RESTAURANT_OWNER', 'SUPER_ADMIN', 'PLATFORM_ADMIN'].includes((currentUser.role || '').toUpperCase())
+        );
+
+        // If an owner is authenticated, purge any stale staff storage remnants so they never interfere
+        if (isOwnerAuthenticated && typeof window !== 'undefined') {
+          if (localStorage.getItem('dinely_active_scope') === 'STAFF') {
+            localStorage.setItem('dinely_active_scope', 'OWNER');
+          }
+          localStorage.removeItem('dinely_staff_token');
+          sessionStorage.removeItem('dinely_staff_token');
+          localStorage.removeItem('dinely_user_staff');
+          sessionStorage.removeItem('dinely_user_staff');
+        }
+
         // Direct Staff Access Attack Check: Staff accounts MUST NEVER access Owner OS
+        // An account is a staff account if:
+        // - currentUser is scoped as STAFF or has an operational staff role (WAITER, KITCHEN, etc.) and is NOT an owner
+        // - OR no owner is authenticated, but an active staff session is currently active in storage
         const activeScope = typeof window !== 'undefined' ? localStorage.getItem('dinely_active_scope') : null;
         const staffToken = typeof window !== 'undefined' ? (sessionStorage.getItem('dinely_staff_token') || localStorage.getItem('dinely_staff_token')) : null;
         const staffUser = api.getCurrentUser('STAFF') || api.getCurrentUser('WAITER') || api.getCurrentUser('KITCHEN') || api.getCurrentUser('BAR') || api.getCurrentUser('INVENTORY');
-        const isStaffUser =
-          activeScope === 'STAFF' ||
-          !!staffToken ||
+
+        const isStaffUser = !isOwnerAuthenticated && (
           (currentUser as any)?.scope === 'STAFF' ||
-          (staffUser as any)?.scope === 'STAFF' ||
           ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes(
-            ((currentUser?.role || staffUser?.role) as string)?.toUpperCase()
-          );
+            (currentUser?.role || '').toUpperCase()
+          ) ||
+          (
+            activeScope === 'STAFF' &&
+            Boolean(staffToken) &&
+            Boolean(
+              (staffUser as any)?.scope === 'STAFF' ||
+              ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes((staffUser?.role || '').toUpperCase())
+            )
+          )
+        );
 
         if (isStaffUser) {
           return (
@@ -918,12 +969,16 @@ function AppContent() {
           currentUser.role === 'PLATFORM_ADMIN' ||
           ((currentUser as any)?.scope !== 'STAFF' &&
             ['OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role) &&
-            currentUser.restaurantId === resolvedTenant.id) ||
+            (currentUser.restaurantId === resolvedTenant.id || currentUser.restaurantId === resolvedTenant.slug)) ||
           ((currentUser as any)?.scope !== 'STAFF' &&
-            currentUser.email && (
-              resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() ||
-              (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase() ||
-              (resolvedTenant as any).owner_email?.toLowerCase() === currentUser.email.toLowerCase()
+            (
+              (resolvedTenant.ownerUid && (currentUser.id === resolvedTenant.ownerUid || (currentUser as any).googleUid === resolvedTenant.ownerUid)) ||
+              ((resolvedTenant as any).owner_uid && (currentUser.id === (resolvedTenant as any).owner_uid || (currentUser as any).googleUid === (resolvedTenant as any).owner_uid)) ||
+              (currentUser.email && (
+                resolvedTenant.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
+                resolvedTenant.ownerEmail?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
+                (resolvedTenant as any).owner_email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim()
+              ))
             ));
 
         if (!isAuthorizedOwner) {

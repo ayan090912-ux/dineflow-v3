@@ -250,7 +250,8 @@ async def verify_tenant_authorization(
     # Direct owner check fallback
     is_direct_owner = (
         (caller.uid and restaurant.owner_uid and caller.uid == restaurant.owner_uid) or
-        (caller.email and restaurant.owner_email and caller.email.lower() == restaurant.owner_email.lower())
+        (caller.email and restaurant.owner_email and caller.email.lower() == restaurant.owner_email.lower()) or
+        (caller.email and restaurant.email and caller.email.lower() == restaurant.email.lower())
     )
 
     if not membership and not is_direct_owner:

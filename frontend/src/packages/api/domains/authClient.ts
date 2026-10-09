@@ -71,14 +71,16 @@ export class AuthClient {
         throw new Error('Platform Administrator accounts must use the dedicated Admin Portal credentials.');
       }
 
+      user.id = googleData.googleUid;
       user.googleUid = googleData.googleUid;
       user.authProvider = 'google';
+      (user as any).scope = 'OWNER';
       if (googleData.photoURL && !user.avatar) {
         user.avatar = googleData.photoURL;
       }
     } else {
       isNewUser = true;
-      const userId = `usr-google-${Date.now()}`;
+      const userId = googleData.googleUid || `usr-google-${Date.now()}`;
       user = {
         id: userId,
         firstName: googleData.name.split(' ')[0] || 'Owner',
@@ -91,6 +93,7 @@ export class AuthClient {
         authProvider: 'google',
         avatar: googleData.photoURL,
       };
+      (user as any).scope = 'OWNER';
       this.base.users.unshift(user);
     }
 
@@ -103,10 +106,17 @@ export class AuthClient {
     };
 
     user.tokens = tokens;
+    (user as any).scope = 'OWNER';
     this.base.currentTokensByScope['OWNER'] = tokens;
     if (typeof window !== 'undefined') {
       localStorage.setItem('dinely_auth_token', effectiveAccessToken);
       sessionStorage.setItem('dinely_auth_token', effectiveAccessToken);
+      localStorage.setItem('dinely_active_scope', 'OWNER');
+      // Purge any stale staff tokens so they never conflict with owner session
+      localStorage.removeItem('dinely_staff_token');
+      sessionStorage.removeItem('dinely_staff_token');
+      localStorage.removeItem('dinely_user_staff');
+      sessionStorage.removeItem('dinely_user_staff');
     }
 
     const ownerRestaurants = await this.getOwnerRestaurants(normalizedEmail, googleData.googleUid);
