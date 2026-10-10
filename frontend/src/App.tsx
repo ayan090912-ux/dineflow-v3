@@ -627,6 +627,30 @@ function AppContent() {
         );
       }
 
+      // Guard protected routes on tenant subdomain while Firebase Auth initializes session
+      const isPublicTenantRoute =
+        cleanPath === '/' ||
+        cleanPath === '/customer' ||
+        cleanPath.startsWith('/customer/') ||
+        cleanPath === '/menu' ||
+        cleanPath.startsWith('/menu/') ||
+        cleanPath === '/table' ||
+        cleanPath.startsWith('/table/') ||
+        cleanPath === '/order' ||
+        cleanPath.startsWith('/order/') ||
+        cleanPath === '/login' ||
+        cleanPath.endsWith('/login');
+
+      if (authState === 'INITIALIZING' && !isPublicTenantRoute) {
+        return (
+          <LoadingScreen
+            restaurantName={resolvedTenant?.name}
+            status="Opening your workspace"
+            substatus="Validating credentials..."
+          />
+        );
+      }
+
       // Inside Resolved Tenant: Route by Path to the corresponding Tenant Application
       const tenantApp = resolveTenantAppFromPath(cleanPath);
 
@@ -900,57 +924,7 @@ function AppContent() {
 
       // 7. Settings / Tenant Management Dashboard (OWNER OS)
       if (tenantApp === 'SETTINGS') {
-        // 1. Check if caller is authenticated as an Owner or Platform Admin
-        const isOwnerAuthenticated = Boolean(
-          currentUser &&
-          (currentUser as any).scope !== 'STAFF' &&
-          ['OWNER', 'RESTAURANT_OWNER', 'SUPER_ADMIN', 'PLATFORM_ADMIN'].includes((currentUser.role || '').toUpperCase())
-        );
-
-        // If an owner is authenticated, purge any stale staff storage remnants so they never interfere
-        if (isOwnerAuthenticated && typeof window !== 'undefined') {
-          if (localStorage.getItem('dinely_active_scope') === 'STAFF') {
-            localStorage.setItem('dinely_active_scope', 'OWNER');
-          }
-          localStorage.removeItem('dinely_staff_token');
-          sessionStorage.removeItem('dinely_staff_token');
-          localStorage.removeItem('dinely_user_staff');
-          sessionStorage.removeItem('dinely_user_staff');
-        }
-
-        // Direct Staff Access Attack Check: Staff accounts MUST NEVER access Owner OS
-        // An account is a staff account if:
-        // - currentUser is scoped as STAFF or has an operational staff role (WAITER, KITCHEN, etc.) and is NOT an owner
-        // - OR no owner is authenticated, but an active staff session is currently active in storage
-        const activeScope = typeof window !== 'undefined' ? localStorage.getItem('dinely_active_scope') : null;
-        const staffToken = typeof window !== 'undefined' ? (sessionStorage.getItem('dinely_staff_token') || localStorage.getItem('dinely_staff_token')) : null;
-        const staffUser = api.getCurrentUser('STAFF') || api.getCurrentUser('WAITER') || api.getCurrentUser('KITCHEN') || api.getCurrentUser('BAR') || api.getCurrentUser('INVENTORY');
-
-        const isStaffUser = !isOwnerAuthenticated && (
-          (currentUser as any)?.scope === 'STAFF' ||
-          ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes(
-            (currentUser?.role || '').toUpperCase()
-          ) ||
-          (
-            activeScope === 'STAFF' &&
-            Boolean(staffToken) &&
-            Boolean(
-              (staffUser as any)?.scope === 'STAFF' ||
-              ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes((staffUser?.role || '').toUpperCase())
-            )
-          )
-        );
-
-        if (isStaffUser) {
-          return (
-            <AccessDeniedScreen
-              tenantName={resolvedTenant.name}
-              requiredRole="RESTAURANT OWNER (STAFF ACCESS PROHIBITED)"
-              onLogout={() => handleLogout('/staff/login')}
-            />
-          );
-        }
-
+        // 1. If unauthenticated, render RoleLoginPage for restaurant owner
         if (!currentUser) {
           return (
             <RoleLoginPage
@@ -964,17 +938,58 @@ function AppContent() {
           );
         }
 
+        // 2. Direct Staff Access Check: Authenticated operational staff accounts MUST NEVER access Owner OS
+        const isStaffUser = Boolean(
+          currentUser &&
+          ((currentUser as any)?.scope === 'STAFF' ||
+            ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes(
+              (currentUser?.role || '').toUpperCase()
+            )) &&
+          !['OWNER', 'RESTAURANT_OWNER', 'SUPER_ADMIN', 'PLATFORM_ADMIN'].includes((currentUser?.role || '').toUpperCase())
+        );
+
+        if (isStaffUser) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="RESTAURANT OWNER (STAFF ACCESS PROHIBITED)"
+              onLogout={() => handleLogout('/staff/login')}
+            />
+          );
+        }
+
+        // 3. Purge any stale staff remnants in storage since an owner/admin is active
+        if (typeof window !== 'undefined') {
+          if (localStorage.getItem('dinely_active_scope') === 'STAFF') {
+            localStorage.setItem('dinely_active_scope', 'OWNER');
+          }
+          localStorage.removeItem('dinely_staff_token');
+          sessionStorage.removeItem('dinely_staff_token');
+          localStorage.removeItem('dinely_user_staff');
+          sessionStorage.removeItem('dinely_user_staff');
+          ['staff', 'waiter', 'kitchen', 'bar', 'inventory'].forEach((role) => {
+            localStorage.removeItem(`dinely_staff_token_${role}`);
+            sessionStorage.removeItem(`dinely_staff_token_${role}`);
+            localStorage.removeItem(`dinely_session_${role}`);
+            sessionStorage.removeItem(`dinely_session_${role}`);
+            localStorage.removeItem(`dinely_user_${role}`);
+            sessionStorage.removeItem(`dinely_user_${role}`);
+          });
+        }
+
+        // 4. Verify Owner / Platform Admin Authorization for this specific restaurant tenant
         const isAuthorizedOwner =
           currentUser.role === 'SUPER_ADMIN' ||
           currentUser.role === 'PLATFORM_ADMIN' ||
           ((currentUser as any)?.scope !== 'STAFF' &&
-            ['OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role) &&
+            ['OWNER', 'RESTAURANT_OWNER', 'MANAGER'].includes((currentUser.role || '').toUpperCase()) &&
             (currentUser.restaurantId === resolvedTenant.id || currentUser.restaurantId === resolvedTenant.slug)) ||
           ((currentUser as any)?.scope !== 'STAFF' &&
             (
               (resolvedTenant.ownerUid && (currentUser.id === resolvedTenant.ownerUid || (currentUser as any).googleUid === resolvedTenant.ownerUid)) ||
               ((resolvedTenant as any).owner_uid && (currentUser.id === (resolvedTenant as any).owner_uid || (currentUser as any).googleUid === (resolvedTenant as any).owner_uid)) ||
               (currentUser.email && (
+                resolvedTenant.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
                 resolvedTenant.ownerEmail?.toLowerCase().trim() === currentUser.email.toLowerCase().trim() ||
                 (resolvedTenant as any).owner_email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim()
               ))

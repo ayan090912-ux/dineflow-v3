@@ -62,8 +62,14 @@ export class AuthClient {
         localStorage.setItem('dinely_active_restaurant_id', 'rest-1790594544526-396022');
         localStorage.removeItem('dinely_staff_token');
         sessionStorage.removeItem('dinely_staff_token');
-        localStorage.removeItem('dinely_user_staff');
-        sessionStorage.removeItem('dinely_user_staff');
+        ['staff', 'waiter', 'kitchen', 'bar', 'inventory'].forEach((role) => {
+          localStorage.removeItem(`dinely_staff_token_${role}`);
+          sessionStorage.removeItem(`dinely_staff_token_${role}`);
+          localStorage.removeItem(`dinely_session_${role}`);
+          sessionStorage.removeItem(`dinely_session_${role}`);
+          localStorage.removeItem(`dinely_user_${role}`);
+          sessionStorage.removeItem(`dinely_user_${role}`);
+        });
       }
       return {
         user: ownerUser,
@@ -149,8 +155,14 @@ export class AuthClient {
       // Purge any stale staff tokens so they never conflict with owner session
       localStorage.removeItem('dinely_staff_token');
       sessionStorage.removeItem('dinely_staff_token');
-      localStorage.removeItem('dinely_user_staff');
-      sessionStorage.removeItem('dinely_user_staff');
+      ['staff', 'waiter', 'kitchen', 'bar', 'inventory'].forEach((role) => {
+        localStorage.removeItem(`dinely_staff_token_${role}`);
+        sessionStorage.removeItem(`dinely_staff_token_${role}`);
+        localStorage.removeItem(`dinely_session_${role}`);
+        sessionStorage.removeItem(`dinely_session_${role}`);
+        localStorage.removeItem(`dinely_user_${role}`);
+        sessionStorage.removeItem(`dinely_user_${role}`);
+      });
     }
 
     const ownerRestaurants = await this.getOwnerRestaurants(normalizedEmail, googleData.googleUid);
@@ -405,7 +417,6 @@ export class AuthClient {
       localStorage.setItem('dinely_active_scope', 'STAFF');
       localStorage.setItem('dinely_staff_token', token);
       localStorage.setItem(`dinely_staff_token_${portalScope.toLowerCase()}`, token);
-      localStorage.setItem('dinely_auth_token', token);
       localStorage.setItem('dinely_active_restaurant_id', restId);
       localStorage.setItem('dinely_user_staff', JSON.stringify(staffUser));
       localStorage.setItem(`dinely_user_${portalScope.toLowerCase()}`, JSON.stringify(staffUser));
@@ -515,7 +526,7 @@ export class AuthClient {
     this.base.saveSession(staffUser, tokens, restId, portalScope);
     if (typeof window !== 'undefined') {
       localStorage.setItem(`dinely_staff_token_${roleKey}`, finalToken);
-      localStorage.setItem('dinely_auth_token', finalToken);
+      localStorage.setItem('dinely_staff_token', finalToken);
     }
     this.base.saveDatabase();
 

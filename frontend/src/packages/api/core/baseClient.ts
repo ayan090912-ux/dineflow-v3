@@ -697,6 +697,18 @@ export class BaseApiClient {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('dinely_auth_token');
       sessionStorage.removeItem('dinely_auth_token');
+      localStorage.removeItem('dinely_active_scope');
+      sessionStorage.removeItem('dinely_active_scope');
+      localStorage.removeItem('dinely_staff_token');
+      sessionStorage.removeItem('dinely_staff_token');
+      ['waiter', 'kitchen', 'bar', 'inventory', 'staff'].forEach((rk) => {
+        localStorage.removeItem(`dinely_staff_token_${rk}`);
+        sessionStorage.removeItem(`dinely_staff_token_${rk}`);
+        localStorage.removeItem(`dinely_session_${rk}`);
+        sessionStorage.removeItem(`dinely_session_${rk}`);
+        localStorage.removeItem(`dinely_user_${rk}`);
+        sessionStorage.removeItem(`dinely_user_${rk}`);
+      });
       localStorage.removeItem('dinely_platform_admin_id_token');
       sessionStorage.removeItem('dinely_admin_token');
       localStorage.removeItem('dinely_active_restaurant_id');
