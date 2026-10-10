@@ -30,7 +30,7 @@ export function Table<T>({
 }: TableProps<T>) {
   return (
     <div className={twMerge('w-full overflow-x-auto rounded-xl border border-[#1e232e] bg-[#0e1117] shadow-xs font-sans', className)}>
-      <table className="w-full text-left border-collapse text-xs">
+      <table className="w-full min-w-[620px] text-left border-collapse text-xs">
         <thead>
           <tr className="border-b border-[#1e232e] bg-[#12151b]">
             {columns.map((col) => (

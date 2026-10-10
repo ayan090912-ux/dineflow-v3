@@ -258,7 +258,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
   });
 
   return (
-    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white pb-12">
+    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white pb-12 w-full max-w-full overflow-x-hidden">
       {/* Toast Feedback */}
       {toast && (
         <div
@@ -276,30 +276,30 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
       )}
 
       {/* Header OS Control Bar */}
-      <header className="sticky top-0 z-40 bg-[#0e1117] border-b border-[#1e232e] px-6 py-3.5 flex items-center justify-between shadow-xs">
+      <header className="sticky top-0 z-40 bg-[#0e1117] border-b border-[#1e232e] px-4 sm:px-6 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
             <Package className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
               <DinelyLogo size="sm" />
-              <h1 className="text-base font-bold text-white tracking-tight uppercase">
+              <h1 className="text-sm sm:text-base font-bold text-white tracking-tight uppercase truncate">
                 {restaurant?.name || 'THE START'}
               </h1>
-              <Badge variant="brand">INVENTORY TERMINAL</Badge>
+              <Badge variant="brand">INVENTORY</Badge>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
               Kitchen & bar raw materials, stock levels, and vendor management
             </p>
           </div>
         </div>
 
         {/* Right Header Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-between sm:justify-end">
           {/* Live Clock */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#12151b] border border-[#1e232e] text-xs font-mono text-slate-300">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -318,26 +318,28 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
             onClick={() => setIsAddSupplierModalOpen(true)}
             variant="outline"
             size="sm"
-            className="text-xs flex items-center gap-1.5"
+            className="text-xs flex items-center gap-1.5 px-2.5 sm:px-3"
           >
             <Building2 className="w-4 h-4 text-slate-300" />
-            <span>+ Add Supplier</span>
+            <span className="hidden sm:inline">+ Add Supplier</span>
+            <span className="sm:hidden">+ Supplier</span>
           </Button>
 
           <Button
             onClick={() => setIsAddStockModalOpen(true)}
             variant="brand"
             size="sm"
-            className="text-xs flex items-center gap-1.5"
+            className="text-xs flex items-center gap-1.5 px-2.5 sm:px-3"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Raw Material</span>
+            <span className="hidden sm:inline">Add Raw Material</span>
+            <span className="sm:hidden">+ Material</span>
           </Button>
 
           {onLogout && (
             <button
               onClick={onLogout}
-              className="text-xs text-slate-400 hover:text-rose-400 px-2 py-1 transition-colors"
+              className="text-xs text-slate-400 hover:text-rose-400 px-2 py-1 transition-colors ml-auto sm:ml-0"
             >
               Exit Terminal
             </button>
@@ -346,7 +348,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto w-full px-6 pt-6 space-y-6 flex-1">
+      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 flex-1">
         {/* Metric Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all">

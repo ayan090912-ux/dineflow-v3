@@ -345,8 +345,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
       })()}
 
       {/* Main Bar Preparation KanBan Pipeline */}
-      <main className="flex-1 p-6 overflow-x-auto">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5 min-w-[1100px]">
+      <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5 w-full">
           {/* COLUMN 1: INCOMING DRINK ORDERS */}
           <div className="space-y-3">
             <div className="p-3 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-between">

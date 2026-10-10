@@ -1115,38 +1115,46 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   const handleSaveEditStaff = async () => {
     if (!editingStaff) return;
-    const staffUpdates = {
-      name: editingStaff.name,
-      role: editingStaff.role,
-      terminal: editingStaff.terminal || editingStaff.terminalId || `${editingStaff.role}-01`,
-      terminalId: editingStaff.terminal || editingStaff.terminalId || `${editingStaff.role}-01`,
-      email: editingStaff.email,
-      phone: editingStaff.phone,
-      shift: editingStaff.shift,
-      assignedSection: editingStaff.assignedSection,
-      hourlyRate: editingStaff.hourlyRate,
-      isActive: editingStaff.isActive,
-    };
-    await api.updateEmployee(editingStaff.id, staffUpdates);
-    setEmployees((prev) =>
-      prev.map((e) => (e.id === editingStaff.id ? { ...e, ...staffUpdates } : e))
-    );
-    addToast('success', 'Staff Record Updated', `${editingStaff.name}'s profile was updated.`);
-    setIsEditStaffModalOpen(false);
-    setEditingStaff(null);
+    try {
+      const staffUpdates = {
+        name: editingStaff.name,
+        role: editingStaff.role,
+        terminal: editingStaff.terminal || editingStaff.terminalId || `${editingStaff.role}-01`,
+        terminalId: editingStaff.terminal || editingStaff.terminalId || `${editingStaff.role}-01`,
+        email: editingStaff.email,
+        phone: editingStaff.phone,
+        shift: editingStaff.shift,
+        assignedSection: editingStaff.assignedSection,
+        hourlyRate: editingStaff.hourlyRate,
+        isActive: editingStaff.isActive,
+      };
+      await api.updateEmployee(editingStaff.id, staffUpdates);
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === editingStaff.id ? { ...e, ...staffUpdates } : e))
+      );
+      addToast('success', 'Staff Record Updated', `${editingStaff.name}'s profile was updated.`);
+      setIsEditStaffModalOpen(false);
+      setEditingStaff(null);
+    } catch (err: any) {
+      addToast('error', 'Staff Update Failed', err.message || 'Could not update staff member on server.');
+    }
   };
 
   const handleToggleAccountDisabled = async (employeeId: string, currentName: string) => {
-    const updated = await api.toggleEmployeeAccountStatus(employeeId);
-    if (updated) {
-      setEmployees((prev) =>
-        prev.map((e) => (e.id === employeeId ? { ...e, isAccountDisabled: updated.isAccountDisabled } : e))
-      );
-      if (updated.isAccountDisabled) {
-        addToast('warning', 'Staff Account Access Disabled', `${currentName} can no longer log in.`);
-      } else {
-        addToast('success', 'Staff Account Access Restored', `${currentName} can now log in.`);
+    try {
+      const updated = await api.toggleEmployeeAccountStatus(employeeId);
+      if (updated) {
+        setEmployees((prev) =>
+          prev.map((e) => (e.id === employeeId ? { ...e, isAccountDisabled: updated.isAccountDisabled } : e))
+        );
+        if (updated.isAccountDisabled) {
+          addToast('warning', 'Staff Account Access Disabled', `${currentName} can no longer log in.`);
+        } else {
+          addToast('success', 'Staff Account Access Restored', `${currentName} can now log in.`);
+        }
       }
+    } catch (err: any) {
+      addToast('error', 'Status Update Failed', err.message || 'Could not change staff account access status.');
     }
   };
 
@@ -1159,16 +1167,24 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   const handleConfirmResetPassword = async () => {
     if (!resetPassStaff) return;
-    await api.resetEmployeePassword(resetPassStaff.id, generatedPass);
-    addToast('success', 'Password Reset Completed', `${resetPassStaff.name}'s portal password was updated.`);
-    setIsResetPassModalOpen(false);
-    setResetPassStaff(null);
+    try {
+      await api.resetEmployeePassword(resetPassStaff.id, generatedPass);
+      addToast('success', 'Password Reset Completed', `${resetPassStaff.name}'s portal password was updated.`);
+      setIsResetPassModalOpen(false);
+      setResetPassStaff(null);
+    } catch (err: any) {
+      addToast('error', 'Password Reset Failed', err.message || 'Could not update password on server.');
+    }
   };
 
   const handleDeleteStaff = async (employeeId: string, name: string) => {
-    await api.deleteEmployee(employeeId);
-    setEmployees((prev) => prev.filter((e) => e.id !== employeeId));
-    addToast('info', 'Staff Member Deleted', `${name} has been removed from staff roster.`);
+    try {
+      await api.deleteEmployee(employeeId);
+      setEmployees((prev) => prev.filter((e) => e.id !== employeeId));
+      addToast('info', 'Staff Member Deleted', `${name} has been removed from staff roster.`);
+    } catch (err: any) {
+      addToast('error', 'Staff Deletion Failed', err.message || 'Could not remove staff member from server.');
+    }
   };
 
   const handleToggleStaffStatus = async (employeeId: string, currentStatus: Employee['status']) => {
@@ -1688,7 +1704,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       </aside>
 
       {/* Main Content Body */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
         {/* Launch Status Banner */}
         {currentRestaurant && (
           <div className="mb-6">

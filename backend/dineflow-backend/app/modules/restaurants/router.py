@@ -1363,7 +1363,10 @@ async def update_restaurant_staff(
 
     stmt = select(RestaurantMembership).where(
         RestaurantMembership.restaurant_id == canonical_id,
-        RestaurantMembership.id == membership_id
+        or_(
+            RestaurantMembership.id == membership_id,
+            RestaurantMembership.user_uid == membership_id
+        )
     )
     res = await db.execute(stmt)
     mem = res.scalar_one_or_none()
@@ -1382,8 +1385,14 @@ async def update_restaurant_staff(
         mem.assigned_terminal = payload.terminal.strip().upper()
     if payload.isActive is not None:
         mem.is_active = payload.isActive
-    if payload.password and len(payload.password) >= 4:
+    if payload.password:
+        if len(payload.password) < 4:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must be at least 4 characters."
+            )
         mem.password_hash = hash_password(payload.password)
+        mem.updated_at = datetime.now(timezone.utc)
     if payload.email:
         mem.user_email = payload.email.strip().lower()
 
@@ -1419,7 +1428,10 @@ async def delete_restaurant_staff(
 
     stmt = select(RestaurantMembership).where(
         RestaurantMembership.restaurant_id == canonical_id,
-        RestaurantMembership.id == membership_id
+        or_(
+            RestaurantMembership.id == membership_id,
+            RestaurantMembership.user_uid == membership_id
+        )
     )
     res = await db.execute(stmt)
     mem = res.scalar_one_or_none()

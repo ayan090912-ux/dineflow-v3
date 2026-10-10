@@ -24,6 +24,8 @@ class CallerContext:
         username: Optional[str] = None,
         terminal: Optional[str] = None,
         scope: str = "USER",
+        iat: Optional[int] = None,
+        pw_sig: Optional[str] = None,
     ):
         self.uid = uid
         self.email = (email or "").strip().lower() if email else None
@@ -33,6 +35,8 @@ class CallerContext:
         self.username = username
         self.terminal = terminal
         self.scope = (scope or "USER").strip().upper()
+        self.iat = iat
+        self.pw_sig = pw_sig
 
     @property
     def is_authenticated(self) -> bool:
@@ -100,6 +104,8 @@ async def get_caller_context(
                     username=username,
                     terminal=terminal,
                     scope=token_scope,
+                    iat=payload.get("iat"),
+                    pw_sig=payload.get("pw_sig"),
                 )
             except Exception:
                 # Tampered, expired, or invalid HS256 token must fail authentication immediately

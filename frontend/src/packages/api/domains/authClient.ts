@@ -324,69 +324,25 @@ export class AuthClient {
     const apiBase = getApiBaseUrl();
     let authResponse: any = null;
 
-    try {
-      const res = await fetch(`${apiBase}/staff/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          username: cleanUsername,
-          password: password,
-        }),
-      });
+    const res = await fetch(`${apiBase}/staff/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        username: cleanUsername,
+        password: password,
+      }),
+    });
 
-      if (res.ok) {
-        authResponse = await res.json();
-      } else {
-        const errData = await res.json().catch(() => null);
-        const detail = errData?.detail || `Authentication failed with status ${res.status}`;
-        throw new Error(detail);
-      }
-    } catch (e: any) {
-      if (cleanUsername === 'rahul01' && password === 'WaiterPass123!') {
-        authResponse = {
-          access_token: `df_waiter_jwt_${Date.now()}`,
-          restaurant_id: 'rest-1790594544526-396022',
-          restaurant_name: 'THE START',
-          restaurant_slug: 'the-start',
-          role: 'WAITER',
-          terminal_id: 'WAITER-01',
-          staff_user_id: 'staff-rahul01',
-          name: 'Rahul',
-          target_route: '/waiter',
-          user: {
-            id: 'staff-rahul01',
-            name: 'Rahul',
-            email: 'rahul@staff.dinely.internal',
-            role: 'WAITER',
-            restaurantId: 'rest-1790594544526-396022',
-          },
-        };
-      } else {
-        if (e.message && (e.message.includes('Invalid') || e.message.includes('deactivated') || e.message.includes('Access denied'))) {
-          throw e;
-        }
-        const res = await fetch(`${apiBase}/auth/staff/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            username: cleanUsername,
-            password: password,
-          }),
-        });
-        if (res.ok) {
-          authResponse = await res.json();
-        } else {
-          const errData = await res.json().catch(() => null);
-          throw new Error(errData?.detail || e.message || 'Authentication failed');
-        }
-      }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      const detail = errData?.detail || `Authentication failed with status ${res.status}`;
+      throw new Error(detail);
     }
+
+    authResponse = await res.json();
 
     const token = authResponse.access_token;
     const restId = authResponse.restaurant_id;

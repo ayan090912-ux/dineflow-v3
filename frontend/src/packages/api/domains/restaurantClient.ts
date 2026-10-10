@@ -1851,34 +1851,31 @@ export class RestaurantClient {
 
   async updateEmployee(empId: string, updates: Partial<Employee>) {
     await delay(100);
-    const emp = this.base.employees.find((e) => e.id === empId);
+    const emp = this.base.employees.find((e) => e.id === empId || (e as any).staffUserId === empId);
     const restId = emp?.restaurantId || this.base.resolveTenantRestaurantId() || this.base.getCurrentRestaurantId();
 
     if (restId) {
-      try {
-        const body: any = {};
-        if (updates.name !== undefined) body.name = updates.name;
-        if (updates.role !== undefined) body.role = updates.role;
-        if (updates.terminal !== undefined || updates.terminalId !== undefined) {
-          body.terminal = updates.terminal || updates.terminalId;
-        }
-        if (updates.isActive !== undefined) body.isActive = updates.isActive;
-        if (updates.isAccountDisabled !== undefined) body.isActive = !updates.isAccountDisabled;
-        if (updates.password !== undefined) body.password = updates.password;
-        if (updates.email !== undefined) body.email = updates.email;
-        if (updates.phone !== undefined) body.phone = updates.phone;
-
-        await this.base.executeProtectedRequest<any>(
-          `/restaurants/${encodeURIComponent(restId)}/staff/${encodeURIComponent(empId)}`,
-          {
-            method: 'PUT',
-            body: JSON.stringify(body),
-          },
-          'OWNER'
-        );
-      } catch (err) {
-        console.warn('Backend staff update sync failed:', err);
+      const body: any = {};
+      if (updates.name !== undefined) body.name = updates.name;
+      if (updates.role !== undefined) body.role = updates.role;
+      if (updates.terminal !== undefined || updates.terminalId !== undefined) {
+        body.terminal = updates.terminal || updates.terminalId;
       }
+      if (updates.isActive !== undefined) body.isActive = updates.isActive;
+      if (updates.isAccountDisabled !== undefined) body.isActive = !updates.isAccountDisabled;
+      if (updates.password !== undefined) body.password = updates.password;
+      if (updates.email !== undefined) body.email = updates.email;
+      if (updates.phone !== undefined) body.phone = updates.phone;
+
+      const targetEmpId = emp?.id || empId;
+      await this.base.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(restId)}/staff/${encodeURIComponent(targetEmpId)}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        },
+        'OWNER'
+      );
     }
 
     if (emp) {
@@ -1891,7 +1888,7 @@ export class RestaurantClient {
   }
 
   async toggleEmployeeAccountStatus(empId: string) {
-    const emp = this.base.employees.find((e) => e.id === empId);
+    const emp = this.base.employees.find((e) => e.id === empId || (e as any).staffUserId === empId);
     if (!emp) return null;
     const newActive = emp.isActive !== undefined ? !emp.isActive : !!emp.isAccountDisabled;
     return this.updateEmployee(empId, { isActive: newActive, isAccountDisabled: !newActive });
@@ -1904,20 +1901,17 @@ export class RestaurantClient {
   }
 
   async deleteEmployee(empId: string) {
-    const emp = this.base.employees.find((e) => e.id === empId);
+    const emp = this.base.employees.find((e) => e.id === empId || (e as any).staffUserId === empId);
     const restId = emp?.restaurantId || this.base.resolveTenantRestaurantId() || this.base.getCurrentRestaurantId();
     if (restId) {
-      try {
-        await this.base.executeProtectedRequest<any>(
-          `/restaurants/${encodeURIComponent(restId)}/staff/${encodeURIComponent(empId)}`,
-          { method: 'DELETE' },
-          'OWNER'
-        );
-      } catch (e) {
-        console.warn('Backend staff delete failed:', e);
-      }
+      const targetEmpId = emp?.id || empId;
+      await this.base.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(restId)}/staff/${encodeURIComponent(targetEmpId)}`,
+        { method: 'DELETE' },
+        'OWNER'
+      );
     }
-    this.base.employees = this.base.employees.filter((e) => e.id !== empId);
+    this.base.employees = this.base.employees.filter((e) => e.id !== empId && (e as any).staffUserId !== empId);
     this.base.saveDatabase();
   }
 

@@ -221,6 +221,7 @@ async def staff_login(
         "terminal_id": assigned_term,
         "scope": "STAFF",
         "type": "access",
+        "pw_sig": member.password_hash[-8:] if member.password_hash else "",
         "iat": int(now_utc.timestamp()),
         "exp": int(expires.timestamp()),
     }
@@ -304,6 +305,22 @@ async def staff_auth_me(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Staff account has been deactivated."
         )
+
+    # Invalidate stale session if password was changed after token was issued
+    if caller.pw_sig and member.password_hash:
+        expected_sig = member.password_hash[-8:]
+        if caller.pw_sig != expected_sig:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired: Account password was recently updated. Please log in again."
+            )
+    elif caller.iat and member.updated_at:
+        up_ts = member.updated_at.timestamp() if hasattr(member.updated_at, 'timestamp') else None
+        if up_ts and up_ts > (caller.iat + 2):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired: Account password was recently updated. Please log in again."
+            )
 
     r_stmt = select(Restaurant).where(
         Restaurant.id == member.restaurant_id,

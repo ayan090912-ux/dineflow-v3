@@ -819,8 +819,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       {/* MAIN LAYOUT */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* SIDEBAR NAVIGATION */}
-        <aside className="w-full lg:w-60 bg-[#0e1117] border-r border-[#1e232e] p-3 flex lg:flex-col justify-between shrink-0 overflow-x-auto lg:overflow-y-auto scrollbar-none">
-          <div className="flex lg:flex-col gap-1 w-full min-w-[500px] lg:min-w-0">
+        <aside className="w-full lg:w-60 bg-[#0e1117] border-b lg:border-b-0 lg:border-r border-[#1e232e] p-2.5 lg:p-3 flex lg:flex-col justify-between shrink-0 overflow-x-auto lg:overflow-y-auto scrollbar-none">
+          <div className="flex lg:flex-col gap-1.5 w-full shrink-0">
             <div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-500 hidden lg:block">
               Floor Terminal
             </div>
@@ -828,7 +828,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             {/* Tab 1: Dashboard Overview */}
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left shrink-0 whitespace-nowrap ${
                 activeTab === 'dashboard'
                   ? 'bg-[#181d27] text-white border border-[#2d3545]'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
@@ -841,7 +841,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             {/* Tab 2: Active Tables */}
             <button
               onClick={() => setActiveTab('active-tables')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
+              className={`flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left shrink-0 whitespace-nowrap ${
                 activeTab === 'active-tables'
                   ? 'bg-[#181d27] text-white border border-[#2d3545]'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
@@ -859,7 +859,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             {/* Tab 3: Pending Calls */}
             <button
               onClick={() => setActiveTab('pending-calls')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
+              className={`flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left shrink-0 whitespace-nowrap ${
                 activeTab === 'pending-calls'
                   ? 'bg-[#181d27] text-white border border-[#2d3545]'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
@@ -879,7 +879,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             {/* Tab 4: Ready Plates */}
             <button
               onClick={() => setActiveTab('ready-plates')}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left w-full ${
+              className={`flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left shrink-0 whitespace-nowrap ${
                 activeTab === 'ready-plates'
                   ? 'bg-[#181d27] text-white border border-[#2d3545]'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-[#141822]'
