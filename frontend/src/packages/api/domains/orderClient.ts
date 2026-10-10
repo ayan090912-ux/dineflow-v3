@@ -14,19 +14,34 @@ import { realtimeBus } from '../realtime';
 export class OrderClient {
   constructor(private base: BaseApiClient) {}
 
-  async getOrders(restaurantId?: string): Promise<Order[]> {
+  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean }): Promise<Order[]> {
     const targetId = this.base.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
     try {
+      let endpoint = `/orders/restaurant/${encodeURIComponent(targetId)}`;
+      const params = new URLSearchParams();
+      if (options?.station) {
+        params.append('station', options.station);
+      }
+      if (options?.activeOnly) {
+        params.append('active_only', 'true');
+      }
+      const qs = params.toString();
+      if (qs) {
+        endpoint += `?${qs}`;
+      }
+
       const rawOrds = await this.base.executeProtectedRequest<any[]>(
-        `/orders/restaurant/${encodeURIComponent(targetId)}`,
+        endpoint,
         { method: 'GET' }
       );
       if (Array.isArray(rawOrds)) {
         const remoteOrds: Order[] = rawOrds.map((data: any) => normalizeOrder(data));
-        this.base.orders = this.base.orders.filter((o) => o.restaurantId !== targetId).concat(remoteOrds);
-        this.base.saveDatabase();
+        if (!options?.station) {
+          this.base.orders = this.base.orders.filter((o) => o.restaurantId !== targetId).concat(remoteOrds);
+          this.base.saveDatabase();
+        }
         return remoteOrds;
       }
     } catch (e) {

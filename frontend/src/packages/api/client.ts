@@ -599,8 +599,8 @@ export class DinelyApiClient extends BaseApiClient {
   // ==========================================
   // ORDERS DOMAIN DELEGATES
   // ==========================================
-  async getOrders(restaurantId?: string): Promise<Order[]> {
-    return this.orderClient.getOrders(restaurantId);
+  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean }): Promise<Order[]> {
+    return this.orderClient.getOrders(restaurantId, options);
   }
 
   async getCustomerOrders(restaurantId?: string, tableId?: string, tableSessionId?: string): Promise<Order[]> {

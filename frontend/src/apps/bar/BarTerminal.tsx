@@ -147,18 +147,19 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     try {
       const restId = api.getCurrentRestaurantId() || undefined;
       const barTickets = await api.getFulfillmentTickets(restId, 'BAR');
-      const allOrders = await api.getOrders(restId);
+      const allOrders = await api.getOrders(restId, { station: 'BAR' });
 
       const barOrders = allOrders
         .filter((o) => {
-          const hasBarTicket = barTickets.some((t) => t.parentOrderId === o.id);
           const hasBarItems = o.items && o.items.some((i) => getFulfillmentStation(i) === 'BAR');
-          return hasBarTicket || hasBarItems;
+          return hasBarItems;
         })
         .map((o) => {
           const ticket = barTickets.find((t) => t.parentOrderId === o.id);
+          const drinkItemsOnly = (o.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
           return {
             ...o,
+            items: drinkItemsOnly,
             barStatus: ticket ? ticket.status : o.barStatus || 'PENDING',
           };
         });
@@ -504,7 +505,10 @@ const BarOrderCard: React.FC<{
   onCustomEta?: () => void;
   isCompleted?: boolean;
 }> = ({ order, actionLabel, actionVariant = 'primary', onAction, onAdjustEta, onCustomEta, isCompleted }) => {
-  const drinkItems = order.items.filter((i) => getFulfillmentStation(i) === 'BAR');
+  const drinkItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
+  if (drinkItems.length === 0) {
+    return null;
+  }
 
   return (
     <motion.div

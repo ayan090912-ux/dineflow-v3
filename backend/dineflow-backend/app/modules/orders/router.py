@@ -10,6 +10,7 @@ from app.core.database.connection import get_db
 from app.core.security.tenant_auth import get_caller_context, CallerContext, require_tenant_staff_or_owner
 from app.modules.orders.models import Order, OrderItem, Bill
 from app.modules.tables.models import Table, TableSession
+from app.modules.menu.models import MenuItem
 
 from app.modules.restaurants.models import Restaurant
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
@@ -55,7 +56,7 @@ class UpdateOrderETASchema(BaseModel):
     estimatedPrepTimeMinutes: Optional[int] = None
     reason: Optional[str] = None
 
-def format_order_response(order: Order) -> dict:
+def format_order_response(order: Order, station: Optional[str] = None) -> dict:
     created_at_val = None
     if getattr(order, "created_at", None):
         try:
@@ -78,6 +79,23 @@ def format_order_response(order: Order) -> dict:
     cust_name = getattr(order, "customer_name", "Guest")
     tot_amt = getattr(order, "total_amount", 0.0) or 0.0
 
+    raw_items = getattr(order, "items_json", []) or []
+    eff_st = (station or "").upper()
+    if eff_st == "BAR":
+        filtered_items = [
+            it for it in raw_items
+            if (it.get("targetDestination") or it.get("target_destination") or "").upper() == "BAR"
+            or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True
+        ]
+    elif eff_st == "KITCHEN":
+        filtered_items = [
+            it for it in raw_items
+            if (it.get("targetDestination") or it.get("target_destination") or "").upper() != "BAR"
+            and not (it.get("isAlcoholic") is True or it.get("is_alcoholic") is True)
+        ]
+    else:
+        filtered_items = raw_items
+
     return {
         "id": getattr(order, "id", ""),
         "restaurant_id": rest_id,
@@ -89,10 +107,10 @@ def format_order_response(order: Order) -> dict:
         "table_session_id": sess_id,
         "tableSessionId": sess_id,
         "status": getattr(order, "status", "PENDING"),
-        "kitchen_status": getattr(order, "kitchen_status", "PENDING"),
-        "kitchenStatus": getattr(order, "kitchen_status", "PENDING"),
-        "bar_status": getattr(order, "bar_status", "PENDING"),
-        "barStatus": getattr(order, "bar_status", "PENDING"),
+        "kitchen_status": getattr(order, "kitchen_status", None),
+        "kitchenStatus": getattr(order, "kitchen_status", None),
+        "bar_status": getattr(order, "bar_status", None),
+        "barStatus": getattr(order, "bar_status", None),
         "customer_name": cust_name,
         "customerName": cust_name,
         "notes": getattr(order, "notes", ""),
@@ -106,8 +124,8 @@ def format_order_response(order: Order) -> dict:
         "estimatedPrepTimeMinutes": getattr(order, "estimated_prep_time_minutes", 15) or 15,
         "eta_target_timestamp": eta_val,
         "etaTargetTimestamp": eta_val,
-        "items": getattr(order, "items_json", []) or [],
-        "items_json": getattr(order, "items_json", []) or [],
+        "items": filtered_items,
+        "items_json": filtered_items,
         "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
         "created_at": created_at_val,
         "createdAt": created_at_val,
@@ -325,7 +343,47 @@ async def create_order(
         except Exception as sess_err:
             print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
 
-        items_list_dict = [i.model_dump() for i in payload.items]
+        # 1. Authoritative MenuItem resolution from database
+        menu_item_ids = [i.menuItemId or i.id for i in payload.items if (i.menuItemId or i.id)]
+        item_names = [i.name.strip() for i in payload.items if i.name]
+
+        query_menu = select(MenuItem).where(
+            MenuItem.restaurant_id == restaurant.id,
+            or_(
+                MenuItem.id.in_(menu_item_ids),
+                MenuItem.name.in_(item_names)
+            )
+        )
+        res_menu = await db.execute(query_menu)
+        db_menu_items = res_menu.scalars().all()
+        menu_by_id = {m.id: m for m in db_menu_items}
+        menu_by_name = {m.name.lower().strip(): m for m in db_menu_items}
+
+        resolved_items_list = []
+        for i in payload.items:
+            m_rec = menu_by_id.get(i.menuItemId or i.id) or menu_by_name.get((i.name or "").lower().strip())
+            if m_rec:
+                station = "BAR" if (m_rec.target_destination == "BAR" or m_rec.is_alcoholic) else "KITCHEN"
+                is_alc = bool(m_rec.is_alcoholic)
+            else:
+                # Default to KITCHEN. Never silently assign unclassified items to Bar.
+                station = "KITCHEN"
+                is_alc = False
+
+            d = i.model_dump()
+            d["targetDestination"] = station
+            d["target_destination"] = station
+            d["isAlcoholic"] = is_alc
+            d["is_alcoholic"] = is_alc
+            resolved_items_list.append(d)
+
+        items_list_dict = resolved_items_list
+        has_kitchen = any(it["targetDestination"] == "KITCHEN" for it in items_list_dict)
+        has_bar = any(it["targetDestination"] == "BAR" for it in items_list_dict)
+
+        kitchen_status = "PENDING" if has_kitchen else None
+        bar_status = "PENDING" if has_bar else None
+
         subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
         tax_amount = 0.0
         total = subtotal
@@ -420,8 +478,8 @@ async def create_order(
             table_number=tbl_num,
             table_session_id=actual_session_id,
             status="PENDING",
-            kitchen_status="PENDING",
-            bar_status="PENDING",
+            kitchen_status=kitchen_status,
+            bar_status=bar_status,
             customer_name=payload.customerName or "Guest",
             notes=payload.notes or "",
             subtotal=subtotal,
@@ -457,6 +515,7 @@ async def create_order(
             print("[TABLE_UPDATE_NOTICE] Table update skipped:", tbl_err)
 
         for idx, i in enumerate(payload.items):
+            it_meta = items_list_dict[idx]
             new_item = OrderItem(
                 id=f"oi-{int(now_utc.timestamp() * 1000)}-{idx}",
                 order_id=order_id,
@@ -466,7 +525,7 @@ async def create_order(
                 unit_price=i.price,
                 subtotal=i.price * i.quantity,
                 notes=i.notes or "",
-                target_destination=i.target_destination if hasattr(i, 'target_destination') else (getattr(i, 'targetDestination', None) or "KITCHEN"),
+                target_destination=it_meta["targetDestination"],
             )
             db.add(new_item)
 
@@ -493,9 +552,9 @@ async def create_order(
         try:
             from app.modules.websocket.manager import ws_manager
             order_target_aud = ["CUSTOMER", "OWNER"]
-            if restaurant.has_kitchen is not False and (not restaurant.enabled_modules or "kitchen" in restaurant.enabled_modules):
+            if has_kitchen and restaurant.has_kitchen is not False and (not restaurant.enabled_modules or "kitchen" in restaurant.enabled_modules):
                 order_target_aud.append("KITCHEN")
-            if restaurant.has_bar is not False and (not restaurant.enabled_modules or "bar" in restaurant.enabled_modules):
+            if has_bar and restaurant.has_bar is not False and (not restaurant.enabled_modules or "bar" in restaurant.enabled_modules):
                 order_target_aud.append("BAR")
             if restaurant.has_waiter is not False and (not restaurant.enabled_modules or "waiter" in restaurant.enabled_modules):
                 order_target_aud.append("WAITER")
@@ -596,6 +655,7 @@ async def get_customer_orders(
 async def get_restaurant_orders(
     restaurant_id: str,
     active_only: bool = Query(False),
+    station: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
@@ -609,8 +669,32 @@ async def get_restaurant_orders(
         except Exception:
             pass
 
+        effective_station = station.upper() if station else None
+        if not effective_station:
+            if caller.role in ["BAR", "BARTENDER"]:
+                effective_station = "BAR"
+            elif caller.role in ["CHEF", "KITCHEN"]:
+                effective_station = "KITCHEN"
+
         query = select(Order).where(Order.restaurant_id == target_rest_id)
-        if active_only:
+
+        if effective_station == "BAR":
+            bar_subq = select(OrderItem.order_id).where(
+                (OrderItem.target_destination == "BAR")
+            ).scalar_subquery()
+            query = query.where(Order.id.in_(bar_subq))
+            if active_only:
+                query = query.where(Order.bar_status.in_(["PENDING", "PREPARING", "READY"]))
+
+        elif effective_station == "KITCHEN":
+            kitchen_subq = select(OrderItem.order_id).where(
+                (OrderItem.target_destination == "KITCHEN")
+            ).scalar_subquery()
+            query = query.where(Order.id.in_(kitchen_subq))
+            if active_only:
+                query = query.where(Order.kitchen_status.in_(["PENDING", "PREPARING", "READY"]))
+
+        elif active_only:
             query_sess = select(TableSession.id).where(
                 (TableSession.restaurant_id == target_rest_id) &
                 (TableSession.status == "ACTIVE")
@@ -629,11 +713,11 @@ async def get_restaurant_orders(
         query = query.order_by(Order.created_at.desc()).limit(limit).offset(offset)
         result = await db.execute(query)
         orders = result.scalars().all()
-        return [format_order_response(o) for o in orders]
+        return [format_order_response(o, station=effective_station) for o in orders]
     except HTTPException:
         raise
     except Exception as e:
-        print("[KITCHEN_ORDER_FETCH_EXCEPT]:", e)
+        print("[ORDER_FETCH_EXCEPT]:", e)
         return []
 
 
@@ -680,32 +764,58 @@ async def update_order_status(
     if payload.barStatus and (r_obj.has_bar is False or (r_obj.enabled_modules and "bar" not in r_obj.enabled_modules)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bar terminal is disabled for this restaurant.")
 
-    # Role-based delivery authorization (Part A & Part F)
-    # Kitchen responsibilities end at: NEW -> PREPARING -> READY
-    # Kitchen and Bar roles must NOT be able to deliver plates to customer tables.
-    # Only WAITER, SERVER, OWNER, RESTAURANT_OWNER, and MANAGER can mark an order DELIVERED.
     target_status = (payload.status or "").upper()
     target_kitchen = (payload.kitchenStatus or "").upper()
+    target_bar = (payload.barStatus or "").upper()
+    caller_role = (caller.role or "").upper()
+
+    # Kitchen and Bar cannot deliver overall orders to tables (waiter responsibility)
     is_delivery_attempt = target_status in ["DELIVERED", "COMPLETED"] or target_kitchen in ["DELIVERED", "COMPLETED"]
-    if is_delivery_attempt:
-        caller_role = (caller.role or "").upper()
+    if is_delivery_attempt and not target_bar:
         allowed_delivery_roles = ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER"]
         if not caller.is_admin and caller_role not in allowed_delivery_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Forbidden: Kitchen staff cannot deliver orders to tables. Role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
+                detail=f"Forbidden: Kitchen staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
             )
 
-    if payload.status:
-        order.status = payload.status
-        if payload.status == "DELIVERED":
-            order.delivered_at = datetime.now(timezone.utc)
     if payload.kitchenStatus:
         order.kitchen_status = payload.kitchenStatus
     if payload.barStatus:
         order.bar_status = payload.barStatus
 
-    if (payload.kitchenStatus == "PREPARING" or payload.status == "PREPARING" or payload.status == "IN_KITCHEN") and not order.eta_target_timestamp:
+    # Determine station items in order
+    has_k_items = False
+    has_b_items = False
+    for it in (order.items_json or []):
+        dest = (it.get("targetDestination") or it.get("target_destination") or "").upper()
+        if dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True:
+            has_b_items = True
+        else:
+            has_k_items = True
+
+    # Reconcile overall status:
+    if payload.status and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER"]:
+        order.status = payload.status
+        if payload.status == "DELIVERED":
+            order.delivered_at = datetime.now(timezone.utc)
+    else:
+        k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED"])
+        b_comp = (not has_b_items) or (order.bar_status in ["COMPLETED", "DELIVERED"])
+
+        k_ready = (not has_k_items) or (order.kitchen_status in ["READY", "COMPLETED", "DELIVERED"])
+        b_ready = (not has_b_items) or (order.bar_status in ["READY", "COMPLETED", "DELIVERED"])
+
+        if k_comp and b_comp:
+            order.status = "COMPLETED"
+        elif k_ready and b_ready:
+            order.status = "READY"
+        elif (has_k_items and order.kitchen_status == "PREPARING") or (has_b_items and order.bar_status == "PREPARING"):
+            order.status = "PREPARING"
+        elif payload.status:
+            order.status = payload.status
+
+    if (payload.kitchenStatus == "PREPARING" or order.status == "PREPARING") and not order.eta_target_timestamp:
         prep_mins = payload.estimatedPrepTimeMinutes or order.estimated_prep_time_minutes or 15
         order.estimated_prep_time_minutes = prep_mins
         order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=prep_mins)
@@ -722,13 +832,40 @@ async def update_order_status(
             pass
 
     await db.commit()
-    print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status}")
+    print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status} bar_status={order.bar_status}")
     await db.refresh(order)
     resp_data = format_order_response(order)
 
     try:
         from app.modules.websocket.manager import ws_manager
-        if payload.status == "READY" or payload.kitchenStatus == "READY" or payload.barStatus == "READY":
+        if payload.barStatus:
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="BarStatusUpdated",
+                payload={
+                    **resp_data,
+                    "orderId": order.id,
+                    "order_id": order.id,
+                    "barStatus": order.bar_status,
+                    "data": resp_data
+                },
+                target_audience=["BAR", "WAITER", "OWNER", "CUSTOMER"]
+            )
+        if payload.kitchenStatus:
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="KitchenStatusUpdated",
+                payload={
+                    **resp_data,
+                    "orderId": order.id,
+                    "order_id": order.id,
+                    "kitchenStatus": order.kitchen_status,
+                    "data": resp_data
+                },
+                target_audience=["KITCHEN", "WAITER", "OWNER", "CUSTOMER"]
+            )
+
+        if order.status == "READY":
             ready_payload = {
                 **resp_data,
                 "orderId": order.id,
@@ -747,7 +884,7 @@ async def update_order_status(
                 payload=ready_payload,
                 target_audience=["WAITER", "CUSTOMER", "OWNER"]
             )
-        if payload.status == "DELIVERED":
+        if order.status == "DELIVERED":
             delivered_payload = {
                 **resp_data,
                 "orderId": order.id,

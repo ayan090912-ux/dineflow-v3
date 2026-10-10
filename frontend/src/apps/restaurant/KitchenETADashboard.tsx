@@ -308,7 +308,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
     const fetchFreshOrders = () => {
       const restId = currentRestId || undefined;
-      api.getOrders(restId).then((freshOrders) => {
+      api.getOrders(restId, { station: 'KITCHEN' }).then((freshOrders) => {
         if (!freshOrders) return;
         setOrders((prevOrders) => {
           const currentList = Array.isArray(prevOrders) ? prevOrders : [];
