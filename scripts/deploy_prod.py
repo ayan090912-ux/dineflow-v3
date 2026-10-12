@@ -49,23 +49,30 @@ def validate_commit_sha(sha):
     """Validate that a commit SHA consists of valid hexadecimal characters."""
     return bool(re.match(r"^[0-9a-fA-F]{7,40}$", sha))
 
-def check_aws_auth():
+def get_aws_session(profile=None):
+    import boto3
+    active_profile = profile or os.environ.get("AWS_PROFILE")
+    if not active_profile:
+        available = boto3.Session().available_profiles
+        if "dinely-deploy" in available:
+            active_profile = "dinely-deploy"
+    return boto3.Session(profile_name=active_profile, region_name=AWS_REGION)
+
+def check_aws_auth(profile=None):
     """Verify AWS authentication via boto3 / environment."""
     try:
-        import boto3
-        sess = boto3.Session(region_name=AWS_REGION)
+        sess = get_aws_session(profile=profile)
         sts = sess.client("sts")
         identity = sts.get_caller_identity()
         return True, identity.get("Arn", "Authenticated")
     except Exception as e:
         return False, str(e)
 
-def get_ssm_client():
-    import boto3
-    return boto3.Session(region_name=AWS_REGION).client("ssm")
+def get_ssm_client(profile=None):
+    return get_aws_session(profile=profile).client("ssm")
 
-def run_ssm_command(commands, comment="Deploy Dinely updates"):
-    ssm = get_ssm_client()
+def run_ssm_command(commands, comment="Deploy Dinely updates", profile=None):
+    ssm = get_ssm_client(profile=profile)
     print(f"[*] Sending SSM command to EC2 instance: {INSTANCE_ID} (Region: {AWS_REGION})...")
     resp = ssm.send_command(
         InstanceIds=[INSTANCE_ID],
@@ -128,6 +135,8 @@ def main():
                         help="Check live status and running commit on EC2 without deploying")
     parser.add_argument("--rollback", metavar="COMMIT_SHA",
                         help=f"Rollback EC2 deployment to a specific commit SHA (known-good: {KNOWN_GOOD_COMMIT})")
+    parser.add_argument("--profile", default=os.environ.get("AWS_PROFILE"),
+                        help="AWS profile to use (defaults to AWS_PROFILE or dinely-deploy)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Validate deployment prerequisites without deploying")
     args = parser.parse_args()
@@ -151,7 +160,7 @@ def main():
     probes_ok = all(p.get("ok") for p in probes.values())
 
     # 2. Check AWS Authentication
-    auth_ok, auth_info = check_aws_auth()
+    auth_ok, auth_info = check_aws_auth(profile=args.profile)
 
     # Handle Dry Run
     if args.dry_run:
@@ -206,7 +215,7 @@ def main():
             "curl -s http://localhost/readyz",
             "echo ''"
         ]
-        run_ssm_command(commands, comment="Check Dinely production status")
+        run_ssm_command(commands, comment="Check Dinely production status", profile=args.profile)
         return
 
     if args.rollback:
@@ -241,7 +250,7 @@ def main():
             "if [ \"$r_code\" != \"200\" ]; then echo 'Readiness check failed with HTTP '$r_code; exit 1; fi",
             "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
         ]
-        success = run_ssm_command(commands, comment=f"Rollback Dinely to {target_sha}")
+        success = run_ssm_command(commands, comment=f"Rollback Dinely to {target_sha}", profile=args.profile)
         if success:
             print("\n[+] ROLLBACK COMPLETED SUCCESSFULLY.")
             check_live_probes()
@@ -279,7 +288,7 @@ def main():
         "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
     ]
 
-    success = run_ssm_command(commands, comment=f"Deploy Dinely {args.target} updates ({args.branch})")
+    success = run_ssm_command(commands, comment=f"Deploy Dinely {args.target} updates ({args.branch})", profile=args.profile)
     if success:
         print("\n[+] DEPLOYMENT COMPLETED SUCCESSFULLY.")
         check_live_probes()
