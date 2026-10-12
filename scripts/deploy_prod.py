@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+Dinely Production Deployment Automation Tool
+Executes verified in-place container rebuilds and updates on AWS EC2 (ap-south-1)
+via AWS Systems Manager (SSM) or validates deployment readiness.
+Note: Deployment uses rolling container recreation (brief 1-3s container restart window).
+"""
 
 import os
 import sys
@@ -8,17 +14,10 @@ _venv_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backe
 _venv_python = os.path.join(_venv_dir, "bin", "python")
 if os.path.exists(_venv_python) and sys.prefix != _venv_dir:
     os.execv(_venv_python, [_venv_python] + sys.argv)
-"""
-Dinely Production Deployment Automation Tool
-Executes verified zero-downtime container deployments on AWS EC2 (ap-south-1)
-via AWS Systems Manager (SSM) or validates deployment readiness.
-"""
 
 import argparse
 import json
-import os
 import re
-import sys
 import time
 import urllib.request
 import urllib.error
@@ -28,12 +27,27 @@ AWS_REGION = "ap-south-1"
 REPO_DIR = "/opt/dinely"
 DEFAULT_BRANCH = "security-hardening-cleanup"
 PROD_DOMAIN = "https://dinely.food"
+KNOWN_GOOD_COMMIT = "494456f3481b69bd9b6a0255d6c906e76deca413"
 
 VALID_TARGETS = {
     "backend": "dinely_backend",
     "web": "dinely_web",
     "all": "all services (web + backend)"
 }
+
+def validate_branch(branch):
+    """Ensure branch name contains strictly safe characters with no shell escapes."""
+    if not branch or not isinstance(branch, str):
+        return False
+    if not re.match(r"^[a-zA-Z0-9_\-\./]+$", branch):
+        return False
+    if ".." in branch or branch.startswith("-"):
+        return False
+    return True
+
+def validate_commit_sha(sha):
+    """Validate that a commit SHA consists of valid hexadecimal characters."""
+    return bool(re.match(r"^[0-9a-fA-F]{7,40}$", sha))
 
 def check_aws_auth():
     """Verify AWS authentication via boto3 / environment."""
@@ -98,15 +112,11 @@ def check_live_probes():
                 version = data.get("version", "unknown")
                 status = data.get("status", "unknown")
                 print(f"  ✓ {name} ({url}): HTTP {resp.status} -> status: {status}, version: {version}, commit: {commit}")
-                results[path] = {"ok": True, "status": resp.status, "data": data}
+                results[path] = {"ok": (resp.status == 200), "status": resp.status, "data": data}
         except Exception as e:
             print(f"  ✗ {name} ({url}): Error: {e}")
             results[path] = {"ok": False, "error": str(e)}
     return results
-
-def validate_commit_sha(sha):
-    """Validate that a commit SHA consists of valid hexadecimal characters."""
-    return bool(re.match(r"^[0-9a-fA-F]{7,40}$", sha))
 
 def main():
     parser = argparse.ArgumentParser(description="Dinely AWS EC2 Production Deployment Tool")
@@ -117,10 +127,15 @@ def main():
     parser.add_argument("--status", action="store_true",
                         help="Check live status and running commit on EC2 without deploying")
     parser.add_argument("--rollback", metavar="COMMIT_SHA",
-                        help="Rollback EC2 deployment to a specific commit SHA (7-40 hex chars)")
+                        help=f"Rollback EC2 deployment to a specific commit SHA (known-good: {KNOWN_GOOD_COMMIT})")
     parser.add_argument("--dry-run", action="store_true",
                         help="Validate deployment prerequisites without deploying")
     args = parser.parse_args()
+
+    # Validate branch parameter strictly
+    if not validate_branch(args.branch):
+        print(f"[-] FATAL: Invalid branch argument '{args.branch}'. Only safe branch names are permitted.", file=sys.stderr)
+        sys.exit(1)
 
     print("==========================================================")
     print("      🚀 DINELY PRODUCTION DEPLOYMENT CONTROLLER         ")
@@ -209,7 +224,7 @@ def main():
             up_cmd = f"docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate {args.target}"
 
         commands = [
-            "set -e",
+            "set -eo pipefail",
             f"cd {REPO_DIR}",
             "git fetch origin",
             f"git checkout {target_sha}",
@@ -218,8 +233,10 @@ def main():
             build_cmd,
             up_cmd,
             "sleep 5",
-            "curl -s http://localhost/healthz",
-            "curl -s http://localhost/readyz",
+            "h_code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/healthz)",
+            "if [ \"$h_code\" != \"200\" ]; then echo 'Health check failed with HTTP '$h_code; exit 1; fi",
+            "r_code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/readyz)",
+            "if [ \"$r_code\" != \"200\" ]; then echo 'Readiness check failed with HTTP '$r_code; exit 1; fi",
             "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
         ]
         success = run_ssm_command(commands, comment=f"Rollback Dinely to {target_sha}")
@@ -241,7 +258,7 @@ def main():
         up_cmd = f"docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate {args.target}"
 
     commands = [
-        "set -e",
+        "set -eo pipefail",
         f"cd {REPO_DIR}",
         f"git fetch origin {args.branch}",
         f"git checkout {args.branch}",
@@ -251,8 +268,10 @@ def main():
         build_cmd,
         up_cmd,
         "sleep 5",
-        "curl -s http://localhost/healthz",
-        "curl -s http://localhost/readyz",
+        "h_code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/healthz)",
+        "if [ \"$h_code\" != \"200\" ]; then echo 'Health check failed with HTTP '$h_code; exit 1; fi",
+        "r_code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/readyz)",
+        "if [ \"$r_code\" != \"200\" ]; then echo 'Readiness check failed with HTTP '$r_code; exit 1; fi",
         "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
     ]
 

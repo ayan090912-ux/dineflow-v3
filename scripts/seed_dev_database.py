@@ -15,6 +15,12 @@ from app.core.security.password import hash_password
 from sqlalchemy import select
 
 async def seed():
+    # Strict Production Safety Guard: Strictly enforce local SQLite database
+    db_url_str = str(engine.url)
+    if "sqlite" not in db_url_str:
+        print(f"[FATAL SAFETY VIOLATION] seed_dev_database.py attempted against non-SQLite database: {db_url_str}", file=sys.stderr)
+        raise RuntimeError("FATAL: seed_dev_database.py is strictly restricted to local SQLite development!")
+
     # Ensure tables are created
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

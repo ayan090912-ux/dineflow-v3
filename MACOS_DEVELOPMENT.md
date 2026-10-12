@@ -4,10 +4,8 @@
 - **Repository Location:** `~/Projects/dinely` (`/Users/ayaan/Projects/dinely`)
 - **Remote Origin:** `https://github.com/ayan090912-ux/dineflow-v3.git`
 - **Active Development & Deployment Branch:** `security-hardening-cleanup`
-- **Live Website URLs:**
-  - `https://dinely.food` (Platform Root & Owner OS)
-  - `https://the-start.dinely.food` (Tenant Subdomain)
-  - `https://the-fly.dinely.food` (Tenant Subdomain)
+- **Live Production Domain:** `https://dinely.food`
+- **Verified Serving Production Commit:** `494456f3481b69bd9b6a0255d6c906e76deca413`
 
 ### Required Tool Versions
 - **OS:** macOS (Apple Silicon / Intel Darwin kernel)
@@ -15,6 +13,8 @@
 - **npm:** `11.19.0`
 - **Python:** `3.9.6+` (macOS Command Line Tools)
 - **Git:** `2.50.1`
+- **GitHub CLI:** `gh` (`v2.102.0` installed in `~/.local/bin`)
+- **AWS CLI:** `aws` (`1.44.87` installed in `~/.local/bin`)
 
 ---
 
@@ -68,6 +68,7 @@ npm --prefix frontend run build
 
 # 3. Backend core security & station routing tests:
 backend/dineflow-backend/.venv/bin/pytest \
+  backend/dineflow-backend/tests/test_database_config.py \
   backend/dineflow-backend/tests/test_station_order_routing.py \
   backend/dineflow-backend/tests/test_staff_owner_hard_isolation.py \
   backend/dineflow-backend/tests/test_staff_terminal_security.py \
@@ -102,7 +103,7 @@ The live production application runs on a dedicated AWS EC2 instance in `ap-sout
 - **EC2 Instance ID:** `i-0997b0b381dfb3fd0` (Region: `ap-south-1`)
 - **Remote Code Path on EC2:** `/opt/dinely`
 - **Production Git Branch:** `security-hardening-cleanup`
-- **Live Health Probes:** `https://dinely.food/healthz` and `https://dinely.food/readyz`
+- **Deployment Nature:** Rolling container rebuild and recreation (1-3 second brief container restart window).
 
 ---
 
@@ -124,7 +125,7 @@ git push origin security-hardening-cleanup
 ### Step 3: Publish to Live Production
 Run the deployment script from your project root:
 ```bash
-# Deploy both web and backend:
+# To deploy both web and backend:
 ./scripts/deploy-prod.sh --target all
 
 # Or deploy backend only:
@@ -148,24 +149,26 @@ Or check directly in browser at:
 ---
 
 ## 6. Rollback Procedure
-If a production issue occurs after deploying:
+If a production issue occurs after deploying, immediately roll back to the verified known-good commit:
 ```bash
-# Roll back EC2 containers to a previous known-good commit:
-./scripts/deploy-prod.sh --rollback <PREVIOUS_STABLE_COMMIT_SHA> --target all
-```
-Example:
-```bash
-./scripts/deploy-prod.sh --rollback 494456f --target all
+# Roll back EC2 containers to known-good baseline commit (494456f):
+./scripts/deploy-prod.sh --rollback 494456f3481b69bd9b6a0255d6c906e76deca413 --target all
 ```
 
 ---
 
 ## 7. New Laptop Setup Prerequisites (One-Time)
 
-To enable deployment from this new MacBook, configure AWS authentication:
-
+### GitHub Authentication
+Authorize GitHub CLI using the secure browser flow:
 ```bash
-# Option A: Using AWS CLI (if installed):
+gh auth login --web -h github.com
+```
+
+### AWS SSM Deployment Authentication
+Configure AWS credentials for `ap-south-1` via either:
+```bash
+# Option A: Using AWS CLI:
 aws configure
 
 # Option B: Set environment variables in ~/.zshrc:
