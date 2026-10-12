@@ -1,5 +1,5 @@
 {
-  "name": "dinely-project-root",
+  "name": "v3",
   "private": true,
   "scripts": {
     "dev": "bash scripts/dev-mac.sh",
