@@ -224,7 +224,7 @@ def main():
             up_cmd = f"docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate {args.target}"
 
         commands = [
-            "set -eo pipefail",
+            "set -e",
             f"cd {REPO_DIR}",
             "git fetch origin",
             f"git checkout {target_sha}",
@@ -260,7 +260,7 @@ def main():
         up_cmd = f"docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate {args.target}"
 
     commands = [
-        "set -eo pipefail",
+        "set -e",
         f"cd {REPO_DIR}",
         f"git fetch origin {args.branch}",
         f"git checkout {args.branch}",
