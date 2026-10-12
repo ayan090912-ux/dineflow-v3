@@ -592,6 +592,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.getBusinessDayHistory(restaurantId);
   }
 
+  async getBusinessDayOrders(restaurantId?: string, dayId?: string): Promise<Order[]> {
+    return this.restaurant.getBusinessDayOrders(restaurantId, dayId);
+  }
+
   async createOrganization(orgData: any) {
     return this.restaurant.createOrganization(orgData);
   }
@@ -599,7 +603,7 @@ export class DinelyApiClient extends BaseApiClient {
   // ==========================================
   // ORDERS DOMAIN DELEGATES
   // ==========================================
-  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean }): Promise<Order[]> {
+  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean; businessDayId?: string }): Promise<Order[]> {
     return this.orderClient.getOrders(restaurantId, options);
   }
 

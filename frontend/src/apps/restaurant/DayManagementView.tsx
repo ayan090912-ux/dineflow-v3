@@ -62,6 +62,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 }) => {
   const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
   const [selectedHistoricalDay, setSelectedHistoricalDay] = useState<BusinessDay | null>(null);
+  const [historicalOrders, setHistoricalOrders] = useState<Order[]>([]);
+  const [isHistOrdersLoading, setIsHistOrdersLoading] = useState(false);
+  const [activeHistTab, setActiveHistTab] = useState<'summary' | 'orders'>('summary');
   const [precheck, setPrecheck] = useState<any>(null);
   const [isPrecheckLoading, setIsPrecheckLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -69,6 +72,20 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const [forceCloseChecked, setForceCloseChecked] = useState(false);
 
   const restId = currentRestaurant?.id || api.getCurrentRestaurantId();
+
+  // Load historical orders when a historical day is opened
+  useEffect(() => {
+    if (selectedHistoricalDay && restId) {
+      setIsHistOrdersLoading(true);
+      setActiveHistTab('summary');
+      api.getBusinessDayOrders(restId, selectedHistoricalDay.id)
+        .then((ords) => setHistoricalOrders(ords || []))
+        .catch(() => setHistoricalOrders([]))
+        .finally(() => setIsHistOrdersLoading(false));
+    } else {
+      setHistoricalOrders([]);
+    }
+  }, [selectedHistoricalDay?.id, restId]);
 
   // Load precheck whenever the modal opens or data changes
   const loadPrecheck = async () => {
@@ -855,8 +872,34 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               </div>
             </div>
 
-            {/* Financial Summary Breakdown */}
-            {(() => {
+            {/* Modal Sub-Tabs: Financial Statement vs Orders Breakdown */}
+            <div className="flex items-center gap-1 bg-[#0e1117] p-1 rounded-xl border border-[#1e232e]">
+              <button
+                type="button"
+                onClick={() => setActiveHistTab('summary')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
+                  activeHistTab === 'summary'
+                    ? 'bg-[#181d27] text-emerald-400 border border-[#2d3545]'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Financial Summary
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveHistTab('orders')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
+                  activeHistTab === 'orders'
+                    ? 'bg-[#181d27] text-emerald-400 border border-[#2d3545]'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Historical Orders ({isHistOrdersLoading ? '...' : historicalOrders.length})
+              </button>
+            </div>
+
+            {/* Tab 1: Financial Summary Breakdown */}
+            {activeHistTab === 'summary' && (() => {
               const summary = (selectedHistoricalDay.summary || {}) as any;
               const tOrders = summary.totalOrders ?? (selectedHistoricalDay as any).total_orders ?? 0;
               const fSales = summary.foodSales ?? (selectedHistoricalDay as any).food_sales ?? 0;
@@ -931,6 +974,79 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 </div>
               );
             })()}
+
+            {/* Tab 2: Historical Orders Breakdown */}
+            {activeHistTab === 'orders' && (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {isHistOrdersLoading ? (
+                  <div className="p-6 text-center text-slate-400 font-mono text-xs">
+                    Loading historical order receipts...
+                  </div>
+                ) : historicalOrders.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 font-mono text-xs bg-[#0e1117] rounded-xl border border-[#1e232e]">
+                    No individual order receipts recorded for this historical shift.
+                  </div>
+                ) : (
+                  historicalOrders.map((ord) => {
+                    const barItems = (ord.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
+                    const foodItems = (ord.items || []).filter((i) => getFulfillmentStation(i) !== 'BAR');
+
+                    return (
+                      <div
+                        key={ord.id}
+                        className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-2 font-mono text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{ord.orderNumber || `#${ord.id.slice(-4)}`}</span>
+                            <span className="text-slate-400">Table {ord.tableNumber}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] border-[#1e232e] text-slate-300">
+                              {ord.status}
+                            </Badge>
+                            <span className="font-bold text-emerald-400">
+                              {formatCurrency(ord.totalAmount, theme.currency)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Station Breakdown */}
+                        <div className="flex items-center gap-2 text-[10px]">
+                          {foodItems.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                              Kitchen ({foodItems.length} items)
+                            </span>
+                          )}
+                          {barItems.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              Bar ({barItems.length} items)
+                            </span>
+                          )}
+                          <span className="text-slate-500 ml-auto">
+                            {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {/* Order Items summary */}
+                        <div className="text-[11px] text-slate-300 divide-y divide-[#1e232e]/50 pt-1">
+                          {(ord.items || []).map((it, idx) => (
+                            <div key={idx} className="flex justify-between py-0.5">
+                              <span>
+                                {it.quantity}x {it.name}
+                              </span>
+                              <span className="text-slate-400">
+                                {formatCurrency(it.price * it.quantity, theme.currency)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
 
             {/* Read-Only Footer */}
             <div className="flex justify-between items-center pt-3 border-t border-[#1e232e]">

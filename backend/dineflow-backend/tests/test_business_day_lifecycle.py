@@ -9,9 +9,10 @@ from jose import jwt
 from app.main import app
 from app.modules.restaurants.models import Restaurant
 from app.modules.tables.models import Table, TableSession
-from app.modules.orders.models import Order, Bill
+from app.modules.orders.models import Order, Bill, OrderItem
 from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.business_day.models import BusinessDay
+from app.modules.menu.models import MenuCategory, MenuItem
 from app.core.config.settings import get_settings
 
 settings = get_settings()
@@ -194,10 +195,14 @@ class TestBusinessDayLifecycle:
             assert order is not None
             assert order.id is not None
 
-            # 2. Double-close protection: closing again without opening another day returns 409
+            # 2. Repeated close request idempotency: closing again returns 200 with the existing closed day without duplicating
             res2 = await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/close", json=close_payload, headers=headers)
-            assert res2.status_code == 409
-            assert "No active open business day found" in res2.json()["detail"]
+            assert res2.status_code == 200
+            assert res2.json()["status"] == "CLOSED"
+            assert res2.json()["id"] == close_data["id"]
+
+            count_res = await db_session.execute(select(func.count(BusinessDay.id)).where(BusinessDay.restaurant_id == rest.id))
+            assert count_res.scalar() == 1
 
             # 3. Next day open: call /open to start the next business day
             open_res = await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/open", headers=headers)
@@ -416,3 +421,213 @@ class TestBusinessDayLifecycle:
             assert res_ok.status_code == 200
             await db_session.refresh(tbl)
             assert tbl.status == "AVAILABLE"
+
+    async def test_bar_terminal_queue_isolation_and_eod_reset(self, db_session: AsyncSession):
+        """
+        Verify that:
+        1. When business day 1 is open, bar orders appear in active bar queue.
+        2. Order creation automatically attaches business_day_id.
+        3. When business day 1 is closed, active bar queue is immediately empty.
+        4. Reconnecting / refreshing page does NOT restore old completed bar tickets.
+        5. When business day 2 is opened, it starts with an empty bar queue.
+        6. New bar order on business day 2 appears in day 2 queue only.
+        7. Historical day 1 bar order is permanently preserved and retrievable in Business Management.
+        """
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"bar-eod-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        # Seed bar menu items so server authoritatively classifies items as BAR
+        cat_bar = MenuCategory(
+            id=f"cat-bar-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            name="Cocktails",
+            sort_order=1,
+        )
+        db_session.add(cat_bar)
+
+        item1 = MenuItem(
+            id=f"item-of-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            category_id=cat_bar.id,
+            name="Old Fashioned",
+            price=550.0,
+            target_destination="BAR",
+            is_alcoholic=True,
+        )
+        item2 = MenuItem(
+            id=f"item-dm-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            category_id=cat_bar.id,
+            name="Dry Martini",
+            price=600.0,
+            target_destination="BAR",
+            is_alcoholic=True,
+        )
+        db_session.add_all([item1, item2])
+        await db_session.commit()
+
+        token = create_test_jwt({"sub": owner_uid, "email": owner_email, "role": "OWNER", "restaurant_id": rest.id})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # 1. Open Day 1
+            open1 = await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/open", json={"business_date": "10 Oct 2026"}, headers=headers)
+            assert open1.status_code == 200
+            day1_id = open1.json()["id"]
+
+            # 2. Place an order containing BAR items
+            order_payload = {
+                "restaurantId": rest.id,
+                "tableNumber": "T-BAR-1",
+                "customerName": "John Cocktail",
+                "items": [
+                    {
+                        "name": "Old Fashioned",
+                        "price": 550.0,
+                        "quantity": 2,
+                        "targetDestination": "BAR",
+                        "isAlcoholic": True,
+                    }
+                ],
+            }
+            order1_res = await ac.post("/api/v1/orders", json=order_payload, headers=headers)
+            assert order1_res.status_code == 201
+            ord1 = order1_res.json()
+            assert ord1["bar_status"] == "PENDING"
+            assert ord1["business_day_id"] == day1_id
+
+            # 3. Bar queue returns this active order
+            bar_queue1 = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?station=BAR&active_only=true", headers=headers)
+            assert bar_queue1.status_code == 200
+            queue_items = bar_queue1.json()
+            assert len(queue_items) == 1
+            assert queue_items[0]["id"] == ord1["id"]
+
+            # 4. Close Day 1 (force_close to finalize active tickets)
+            close1 = await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/close", json={"force_close": True}, headers=headers)
+            assert close1.status_code == 200
+
+            # 5. Bar queue immediately resets to 0 (clean operational state)
+            bar_queue_closed = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?station=BAR&active_only=true", headers=headers)
+            assert bar_queue_closed.status_code == 200
+            assert len(bar_queue_closed.json()) == 0
+
+            # 6. Refresh / reconnect simulation: queue remains 0
+            bar_queue_reconnect = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?station=BAR&active_only=true", headers=headers)
+            assert bar_queue_reconnect.status_code == 200
+            assert len(bar_queue_reconnect.json()) == 0
+
+            # 7. Open Day 2
+            open2 = await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/open", json={"business_date": "11 Oct 2026"}, headers=headers)
+            assert open2.status_code == 200
+            day2_id = open2.json()["id"]
+
+            # 8. Day 2 active queue is clean (old tickets do NOT reappear in Day 2)
+            bar_queue_day2_initial = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?station=BAR&active_only=true", headers=headers)
+            assert bar_queue_day2_initial.status_code == 200
+            assert len(bar_queue_day2_initial.json()) == 0
+
+            # 9. Create a new beverage order on Day 2
+            order2_payload = {
+                "restaurantId": rest.id,
+                "tableNumber": "T-BAR-2",
+                "customerName": "Alice Martini",
+                "items": [
+                    {
+                        "name": "Dry Martini",
+                        "price": 600.0,
+                        "quantity": 1,
+                        "targetDestination": "BAR",
+                        "isAlcoholic": True,
+                    }
+                ],
+            }
+            order2_res = await ac.post("/api/v1/orders", json=order2_payload, headers=headers)
+            assert order2_res.status_code == 201
+            ord2 = order2_res.json()
+            assert ord2["business_day_id"] == day2_id
+
+            # 10. Day 2 queue shows ONLY the new beverage order
+            bar_queue_day2_active = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?station=BAR&active_only=true", headers=headers)
+            assert bar_queue_day2_active.status_code == 200
+            d2_items = bar_queue_day2_active.json()
+            assert len(d2_items) == 1
+            assert d2_items[0]["id"] == ord2["id"]
+            assert d2_items[0]["id"] != ord1["id"]
+
+            # 11. Historical Day 1 records are permanently preserved and retrievable by Business Management
+            hist_orders_res = await ac.get(f"/api/v1/restaurants/{rest.id}/business-day/history/{day1_id}/orders", headers=headers)
+            assert hist_orders_res.status_code == 200
+            day1_orders = hist_orders_res.json()
+            assert len(day1_orders) >= 1
+            assert any(o["id"] == ord1["id"] for o in day1_orders)
+            assert all(o["business_day_id"] == day1_id for o in day1_orders)
+
+    async def test_kitchen_and_waiter_queues_reset_on_eod(self, db_session: AsyncSession):
+        """
+        Verify that Kitchen KDS and Waiter terminal views follow the same business-day lifecycle.
+        """
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"kds-eod-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        token = create_test_jwt({"sub": owner_uid, "email": owner_email, "role": "OWNER", "restaurant_id": rest.id})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # 1. Open Day
+            await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/open", json={"business_date": "15 Oct 2026"}, headers=headers)
+
+            # 2. Add kitchen order
+            k_payload = {
+                "restaurantId": rest.id,
+                "tableNumber": "T-KDS-1",
+                "customerName": "Guest",
+                "items": [{"name": "Butter Chicken", "price": 450.0, "quantity": 1, "targetDestination": "KITCHEN"}],
+            }
+            ord_res = await ac.post("/api/v1/orders", json=k_payload, headers=headers)
+            assert ord_res.status_code == 201
+            k_ord = ord_res.json()
+
+            # 3. Active kitchen queue returns this order
+            kds_res = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?station=KITCHEN&active_only=true", headers=headers)
+            assert kds_res.status_code == 200
+            assert len(kds_res.json()) == 1
+
+            # 4. Active waiter queue returns this order
+            waiter_res = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?active_only=true", headers=headers)
+            assert waiter_res.status_code == 200
+            assert len(waiter_res.json()) == 1
+
+            # 5. Close day
+            await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/close", json={"force_close": True}, headers=headers)
+
+            # 6. Both queues must now be empty
+            kds_after = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?station=KITCHEN&active_only=true", headers=headers)
+            assert len(kds_after.json()) == 0
+
+            waiter_after = await ac.get(f"/api/v1/orders/restaurant/{rest.id}?active_only=true", headers=headers)
+            assert len(waiter_after.json()) == 0
+
+    async def test_cross_tenant_isolation_on_station_queues(self, db_session: AsyncSession):
+        """
+        Verify that staff or owners from restaurant A cannot access restaurant B's station queues.
+        """
+        owner_a = f"uid_a_{uuid.uuid4().hex[:6]}"
+        rest_a = await self._create_test_restaurant(db_session, f"iso-a-{uuid.uuid4().hex[:6]}", owner_a, "a@test.com")
+
+        owner_b = f"uid_b_{uuid.uuid4().hex[:6]}"
+        rest_b = await self._create_test_restaurant(db_session, f"iso-b-{uuid.uuid4().hex[:6]}", owner_b, "b@test.com")
+
+        # Staff token for Restaurant A
+        staff_a_token = create_test_jwt({"sub": "staff_a", "role": "BARTENDER", "restaurant_id": rest_a.id})
+        headers_a = {"Authorization": f"Bearer {staff_a_token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # Staff A queries Restaurant B's bar orders -> 403 Forbidden
+            res = await ac.get(f"/api/v1/orders/restaurant/{rest_b.id}?station=BAR", headers=headers_a)
+            assert res.status_code == 403

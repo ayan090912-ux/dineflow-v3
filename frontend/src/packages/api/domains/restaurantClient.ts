@@ -14,6 +14,7 @@ import {
   BusinessDay,
   ThemeConfig,
   Organization,
+  Order,
 } from '../../types';
 import { firebaseAuth } from '../../auth/firebase';
 import { BaseApiClient } from '../core/baseClient';
@@ -21,6 +22,7 @@ import {
   delay,
   getApiBaseUrl,
   getPortalScopeFromPath,
+  normalizeOrder,
 } from '../core/helpers';
 import {
   getRestaurantCustomerUrl,
@@ -2470,6 +2472,25 @@ export class RestaurantClient {
       console.warn('[getBusinessDayHistory] Backend API fallback:', err);
     }
     return this.base.businessDays.filter((b) => b.restaurantId === restId && b.status === 'CLOSED');
+  }
+
+  async getBusinessDayOrders(restaurantId?: string, dayId?: string): Promise<Order[]> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId);
+    if (!restId || !dayId) return [];
+
+    try {
+      const data = await this.base.executeProtectedRequest<any[]>(
+        `/restaurants/${encodeURIComponent(restId)}/business-day/history/${encodeURIComponent(dayId)}/orders`,
+        { method: 'GET' },
+        'OWNER'
+      );
+      if (Array.isArray(data)) {
+        return data.map(normalizeOrder);
+      }
+    } catch (err) {
+      console.warn('[getBusinessDayOrders] Backend API failed:', err);
+    }
+    return [];
   }
 
   async getOwnerRestaurants(ownerEmail?: string, ownerUid?: string): Promise<Restaurant[]> {

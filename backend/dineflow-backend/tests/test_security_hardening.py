@@ -4,7 +4,10 @@ from app.main import app
 from app.core.middlewares.rate_limit import limiter
 from app.modules.websocket.manager import ws_manager
 
+from app.core.config.settings import get_settings
+
 client = TestClient(app)
+settings = get_settings()
 
 class TestSecurityHardeningSuite:
     def setup_method(self):
@@ -12,6 +15,11 @@ class TestSecurityHardeningSuite:
         limiter.requests.clear()
         ws_manager.active_connections.clear()
         ws_manager.connect_attempts.clear()
+        self._orig_rate_limit = settings.RATE_LIMIT_ENABLED
+        settings.RATE_LIMIT_ENABLED = True
+
+    def teardown_method(self):
+        settings.RATE_LIMIT_ENABLED = self._orig_rate_limit
 
     def test_security_headers_present_on_all_responses(self):
         """Verify production security headers are injected on all HTTP responses."""

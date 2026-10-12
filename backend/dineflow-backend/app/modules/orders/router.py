@@ -4,13 +4,14 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, and_
 
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import get_caller_context, CallerContext, require_tenant_staff_or_owner
 from app.modules.orders.models import Order, OrderItem, Bill
 from app.modules.tables.models import Table, TableSession
 from app.modules.menu.models import MenuItem
+from app.modules.business_day.models import BusinessDay
 
 from app.modules.restaurants.models import Restaurant
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
@@ -127,6 +128,8 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
         "items": filtered_items,
         "items_json": filtered_items,
         "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
+        "business_day_id": getattr(order, "business_day_id", None),
+        "businessDayId": getattr(order, "business_day_id", None),
         "created_at": created_at_val,
         "createdAt": created_at_val,
     }
@@ -469,7 +472,15 @@ async def create_order(
         else:
             order_id = f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
 
-        print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={restaurant.id} table_id={tbl_id} session_id={session_id}")
+        # Query active OPEN business day for authoritative attribution
+        query_bday = select(BusinessDay.id).where(
+            BusinessDay.restaurant_id == restaurant.id,
+            BusinessDay.status == "OPEN"
+        ).order_by(BusinessDay.opened_at.desc()).limit(1)
+        res_bday = await db.execute(query_bday)
+        active_bday_id = res_bday.scalar_one_or_none()
+
+        print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={restaurant.id} table_id={tbl_id} session_id={session_id} business_day_id={active_bday_id}")
 
         new_order = Order(
             id=order_id,
@@ -477,6 +488,7 @@ async def create_order(
             table_id=tbl_id,
             table_number=tbl_num,
             table_session_id=actual_session_id,
+            business_day_id=active_bday_id,
             status="PENDING",
             kitchen_status=kitchen_status,
             bar_status=bar_status,
@@ -656,6 +668,7 @@ async def get_restaurant_orders(
     restaurant_id: str,
     active_only: bool = Query(False),
     station: Optional[str] = Query(None),
+    business_day_id: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
@@ -669,6 +682,16 @@ async def get_restaurant_orders(
         except Exception:
             pass
 
+        if caller.restaurant_id:
+            caller_canon = caller.restaurant_id
+            try:
+                from app.core.tenant.resolver import resolve_canonical_restaurant_id
+                caller_canon = await resolve_canonical_restaurant_id(caller.restaurant_id, db)
+            except Exception:
+                pass
+            if caller_canon and caller_canon.lower() != target_rest_id.lower() and caller.role not in ["OWNER", "SUPER_ADMIN", "ADMIN"]:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
+
         effective_station = station.upper() if station else None
         if not effective_station:
             if caller.role in ["BAR", "BARTENDER"]:
@@ -678,13 +701,63 @@ async def get_restaurant_orders(
 
         query = select(Order).where(Order.restaurant_id == target_rest_id)
 
+        # 1. Explicit business day history filter
+        if business_day_id:
+            clean_bday_id = business_day_id.strip()
+            query = query.where(Order.business_day_id == clean_bday_id)
+        else:
+            # Check current open business day for active shift scoping
+            open_bday_res = await db.execute(
+                select(BusinessDay).where(
+                    BusinessDay.restaurant_id == target_rest_id,
+                    BusinessDay.status == "OPEN"
+                ).order_by(BusinessDay.opened_at.desc()).limit(1)
+            )
+            open_bday = open_bday_res.scalar_one_or_none()
+
+            if active_only:
+                if not open_bday:
+                    has_bday_res = await db.execute(
+                        select(func.count(BusinessDay.id)).where(BusinessDay.restaurant_id == target_rest_id)
+                    )
+                    has_bday_count = has_bday_res.scalar() or 0
+                    if has_bday_count > 0:
+                        # Business day is currently closed - operational queue is clean/empty
+                        return []
+                else:
+                    query = query.where(
+                        or_(
+                            Order.business_day_id == open_bday.id,
+                            and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at)
+                        )
+                    )
+            elif effective_station:
+                if open_bday:
+                    query = query.where(
+                        or_(
+                            Order.business_day_id == open_bday.id,
+                            and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at)
+                        )
+                    )
+                else:
+                    has_bday_res = await db.execute(
+                        select(func.count(BusinessDay.id)).where(BusinessDay.restaurant_id == target_rest_id)
+                    )
+                    has_bday_count = has_bday_res.scalar() or 0
+                    if has_bday_count > 0:
+                        return []
+                    query = query.where(Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"]))
+
         if effective_station == "BAR":
             bar_subq = select(OrderItem.order_id).where(
                 (OrderItem.target_destination == "BAR")
             ).scalar_subquery()
             query = query.where(Order.id.in_(bar_subq))
             if active_only:
-                query = query.where(Order.bar_status.in_(["PENDING", "PREPARING", "READY"]))
+                query = query.where(
+                    Order.bar_status.in_(["PENDING", "PREPARING", "READY"]),
+                    Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+                )
 
         elif effective_station == "KITCHEN":
             kitchen_subq = select(OrderItem.order_id).where(
@@ -692,7 +765,10 @@ async def get_restaurant_orders(
             ).scalar_subquery()
             query = query.where(Order.id.in_(kitchen_subq))
             if active_only:
-                query = query.where(Order.kitchen_status.in_(["PENDING", "PREPARING", "READY"]))
+                query = query.where(
+                    Order.kitchen_status.in_(["PENDING", "PREPARING", "READY"]),
+                    Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+                )
 
         elif active_only:
             query_sess = select(TableSession.id).where(

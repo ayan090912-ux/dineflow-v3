@@ -14,7 +14,7 @@ import { realtimeBus } from '../realtime';
 export class OrderClient {
   constructor(private base: BaseApiClient) {}
 
-  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean }): Promise<Order[]> {
+  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean; businessDayId?: string }): Promise<Order[]> {
     const targetId = this.base.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
@@ -26,6 +26,9 @@ export class OrderClient {
       }
       if (options?.activeOnly) {
         params.append('active_only', 'true');
+      }
+      if (options?.businessDayId) {
+        params.append('business_day_id', options.businessDayId);
       }
       const qs = params.toString();
       if (qs) {
@@ -678,6 +681,24 @@ export class OrderClient {
 
   async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
     const order = this.base.orders.find((o) => o.id === orderId);
+    const orderStatus = status === 'READY' ? 'READY' : (order?.status || 'PREPARING');
+
+    try {
+      await this.base.executeProtectedRequest<any>(
+        `/orders/${encodeURIComponent(orderId)}/status`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+            barStatus: status,
+          }),
+        },
+        'BAR'
+      );
+    } catch (e) {
+      console.warn('API PUT for updateBarStatus failed:', e);
+    }
+
     if (order) {
       order.barStatus = status;
       if (status === 'COMPLETED') {
@@ -692,19 +713,6 @@ export class OrderClient {
         if (order.status !== 'READY' && order.status !== 'DELIVERED' && order.status !== 'COMPLETED') {
           order.status = 'PREPARING';
         }
-      }
-
-      try {
-        await this.base.executeProtectedRequest<any>(
-          `/orders/${encodeURIComponent(orderId)}/status`,
-          {
-            method: 'PUT',
-            body: JSON.stringify({ status: order.status, barStatus: status }),
-          },
-          'BAR'
-        );
-      } catch (e) {
-        console.warn('API PUT for updateBarStatus failed:', e);
       }
 
       order.updatedAt = new Date().toISOString();

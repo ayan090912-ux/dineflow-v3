@@ -36,6 +36,7 @@ interface BarTerminalProps {
 
 export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }) => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [recentDispatches, setRecentDispatches] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastNotification, setLastNotification] = useState<string>('');
@@ -67,7 +68,17 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
       // Day Closed Reset - clean live operational queues
       if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
         setOrders([]);
+        setRecentDispatches([]);
         setLastNotification('Business Day Closed 🌅 Bar queue reset for new day.');
+        return;
+      }
+
+      // Day Opened - reload fresh tickets for the new business day
+      if (event.type === 'DayOpened' || event.type === 'BusinessDayOpened') {
+        setOrders([]);
+        setRecentDispatches([]);
+        loadBarOrders(false);
+        setLastNotification('New Business Day Opened ☀️ Ready for new beverage orders.');
         return;
       }
 
@@ -146,8 +157,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     if (showLoading) setIsLoading(true);
     try {
       const restId = api.getCurrentRestaurantId() || undefined;
-      const barTickets = await api.getFulfillmentTickets(restId, 'BAR');
-      const allOrders = await api.getOrders(restId, { station: 'BAR' });
+      const allOrders = await api.getOrders(restId, { station: 'BAR', activeOnly: true });
 
       const barOrders = allOrders
         .filter((o) => {
@@ -155,12 +165,13 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
           return hasBarItems;
         })
         .map((o) => {
-          const ticket = barTickets.find((t) => t.parentOrderId === o.id);
           const drinkItemsOnly = (o.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
+          const isFinished = o.status === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'CANCELLED';
+          const effBarStatus = isFinished ? 'COMPLETED' : (o.barStatus || 'PENDING');
           return {
             ...o,
             items: drinkItemsOnly,
-            barStatus: ticket ? ticket.status : o.barStatus || 'PENDING',
+            barStatus: effBarStatus,
           };
         });
 
@@ -182,6 +193,17 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
           : 'COMPLETED';
       await api.updateFulfillmentTicketStatus(orderId, stationStatus, 'BAR');
       await api.updateBarStatus(orderId, stationStatus);
+
+      if (stationStatus === 'COMPLETED' || newStatus === 'DELIVERED') {
+        const completedOrd = orders.find((o) => o.id === orderId);
+        if (completedOrd) {
+          setRecentDispatches((prev) => [
+            { ...completedOrd, barStatus: 'COMPLETED', status: 'COMPLETED' },
+            ...prev.filter((x) => x.id !== orderId),
+          ].slice(0, 5));
+        }
+      }
+
       await loadBarOrders(false);
     } catch (err) {
       console.error('Failed to update drink order status:', err);
@@ -209,7 +231,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     await loadBarOrders();
   };
 
-  // Divide orders into Bar Pipeline stages based strictly on barStatus
+  // Divide orders into Bar Pipeline stages based strictly on authoritative station and order status
   const pendingOrders = orders.filter(
     (o) =>
       (o.barStatus === 'PENDING' || !o.barStatus) &&
@@ -217,13 +239,27 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
       o.barStatus !== 'ACCEPTED' &&
       o.barStatus !== 'READY' &&
       o.barStatus !== 'COMPLETED' &&
-      o.status !== 'CANCELLED'
+      o.status !== 'CANCELLED' &&
+      o.status !== 'COMPLETED' &&
+      o.status !== 'DELIVERED'
   );
   const preparingOrders = orders.filter(
-    (o) => o.barStatus === 'PREPARING' || o.barStatus === 'ACCEPTED'
+    (o) =>
+      (o.barStatus === 'PREPARING' || o.barStatus === 'ACCEPTED') &&
+      o.status !== 'COMPLETED' &&
+      o.status !== 'DELIVERED' &&
+      o.status !== 'CANCELLED'
   );
-  const readyOrders = orders.filter((o) => o.barStatus === 'READY');
-  const completedOrders = orders.filter((o) => o.barStatus === 'COMPLETED');
+  const readyOrders = orders.filter(
+    (o) =>
+      o.barStatus === 'READY' &&
+      o.status !== 'COMPLETED' &&
+      o.status !== 'DELIVERED' &&
+      o.status !== 'CANCELLED'
+  );
+  const completedOrders = recentDispatches.length > 0
+    ? recentDispatches
+    : orders.filter((o) => o.barStatus === 'COMPLETED');
 
   return (
     <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">

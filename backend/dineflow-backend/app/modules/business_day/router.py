@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, or_, func
+from sqlalchemy import select, update, or_, and_, func
 
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import require_tenant_owner_or_admin, get_caller_context, CallerContext
@@ -401,6 +401,31 @@ async def close_business_day(
     current_bday = res.scalar_one_or_none()
 
     if not current_bday:
+        last_closed_res = await db.execute(
+            select(BusinessDay).where(
+                BusinessDay.restaurant_id == rest.id,
+                BusinessDay.status == "CLOSED"
+            ).order_by(BusinessDay.closed_at.desc(), BusinessDay.opened_at.desc()).limit(1)
+        )
+        last_closed = last_closed_res.scalar_one_or_none()
+        if last_closed:
+            # Idempotent return for repeated close requests
+            closed_formatted = _format_business_day(last_closed)
+            next_business_date = compute_next_business_date(last_closed.business_date)
+            closed_formatted["next_business_date"] = next_business_date
+            closed_formatted["nextBusinessDate"] = next_business_date
+            closed_formatted["previous_business_date"] = last_closed.business_date
+            closed_formatted["previousBusinessDate"] = last_closed.business_date
+            return {
+                **closed_formatted,
+                "success": True,
+                "message": f"Business Day {last_closed.business_date} is already closed.",
+                "is_already_closed": True,
+                "closedDay": closed_formatted,
+                "nextBusinessDate": next_business_date,
+                "previousBusinessDate": last_closed.business_date,
+            }
+
         any_day_res = await db.execute(select(func.count(BusinessDay.id)).where(BusinessDay.restaurant_id == rest.id))
         count = any_day_res.scalar() or 0
         if count == 0:
@@ -422,8 +447,8 @@ async def close_business_day(
                 detail="No active open business day found. The current business day is already closed."
             )
 
-    # Precheck enforcement: if force_close is not set, verify that active tables / unpaid bills do not block closing
-    is_force_close = bool(payload.force_close or payload.forceCloseActiveTables)
+    # Precheck enforcement: if force_close is not set, verify that active tables / unpaid bills / pending tickets do not block closing
+    is_force_close = bool(payload.force_close or payload.forceCloseActiveTables or payload.forceFinalizeOrders)
     if not is_force_close:
         tbl_res = await db.execute(
             select(func.count(Table.id)).where(Table.restaurant_id == rest.id, Table.status == "OCCUPIED")
@@ -442,10 +467,29 @@ async def close_business_day(
         )
         unpaid_count = bills_res.scalar() or 0
 
-        if occupied_count > 0 or unpaid_count > 0:
+        orders_res_check = await db.execute(
+            select(func.count(Order.id)).where(
+                Order.restaurant_id == rest.id,
+                or_(
+                    Order.status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+                    Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+                    Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+                )
+            )
+        )
+        uncompleted_count = orders_res_check.scalar() or 0
+
+        if occupied_count > 0 or unpaid_count > 0 or uncompleted_count > 0:
+            reasons = []
+            if occupied_count > 0:
+                reasons.append(f"{occupied_count} table(s) are occupied")
+            if unpaid_count > 0:
+                reasons.append(f"{unpaid_count} bill(s) are unpaid")
+            if uncompleted_count > 0:
+                reasons.append(f"{uncompleted_count} preparation ticket(s) are active")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot close day yet. {occupied_count} table(s) are occupied and {unpaid_count} bill(s) are unpaid. Please settle them or confirm force close."
+                detail=f"Cannot close day yet. {', '.join(reasons)}. Please settle them or confirm force close."
             )
 
     now_utc = datetime.now(timezone.utc)
@@ -554,7 +598,7 @@ async def close_business_day(
             status="AVAILABLE",
             is_occupied=False,
             active_session_id=None,
-        )
+        ).execution_options(synchronize_session=False)
     )
 
     # B. Close all open table sessions
@@ -565,19 +609,47 @@ async def close_business_day(
         ).values(
             status="CLOSED",
             session_closed_at=now_utc
-        )
+        ).execution_options(synchronize_session=False)
+    )
+
+    # Authoritatively stamp business_day_id on all orders from this operational shift
+    await db.execute(
+        update(Order).where(
+            Order.restaurant_id == rest.id,
+            or_(
+                Order.business_day_id == current_bday.id,
+                and_(Order.business_day_id.is_(None), Order.created_at >= since_time)
+            )
+        ).values(business_day_id=current_bday.id).execution_options(synchronize_session=False)
     )
 
     # C. Clear live operational queue: finalize uncompleted orders so they don't linger on live KDS/Bar
     await db.execute(
         update(Order).where(
             Order.restaurant_id == rest.id,
-            Order.status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+            Order.business_day_id == current_bday.id,
+            Order.status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"])
         ).values(
             status="COMPLETED",
             kitchen_status="COMPLETED",
             bar_status="COMPLETED"
-        )
+        ).execution_options(synchronize_session=False)
+    )
+
+    # Also seal any completed orders with lingering station statuses
+    await db.execute(
+        update(Order).where(
+            Order.restaurant_id == rest.id,
+            Order.business_day_id == current_bday.id,
+            Order.status.in_(["COMPLETED", "DELIVERED"]),
+            or_(
+                Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"]),
+                Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"])
+            )
+        ).values(
+            kitchen_status="COMPLETED",
+            bar_status="COMPLETED"
+        ).execution_options(synchronize_session=False)
     )
 
     # D. Resolve open customer requests (Waiter)
@@ -587,7 +659,7 @@ async def close_business_day(
             CustomerRequestModel.status == "PENDING"
         ).values(
             status="COMPLETED"
-        )
+        ).execution_options(synchronize_session=False)
     )
 
     # Commit entire day-close transaction atomically!
@@ -833,3 +905,42 @@ async def get_historical_business_day_detail(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historical business day record not found.")
 
     return _format_business_day(bday)
+
+
+@router.get("/history/{day_id}/orders")
+async def get_historical_business_day_orders(
+    restaurant_id: str,
+    day_id: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    rest = await _resolve_restaurant(restaurant_id, db)
+    clean_day_id = (day_id or "").strip()
+    query = select(BusinessDay).where(
+        BusinessDay.restaurant_id == rest.id,
+        or_(
+            BusinessDay.id == clean_day_id,
+            BusinessDay.business_date == clean_day_id,
+        )
+    )
+    res = await db.execute(query)
+    bday = res.scalar_one_or_none()
+    if not bday:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historical business day record not found.")
+
+    query_orders = select(Order).where(
+        Order.restaurant_id == rest.id,
+        or_(
+            Order.business_day_id == bday.id,
+            and_(
+                Order.business_day_id.is_(None),
+                Order.created_at >= bday.opened_at,
+                Order.created_at <= (bday.closed_at or datetime.now(timezone.utc))
+            )
+        )
+    ).order_by(Order.created_at.asc())
+    res_orders = await db.execute(query_orders)
+    orders = res_orders.scalars().all()
+    from app.modules.orders.router import format_order_response
+    return [format_order_response(o) for o in orders]
+
