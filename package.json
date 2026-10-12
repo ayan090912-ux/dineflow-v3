@@ -3,7 +3,10 @@
   "private": true,
   "scripts": {
     "dev": "bash scripts/dev-mac.sh",
-    "dev:mac": "bash scripts/dev-mac.sh"
+    "dev:mac": "bash scripts/dev-mac.sh",
+    "deploy:prod": "bash scripts/deploy-prod.sh",
+    "deploy:status": "bash scripts/deploy-prod.sh --status",
+    "deploy:dry": "bash scripts/deploy-prod.sh --dry-run"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

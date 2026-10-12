@@ -45,3 +45,5 @@ ssm_cmd.json
 
 !scripts/dev-mac.sh
 !scripts/seed_dev_database.py
+!scripts/deploy_prod.py
+!scripts/deploy-prod.sh
