@@ -247,11 +247,13 @@ async def unhandled_exception_handler(request, exc):
 
 
 from sqlalchemy import text
+import app.core.database.connection as conn_mod
 from app.core.database.connection import AsyncSessionLocal
 import os
 import subprocess
 
-_CACHED_COMMIT_SHA: str | None = None
+from typing import Optional
+_CACHED_COMMIT_SHA: Optional[str] = None
 
 def get_git_commit() -> str:
     global _CACHED_COMMIT_SHA
@@ -319,7 +321,7 @@ async def health_check():
 async def readiness_check():
     db_status = "unknown"
     try:
-        async with AsyncSessionLocal() as session:
+        async with conn_mod.AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
             db_status = "connected"
     except Exception as e:

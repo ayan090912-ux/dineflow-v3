@@ -14,6 +14,12 @@ export interface ErrorBoundaryState {
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  declare props: ErrorBoundaryProps;
+  declare setState: (
+    state: Partial<ErrorBoundaryState> | ((prevState: ErrorBoundaryState, props: ErrorBoundaryProps) => Partial<ErrorBoundaryState> | null),
+    callback?: () => void
+  ) => void;
+
   state: ErrorBoundaryState = {
     hasError: false,
     error: null,

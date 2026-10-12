@@ -1,3 +1,4 @@
+import os
 import urllib.parse
 from functools import lru_cache
 from typing import List, Optional
@@ -21,6 +22,16 @@ def normalize_database_urls(raw_url: str, env: str) -> tuple[str, str]:
     hostname = (parsed.hostname or "").lower()
 
     is_local = hostname in ("localhost", "127.0.0.1", "db", "0.0.0.0", "::1")
+
+    # SQLite URLs handling (preserve path slashes and memory notation)
+    if scheme.startswith("sqlite"):
+        if "aiosqlite" in url:
+            async_url = url
+            sync_url = url.replace("sqlite+aiosqlite:", "sqlite:")
+        else:
+            sync_url = url
+            async_url = url.replace("sqlite:", "sqlite+aiosqlite:")
+        return async_url, sync_url
 
     # Production safety check: Prevent localhost in production
     if env.lower() == "production" and is_local:
@@ -77,7 +88,10 @@ def normalize_database_urls(raw_url: str, env: str) -> tuple[str, str]:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"),
+            ".env"
+        ),
         env_file_encoding="utf-8",
         extra="ignore"
     )

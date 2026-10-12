@@ -1,4 +1,10 @@
 {
+  "name": "dinely-project-root",
+  "private": true,
+  "scripts": {
+    "dev": "bash scripts/dev-mac.sh",
+    "dev:mac": "bash scripts/dev-mac.sh"
+  },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",

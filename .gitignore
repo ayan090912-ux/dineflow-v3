@@ -40,6 +40,8 @@ production_backup_*
 
 # Scratch scripts & temporary test artifacts
 scratch/
-scripts/
+scripts/*
 ssm_cmd.json
 
+!scripts/dev-mac.sh
+!scripts/seed_dev_database.py
