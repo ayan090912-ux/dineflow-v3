@@ -136,6 +136,59 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
   const portalScope = portal === 'admin' ? 'ADMIN' : 'STAFF';
   const currentUser = api.getCurrentUser(portalScope);
 
+  // Check for admin redirect completion on mount (mobile redirect flow)
+  React.useEffect(() => {
+    let isMounted = true;
+    if (portal !== 'admin') return;
+
+    const checkAdminRedirect = async () => {
+      try {
+        const { handleGoogleRedirectResult } = await import('../../packages/auth/firebase');
+        const googleUser = await handleGoogleRedirectResult(true);
+        if (googleUser && isMounted) {
+          setIsAdminGoogleLoading(true);
+          const idToken = googleUser.idToken;
+          if (!idToken) {
+            throw new Error('Google authentication failed to produce a valid verification token.');
+          }
+          const res = await api.loginPlatformAdmin(idToken, googleUser.email);
+          setSuccessMessage(`Platform Administrator verified. Loading Control Plane...`);
+          setTimeout(() => {
+            if (isMounted) {
+              setIsAdminGoogleLoading(false);
+              onLoginSuccess('PLATFORM_ADMIN', res.user);
+              onNavigate('/admin/dashboard');
+            }
+          }, 350);
+        }
+      } catch (err: any) {
+        if (!isMounted) return;
+        setIsAdminGoogleLoading(false);
+        const isAuthzError =
+          err?.statusCode === 403 ||
+          err?.isAuthorizationError === true ||
+          err?.message?.toLowerCase().includes('not authorized') ||
+          err?.message?.toLowerCase().includes('forbidden') ||
+          err?.message?.toLowerCase().includes('access denied');
+
+        if (isAuthzError) {
+          try {
+            const { signOutFirebase } = await import('../../packages/auth/firebase');
+            await signOutFirebase();
+          } catch (_) {}
+          setErrorMessage('This Google account is not authorized for Platform Admin.');
+        } else if (err.code !== 'auth/popup-closed-by-user' && !err.isCancelled) {
+          setErrorMessage(err?.message || 'Authentication failed. Please verify your credentials.');
+        }
+      }
+    };
+
+    checkAdminRedirect();
+    return () => {
+      isMounted = false;
+    };
+  }, [portal]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -187,6 +240,10 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
 
     try {
       const googleUser = await signInPlatformAdminWithGoogle();
+      if (!googleUser) {
+        // Redirect flow initiated for mobile; browser navigates away
+        return;
+      }
       const idToken = googleUser.idToken;
       if (!idToken) {
         throw new Error('Google authentication failed to produce a valid verification token.');

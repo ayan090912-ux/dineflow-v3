@@ -36,6 +36,39 @@ export default {
     const hostHeader = request.headers.get('x-forwarded-host') || request.headers.get('host') || url.hostname;
     const originalHostname = hostHeader.split(':')[0].toLowerCase().trim();
 
+    // 0. Same-Domain Firebase Auth Helper (iOS Safari ITP & Storage Partitioning Support)
+    if (url.pathname.startsWith('/__/auth/')) {
+      const helperBase = 'https://dinely-cd6cd.firebaseapp.com';
+      const targetUrl = new URL(url.pathname + url.search, helperBase);
+      const reqHeaders = new Headers(request.headers);
+      reqHeaders.set('Host', 'dinely-cd6cd.firebaseapp.com');
+      reqHeaders.set('X-Forwarded-Host', originalHostname);
+      reqHeaders.set('X-Forwarded-Proto', 'https');
+      reqHeaders.set('X-Real-IP', request.headers.get('CF-Connecting-IP') || '');
+
+      const requestInit = {
+        method: request.method,
+        headers: reqHeaders,
+        redirect: 'follow',
+      };
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        requestInit.body = request.body;
+      }
+      try {
+        const response = await fetch(targetUrl.toString(), requestInit);
+        const resHeaders = new Headers(response.headers);
+        resHeaders.set('X-Dinely-Routed-By', 'dinely-tenant-router');
+        resHeaders.set('X-Dinely-Auth-Helper', 'true');
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: resHeaders,
+        });
+      } catch (e) {
+        return proxyToOrigin(request, url, originalHostname, null, false, originBase, originHost);
+      }
+    }
+
     // 1. Root Platform Domain Handling (dinely.food or www.dinely.food)
     if (
       originalHostname === 'dinely.food' ||

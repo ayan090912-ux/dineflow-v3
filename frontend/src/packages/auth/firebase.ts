@@ -3,15 +3,34 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   UserCredential,
 } from 'firebase/auth';
 
 const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {}) as any;
 
+/**
+ * Resolves the appropriate Firebase Authentication domain.
+ * When running in production (dinely.food or *.dinely.food), uses 'dinely.food'
+ * to leverage the same-domain reverse proxy at /__/auth/ (preventing iOS Safari
+ * Intelligent Tracking Prevention and cross-origin Storage Partitioning failures).
+ * In local development, falls back to VITE_FIREBASE_AUTH_DOMAIN or dinely-cd6cd.firebaseapp.com.
+ */
+export function resolveAuthDomain(): string {
+  if (typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname === 'dinely.food' || hostname.endsWith('.dinely.food')) {
+      return 'dinely.food';
+    }
+  }
+  return env.VITE_FIREBASE_AUTH_DOMAIN || 'dinely-cd6cd.firebaseapp.com';
+}
+
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyAp2Mt6i7JfWHdQyxogoMtlDh1RQrtJtUg',
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'dinely-cd6cd.firebaseapp.com',
+  authDomain: resolveAuthDomain(),
   projectId: env.VITE_FIREBASE_PROJECT_ID || 'dinely-cd6cd',
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'dinely-cd6cd.firebasestorage.app',
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '99267644103',
@@ -37,83 +56,188 @@ export interface GoogleAuthResult {
 }
 
 /**
+ * Detects whether the current environment is a mobile or tablet browser (iOS Safari, Android Chrome, etc.)
+ * where third-party storage partitioning (ITP) and popup restrictions are actively enforced.
+ */
+export function isMobileOrTabletBrowser(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isTouch = Boolean(navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && isTouch);
+  const isAndroid = /Android/i.test(ua);
+  const isMobileUA = /Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  return isIOS || isAndroid || isMobileUA || (isTouch && window.innerWidth <= 1024);
+}
+
+/**
+ * Extracts and normalizes Google authentication payload from a Firebase UserCredential.
+ */
+async function extractGoogleAuthResult(credential: UserCredential, forceRefreshIdToken: boolean = false): Promise<GoogleAuthResult> {
+  const user = credential.user;
+  if (!user.email) {
+    throw new Error('No email address associated with this Google account.');
+  }
+
+  const idToken = await user.getIdToken(forceRefreshIdToken);
+
+  return {
+    uid: user.uid,
+    email: user.email.toLowerCase(),
+    displayName: user.displayName || user.email.split('@')[0],
+    photoURL: user.photoURL || undefined,
+    idToken,
+  };
+}
+
+/**
+ * Standardized mapping for Firebase Auth error codes to helpful user messages.
+ */
+function mapAndThrowAuthError(error: any): never {
+  console.error('Firebase Google Auth Error:', error);
+
+  if (error.code === 'auth/popup-closed-by-user') {
+    const cancelErr = new Error('Google sign-in popup was closed before completing authentication.');
+    (cancelErr as any).code = 'auth/popup-closed-by-user';
+    (cancelErr as any).isCancelled = true;
+    throw cancelErr;
+  } else if (error.code === 'auth/popup-blocked') {
+    const blockErr = new Error('Google sign-in popup was blocked by your browser. Please allow popups for this domain.');
+    (blockErr as any).code = 'auth/popup-blocked';
+    throw blockErr;
+  } else if (error.code === 'auth/cancelled-popup-request') {
+    const cancelErr = new Error('Sign-in process cancelled.');
+    (cancelErr as any).code = 'auth/cancelled-popup-request';
+    (cancelErr as any).isCancelled = true;
+    throw cancelErr;
+  } else if (error.code === 'auth/network-request-failed' || error.message?.toLowerCase().includes('network') || error.message?.toLowerCase().includes('failed to fetch')) {
+    const netErr = new Error('Network failure: Unable to reach Google authentication service. Please check your internet connection.');
+    (netErr as any).code = 'auth/network-request-failed';
+    (netErr as any).isNetworkError = true;
+    throw netErr;
+  } else if (error.code === 'auth/account-exists-with-different-credential') {
+    const accErr = new Error('An account already exists with the same email address using a different login method.');
+    (accErr as any).code = error.code;
+    throw accErr;
+  } else if (error.code === 'auth/unauthorized-domain' || error.message?.includes('unauthorized-domain')) {
+    const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+    const domErr = new Error(`Firebase Auth Domain Error: '${currentHost}' is not authorized in Firebase Console. Please add '${currentHost}' under Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
+    (domErr as any).code = 'auth/unauthorized-domain';
+    throw domErr;
+  } else if (error.code === 'auth/api-key-not-valid' || error.message?.includes('api-key-not-valid')) {
+    const keyErr = new Error('Firebase API key is missing or invalid in frontend/.env (VITE_FIREBASE_API_KEY). Please set a valid Firebase Web API key from Firebase Console.');
+    (keyErr as any).code = 'auth/api-key-not-valid';
+    throw keyErr;
+  }
+
+  const genErr = new Error(error.message || 'Google Authentication failed. Please try again.');
+  (genErr as any).code = error.code || 'auth/unknown';
+  throw genErr;
+}
+
+/**
+ * Triggers Google Authentication with mobile redirect or desktop popup flow.
+ * - Mobile / tablet devices (especially iOS Safari with ITP): Uses signInWithRedirect.
+ * - Desktop browsers: Uses signInWithPopup, falling back to signInWithRedirect if popup is blocked.
+ * When redirect is used, this method returns null as the browser redirects away.
+ * Results upon return from redirect must be collected via handleGoogleRedirectResult().
+ */
+export async function signInWithGoogle(options?: {
+  forceRedirect?: boolean;
+  forceRefreshIdToken?: boolean;
+}): Promise<GoogleAuthResult | null> {
+  const shouldUseRedirect = options?.forceRedirect || isMobileOrTabletBrowser();
+
+  if (shouldUseRedirect) {
+    try {
+      await signInWithRedirect(firebaseAuth, googleProvider);
+      return null;
+    } catch (error: any) {
+      mapAndThrowAuthError(error);
+    }
+  }
+
+  // Desktop popup flow with automatic popup-blocked fallback to redirect
+  try {
+    const result = await signInWithPopup(firebaseAuth, googleProvider);
+    return await extractGoogleAuthResult(result, options?.forceRefreshIdToken);
+  } catch (error: any) {
+    if (error.code === 'auth/popup-blocked') {
+      console.warn('Popup blocked on desktop browser. Falling back to redirect flow...');
+      try {
+        await signInWithRedirect(firebaseAuth, googleProvider);
+        return null;
+      } catch (redirectErr: any) {
+        mapAndThrowAuthError(redirectErr);
+      }
+    }
+    mapAndThrowAuthError(error);
+  }
+}
+
+/**
  * Triggers real Firebase Google Authentication with popup flow.
- * Returns the authenticated Google user details.
+ * On mobile browsers or when popups are blocked, gracefully delegates to redirect flow.
  */
 export async function signInWithGooglePopup(forceRefreshIdToken: boolean = false): Promise<GoogleAuthResult> {
-  try {
-    const result: UserCredential = await signInWithPopup(firebaseAuth, googleProvider);
-    const user = result.user;
-
-    if (!user.email) {
-      throw new Error('No email address associated with this Google account.');
-    }
-
-    const idToken = await user.getIdToken(forceRefreshIdToken);
-
-    return {
-      uid: user.uid,
-      email: user.email.toLowerCase(),
-      displayName: user.displayName || user.email.split('@')[0],
-      photoURL: user.photoURL || undefined,
-      idToken,
-    };
-  } catch (error: any) {
-    console.error('Firebase Google Sign-In Error:', error);
-
-    if (error.code === 'auth/popup-closed-by-user') {
-      const cancelErr = new Error('Google sign-in popup was closed before completing authentication.');
-      (cancelErr as any).code = 'auth/popup-closed-by-user';
-      (cancelErr as any).isCancelled = true;
-      throw cancelErr;
-    } else if (error.code === 'auth/popup-blocked') {
-      const blockErr = new Error('Google sign-in popup was blocked by your browser. Please allow popups for this domain.');
-      (blockErr as any).code = 'auth/popup-blocked';
-      throw blockErr;
-    } else if (error.code === 'auth/cancelled-popup-request') {
-      const cancelErr = new Error('Sign-in process cancelled.');
-      (cancelErr as any).code = 'auth/cancelled-popup-request';
-      (cancelErr as any).isCancelled = true;
-      throw cancelErr;
-    } else if (error.code === 'auth/network-request-failed' || error.message?.toLowerCase().includes('network') || error.message?.toLowerCase().includes('failed to fetch')) {
-      const netErr = new Error('Network failure: Unable to reach Google authentication service. Please check your internet connection.');
-      (netErr as any).code = 'auth/network-request-failed';
-      (netErr as any).isNetworkError = true;
-      throw netErr;
-    } else if (error.code === 'auth/account-exists-with-different-credential') {
-      const accErr = new Error('An account already exists with the same email address using a different login method.');
-      (accErr as any).code = error.code;
-      throw accErr;
-    } else if (error.code === 'auth/unauthorized-domain' || error.message?.includes('unauthorized-domain')) {
-      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-      const domErr = new Error(`Firebase Auth Domain Error: '${currentHost}' is not authorized in Firebase Console. Please add '${currentHost}' under Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
-      (domErr as any).code = 'auth/unauthorized-domain';
-      throw domErr;
-    } else if (error.code === 'auth/api-key-not-valid' || error.message?.includes('api-key-not-valid')) {
-      const keyErr = new Error('Firebase API key is missing or invalid in frontend/.env (VITE_FIREBASE_API_KEY). Please set a valid Firebase Web API key from Firebase Console.');
-      (keyErr as any).code = 'auth/api-key-not-valid';
-      throw keyErr;
-    }
-
-    const genErr = new Error(error.message || 'Google Authentication failed. Please try again.');
-    (genErr as any).code = error.code || 'auth/unknown';
-    throw genErr;
+  const res = await signInWithGoogle({ forceRefreshIdToken });
+  if (!res) {
+    // When redirecting on mobile, return an unresolving promise while browser navigates
+    return new Promise(() => {});
   }
+  return res;
+}
+
+/**
+ * Processes the result of a Google sign-in redirect flow (from signInWithRedirect).
+ * Memoized per page load so multiple callers share the same redirect result without racing getRedirectResult.
+ */
+let redirectResultPromise: Promise<GoogleAuthResult | null> | null = null;
+
+export async function handleGoogleRedirectResult(forceRefreshIdToken: boolean = false): Promise<GoogleAuthResult | null> {
+  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') return null;
+
+  if (!redirectResultPromise) {
+    redirectResultPromise = (async () => {
+      try {
+        const result: UserCredential | null = await getRedirectResult(firebaseAuth);
+        if (!result || !result.user) {
+          return null;
+        }
+        return await extractGoogleAuthResult(result, forceRefreshIdToken);
+      } catch (error: any) {
+        if (error.code === 'auth/operation-not-supported-in-this-environment') {
+          return null;
+        }
+        console.error('Firebase Google Redirect Result Error:', error);
+        mapAndThrowAuthError(error);
+      }
+    })();
+  }
+
+  return redirectResultPromise;
 }
 
 /**
  * Platform Admin Google Login Flow.
  * Obtains fresh Firebase ID token for backend Platform Admin verification.
  */
-export async function signInPlatformAdminWithGoogle(): Promise<GoogleAuthResult> {
-  return signInWithGooglePopup(true);
+export async function signInPlatformAdminWithGoogle(): Promise<GoogleAuthResult | null> {
+  return signInWithGoogle({ forceRefreshIdToken: true });
 }
 
 /**
- * Waits for Firebase Auth to complete initial asynchronous hydration from IndexedDB.
+ * Waits for Firebase Auth to complete initial asynchronous hydration from IndexedDB / Redirect.
  */
 export async function ensureFirebaseAuthReady(): Promise<any> {
   if (typeof window === 'undefined') return null;
+
+  // Process any pending redirect results first
+  try {
+    await handleGoogleRedirectResult();
+  } catch (e) {
+    console.warn('[firebase] Pending redirect result error during hydration:', e);
+  }
+
   if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
   try {
     if (typeof (firebaseAuth as any).authStateReady === 'function') {
@@ -183,4 +307,3 @@ export async function signOutFirebase(): Promise<void> {
     authStateMachine.logout();
   }
 }
-

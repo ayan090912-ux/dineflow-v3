@@ -13,7 +13,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import { api } from '../../packages/api/client';
-import { signInWithGooglePopup, firebaseAuth, authStateMachine } from '../../packages/auth/firebase';
+import {
+  signInWithGoogle,
+  handleGoogleRedirectResult,
+  firebaseAuth,
+  authStateMachine,
+} from '../../packages/auth/firebase';
 import { getTenantUrl } from '../../packages/utils/tenantResolver';
 import { DinelyLogo } from '../../packages/ui';
 
@@ -83,7 +88,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
-  // Check for existing authenticated session on mount
+  // Check for existing authenticated session and pending mobile redirect results on mount
   useEffect(() => {
     let isMounted = true;
 
@@ -95,6 +100,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         return;
       }
 
+      // 1. Process pending Google redirect result (mobile Safari / storage-partitioned redirect flow)
+      try {
+        const redirectUser = await handleGoogleRedirectResult();
+        if (redirectUser && isMounted) {
+          setSuccessMessage(`Signed in as ${redirectUser.displayName || redirectUser.email}`);
+          const res = await api.authenticateWithGoogle({
+            googleUid: redirectUser.uid,
+            email: redirectUser.email,
+            name: redirectUser.displayName,
+            photoURL: redirectUser.photoURL,
+            idToken: redirectUser.idToken,
+          });
+
+          if (onLoginSuccess) {
+            onLoginSuccess(res);
+          }
+
+          await routeUserAfterAuth(redirectUser.email, redirectUser.uid);
+          return;
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('[AuthPage] Google redirect result error:', err);
+          if (err.code === 'auth/popup-closed-by-user' || err.isCancelled) {
+            authStateMachine.handleGoogleCancellation();
+            setErrorMessage('Sign-in cancelled. Click below to try again.');
+          } else {
+            setErrorMessage(err.message || 'Google authentication failed. Please try again.');
+          }
+        }
+      }
+
+      // 2. Check existing active local owner session
       const currentUser = api.getCurrentUser('OWNER');
 
       // Only auto-route if an explicit active Dinely owner session is currently valid
@@ -117,14 +155,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     };
   }, [initialMode]);
 
-  // 1. Google Authentication Flow
+  // 1. Google Authentication Flow (Adaptive Mobile Redirect / Desktop Popup)
   const handleGoogleAuth = async () => {
     setErrorMessage('');
     setSuccessMessage('');
     setIsGoogleLoading(true);
 
     try {
-      const googleUser = await signInWithGooglePopup();
+      const googleUser = await signInWithGoogle();
+      if (!googleUser) {
+        // Redirect flow initiated for mobile browser; browser will navigate to OAuth provider
+        return;
+      }
+
       setSuccessMessage(`Signed in as ${googleUser.displayName || googleUser.email}`);
 
       // Authenticate with Dinely API engine
@@ -145,7 +188,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       console.error('[AuthPage] Google sign-in failed:', err);
       if (err.code === 'auth/popup-closed-by-user' || err.isCancelled) {
         authStateMachine.handleGoogleCancellation();
-        setErrorMessage('Sign-in cancelled: The Google sign-in popup was closed before completing authentication. Click below to try again.');
+        setErrorMessage('Sign-in cancelled: The Google sign-in window was closed before completing authentication. Click below to try again.');
       } else if (err.code === 'auth/network-request-failed' || err.isNetworkError || err.message?.toLowerCase().includes('network')) {
         authStateMachine.handleNetworkFailure();
         setErrorMessage('Network connection failure: Unable to communicate with Google authentication servers. Please check your internet connection.');

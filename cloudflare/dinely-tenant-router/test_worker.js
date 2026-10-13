@@ -43,14 +43,14 @@ async function runWorkerTests() {
 
     const res1 = await worker.fetch(req1, {}, {});
     assert.strictEqual(res1.status, 200);
-    assert.strictEqual(lastOriginRequest.url, 'https://dinely-cd6cd.web.app/customer');
-    assert.strictEqual(lastOriginRequest.options.headers.get('Host'), 'dinely-cd6cd.web.app');
+    assert.strictEqual(lastOriginRequest.url, 'http://ec2-3-7-195-143.ap-south-1.compute.amazonaws.com/customer');
+    assert.strictEqual(lastOriginRequest.options.headers.get('Host'), 'the-dunk.dinely.food');
     assert.strictEqual(lastOriginRequest.options.headers.get('X-Forwarded-Host'), 'the-dunk.dinely.food');
     assert.strictEqual(lastOriginRequest.options.headers.get('X-Tenant-Slug'), 'the-dunk');
     assert.strictEqual(res1.headers.get('X-Dinely-Routed-By'), 'dinely-tenant-router');
     assert.strictEqual(res1.headers.get('X-Dinely-Tenant-Slug'), 'the-dunk');
     assert.strictEqual(res1.headers.get('X-Dinely-Original-Host'), 'the-dunk.dinely.food');
-    console.log('  ✓ PASSED: Origin proxied with tenant headers and telemetry attached');
+    console.log('  ✓ PASSED: Origin proxied to EC2 with tenant headers and telemetry attached');
 
     // -------------------------------------------------------------
     // TEST 2: Platform Root Request (dinely.food)
@@ -62,8 +62,8 @@ async function runWorkerTests() {
 
     const res2 = await worker.fetch(req2, {}, {});
     assert.strictEqual(res2.status, 200);
-    assert.strictEqual(lastOriginRequest.url, 'https://dinely-cd6cd.web.app/admin');
-    assert.strictEqual(lastOriginRequest.options.headers.get('Host'), 'dinely-cd6cd.web.app');
+    assert.strictEqual(lastOriginRequest.url, 'http://ec2-3-7-195-143.ap-south-1.compute.amazonaws.com/admin');
+    assert.strictEqual(lastOriginRequest.options.headers.get('Host'), 'dinely.food');
     assert.strictEqual(lastOriginRequest.options.headers.get('X-Tenant-Slug'), null);
     assert.strictEqual(res2.headers.get('X-Dinely-Tenant-Slug'), null);
     console.log('  ✓ PASSED: Platform root correctly passed without tenant context');
@@ -87,7 +87,7 @@ async function runWorkerTests() {
       status: 302,
       statusText: 'Found',
       headers: new Headers({
-        'Location': 'https://dinely-cd6cd.web.app/customer',
+        'Location': 'http://ec2-3-7-195-143.ap-south-1.compute.amazonaws.com/customer',
       }),
       body: '',
     };
@@ -101,8 +101,33 @@ async function runWorkerTests() {
     assert.strictEqual(res4.headers.get('Location'), 'https://cafe-co.dinely.food/customer');
     console.log('  ✓ PASSED: Location header rewritten to preserve tenant browser URL');
 
+    // -------------------------------------------------------------
+    // TEST 5: Same-Domain Firebase Auth Helper Route (/__/auth/handler)
+    // -------------------------------------------------------------
+    console.log('\n[TEST 5] Firebase Auth Helper: dinely.food/__/auth/handler');
+    mockOriginResponse = {
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({
+        'Content-Type': 'text/html; charset=utf-8',
+      }),
+      body: '<html><body>Firebase Auth Helper</body></html>',
+    };
+
+    const req5 = new Request('https://dinely.food/__/auth/handler?apiKey=testApiKey', {
+      headers: { 'Host': 'dinely.food' },
+    });
+
+    const res5 = await worker.fetch(req5, {}, {});
+    assert.strictEqual(res5.status, 200);
+    assert.strictEqual(lastOriginRequest.url, 'https://dinely-cd6cd.firebaseapp.com/__/auth/handler?apiKey=testApiKey');
+    assert.strictEqual(lastOriginRequest.options.headers.get('Host'), 'dinely-cd6cd.firebaseapp.com');
+    assert.strictEqual(res5.headers.get('X-Dinely-Routed-By'), 'dinely-tenant-router');
+    assert.strictEqual(res5.headers.get('X-Dinely-Auth-Helper'), 'true');
+    console.log('  ✓ PASSED: /__/auth/handler proxied directly to Firebase Auth helper with auth headers');
+
     console.log('\n====================================================');
-    console.log('ALL CLOUDFLARE WORKER UNIT TESTS PASSED (4/4)');
+    console.log('ALL CLOUDFLARE WORKER UNIT TESTS PASSED (5/5)');
     console.log('====================================================\n');
   } finally {
     global.fetch = originalFetch;

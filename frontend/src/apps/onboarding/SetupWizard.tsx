@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../packages/api/client';
-import { signInWithGooglePopup } from '../../packages/auth/firebase';
+import { signInWithGoogle, handleGoogleRedirectResult } from '../../packages/auth/firebase';
 import {
   Button,
   Card,
@@ -191,13 +191,43 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     setSelectedLocationObj(loc);
   };
 
-  // Check user state on mount
+  // Check user state and pending mobile redirect on mount
   useEffect(() => {
-    const user = api.getCurrentUser();
-    setCurrentUser(user);
-    if (user) {
-      resolveOwnerState(user);
-    }
+    let isMounted = true;
+    const initUser = async () => {
+      try {
+        const redirectUser = await handleGoogleRedirectResult();
+        if (redirectUser && isMounted) {
+          setIsAuthInitializing(true);
+          const authRes = await api.authenticateWithGoogle({
+            googleUid: redirectUser.uid,
+            email: redirectUser.email,
+            name: redirectUser.displayName,
+            photoURL: redirectUser.photoURL,
+            idToken: redirectUser.idToken,
+          });
+          setCurrentUser(authRes.user);
+          setIsAuthInitializing(false);
+          await resolveOwnerState(authRes.user);
+          return;
+        }
+      } catch (e) {
+        console.warn('SetupWizard redirect result check:', e);
+      }
+
+      const user = api.getCurrentUser();
+      if (isMounted) {
+        setCurrentUser(user);
+        if (user) {
+          resolveOwnerState(user);
+        }
+      }
+    };
+
+    initUser();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const resolveOwnerState = async (user: User) => {
@@ -240,7 +270,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     setAuthError('');
     setIsAuthInitializing(true);
     try {
-      const googleResult = await signInWithGooglePopup();
+      const googleResult = await signInWithGoogle();
+      if (!googleResult) {
+        // Redirect flow initiated on mobile device
+        return;
+      }
       const authRes = await api.authenticateWithGoogle({
         googleUid: googleResult.uid,
         email: googleResult.email,
