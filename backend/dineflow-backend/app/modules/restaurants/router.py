@@ -802,6 +802,11 @@ async def update_restaurant(
     if payload.lifecycleStatus:
         prev_status = rest.lifecycle_status
         new_stat = payload.lifecycleStatus.upper()
+        if new_stat in ["LIVE", "APPROVED"] and not caller.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: Only the platform administrator can approve a restaurant application to LIVE status."
+            )
         if prev_status != new_stat:
             rest.lifecycle_status = new_stat
             if new_stat == "PENDING_APPROVAL":

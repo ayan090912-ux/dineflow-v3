@@ -15,6 +15,7 @@ def create_admin_jwt(email: str = "ayan090912@gmail.com", uid: str = "admin_uid_
         "uid": uid,
         "user_id": uid,
         "email": email,
+        "email_verified": True,
         "role": "PLATFORM_ADMIN",
         "admin": True,
     }

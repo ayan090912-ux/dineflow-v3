@@ -14,6 +14,7 @@ def make_token(uid: str, email: str, role: str = "RESTAURANT_OWNER", is_admin: b
     claims = {
         "uid": uid,
         "email": email,
+        "email_verified": True,
         "role": role,
         "admin": is_admin
     }

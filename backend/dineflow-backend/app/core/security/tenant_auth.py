@@ -135,7 +135,7 @@ async def get_caller_context(
             # Check Platform Admin status - strictly limited to authorized admin email
             admin_emails = get_platform_admin_allowed_emails()
             is_email_authorized = bool(
-                email and (email in admin_emails) and (claims.get("email_verified") is not False)
+                email and (email in admin_emails) and (claims.get("email_verified") is True)
             )
             is_uid_authorized = True
             if settings.PLATFORM_ADMIN_FIREBASE_UID:

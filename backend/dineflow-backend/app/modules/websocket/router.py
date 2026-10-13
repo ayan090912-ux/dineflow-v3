@@ -86,7 +86,7 @@ async def websocket_endpoint(
                 st = get_settings()
                 allowed = get_platform_admin_allowed_emails()
 
-                is_email_auth = (email in allowed) and (claims.get("email_verified") is not False)
+                is_email_auth = (email in allowed) and (claims.get("email_verified") is True)
 
                 is_uid_auth = True
                 if st.PLATFORM_ADMIN_FIREBASE_UID:
@@ -167,7 +167,7 @@ async def websocket_endpoint(
                     email = (claims.get("email") or "").strip().lower()
                     uid = claims.get("uid") or claims.get("user_id") or claims.get("sub")
 
-                    if email in get_platform_admin_allowed_emails() and (claims.get("email_verified") is not False):
+                    if email in get_platform_admin_allowed_emails() and (claims.get("email_verified") is True):
                         is_verified = True
                         verified_role = "PLATFORM_ADMIN"
                     else:

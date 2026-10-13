@@ -92,9 +92,8 @@ async def get_current_firebase_admin(
     if not email:
         raise RBACError("Forbidden: Access Denied. Token does not contain an email address.")
 
-    # 2. Email verification check (Google accounts must have verified email)
-    email_verified = claims.get("email_verified")
-    if email_verified is False:
+    # 2. Strict Email verification check (Google accounts must have explicitly verified email)
+    if claims.get("email_verified") is not True:
         raise RBACError("Forbidden: Access Denied. Google account email address must be verified.")
 
     # 3. Strict Administrator Allowlist Check (Only ayan090912@gmail.com permitted)

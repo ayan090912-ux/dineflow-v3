@@ -224,6 +224,7 @@ class TestPlatformAdminAuthorization:
         admin_claims = {
             "uid": "uid_real_admin_001",
             "email": "ayan090912@gmail.com",
+            "email_verified": True,
             "admin": True,
             "role": "PLATFORM_ADMIN"
         }
@@ -350,5 +351,137 @@ class TestPlatformAdminAuthorization:
         )
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+    def test_21_missing_email_verified_claim_for_ayan_is_rejected_403(self):
+        # Token has authorized email ayan090912@gmail.com but MISSING the email_verified claim completely.
+        # Fail-closed rule MUST reject with HTTP 403 Forbidden.
+        admin_claims = {
+            "uid": "uid_ayan_missing_verified",
+            "email": "ayan090912@gmail.com",
+            # "email_verified" intentionally omitted
+            "admin": True,
+            "role": "PLATFORM_ADMIN"
+        }
+        token = create_fake_jwt(admin_claims)
+        response = client.get(
+            "/api/v1/admin/restaurants",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+        assert "must be verified" in response.json()["detail"]
+
+    def test_22_explicitly_false_email_verified_claim_is_rejected_403(self):
+        # Token has authorized email ayan090912@gmail.com but email_verified is explicitly False.
+        # MUST reject with HTTP 403 Forbidden.
+        admin_claims = {
+            "uid": "uid_ayan_false_verified",
+            "email": "ayan090912@gmail.com",
+            "email_verified": False,
+            "admin": True,
+            "role": "PLATFORM_ADMIN"
+        }
+        token = create_fake_jwt(admin_claims)
+        response = client.get(
+            "/api/v1/admin/restaurants",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+        assert "must be verified" in response.json()["detail"]
+
+    def test_23_untrusted_email_even_with_verified_email_claim_is_rejected_403(self):
+        # Token has email_verified == True but belongs to an untrusted/unauthorized email address.
+        # MUST reject with HTTP 403 Forbidden.
+        attacker_claims = {
+            "uid": "uid_untrusted_verified_user",
+            "email": "untrusted.attacker@gmail.com",
+            "email_verified": True,
+            "admin": True,
+            "role": "PLATFORM_ADMIN"
+        }
+        token = create_fake_jwt(attacker_claims)
+        response = client.get(
+            "/api/v1/admin/restaurants",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+        assert "not authorized for Platform Admin" in response.json()["detail"]
+
+    def test_24_valid_verified_authorized_account_is_granted_access_200(self):
+        # Token satisfies ALL conditions:
+        # 1. Valid token
+        # 2. Email is exactly ayan090912@gmail.com
+        # 3. email_verified is explicitly True
+        admin_claims = {
+            "uid": "uid_ayan_legit_admin",
+            "email": "ayan090912@gmail.com",
+            "email_verified": True,
+            "admin": True,
+            "role": "PLATFORM_ADMIN"
+        }
+        token = create_fake_jwt(admin_claims)
+
+        # Endpoint 1: /api/v1/admin/restaurants
+        r1 = client.get("/api/v1/admin/restaurants", headers={"Authorization": f"Bearer {token}"})
+        assert r1.status_code == 200
+
+        # Endpoint 2: /api/v1/admin/verify-token
+        r2 = client.post("/api/v1/admin/verify-token", headers={"Authorization": f"Bearer {token}"})
+        assert r2.status_code == 200
+        assert r2.json()["authenticated"] is True
+
+        # Endpoint 3: /api/v1/admin/audit-logs
+        r3 = client.get("/api/v1/admin/audit-logs", headers={"Authorization": f"Bearer {token}"})
+        assert r3.status_code == 200
+
+    def test_25_websocket_admin_channel_fail_closed_verification(self):
+        from starlette.websockets import WebSocketDisconnect
+
+        # 1. Missing email_verified claim
+        missing_verified_token = create_fake_jwt({
+            "uid": "uid_ayan",
+            "email": "ayan090912@gmail.com",
+            "role": "PLATFORM_ADMIN"
+        })
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(f"/api/v1/ws?restaurant_id=__platform_admin__&role=PLATFORM_ADMIN&token={missing_verified_token}"):
+                pass
+        assert exc_info.value.code == 1008
+
+        # 2. email_verified is False
+        false_verified_token = create_fake_jwt({
+            "uid": "uid_ayan",
+            "email": "ayan090912@gmail.com",
+            "email_verified": False,
+            "role": "PLATFORM_ADMIN"
+        })
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(f"/api/v1/ws?restaurant_id=__platform_admin__&role=PLATFORM_ADMIN&token={false_verified_token}"):
+                pass
+        assert exc_info.value.code == 1008
+
+        # 3. Untrusted email even if verified True
+        untrusted_token = create_fake_jwt({
+            "uid": "uid_untrusted",
+            "email": "untrusted@gmail.com",
+            "email_verified": True,
+            "role": "PLATFORM_ADMIN"
+        })
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(f"/api/v1/ws?restaurant_id=__platform_admin__&role=PLATFORM_ADMIN&token={untrusted_token}"):
+                pass
+        assert exc_info.value.code == 1008
+
+        # 4. Valid authorized ayan090912@gmail.com with email_verified == True connects successfully
+        legit_token = create_fake_jwt({
+            "uid": "uid_ayan",
+            "email": "ayan090912@gmail.com",
+            "email_verified": True,
+            "role": "PLATFORM_ADMIN"
+        })
+        with client.websocket_connect(f"/api/v1/ws?restaurant_id=__platform_admin__&role=PLATFORM_ADMIN&token={legit_token}") as ws:
+            ws.send_text("ping")
+            data = ws.receive_text()
+            assert data == "pong"
+
 
 

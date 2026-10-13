@@ -25,6 +25,7 @@ class TestRestaurantLifecycleE2E:
         "uid": admin_uid,
         "user_id": admin_uid,
         "email": admin_email,
+        "email_verified": True,
         "admin": True,
         "role": "PLATFORM_ADMIN"
     })
