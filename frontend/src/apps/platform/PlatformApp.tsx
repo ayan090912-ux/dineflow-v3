@@ -571,6 +571,100 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
       (r.cuisine && r.cuisine.toLowerCase().includes(q))
     );
   });
+  if (queueState === 'AUTHENTICATING') {
+    return (
+      <div className="min-h-screen bg-[#0b0d11] text-white flex flex-col items-center justify-center p-6 select-none font-sans">
+        <div className="max-w-md w-full bg-[#0e1117] border border-white/[0.08] rounded-2xl p-8 text-center shadow-2xl space-y-4">
+          <RefreshCw className="w-8 h-8 animate-spin text-amber-400 mx-auto" />
+          <h2 className="text-base font-semibold text-white">Verifying Administrator Access...</h2>
+          <p className="text-xs text-white/50">Validating Google identity against the platform administrator registry.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (queueState === '403') {
+    return (
+      <div className="min-h-screen bg-[#0b0d11] text-white flex flex-col items-center justify-center p-6 select-none font-sans">
+        <div className="max-w-md w-full bg-[#0e1117] border border-rose-500/30 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+          <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto text-rose-400">
+            <Ban className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold tracking-tight text-white">Access Forbidden (403)</h2>
+            <p className="text-sm text-rose-300 font-medium">
+              This Google account is not authorized for Platform Admin.
+            </p>
+            <p className="text-xs text-white/50 leading-relaxed mt-2">
+              Dinely Platform Administration is strictly restricted to authorized platform personnel (<span className="text-amber-400 font-mono">ayan090912@gmail.com</span>). Nobody using any other email address is permitted to access this portal.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-3">
+            <Button
+              variant="brand"
+              onClick={async () => {
+                try {
+                  const { signOutFirebase } = await import('../../packages/auth/firebase');
+                  await signOutFirebase();
+                } catch (_) {}
+                if (onLogout) onLogout();
+                else window.location.href = '/admin/login';
+              }}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs"
+            >
+              Sign In with Authorized Google Account
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                window.location.href = '/';
+              }}
+              className="w-full border-white/10 text-white/70 hover:text-white hover:bg-white/5 text-xs"
+            >
+              Return to Dinely Home
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (queueState === '401') {
+    return (
+      <div className="min-h-screen bg-[#0b0d11] text-white flex flex-col items-center justify-center p-6 select-none font-sans">
+        <div className="max-w-md w-full bg-[#0e1117] border border-amber-500/30 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold tracking-tight text-white">Administrator Sign-In Required</h2>
+            <p className="text-sm text-white/60">
+              {queueErrorMessage || 'Please authenticate with the authorized Dinely administrator Google account.'}
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-3">
+            <Button
+              variant="brand"
+              onClick={handleAdminSignIn}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs"
+            >
+              Sign In as Administrator
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                window.location.href = '/';
+              }}
+              className="w-full border-white/10 text-white/70 hover:text-white hover:bg-white/5 text-xs"
+            >
+              Return to Dinely Home
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col sm:flex-row font-sans">
       {/* Platform Admin Sidebar */}
@@ -627,7 +721,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               <Avatar name="Platform Admin" size="sm" status="online" />
               <div>
                 <p className="text-xs font-semibold text-white">Chief Admin</p>
-                <p className="text-[10px] text-white/40 font-mono">admin@dinely.com</p>
+                <p className="text-[10px] text-white/40 font-mono">{firebaseAuth.currentUser?.email || 'ayan090912@gmail.com'}</p>
               </div>
             </div>
           </div>

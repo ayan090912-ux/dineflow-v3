@@ -12,12 +12,9 @@ security_scheme = HTTPBearer(auto_error=False)
 def get_platform_admin_allowed_emails() -> List[str]:
     settings = get_settings()
     emails = settings.get_platform_admin_emails()
-    primary_admins = ["ayan090912@gmail.com"]
-    clean = [e.lower() for e in emails]
-    for admin in primary_admins:
-        if admin not in clean:
-            clean.append(admin)
-    return clean
+    if not emails:
+        emails = ["ayan090912@gmail.com"]
+    return [e.strip().lower() for e in emails if e and e.strip()]
 
 PLATFORM_ADMIN_ALLOWED_EMAILS = get_platform_admin_allowed_emails()
 
@@ -26,13 +23,16 @@ async def is_platform_admin_in_db(email: str) -> bool:
     """Check if the given email is registered as an active platform admin in the database."""
     if not email:
         return False
+    clean_email = email.strip().lower()
+    if clean_email not in get_platform_admin_allowed_emails():
+        return False
     try:
         from app.core.database.connection import get_db_session
         from app.modules.auth.models import PlatformAdmin
         from sqlalchemy import select
         async with get_db_session() as session:
             stmt = select(PlatformAdmin).where(
-                PlatformAdmin.email == email.strip().lower(),
+                PlatformAdmin.email == clean_email,
                 PlatformAdmin.is_active == True
             )
             res = await session.execute(stmt)
@@ -89,21 +89,22 @@ async def get_current_firebase_admin(
     if not uid:
         raise AuthenticationError("Token payload missing valid user identity (UID).")
 
-    # 2. Dynamic Allowlist & Database Comparison
+    if not email:
+        raise RBACError("Forbidden: Access Denied. Token does not contain an email address.")
+
+    # 2. Email verification check (Google accounts must have verified email)
+    email_verified = claims.get("email_verified")
+    if email_verified is False:
+        raise RBACError("Forbidden: Access Denied. Google account email address must be verified.")
+
+    # 3. Strict Administrator Allowlist Check (Only ayan090912@gmail.com permitted)
     allowed_list = get_platform_admin_allowed_emails()
-    is_email_authorized = email in allowed_list
-    if not is_email_authorized and email:
-        is_email_authorized = await is_platform_admin_in_db(email)
+    if email not in allowed_list:
+        raise RBACError("Forbidden: Access Denied. This Google account is not authorized for Platform Admin.")
 
-    is_uid_authorized = False
     if settings.PLATFORM_ADMIN_FIREBASE_UID:
-        is_uid_authorized = (uid == settings.PLATFORM_ADMIN_FIREBASE_UID)
-
-    is_authorized = is_email_authorized or is_uid_authorized
-
-    # Strongest Security Boundary Check: Reject any other email or account attempting admin access
-    if not is_authorized:
-        raise RBACError("Forbidden: Access Denied.")
+        if uid != settings.PLATFORM_ADMIN_FIREBASE_UID:
+            raise RBACError("Forbidden: Access Denied. Unauthorized administrator UID.")
 
     # Verified admin claims set in-memory for this request
     claims["admin"] = True

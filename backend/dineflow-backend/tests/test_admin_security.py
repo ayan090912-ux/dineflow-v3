@@ -284,8 +284,9 @@ class TestPlatformAdminAuthorization:
             settings.PLATFORM_ADMIN_EMAILS = orig_emails
 
     @pytest.mark.asyncio
-    async def test_18_admin_authorized_via_db_platform_admin_table(self):
-        # Insert admin directly into PlatformAdmin table
+    async def test_18_admin_in_db_table_without_allowlist_is_rejected_403(self):
+        # Even if an admin record exists in PlatformAdmin DB table, if their email is not allowlisted,
+        # they MUST be rejected with 403 Forbidden.
         from app.core.database.connection import get_db_session
         from app.modules.auth.models import PlatformAdmin
         import uuid
@@ -295,7 +296,7 @@ class TestPlatformAdminAuthorization:
             admin_record = PlatformAdmin(
                 email=test_email,
                 password_hash="argon2_hashed_placeholder",
-                full_name="Database Verified Admin",
+                full_name="Database Unallowlisted Admin",
                 is_active=True
             )
             session.add(admin_record)
@@ -313,5 +314,41 @@ class TestPlatformAdminAuthorization:
             "/api/v1/admin/restaurants",
             headers={"Authorization": f"Bearer {token}"}
         )
+        assert response.status_code == 403
+        assert "not authorized for Platform Admin" in response.json()["detail"]
+
+    def test_19_unverified_email_for_ayan_is_rejected_403(self):
+        # Even for ayan090912@gmail.com, unverified Google email must be rejected with 403
+        admin_claims = {
+            "uid": "uid_ayan_unverified",
+            "email": "ayan090912@gmail.com",
+            "email_verified": False,
+            "admin": True,
+            "role": "PLATFORM_ADMIN"
+        }
+        token = create_fake_jwt(admin_claims)
+        response = client.get(
+            "/api/v1/admin/restaurants",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+        assert "must be verified" in response.json()["detail"]
+
+    def test_20_case_insensitive_and_whitespace_ayan_is_authorized_200(self):
+        # Normalization test: uppercase with surrounding whitespace
+        admin_claims = {
+            "uid": "uid_real_admin_001",
+            "email": "  AYAN090912@GMAIL.COM  ",
+            "email_verified": True,
+            "admin": True,
+            "role": "PLATFORM_ADMIN"
+        }
+        token = create_fake_jwt(admin_claims)
+        response = client.get(
+            "/api/v1/admin/restaurants",
+            headers={"Authorization": f"Bearer {token}"}
+        )
         assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
 

@@ -132,21 +132,23 @@ async def get_caller_context(
             email = (claims.get("email") or "").strip().lower()
             role = claims.get("role") or ("PLATFORM_ADMIN" if claims.get("admin") else "RESTAURANT_OWNER")
 
-            # Check Platform Admin status
+            # Check Platform Admin status - strictly limited to authorized admin email
             admin_emails = get_platform_admin_allowed_emails()
-
-            is_admin = bool(
-                claims.get("admin")
-                or role == "PLATFORM_ADMIN"
-                or (email and email in admin_emails)
-                or (settings.PLATFORM_ADMIN_FIREBASE_UID and uid == settings.PLATFORM_ADMIN_FIREBASE_UID)
+            is_email_authorized = bool(
+                email and (email in admin_emails) and (claims.get("email_verified") is not False)
             )
+            is_uid_authorized = True
+            if settings.PLATFORM_ADMIN_FIREBASE_UID:
+                is_uid_authorized = (uid == settings.PLATFORM_ADMIN_FIREBASE_UID)
+
+            is_admin = is_email_authorized and is_uid_authorized
 
             rest_id = claims.get("restaurant_id") or claims.get("restaurantId") or x_staff_restaurant_id
+            effective_role = "PLATFORM_ADMIN" if is_admin else ("RESTAURANT_OWNER" if str(role).upper() == "PLATFORM_ADMIN" else str(role).upper())
             return CallerContext(
                 uid=uid,
                 email=email,
-                role="PLATFORM_ADMIN" if is_admin else role.upper(),
+                role=effective_role,
                 is_admin=is_admin,
                 restaurant_id=rest_id,
                 scope="ADMIN" if is_admin else "OWNER",

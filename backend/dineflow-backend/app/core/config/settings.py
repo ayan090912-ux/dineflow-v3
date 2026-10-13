@@ -186,9 +186,8 @@ class Settings(BaseSettings):
     FIREBASE_SERVICE_ACCOUNT_KEY_PATH: Optional[str] = None
 
     def get_platform_admin_emails(self) -> List[str]:
-        emails: List[str] = []
-        if self.PLATFORM_ADMIN_EMAIL:
-            emails.append(self.PLATFORM_ADMIN_EMAIL.strip().lower())
+        primary = (self.PLATFORM_ADMIN_EMAIL or "ayan090912@gmail.com").strip().lower()
+        emails: List[str] = [primary]
         if self.PLATFORM_ADMIN_EMAILS:
             for em in self.PLATFORM_ADMIN_EMAILS.split(","):
                 clean = em.strip().lower()
