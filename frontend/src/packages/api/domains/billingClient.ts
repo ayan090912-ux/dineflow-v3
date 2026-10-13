@@ -78,12 +78,48 @@ export class BillingClient {
   }
 
   async getRunningTableBill(restaurantId?: string, tableNumber?: string, targetSessionId?: string): Promise<Bill | null> {
-    this.base.loadDatabase();
-    await delay(50);
-    const restId = this.base.resolveTenantRestaurantId(restaurantId);
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId;
     if (!restId) return null;
 
     const activeTableStr = tableNumber ? formatStandardTableNumber(tableNumber) : 'Table 01';
+
+    // 1. Authoritative Backend Remote Query
+    try {
+      const apiBase = getApiBaseUrl();
+      const params = new URLSearchParams();
+      if (targetSessionId) params.append('sessionId', targetSessionId);
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+      const url = `${apiBase}/restaurants/${encodeURIComponent(restId)}/billing/table/${encodeURIComponent(activeTableStr)}/bill${queryStr}`;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.base.getAuthHeader(),
+        },
+      });
+
+      if (res.ok) {
+        const remoteBill: Bill = await res.json();
+        if (remoteBill && remoteBill.id) {
+          // Normalize and cache in local database
+          const existingIdx = this.base.bills.findIndex((b) => b.id === remoteBill.id || b.tableSessionId === remoteBill.tableSessionId);
+          if (existingIdx >= 0) {
+            this.base.bills[existingIdx] = { ...this.base.bills[existingIdx], ...remoteBill };
+          } else {
+            this.base.bills.unshift(remoteBill);
+          }
+          this.base.saveDatabase();
+          return remoteBill;
+        }
+      }
+    } catch (err) {
+      console.warn('[BillingClient] Remote running bill fetch notice:', err);
+    }
+
+    // 2. Deterministic Local Database Fallback (preserving authoritative pricing formula)
+    this.base.loadDatabase();
+    await delay(50);
 
     let tbl = this.base.tables.find(
       (t) => t.restaurantId === restId && (matchTableNumber(t.tableNumber, activeTableStr) || t.id === activeTableStr)
@@ -128,7 +164,7 @@ export class BillingClient {
         const existing = itemMap.get(key);
         if (existing) {
           existing.quantity += item.quantity;
-          existing.totalPrice = existing.quantity * existing.unitPrice;
+          existing.totalPrice = Math.round(existing.quantity * existing.unitPrice * 100) / 100;
         } else {
           itemMap.set(key, {
             orderId: ord.id,
@@ -136,7 +172,7 @@ export class BillingClient {
             name: item.name,
             quantity: item.quantity,
             unitPrice: item.price,
-            totalPrice: item.quantity * item.price,
+            totalPrice: Math.round(item.quantity * item.price * 100) / 100,
             station: getFulfillmentStation(item),
           });
         }
@@ -144,14 +180,31 @@ export class BillingClient {
     });
 
     const items = Array.from(itemMap.values());
-    const subtotal = items.reduce((sum, i) => sum + i.totalPrice, 0);
+    const subtotal = Math.round(items.reduce((sum, i) => sum + i.totalPrice, 0) * 100) / 100;
 
     const rest = this.base.restaurants.find((r) => r.id === restId);
     const configuredTaxPercentage = typeof rest?.taxPercentage === 'number' ? rest.taxPercentage : 5.0;
     const taxRateDecimal = configuredTaxPercentage / 100.0;
-    const taxAmount = Math.round(subtotal * taxRateDecimal * 100) / 100;
-    const discountAmount = 0;
-    const grandTotal = Math.round((subtotal + taxAmount - discountAmount) * 100) / 100;
+    const discountAmount = 0.0;
+    const taxableSubtotal = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100);
+
+    const scPct = (rest?.serviceChargeEnabled && typeof rest?.serviceChargePercentage === 'number') ? rest.serviceChargePercentage : 0.0;
+    const serviceChargeAmount = scPct > 0 ? Math.round(taxableSubtotal * (scPct / 100.0) * 100) / 100 : 0.0;
+
+    const taxAmount = Math.round(taxableSubtotal * taxRateDecimal * 100) / 100;
+    const rawTotal = Math.round((taxableSubtotal + serviceChargeAmount + taxAmount) * 100) / 100;
+    const roundOffAmount = Math.round((Math.round(rawTotal) - rawTotal) * 100) / 100;
+    const grandTotal = Math.round((rawTotal + roundOffAmount) * 100) / 100;
+
+    const taxBreakdown = [
+      {
+        name: `GST (${configuredTaxPercentage}%)`,
+        taxName: `GST (${configuredTaxPercentage}%)`,
+        rate: configuredTaxPercentage,
+        amount: taxAmount,
+        isInclusive: false,
+      }
+    ];
 
     let existingBill = this.base.bills.find((b) => b.restaurantId === restId && b.tableSessionId === session!.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED');
 
@@ -159,13 +212,15 @@ export class BillingClient {
       existingBill.orders = sessionOrders;
       existingBill.items = items;
       existingBill.subtotal = subtotal;
-      if (existingBill.taxRate === undefined) {
-        existingBill.taxRate = configuredTaxPercentage;
-      }
-      const effectiveTaxRate = existingBill.taxRate / 100.0;
-      existingBill.taxAmount = Math.round(subtotal * effectiveTaxRate * 100) / 100;
+      existingBill.taxRate = configuredTaxPercentage;
+      existingBill.taxAmount = taxAmount;
       existingBill.discountAmount = discountAmount;
-      existingBill.grandTotal = Math.round((subtotal + existingBill.taxAmount - discountAmount) * 100) / 100;
+      existingBill.taxableSubtotal = taxableSubtotal;
+      existingBill.serviceChargePercentage = scPct;
+      existingBill.serviceChargeAmount = serviceChargeAmount;
+      existingBill.roundOffAmount = roundOffAmount;
+      existingBill.grandTotal = grandTotal;
+      existingBill.taxBreakdown = taxBreakdown as any;
       existingBill.updatedAt = new Date().toISOString();
       this.base.saveDatabase();
       return existingBill;
@@ -185,10 +240,17 @@ export class BillingClient {
       orders: sessionOrders,
       items,
       subtotal,
+      discountAmount,
+      taxableSubtotal,
+      serviceChargePercentage: scPct,
+      serviceChargeAmount,
       taxAmount,
       taxRate: configuredTaxPercentage,
-      discountAmount,
+      taxBreakdown: taxBreakdown as any,
+      roundOffAmount,
       grandTotal,
+      amountPaid: 0.0,
+      balanceDue: grandTotal,
       status: 'OPEN',
       paymentStatus: 'UNPAID',
       createdAt: new Date().toISOString(),

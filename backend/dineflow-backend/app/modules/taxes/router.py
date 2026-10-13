@@ -10,6 +10,7 @@ from app.core.security.tenant_auth import require_tenant_owner_or_admin, CallerC
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, TaxAuditLog, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
 from app.modules.menu.models import MenuCategory, MenuItem
+from app.modules.orders.router import invalidate_order_tax_cache
 
 router = APIRouter()
 
@@ -160,6 +161,7 @@ async def create_tax(
 
     await db.commit()
     await db.refresh(new_tax)
+    invalidate_order_tax_cache(restaurant_id)
     return format_tax_response(new_tax, payload.categoryIds, payload.menuItemIds)
 
 @router.get("/{restaurant_id}/taxes/{tax_id}")
@@ -236,6 +238,7 @@ async def update_tax(
 
     await db.commit()
     await db.refresh(tax)
+    invalidate_order_tax_cache(restaurant_id)
     return new_snapshot
 
 @router.post("/{restaurant_id}/taxes/{tax_id}/activate")
@@ -262,6 +265,7 @@ async def activate_tax(
     db.add(audit)
     await db.commit()
     await db.refresh(tax)
+    invalidate_order_tax_cache(restaurant_id)
     cat_ids, item_ids = await get_tax_associations(tax.id, db)
     return format_tax_response(tax, cat_ids, item_ids)
 
@@ -289,6 +293,7 @@ async def deactivate_tax(
     db.add(audit)
     await db.commit()
     await db.refresh(tax)
+    invalidate_order_tax_cache(restaurant_id)
     cat_ids, item_ids = await get_tax_associations(tax.id, db)
     return format_tax_response(tax, cat_ids, item_ids)
 

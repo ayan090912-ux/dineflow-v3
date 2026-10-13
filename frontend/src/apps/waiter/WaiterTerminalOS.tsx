@@ -1811,24 +1811,35 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   <div className="border-t border-[#1e232e] pt-2 space-y-1 text-xs font-mono">
                     <div className="flex justify-between text-slate-400">
                       <span>Subtotal:</span>
-                      <span>₹{(bill?.subtotal || calculatedTotal).toFixed(2)}</span>
+                      <span>₹{(bill?.subtotal !== undefined ? bill.subtotal : sessionOrders.reduce((sum, o) => sum + (o.subtotal || o.totalAmount), 0)).toFixed(2)}</span>
                     </div>
                     {bill && bill.discountAmount ? (
                       <div className="flex justify-between text-emerald-400">
-                        <span>Discount:</span>
+                        <span>Discount {bill.discountPercentage ? `(${bill.discountPercentage}%)` : ''}:</span>
                         <span>-₹{bill.discountAmount.toFixed(2)}</span>
                       </div>
                     ) : null}
-                    {bill && bill.taxAmount ? (
+                    {(bill?.taxAmount || 0) > 0 ? (
                       <div className="flex justify-between text-slate-400">
                         <span>GST / Taxes:</span>
-                        <span>₹{bill.taxAmount.toFixed(2)}</span>
+                        <span>₹{(bill?.taxAmount || 0).toFixed(2)}</span>
+                      </div>
+                    ) : sessionOrders.some((o) => (o.taxAmount || 0) > 0) ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>GST / Taxes:</span>
+                        <span>₹{sessionOrders.reduce((sum, o) => sum + (o.taxAmount || 0), 0).toFixed(2)}</span>
                       </div>
                     ) : null}
-                    {bill && bill.serviceChargeAmount ? (
+                    {bill && (bill.serviceChargeAmount || 0) > 0 ? (
                       <div className="flex justify-between text-slate-400">
-                        <span>Service Charge:</span>
-                        <span>₹{bill.serviceChargeAmount.toFixed(2)}</span>
+                        <span>Service Charge ({bill.serviceChargePercentage || 0}%):</span>
+                        <span>₹{(bill.serviceChargeAmount || 0).toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {bill && bill.roundOffAmount !== undefined && bill.roundOffAmount !== 0 ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Round Off:</span>
+                        <span>{bill.roundOffAmount > 0 ? `+₹${bill.roundOffAmount.toFixed(2)}` : `-₹${Math.abs(bill.roundOffAmount).toFixed(2)}`}</span>
                       </div>
                     ) : null}
                     <div className="flex justify-between items-center text-sm font-bold text-white pt-1.5 border-t border-[#1e232e]">

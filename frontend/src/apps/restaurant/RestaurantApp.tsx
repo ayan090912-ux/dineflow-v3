@@ -1989,7 +1989,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 }
               });
 
-              const totalSales = foodSales + barSales;
+              const paidBillsTotal = (bills || []).filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID').reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+              const totalSales = paidBillsTotal > 0 ? paidBillsTotal : (foodSales + barSales);
 
               return (
                 <>

@@ -16,6 +16,7 @@ from app.modules.business_day.models import BusinessDay
 from app.modules.restaurants.models import Restaurant
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
+from app.modules.billing.service import BillingService
 
 router = APIRouter()
 
@@ -173,6 +174,14 @@ _ORDER_RESTAURANT_CACHE_TTL: float = 60.0
 
 _ORDER_TAX_CACHE: dict = {}
 _ORDER_TAX_CACHE_TTL: float = 60.0
+
+
+def invalidate_order_tax_cache(restaurant_id: Optional[str] = None):
+    """Invalidates the order tax cache for a specific restaurant or globally."""
+    if restaurant_id:
+        _ORDER_TAX_CACHE.pop(restaurant_id, None)
+    else:
+        _ORDER_TAX_CACHE.clear()
 
 _ORDER_DAILY_SEQ: dict = {}
 
@@ -397,37 +406,13 @@ async def create_order(
             if cached_tax_entry and (now_mono - cached_tax_entry[0] < _ORDER_TAX_CACHE_TTL):
                 active_taxes, tax_cats_map, tax_items_map = cached_tax_entry[1]
             else:
-                res_taxes = await db.execute(
-                    select(Tax).where((Tax.restaurant_id == restaurant.id) & (Tax.status == "ACTIVE"))
-                )
-                raw_taxes = res_taxes.scalars().all()
-                active_taxes = [
-                    CachedTax(
-                        id=t.id,
-                        name=t.name,
-                        type=t.type,
-                        rate=float(t.rate or 0.0),
-                        fixed_amount=float(t.fixed_amount or 0.0),
-                        is_inclusive=bool(t.is_inclusive),
-                        status=t.status,
-                        applicable_order_types=list(t.applicable_order_types or []),
-                        applies_to=t.applies_to
-                    )
-                    for t in raw_taxes
-                ]
+                # Resolve actual Restaurant DB model for tax configuration
+                r_db_res = await db.execute(select(Restaurant).where(Restaurant.id == restaurant.id))
+                rest_db_obj = r_db_res.scalar_one_or_none()
+                if not rest_db_obj:
+                    rest_db_obj = restaurant
 
-                tax_cats_map: Dict[str, List[str]] = {}
-                tax_items_map: Dict[str, List[str]] = {}
-                if raw_taxes:
-                    tax_ids = [t.id for t in raw_taxes]
-                    c_res = await db.execute(select(TaxCategory.tax_id, TaxCategory.category_id).where(TaxCategory.tax_id.in_(tax_ids)))
-                    for tid, cid in c_res.all():
-                        tax_cats_map.setdefault(tid, []).append(cid)
-
-                    i_res = await db.execute(select(TaxMenuItem.tax_id, TaxMenuItem.menu_item_id).where(TaxMenuItem.tax_id.in_(tax_ids)))
-                    for tid, mid in i_res.all():
-                        tax_items_map.setdefault(tid, []).append(mid)
-
+                active_taxes, tax_cats_map, tax_items_map = await BillingService.get_effective_taxes(rest_db_obj, db)
                 _ORDER_TAX_CACHE[restaurant.id] = (now_mono, (active_taxes, tax_cats_map, tax_items_map))
 
             calc = calculate_taxes(

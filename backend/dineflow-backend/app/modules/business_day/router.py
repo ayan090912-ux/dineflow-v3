@@ -542,15 +542,31 @@ async def close_business_day(
                 bar_orders += 1
 
     # Payment breakdown from bills
+    day_session_ids = {o.table_session_id for o in day_orders if o.table_session_id}
     bills_res = await db.execute(
-        select(Bill).where(Bill.restaurant_id == rest.id, Bill.created_at >= since_time, Bill.status == "PAID")
+        select(Bill).where(
+            Bill.restaurant_id == rest.id,
+            or_(Bill.status == "PAID", Bill.payment_status == "PAID")
+        )
     )
-    paid_bills = bills_res.scalars().all()
+    all_paid_bills = bills_res.scalars().all()
+    paid_bills = [
+        b for b in all_paid_bills
+        if (b.table_session_id and b.table_session_id in day_session_ids)
+        or (b.created_at and since_time and (
+            (b.created_at.replace(tzinfo=timezone.utc) if b.created_at.tzinfo is None else b.created_at) >= (since_time.replace(tzinfo=timezone.utc) if since_time.tzinfo is None else since_time)
+        ))
+    ]
 
-    cash_sales = sum(b.grand_total for b in paid_bills if b.payment_method == "CASH")
-    card_sales = sum(b.grand_total for b in paid_bills if b.payment_method == "CARD")
-    upi_sales = sum(b.grand_total for b in paid_bills if b.payment_method == "UPI")
-    discount_amount = sum(b.discount_amount for b in paid_bills)
+    cash_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CASH"), 2)
+    card_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CARD"), 2)
+    upi_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method in ["UPI", "ONLINE_UPI", "QR_CODE"]), 2)
+    discount_amount = round(sum(b.discount_amount for b in paid_bills), 2)
+
+    total_paid_bills_sales = round(cash_sales + card_sales + upi_sales, 2)
+    if paid_bills:
+        total_sales = total_paid_bills_sales
+        tax_amount = round(sum(b.tax_amount for b in paid_bills), 2)
 
     avg_order_val = round(total_sales / total_orders, 2) if total_orders > 0 else 0.0
 

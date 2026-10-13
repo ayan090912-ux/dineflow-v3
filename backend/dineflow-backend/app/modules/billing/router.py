@@ -13,6 +13,7 @@ from app.modules.tables.models import Table, TableSession
 from app.modules.orders.models import Order, Bill
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
+from app.modules.billing.service import BillingService
 from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
@@ -122,6 +123,10 @@ def format_bill_response(bill: Bill) -> dict:
         except Exception:
             updated_at_val = str(bill.updated_at)
 
+    amount_paid_val = float(bill.grand_total if bill.payment_status == "PAID" else 0.0)
+    balance_due_val = float(0.0 if bill.payment_status == "PAID" else bill.grand_total)
+    taxable_subtotal_val = max(0.0, round(float(bill.subtotal or 0.0) - float(bill.discount_amount or 0.0), 2))
+
     return {
         "id": bill.id,
         "restaurantId": bill.restaurant_id,
@@ -139,6 +144,8 @@ def format_bill_response(bill: Bill) -> dict:
         "discount_amount": bill.discount_amount,
         "discountPercentage": bill.discount_percentage,
         "discount_percentage": bill.discount_percentage,
+        "taxableSubtotal": taxable_subtotal_val,
+        "taxable_subtotal": taxable_subtotal_val,
         "serviceChargeAmount": bill.service_charge_amount,
         "service_charge_amount": bill.service_charge_amount,
         "serviceChargePercentage": bill.service_charge_percentage,
@@ -151,6 +158,10 @@ def format_bill_response(bill: Bill) -> dict:
         "round_off_amount": bill.round_off_amount,
         "grandTotal": bill.grand_total,
         "grand_total": bill.grand_total,
+        "amountPaid": amount_paid_val,
+        "amount_paid": amount_paid_val,
+        "balanceDue": balance_due_val,
+        "balance_due": balance_due_val,
         "status": bill.status,
         "paymentStatus": bill.payment_status,
         "payment_status": bill.payment_status,
@@ -340,154 +351,181 @@ async def calculate_table_bill(
     input_data: CalculateBillInputSchema,
     db: AsyncSession = Depends(get_db)
 ):
-    # 1. Fetch Restaurant & Active Tax Configuration
+    """
+    Authoritative bill calculation endpoint.
+    Calculates subtotal, discounts, service charges, taxes, round-off, and grand total.
+    """
     rest = await find_restaurant_by_identifier(restaurant_id, db)
     if not rest:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
-    taxes_stmt = select(Tax).where(Tax.restaurant_id == rest.id, Tax.status == "ACTIVE")
-    t_res = await db.execute(taxes_stmt)
-    active_taxes = list(t_res.scalars().all())
-
-    # Tax category and item associations
-    cat_stmt = select(TaxCategory)
-    cat_res = await db.execute(cat_stmt)
-    tax_categories_map: Dict[str, List[str]] = {}
-    for tc in cat_res.scalars().all():
-        tax_categories_map.setdefault(tc.tax_id, []).append(tc.category_id)
-
-    item_stmt = select(TaxMenuItem)
-    item_res = await db.execute(item_stmt)
-    tax_items_map: Dict[str, List[str]] = {}
-    for ti in item_res.scalars().all():
-        tax_items_map.setdefault(ti.tax_id, []).append(ti.menu_item_id)
-
-    # 2. Fetch Orders for this table session
-    tbl_num = input_data.tableNumber
-    sess_id = input_data.tableSessionId
-
-    orders_query = select(Order).where(
-        Order.restaurant_id == rest.id,
-        Order.status != "CANCELLED"
-    )
-    if sess_id:
-        orders_query = orders_query.where(Order.table_session_id == sess_id)
-    else:
-        orders_query = orders_query.where(Order.table_number == tbl_num)
-
-    o_res = await db.execute(orders_query)
-    table_orders = list(o_res.scalars().all())
-
-    # Fallback: If no orders found by session ID, search by tableId / tableNumber
-    if not table_orders and (input_data.tableId or tbl_num):
-        t_filters = []
-        if input_data.tableId:
-            t_filters.append(Order.table_id == input_data.tableId)
-        if tbl_num:
-            t_filters.extend([
-                Order.table_number == tbl_num,
-                Order.table_number == f"Table {tbl_num}",
-                Order.table_number == tbl_num.replace("Table ", "").strip()
-            ])
-        fallback_query = select(Order).where(
-            Order.restaurant_id == rest.id,
-            Order.status != "CANCELLED",
-            or_(*t_filters)
-        ).order_by(Order.created_at.desc()).limit(20)
-        fb_res = await db.execute(fallback_query)
-        table_orders = list(fb_res.scalars().all())
-
-    # Aggregate item list
-    bill_items: List[Dict[str, Any]] = []
-    for order in table_orders:
-        items = getattr(order, "items_json", []) or []
-        for itm in items:
-            raw_p = itm.get("price")
-            if raw_p is None:
-                raw_p = itm.get("unit_price")
-            if raw_p is None:
-                raw_p = itm.get("unitPrice")
-            unit_p = float(raw_p or 0.0)
-            qty = int(itm.get("quantity") or 1)
-            raw_tot = itm.get("totalPrice") or itm.get("total_price")
-            total_p = round(float(raw_tot) if raw_tot is not None else (unit_p * qty), 2)
-            if unit_p == 0.0 and total_p > 0.0:
-                unit_p = round(total_p / max(1, qty), 2)
-
-            bill_items.append({
-                "orderId": order.id,
-                "menuItemId": itm.get("menuItemId") or itm.get("id") or "",
-                "name": itm.get("name", "Item"),
-                "quantity": qty,
-                "price": unit_p,
-                "unit_price": unit_p,
-                "unitPrice": unit_p,
-                "totalPrice": total_p,
-                "total_price": total_p,
-                "station": itm.get("targetDestination") or ("BAR" if itm.get("isAlcoholic") else "KITCHEN"),
-                "category": itm.get("category"),
-                "categoryId": itm.get("categoryId"),
-            })
-
-    # Run deterministic Tax Engine
-    calc_res = calculate_taxes(
-        items=bill_items,
-        active_taxes=active_taxes,
-        tax_categories_map=tax_categories_map,
-        tax_items_map=tax_items_map,
-        order_type=input_data.orderType or "DINE_IN"
+    return await BillingService.calculate_table_bill_data(
+        rest=rest,
+        table_number=input_data.tableNumber,
+        table_session_id=input_data.tableSessionId,
+        table_id=input_data.tableId,
+        discount_percentage=input_data.discountPercentage or 0.0,
+        discount_amount=input_data.discountAmount or 0.0,
+        service_charge_percentage=input_data.serviceChargePercentage,
+        order_type=input_data.orderType or "DINE_IN",
+        db=db
     )
 
-    subtotal = calc_res["subtotal"]
-    tax_amount = calc_res["total_tax_amount"]
-    tax_breakdown = calc_res["tax_breakdown"]
 
-    # Fallback safety: If subtotal came out to 0.0 but bill_items or table_orders have amounts
-    if subtotal <= 0.0:
-        if bill_items:
-            subtotal = round(sum(float(i.get("totalPrice") or 0.0) for i in bill_items), 2)
-        elif table_orders:
-            subtotal = round(sum(float(getattr(o, "subtotal", 0.0) or getattr(o, "total_amount", 0.0) or 0.0) for o in table_orders), 2)
+@router.get("/{restaurant_id}/billing/table/{table_number}/bill")
+@router.get("/{restaurant_id}/billing/tables/{table_number}/running-bill")
+async def get_running_table_bill(
+    restaurant_id: str,
+    table_number: str,
+    session_id: Optional[str] = Query(None, alias="sessionId"),
+    table_session_id: Optional[str] = Query(None, alias="tableSessionId"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Authoritative running bill endpoint for a table.
+    Enables Customer Bill Modal, Waiter POS, and Checkout to display identical, verified totals.
+    """
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    if not rest:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
 
-    # Calculate Discount
-    disc_amt = input_data.discountAmount or 0.0
-    if input_data.discountPercentage and input_data.discountPercentage > 0:
-        disc_amt = round(subtotal * (input_data.discountPercentage / 100.0), 2)
-    disc_amt = min(disc_amt, subtotal)
+    effective_sess_id = session_id or table_session_id or None
+    tbl_num = (table_number or "").strip()
 
-    taxable_subtotal = max(0.0, round(subtotal - disc_amt, 2))
+    # 1. Check if an existing Bill already exists for this table/session
+    t_candidates = [
+        tbl_num,
+        f"Table {tbl_num}",
+        tbl_num.replace("Table ", "").strip()
+    ]
+    query = select(Bill).where(
+        Bill.restaurant_id == rest.id,
+        Bill.table_number.in_(t_candidates),
+    )
+    if effective_sess_id:
+        query = query.where(Bill.table_session_id == effective_sess_id)
+    query = query.order_by(Bill.created_at.desc()).limit(1)
+    b_res = await db.execute(query)
+    existing_bill = b_res.scalar_one_or_none()
 
-    # Calculate Service Charge
-    sc_pct = rest.service_charge_percentage if rest.service_charge_enabled else 0.0
-    if input_data.serviceChargePercentage is not None:
-        sc_pct = max(0.0, float(input_data.serviceChargePercentage))
-    service_charge_amt = round(taxable_subtotal * (sc_pct / 100.0), 2) if sc_pct > 0 else 0.0
+    # Immutability Guarantee: If bill is already paid or closed, return historical snapshot
+    if existing_bill and existing_bill.payment_status == "PAID":
+        return format_bill_response(existing_bill)
 
-    raw_total = taxable_subtotal + service_charge_amt + tax_amount
-    round_off = round(round(raw_total) - raw_total, 2)
-    grand_total = round(raw_total + round_off, 2)
+    # 2. Compute authoritative bill data from active session orders
+    calc_data = await BillingService.calculate_table_bill_data(
+        rest=rest,
+        table_number=tbl_num,
+        table_session_id=effective_sess_id or (existing_bill.table_session_id if existing_bill else None),
+        table_id=existing_bill.table_id if existing_bill else None,
+        discount_percentage=existing_bill.discount_percentage if existing_bill else 0.0,
+        discount_amount=existing_bill.discount_amount if existing_bill else 0.0,
+        service_charge_percentage=existing_bill.service_charge_percentage if existing_bill else None,
+        db=db
+    )
 
+    if existing_bill:
+        # Sync unpaid bill with newly placed or modified orders
+        existing_bill.subtotal = calc_data["subtotal"]
+        existing_bill.discount_amount = calc_data["discountAmount"]
+        existing_bill.discount_percentage = calc_data["discountPercentage"]
+        existing_bill.service_charge_amount = calc_data["serviceChargeAmount"]
+        existing_bill.service_charge_percentage = calc_data["serviceChargePercentage"]
+        existing_bill.tax_percentage = calc_data["taxPercentage"]
+        existing_bill.tax_amount = calc_data["taxAmount"]
+        existing_bill.round_off_amount = calc_data["roundOffAmount"]
+        existing_bill.grand_total = calc_data["grandTotal"]
+        existing_bill.tax_breakdown_json = calc_data["taxBreakdown"]
+        existing_bill.items_snapshot_json = calc_data["items"]
+        existing_bill.orders_snapshot_json = calc_data["orders"]
+        await db.commit()
+        await db.refresh(existing_bill)
+        return format_bill_response(existing_bill)
+
+    # 3. If no persisted bill exists yet, return provisional bill matching format_bill_response contract
+    now_iso = datetime.now(timezone.utc).isoformat()
     return {
+        "id": f"provisional-{rest.id}-{tbl_num.lower().replace(' ', '_')}",
         "restaurantId": rest.id,
+        "restaurant_id": rest.id,
+        "tableId": calc_data["tableId"],
+        "table_id": calc_data["tableId"],
         "tableNumber": tbl_num,
-        "tableSessionId": sess_id,
-        "itemCount": len(bill_items),
-        "items": bill_items,
-        "orders": [
-            {"id": o.id, "orderNumber": o.order_number or f"#ORD-{o.id[:4]}", "status": o.status, "totalAmount": o.total_amount}
-            for o in table_orders
-        ],
-        "subtotal": subtotal,
-        "discountPercentage": input_data.discountPercentage or 0.0,
-        "discountAmount": disc_amt,
-        "taxableSubtotal": taxable_subtotal,
-        "serviceChargePercentage": sc_pct,
-        "serviceChargeAmount": service_charge_amt,
-        "taxAmount": tax_amount,
-        "taxBreakdown": tax_breakdown,
-        "roundOffAmount": round_off,
-        "grandTotal": grand_total,
+        "table_number": tbl_num,
+        "tableSessionId": calc_data["tableSessionId"] or effective_sess_id or "LIVE",
+        "table_session_id": calc_data["tableSessionId"] or effective_sess_id or "LIVE",
+        "invoiceNumber": "Provisional Bill",
+        "invoice_number": "Provisional Bill",
+        "subtotal": calc_data["subtotal"],
+        "discountAmount": calc_data["discountAmount"],
+        "discount_amount": calc_data["discountAmount"],
+        "discountPercentage": calc_data["discountPercentage"],
+        "discount_percentage": calc_data["discountPercentage"],
+        "taxableSubtotal": calc_data["taxableSubtotal"],
+        "taxable_subtotal": calc_data["taxableSubtotal"],
+        "serviceChargeAmount": calc_data["serviceChargeAmount"],
+        "service_charge_amount": calc_data["serviceChargeAmount"],
+        "serviceChargePercentage": calc_data["serviceChargePercentage"],
+        "service_charge_percentage": calc_data["serviceChargePercentage"],
+        "taxPercentage": calc_data["taxPercentage"],
+        "tax_percentage": calc_data["taxPercentage"],
+        "taxAmount": calc_data["taxAmount"],
+        "tax_amount": calc_data["taxAmount"],
+        "roundOffAmount": calc_data["roundOffAmount"],
+        "round_off_amount": calc_data["roundOffAmount"],
+        "grandTotal": calc_data["grandTotal"],
+        "grand_total": calc_data["grandTotal"],
+        "amountPaid": 0.0,
+        "amount_paid": 0.0,
+        "balanceDue": calc_data["grandTotal"],
+        "balance_due": calc_data["grandTotal"],
+        "status": "OPEN",
+        "paymentStatus": "UNPAID",
+        "payment_status": "UNPAID",
+        "paymentMethod": None,
+        "payment_method": None,
+        "paymentVerifiedBy": None,
+        "payment_verified_by": None,
+        "paymentReference": None,
+        "payment_reference": None,
+        "taxBreakdown": calc_data["taxBreakdown"],
+        "tax_breakdown": calc_data["taxBreakdown"],
+        "tax_breakdown_json": calc_data["taxBreakdown"],
+        "items": calc_data["items"],
+        "items_snapshot_json": calc_data["items"],
+        "orders": calc_data["orders"],
+        "orders_snapshot_json": calc_data["orders"],
+        "createdAt": now_iso,
+        "created_at": now_iso,
+        "updatedAt": now_iso,
+        "updated_at": now_iso,
     }
+
+
+@router.get("/{restaurant_id}/billing/session/{session_id}/bill")
+@router.get("/{restaurant_id}/billing/sessions/{session_id}/running-bill")
+async def get_running_session_bill(
+    restaurant_id: str,
+    session_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Session-scoped running bill endpoint.
+    """
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    if not rest:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    s_res = await db.execute(select(TableSession).where(TableSession.id == session_id))
+    sess = s_res.scalar_one_or_none()
+    tbl_num = sess.table_number if sess else "Table 01"
+
+    return await get_running_table_bill(
+        restaurant_id=restaurant_id,
+        table_number=tbl_num,
+        session_id=session_id,
+        db=db
+    )
 
 
 @router.post("/{restaurant_id}/billing/generate-invoice")
@@ -496,105 +534,38 @@ async def generate_table_invoice(
     payload: GenerateInvoiceInputSchema,
     db: AsyncSession = Depends(get_db)
 ):
-    # 1. Fetch Restaurant & Next Invoice Number
+    """
+    Authoritative invoice generation endpoint.
+    Creates or updates the single canonical Bill record for the active table session.
+    """
     rest = await find_restaurant_by_identifier(restaurant_id, db)
     if not rest:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
-    # Generate sequential invoice number
-    prefix = rest.invoice_prefix or "INV-"
-    current_num = int(rest.invoice_starting_number or 1001)
-
-    # Check for existing bills with invoice numbers to ensure uniqueness
-    max_inv_stmt = select(func.count(Bill.id)).where(Bill.restaurant_id == rest.id)
-    inv_count_res = await db.execute(max_inv_stmt)
-    total_bills = inv_count_res.scalar() or 0
-    invoice_number = f"{prefix}{current_num + total_bills}"
-
-    # 2. Run Canonical Calculation
-    calc_input = CalculateBillInputSchema(
-        tableId=payload.tableId,
-        tableNumber=payload.tableNumber,
-        tableSessionId=payload.tableSessionId,
-        discountPercentage=payload.discountPercentage,
-        discountAmount=payload.discountAmount,
-        serviceChargePercentage=payload.serviceChargePercentage,
-        orderType=payload.orderType
-    )
-    calc_res = await calculate_table_bill(rest.id, calc_input, db)
-
-    # Invariant: An invoice for orders with non-zero line items must never calculate to 0.0
-    if calc_res.get("items") and float(calc_res.get("grandTotal") or 0.0) <= 0.0:
-        items_sum = sum(float(i.get("totalPrice") or i.get("price") or 0.0) for i in calc_res.get("items", []))
-        if items_sum > 0.0:
-            calc_res["subtotal"] = items_sum
-            calc_res["taxableSubtotal"] = items_sum
-            calc_res["grandTotal"] = items_sum
-    if calc_res.get("orders") and float(calc_res.get("grandTotal") or 0.0) <= 0.0:
-        orders_sum = sum(float(o.get("totalAmount") or 0.0) for o in calc_res.get("orders", []))
-        if orders_sum > 0.0:
-            calc_res["subtotal"] = orders_sum
-            calc_res["taxableSubtotal"] = orders_sum
-            calc_res["grandTotal"] = orders_sum
-
-    # 3. Create or Update Bill record
-    bill_id = f"bill-{uuid.uuid4().hex[:12]}"
-    new_bill = Bill(
-        id=bill_id,
-        restaurant_id=rest.id,
-        table_id=payload.tableId or f"table-{payload.tableNumber}",
+    bill = await BillingService.get_or_create_table_invoice(
+        rest=rest,
         table_number=payload.tableNumber,
-        table_session_id=payload.tableSessionId or f"sess-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
-        invoice_number=invoice_number,
-        subtotal=calc_res["subtotal"],
-        discount_amount=calc_res["discountAmount"],
-        discount_percentage=calc_res["discountPercentage"],
-        service_charge_amount=calc_res["serviceChargeAmount"],
-        service_charge_percentage=calc_res["serviceChargePercentage"],
-        tax_percentage=rest.tax_percentage or 5.0,
-        tax_amount=calc_res["taxAmount"],
-        round_off_amount=calc_res["roundOffAmount"],
-        grand_total=calc_res["grandTotal"],
-        status="BILL_REQUESTED",
-        payment_status="UNPAID",
+        table_session_id=payload.tableSessionId,
+        table_id=payload.tableId,
+        discount_percentage=payload.discountPercentage or 0.0,
+        discount_amount=payload.discountAmount or 0.0,
+        service_charge_percentage=payload.serviceChargePercentage,
         payment_method=payload.paymentMethod,
-        tax_breakdown_json=calc_res["taxBreakdown"],
-        items_snapshot_json=calc_res["items"],
-        orders_snapshot_json=calc_res["orders"],
+        order_type=payload.orderType or "DINE_IN",
+        db=db
     )
-    db.add(new_bill)
 
-    # Update Table status to BILL_REQUESTED
-    tbl_stmt = select(Table).where(Table.restaurant_id == rest.id, Table.table_number == payload.tableNumber)
-    tbl_res = await db.execute(tbl_stmt)
-    tbl = tbl_res.scalar_one_or_none()
-    if tbl:
-        tbl.status = "BILL_REQUESTED"
-
-    # Update TableSession status
-    if payload.tableSessionId:
-        sess_stmt = select(TableSession).where(TableSession.id == payload.tableSessionId)
-        sess_res = await db.execute(sess_stmt)
-        sess = sess_res.scalar_one_or_none()
-        if sess:
-            sess.status = "BILL_REQUESTED"
-            sess.bill_id = bill_id
-
-    await db.commit()
-    await db.refresh(new_bill)
-
-    # 4. Broadcast Realtime Event
-    formatted = format_bill_response(new_bill)
+    formatted = format_bill_response(bill)
     try:
         await ws_manager.broadcast_event(
             restaurant_id=rest.id,
             event_type="BillRequested",
             payload={
-                "billId": new_bill.id,
-                "invoiceNumber": new_bill.invoice_number,
-                "tableNumber": new_bill.table_number,
-                "tableSessionId": new_bill.table_session_id,
-                "grandTotal": new_bill.grand_total,
+                "billId": bill.id,
+                "invoiceNumber": bill.invoice_number,
+                "tableNumber": bill.table_number,
+                "tableSessionId": bill.table_session_id,
+                "grandTotal": bill.grand_total,
                 "data": formatted,
             }
         )
@@ -602,7 +573,7 @@ async def generate_table_invoice(
             restaurant_id=rest.id,
             event_type="TableStatusUpdated",
             payload={
-                "tableNumber": new_bill.table_number,
+                "tableNumber": bill.table_number,
                 "status": "BILL_REQUESTED",
             }
         )
@@ -610,6 +581,25 @@ async def generate_table_invoice(
         pass
 
     return formatted
+
+
+@router.get("/{restaurant_id}/billing/diagnostic/{order_or_bill_id}")
+async def get_billing_diagnostic_endpoint(
+    restaurant_id: str,
+    order_or_bill_id: str,
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Non-mutating diagnostic tool (Section 11) for deep financial reconciliation.
+    Inspects persisted line items, price snapshots, subtotals, taxes, and reports exact differences.
+    """
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    if not rest:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    return await BillingService.generate_billing_diagnostic(order_or_bill_id, rest.id, db)
+
 
 
 # ----------------- BILLS LIST & PAYMENT ENDPOINTS -----------------

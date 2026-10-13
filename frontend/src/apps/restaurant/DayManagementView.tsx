@@ -155,7 +155,8 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
     }
   });
 
-  const totalSales = foodSales + barSales;
+  const paidBillsTotal = bills.filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID').reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+  const totalSales = paidBillsTotal > 0 ? paidBillsTotal : (foodSales + barSales);
 
   // Live counters
   const activeTablesCount = precheck?.active_tables_count ?? tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied).length;

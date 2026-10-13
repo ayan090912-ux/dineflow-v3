@@ -1304,13 +1304,15 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               <span>Subtotal</span>
               <span>{formatPrice(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-white/60">
-              <span>GST ({currentRestaurant?.taxPercentage ?? 5}%)</span>
-              <span>{formatPrice(Math.round(subtotal * ((currentRestaurant?.taxPercentage ?? 5) / 100) * 100) / 100)}</span>
-            </div>
+            {(typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) > 0 && (
+              <div className="flex justify-between text-white/60">
+                <span>GST / Taxes ({typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5}%)</span>
+                <span>{formatPrice(Math.round(subtotal * (((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5)) / 100) * 100) / 100)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-white font-semibold text-sm pt-2 border-t border-white/[0.08]">
-              <span>Total</span>
-              <span className="text-amber-400">{formatPrice(Math.round((subtotal + subtotal * ((currentRestaurant?.taxPercentage ?? 5) / 100)) * 100) / 100)}</span>
+              <span>Estimated Total</span>
+              <span className="text-amber-400">{formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
             </div>
           </div>
 

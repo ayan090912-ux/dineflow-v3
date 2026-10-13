@@ -351,24 +351,38 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                   <span>{formatCurrency(bill.subtotal)}</span>
                 </div>
 
-                {bill.taxBreakdown && bill.taxBreakdown.length > 0 ? (
-                  bill.taxBreakdown.map((t, idx) => (
-                    <div key={idx} className="flex justify-between text-white/40">
-                      <span>{t.name || t.taxName || 'Tax'} ({t.rate || t.taxRate || 0}%{t.isInclusive || t.is_inclusive ? ' Included' : ''})</span>
-                      <span>{formatCurrency(t.amount || t.taxAmount || 0)}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex justify-between text-white/40">
-                    <span>Taxes & Charges</span>
-                    <span>{formatCurrency(bill.taxAmount)}</span>
+                {bill.discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-400">
+                    <span>Discount {bill.discountPercentage ? `(${bill.discountPercentage}%)` : ''}</span>
+                    <span>-{formatCurrency(bill.discountAmount)}</span>
                   </div>
                 )}
 
-                {bill.discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-400">
-                    <span>Discount</span>
-                    <span>-{formatCurrency(bill.discountAmount)}</span>
+                {(bill.serviceChargeAmount || 0) > 0 && (
+                  <div className="flex justify-between text-white/40">
+                    <span>Service Charge ({bill.serviceChargePercentage || 0}%)</span>
+                    <span>{formatCurrency(bill.serviceChargeAmount || 0)}</span>
+                  </div>
+                )}
+
+                {bill.taxBreakdown && bill.taxBreakdown.length > 0 ? (
+                  bill.taxBreakdown.map((t, idx) => (
+                    <div key={idx} className="flex justify-between text-white/40">
+                      <span>{(t.name || t.taxName || 'Tax')} ({t.rate || t.taxRate || 0}%{(t.isInclusive || t.is_inclusive) ? ' Included' : ''})</span>
+                      <span>{formatCurrency(t.amount || t.taxAmount || 0)}</span>
+                    </div>
+                  ))
+                ) : (bill.taxAmount || 0) > 0 ? (
+                  <div className="flex justify-between text-white/40">
+                    <span>GST / Taxes</span>
+                    <span>{formatCurrency(bill.taxAmount)}</span>
+                  </div>
+                ) : null}
+
+                {bill.roundOffAmount !== undefined && bill.roundOffAmount !== 0 && (
+                  <div className="flex justify-between text-white/40">
+                    <span>Round Off</span>
+                    <span>{bill.roundOffAmount > 0 ? `+${formatCurrency(bill.roundOffAmount)}` : formatCurrency(bill.roundOffAmount)}</span>
                   </div>
                 )}
 
