@@ -68,7 +68,7 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
 
     from app.core.tenant.resolver import resolve_canonical_restaurant
     rest = await resolve_canonical_restaurant(payload.restaurantId, db)
-    if not rest or rest.deleted_at is not None or rest.lifecycle_status == "ARCHIVED":
+    if not rest or rest.deleted_at is not None or rest.lifecycle_status in ["ARCHIVED", "SUSPENDED", "REJECTED"]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant is archived or inactive")
 
     if rest.has_waiter is False or (rest.enabled_modules and "waiter" not in rest.enabled_modules):

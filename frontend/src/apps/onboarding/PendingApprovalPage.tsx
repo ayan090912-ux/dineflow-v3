@@ -55,14 +55,51 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
 
   // Current authenticated user context
   const currentUser = api.getCurrentUser('OWNER') || api.getCurrentUser();
+  const [effectiveRestaurantId, setEffectiveRestaurantId] = useState<string | null>(restaurantId || null);
+
+  const resolveTargetId = async (): Promise<string | null> => {
+    if (restaurantId && restaurantId.trim()) {
+      return restaurantId.trim();
+    }
+    const currentId = api.getCurrentRestaurantId();
+    if (currentId && currentId.trim()) {
+      return currentId.trim();
+    }
+    if (currentUser?.email) {
+      try {
+        const ownerRests = await api.getOwnerRestaurants(currentUser.email, currentUser.id);
+        if (ownerRests && ownerRests.length > 0) {
+          const candidate =
+            ownerRests.find((r) =>
+              ['PENDING_APPROVAL', 'CHANGES_REQUESTED', 'REJECTED', 'DRAFT'].includes(r.lifecycleStatus)
+            ) || ownerRests[0];
+          if (candidate?.id) {
+            api.setCurrentRestaurantId(candidate.id);
+            return candidate.id;
+          }
+        }
+      } catch (err) {
+        console.warn('[PendingApprovalPage] Could not query owner restaurants:', err);
+      }
+    }
+    return null;
+  };
 
   useEffect(() => {
-    // Connect to restaurant-specific channel when we know the tenant ID.
-    // Never use 'global' — that channel is reserved for Platform Admins only.
-    if (restaurantId) {
-      realtimeBus.connect(restaurantId, 'OWNER');
-    }
-    loadRestaurantData();
+    let isMounted = true;
+
+    const initPage = async () => {
+      const targetId = await resolveTargetId();
+      if (!isMounted) return;
+      if (targetId) {
+        setEffectiveRestaurantId(targetId);
+        realtimeBus.connect(targetId, 'OWNER');
+      }
+      await loadRestaurantData(targetId || undefined);
+    };
+
+    initPage();
+
     const interval = setInterval(() => {
       loadRestaurantDataSilent();
     }, 3000);
@@ -77,13 +114,14 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
         evtType === 'RESTAURANT_DISMISSED'
       ) {
         const evtRestId = event.restaurantId || event.restaurant_id;
-        if (!restaurantId || !evtRestId || evtRestId === restaurantId || (restaurant && evtRestId === restaurant.id)) {
+        if (!effectiveRestaurantId || !evtRestId || evtRestId === effectiveRestaurantId || (restaurant && evtRestId === restaurant.id)) {
           loadRestaurantDataSilent();
         }
       }
     });
 
     return () => {
+      isMounted = false;
       clearInterval(interval);
       unsub();
     };
@@ -104,12 +142,19 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
     }
   }, [restaurant, onNavigate]);
 
-  const loadRestaurantData = async () => {
+  const loadRestaurantData = async (explicitId?: string) => {
     setIsLoading(true);
     try {
-      const rest = await api.getRestaurantDetails(restaurantId);
+      const targetId = explicitId || effectiveRestaurantId || (await resolveTargetId());
+      if (targetId) {
+        setEffectiveRestaurantId(targetId);
+        realtimeBus.connect(targetId, 'OWNER');
+      }
+      const rest = await api.getRestaurantDetails(targetId || undefined);
       setRestaurant(rest);
       if (rest) {
+        setEffectiveRestaurantId(rest.id);
+        api.setCurrentRestaurantId(rest.id);
         setResubmitName(rest.name || '');
         setResubmitAddress(rest.address || '');
         setResubmitCity(rest.city || 'Mumbai');
@@ -125,9 +170,13 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
 
   const loadRestaurantDataSilent = async () => {
     try {
-      const rest = await api.getRestaurantDetails(restaurantId);
-      if (rest) {
-        setRestaurant(rest);
+      const targetId = effectiveRestaurantId || (await resolveTargetId());
+      if (targetId) {
+        const rest = await api.getRestaurantDetails(targetId);
+        if (rest) {
+          setRestaurant(rest);
+          setEffectiveRestaurantId(rest.id);
+        }
       }
     } catch (e) {}
   };
@@ -135,7 +184,8 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const rest = await api.getRestaurantDetails(restaurantId);
+      const targetId = effectiveRestaurantId || (await resolveTargetId());
+      const rest = await api.getRestaurantDetails(targetId || undefined);
       setRestaurant(rest);
       if (
         rest &&
@@ -176,6 +226,11 @@ export const PendingApprovalPage: React.FC<PendingApprovalPageProps> = ({
       });
 
       setRestaurant(updated);
+      if (updated?.id) {
+        setEffectiveRestaurantId(updated.id);
+        api.setCurrentRestaurantId(updated.id);
+        realtimeBus.connect(updated.id, 'OWNER');
+      }
       setIsResubmitting(false);
       setIsResubmitModalOpen(false);
     } catch (err: any) {

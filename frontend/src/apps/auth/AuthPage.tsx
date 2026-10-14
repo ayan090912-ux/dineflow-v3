@@ -68,6 +68,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       } else if (myRests.length === 1) {
         const onlyRest = myRests[0];
         await api.switchActiveRestaurant(onlyRest.id);
+        api.setCurrentRestaurantId(onlyRest.id);
         const isLive =
           onlyRest.isApproved !== false &&
           onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&

@@ -14,10 +14,11 @@ import {
   Mail,
   User as UserIcon,
   Phone,
-  ExternalLink
+  ExternalLink,
+  Clock
 } from 'lucide-react';
 import { DinelyLogo, Button, Input } from '../../packages/ui';
-import { getApiBaseUrl } from '../../packages/api/client';
+import { getApiBaseUrl, api } from '../../packages/api/client';
 
 interface RestaurantSignupPageProps {
   onNavigate?: (path: string) => void;
@@ -161,6 +162,9 @@ export const RestaurantSignupPage: React.FC<RestaurantSignupPageProps> = ({ onNa
         localStorage.setItem('dinely_auth_token', data.token);
         localStorage.setItem('dinely_active_restaurant_id', tenant.id);
         sessionStorage.setItem('dinely_active_restaurant_id', tenant.id);
+        if (tenant.id) {
+          api.setCurrentRestaurantId(tenant.id);
+        }
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Restaurant signup failed. Please try again.');
@@ -197,21 +201,21 @@ export const RestaurantSignupPage: React.FC<RestaurantSignupPageProps> = ({ onNa
       <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6 my-6">
         <div className="w-full max-w-2xl">
           {successData ? (
-            /* Success confirmation screen */
-            <div className="bg-[#0e1117] border border-emerald-500/30 rounded-3xl p-8 sm:p-10 shadow-2xl text-center space-y-6 animate-in fade-in zoom-in-95 duration-300">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto">
-                <CheckCircle2 size={36} />
+            /* Application Submitted confirmation screen */
+            <div className="bg-[#0e1117] border border-amber-500/30 rounded-3xl p-8 sm:p-10 shadow-2xl text-center space-y-6 animate-in fade-in zoom-in-95 duration-300">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
+                <Clock size={36} />
               </div>
 
               <div>
-                <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  TENANT PROVISIONED LIVE
+                <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  APPLICATION SUBMITTED — AWAITING PLATFORM APPROVAL
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-3">
-                  {successData.restaurantName} is Ready!
+                  {successData.restaurantName} Application Received!
                 </h2>
                 <p className="text-sm text-white/60 max-w-md mx-auto mt-2">
-                  Your isolated multi-tenant restaurant instance has been provisioned with database records, menu starter items, and tables.
+                  Your restaurant instance has been provisioned and submitted to the Platform Admin for review and approval. Once approved, your live operating dashboard and public ordering domain will activate immediately.
                 </p>
               </div>
 
@@ -225,36 +229,27 @@ export const RestaurantSignupPage: React.FC<RestaurantSignupPageProps> = ({ onNa
                   <span className="text-white">{successData.slug}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-white/40">Tenant Domain:</span>
-                  <a
-                    href={successData.domain}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
-                  >
-                    {successData.domain}
-                    <ExternalLink size={12} />
-                  </a>
+                  <span className="text-white/40">Assigned Domain:</span>
+                  <span className="text-amber-300 font-semibold">{successData.domain}</span>
                 </div>
               </div>
 
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
-                <a
-                  href={`${successData.domain}/restaurant/dashboard`}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2"
+                <button
+                  type="button"
+                  onClick={() => onNavigate ? onNavigate('/restaurant/pending-approval') : (window.location.href = '/restaurant/pending-approval')}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>Open Restaurant Dashboard</span>
+                  <span>Track Application Status</span>
                   <ArrowRight size={16} />
-                </a>
-                <a
-                  href={`${successData.domain}/customer`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-white/[0.08]"
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate ? onNavigate('/') : (window.location.href = '/')}
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-white/[0.08] cursor-pointer"
                 >
-                  <span>View Customer Menu</span>
-                  <ExternalLink size={14} />
-                </a>
+                  <span>Dinely Platform Home</span>
+                </button>
               </div>
             </div>
           ) : (

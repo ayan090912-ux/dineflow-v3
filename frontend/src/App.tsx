@@ -109,6 +109,8 @@ function PlatformTenantRedirector({
               onlyRest.lifecycleStatus !== 'SUSPENDED');
 
           if (!isLive) {
+            await api.switchActiveRestaurant(onlyRest.id);
+            api.setCurrentRestaurantId(onlyRest.id);
             onNavigate('/restaurant/pending-approval');
             return;
           }
@@ -1005,6 +1007,26 @@ function AppContent() {
           );
         }
 
+        // 5. Enforce approval status: Unapproved restaurants cannot access the live operational dashboard
+        const isLive =
+          resolvedTenant.lifecycleStatus === 'LIVE' ||
+          resolvedTenant.lifecycleStatus === 'APPROVED' ||
+          (resolvedTenant.isApproved === true &&
+            resolvedTenant.lifecycleStatus !== 'PENDING_APPROVAL' &&
+            resolvedTenant.lifecycleStatus !== 'REJECTED' &&
+            resolvedTenant.lifecycleStatus !== 'ARCHIVED' &&
+            resolvedTenant.lifecycleStatus !== 'SUSPENDED');
+
+        if (!isLive) {
+          return (
+            <PendingApprovalPage
+              restaurantId={resolvedTenant.id}
+              onNavigate={navigateTo}
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
         return <RestaurantApp activeRestaurant={resolvedTenant} onLogout={() => handleLogout('/login')} onNavigate={navigateTo} />;
       }
 
@@ -1265,6 +1287,13 @@ function AppContent() {
           onNavigate={navigateTo}
           onFinishSetup={(setupData) => {
             setActiveOwnerData((prev: any) => ({ ...prev, ...setupData }));
+            if (setupData?.id) {
+              api.setCurrentRestaurantId(setupData.id);
+              api.switchActiveRestaurant(setupData.id);
+            }
+            if (setupData) {
+              setCurrentRestaurant(setupData);
+            }
             navigateTo('/restaurant/pending-approval');
           }}
         />
@@ -1308,7 +1337,7 @@ function AppContent() {
     if (cleanPath === '/restaurant/pending-approval' || cleanPath === '/pending-approval') {
       return (
         <PendingApprovalPage
-          restaurantId={currentRestaurant?.id}
+          restaurantId={currentRestaurant?.id || api.getCurrentRestaurantId() || undefined}
           onNavigate={navigateTo}
           onLogout={() => handleLogout('/restaurant/login')}
         />

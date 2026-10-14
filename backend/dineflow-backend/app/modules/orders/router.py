@@ -224,10 +224,10 @@ async def create_order(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Restaurant '{payload.restaurantId}' was not found"
                 )
-            if db_rest.lifecycle_status in ["SUSPENDED", "ARCHIVED"]:
+            if db_rest.lifecycle_status in ["SUSPENDED", "ARCHIVED", "REJECTED"]:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Restaurant '{payload.restaurantId}' is archived or suspended"
+                    detail=f"Restaurant '{payload.restaurantId}' is archived or inactive"
                 )
             restaurant = CachedRestaurant(
                 id=db_rest.id,
