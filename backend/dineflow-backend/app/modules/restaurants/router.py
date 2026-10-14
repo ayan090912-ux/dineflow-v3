@@ -14,6 +14,7 @@ from app.modules.restaurants.models import Restaurant, RestaurantLifecycleLog, R
 from app.core.tenant.resolver import resolve_public_tenant, resolve_tenant, TenantResolutionMode, resolve_owner_tenant
 from app.modules.restaurants.tenant_resolver import resolve_public_tenant_from_host
 from app.modules.tables.models import Table
+from app.modules.terminals.models import Terminal
 from app.modules.websocket.manager import ws_manager
 from app.core.tenant.qr import generate_canonical_qr_url
 from app.core.storage.provider import get_storage_provider
@@ -516,6 +517,8 @@ async def create_restaurant(
                 modules.append("bar")
 
     has_tables = payload.hasTables if payload.hasTables is not None else (b_type != "FOOD_CART" or "waiter" in modules)
+    if has_tables and "tables" not in modules:
+        modules.append("tables")
 
     new_rest = Restaurant(
         id=rest_id,
@@ -1073,8 +1076,19 @@ async def submit_restaurant(
             rest.phone = payload.phone.strip()
         if payload.email:
             rest.email = payload.email.strip()
+        if payload.totalTablesCount is not None and payload.totalTablesCount > 0:
+            rest.has_tables = True
+            rest.total_tables_count = payload.totalTablesCount
         if payload.enabledModules:
-            rest.enabled_modules = payload.enabledModules
+            mods = list(payload.enabledModules)
+            if (rest.has_tables or (payload.totalTablesCount and payload.totalTablesCount > 0)) and "tables" not in mods:
+                mods.append("tables")
+            rest.enabled_modules = mods
+        elif rest.has_tables:
+            current_mods = list(rest.enabled_modules) if isinstance(rest.enabled_modules, list) else []
+            if "tables" not in current_mods:
+                current_mods.append("tables")
+                rest.enabled_modules = current_mods
 
     # Record Lifecycle History in PostgreSQL
     db.add(RestaurantLifecycleLog(
@@ -1337,6 +1351,56 @@ async def create_restaurant_staff(
     db.add(new_mem)
     await db.commit()
     await db.refresh(new_mem)
+
+    # Ensure assigned terminal is tracked in terminals table and notify owner
+    if clean_terminal:
+        try:
+            t_stmt = select(Terminal).where(
+                Terminal.restaurant_id == canonical_id,
+                Terminal.terminal_code == clean_terminal
+            )
+            t_res = await db.execute(t_stmt)
+            existing_t = t_res.scalar_one_or_none()
+            if not existing_t:
+                new_t = Terminal(
+                    id=f"term-{canonical_id}-{uuid.uuid4().hex[:8]}",
+                    restaurant_id=canonical_id,
+                    name=f"{clean_name}'s Device",
+                    terminal_code=clean_terminal,
+                    terminal_type=clean_role if clean_role in ["WAITER", "KITCHEN", "BAR", "CASHIER"] else "WAITER",
+                    pairing_code=uuid.uuid4().hex[:6].upper(),
+                    status="ACTIVE",
+                    is_active=True,
+                )
+                db.add(new_t)
+                await db.commit()
+
+                # Broadcast terminal registered event
+                now_utc = datetime.now(timezone.utc)
+                r_stmt = select(Restaurant.name).where(Restaurant.id == canonical_id)
+                r_res = await db.execute(r_stmt)
+                r_name = r_res.scalar_one_or_none() or "Restaurant"
+                await ws_manager.broadcast_event(
+                    restaurant_id=canonical_id,
+                    event_type="terminal_registered",
+                    payload={
+                        "eventId": f"evt-term-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}",
+                        "type": "terminal_registered",
+                        "restaurantId": canonical_id,
+                        "restaurantName": r_name,
+                        "terminalId": new_t.id,
+                        "terminalCode": new_t.terminal_code,
+                        "terminalName": new_t.name,
+                        "terminalType": new_t.terminal_type,
+                        "status": new_t.status,
+                        "isActive": new_t.is_active,
+                        "timestamp": now_utc.isoformat(),
+                        "message": f"New terminal registered: {new_t.name} ({new_t.terminal_code})"
+                    },
+                    target_audience=["OWNER", "WAITER", "MANAGER"]
+                )
+        except Exception as t_err:
+            pass
 
     return {
         "id": new_mem.id,

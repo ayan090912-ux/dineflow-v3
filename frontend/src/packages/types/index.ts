@@ -81,13 +81,25 @@ export function isModuleEnabled(
   if (!restaurant) return true; // Default permissive until loaded
   
   const bType = (restaurant.businessType || 'RESTAURANT').toUpperCase();
+  const modLower = module.toLowerCase();
+
+  // If checking tables module:
+  if (modLower === 'tables') {
+    if (restaurant.hasTables === false) return false;
+    const count = restaurant.tablesCount ?? (restaurant as any).totalTablesCount;
+    if (Array.isArray(restaurant.enabledModules) && restaurant.enabledModules.length > 0) {
+      if (restaurant.enabledModules.includes('tables')) return true;
+      // If restaurant has seating flag or table count, do not block tables
+      if (restaurant.hasTables === true || (count && count > 0)) {
+        return true;
+      }
+    }
+    return (restaurant.hasTables as boolean | undefined) !== false;
+  }
 
   // If enabledModules array is present, check membership
   if (Array.isArray(restaurant.enabledModules) && restaurant.enabledModules.length > 0) {
-    if (module.toLowerCase() === 'tables') {
-      return restaurant.hasTables !== false && restaurant.enabledModules.includes('tables');
-    }
-    return restaurant.enabledModules.includes(module.toLowerCase());
+    return restaurant.enabledModules.includes(modLower);
   }
 
   // Fallback to explicit boolean flags
@@ -235,6 +247,7 @@ export interface Restaurant {
   rating: number;
   activeOrdersCount: number;
   tablesCount?: number;
+  totalTablesCount?: number;
   theme: ThemeConfig;
   features?: RestaurantFeatures;
   domain?: string;
@@ -548,12 +561,34 @@ export interface Table {
   mergedGroupLabel?: string;
   mergedGroupId?: string;
   mergedLabel?: string;
+  // Visual Floorplan positioning & orientation
+  positionX?: number;
+  positionY?: number;
+  rotation?: number;
+  posX?: number;
+  posY?: number;
   // Table Reservation
   reservationDetails?: TableReservation;
   reservedForName?: string;
   reservedForPhone?: string;
   reservationTime?: string;
   partySize?: number;
+}
+
+export interface RestaurantTerminal {
+  id: string;
+  restaurantId: string;
+  name: string;
+  terminalCode: string;
+  terminalType: 'POS' | 'WAITER' | 'KITCHEN' | 'BAR' | 'CASHIER' | string;
+  deviceInfo?: string;
+  pairingCode?: string;
+  status: 'ACTIVE' | 'OFFLINE' | 'PAIRING' | string;
+  ipAddress?: string;
+  isActive: boolean;
+  lastActiveAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type CustomerRequestType =

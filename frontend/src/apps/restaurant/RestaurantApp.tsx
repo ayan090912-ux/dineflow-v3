@@ -750,6 +750,25 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           }));
           addToast('info', 'Workspace Updated', 'Restaurant operational terminal configuration was updated.');
         }
+      } else if (event.type === 'terminal_registered' || (event as any).type === 'TerminalRegistered') {
+        const payload = (event as any).payload || event;
+        const tName = payload.terminalName || payload.name || 'Device';
+        const tCode = payload.terminalCode || payload.terminal_code || '';
+        const msg = payload.message || `New terminal registered: ${tName} (${tCode})`;
+        addToast('success', 'Terminal Registered 📱', msg);
+
+        // Native Phone & Browser Notification
+        try {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Dinely OS: Terminal Registered 📱', {
+              body: msg,
+              icon: '/favicon.ico',
+              tag: `terminal-${tCode || Date.now()}`,
+            });
+          }
+        } catch (nErr) {
+          console.warn('[Notification] Trigger failed:', nErr);
+        }
       } else if (event.type === 'RECONNECTED') {
         loadData(false);
       }

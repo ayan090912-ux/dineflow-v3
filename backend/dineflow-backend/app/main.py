@@ -21,6 +21,7 @@ import app.modules.customer_requests.models
 import app.modules.taxes.models
 import app.modules.inventory.models
 import app.modules.business_day.models
+import app.modules.terminals.models
 
 
 from sqlalchemy import text
@@ -97,6 +98,24 @@ async def ensure_db_schema_columns(conn):
             created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );""",
+        """CREATE TABLE IF NOT EXISTS terminals (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            terminal_code VARCHAR(50) NOT NULL,
+            terminal_type VARCHAR(50) DEFAULT 'WAITER' NOT NULL,
+            device_info VARCHAR(255),
+            pairing_code VARCHAR(50),
+            status VARCHAR(30) DEFAULT 'ACTIVE' NOT NULL,
+            ip_address VARCHAR(100),
+            last_active_at TIMESTAMPTZ,
+            is_active BOOLEAN DEFAULT TRUE NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            CONSTRAINT uq_restaurant_terminal_code UNIQUE (restaurant_id, terminal_code)
+        );""",
+        """CREATE INDEX IF NOT EXISTS ix_terminals_restaurant_id ON terminals (restaurant_id);""",
+        """CREATE INDEX IF NOT EXISTS ix_terminals_terminal_code ON terminals (terminal_code);""",
     ]
     for stmt in create_table_statements:
         try:
@@ -122,6 +141,14 @@ async def ensure_db_schema_columns(conn):
            WHERE EXCLUDED.restaurant_id IN (
                SELECT id FROM restaurants WHERE lifecycle_status = 'LIVE' OR is_approved = TRUE
            );""",
+        """UPDATE restaurants
+           SET enabled_modules = CASE
+               WHEN enabled_modules IS NULL OR jsonb_typeof(enabled_modules::jsonb) != 'array' THEN '["tables"]'::jsonb
+               WHEN NOT (enabled_modules::jsonb ? 'tables') THEN enabled_modules::jsonb || '["tables"]'::jsonb
+               ELSE enabled_modules::jsonb
+           END
+           WHERE (has_tables IS TRUE OR has_tables IS NULL)
+             AND (enabled_modules IS NULL OR NOT (enabled_modules::jsonb ? 'tables'));""",
     ]
     for stmt in baseline_sync_statements:
         try:
@@ -141,6 +168,11 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_breakdown_json JSON;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS business_day_id VARCHAR(255);",
+        "ALTER TABLE tables ADD COLUMN IF NOT EXISTS shape VARCHAR(50) DEFAULT 'RECTANGLE';",
+        "ALTER TABLE tables ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE tables ADD COLUMN IF NOT EXISTS position_x FLOAT DEFAULT 0.0;",
+        "ALTER TABLE tables ADD COLUMN IF NOT EXISTS position_y FLOAT DEFAULT 0.0;",
+        "ALTER TABLE tables ADD COLUMN IF NOT EXISTS rotation FLOAT DEFAULT 0.0;",
     ]
     for stmt in schema_patch_statements:
         try:
@@ -345,6 +377,7 @@ from app.modules.inventory.router import router as inventory_router
 from app.modules.websocket.router import router as websocket_router
 from app.modules.business_day.router import router as business_day_router
 from app.modules.auth.staff_router import router as staff_auth_router
+from app.modules.terminals.router import router as terminal_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -352,6 +385,7 @@ app.include_router(staff_auth_router, prefix="/api/v1/staff/auth", tags=["Staff 
 app.include_router(staff_auth_router, prefix="/api/v1/auth/staff", tags=["Staff Authentication Alias"])
 app.include_router(platform_router, prefix="/api/v1/admin", tags=["Platform Admin"])
 app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Restaurants"])
+app.include_router(terminal_router, prefix="/api/v1/restaurants", tags=["Terminals"])
 app.include_router(tax_router, prefix="/api/v1/restaurants", tags=["Taxes"])
 app.include_router(billing_router, prefix="/api/v1/restaurants", tags=["Billing & Invoices"])
 app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])

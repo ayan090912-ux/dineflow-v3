@@ -17,6 +17,11 @@ class Table(Base, TimestampMixin):
     is_occupied: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     qr_code_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     active_session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    shape: Mapped[Optional[str]] = mapped_column(String(50), default="RECTANGLE", nullable=True)
+    is_vip: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
+    position_x: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
+    position_y: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
+    rotation: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
 
 class TableSession(Base, TimestampMixin):
     __tablename__ = "table_sessions"

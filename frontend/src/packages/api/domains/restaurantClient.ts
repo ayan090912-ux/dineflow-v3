@@ -15,6 +15,7 @@ import {
   ThemeConfig,
   Organization,
   Order,
+  RestaurantTerminal,
 } from '../../types';
 import { firebaseAuth } from '../../auth/firebase';
 import { BaseApiClient } from '../core/baseClient';
@@ -797,6 +798,11 @@ export class RestaurantClient {
               capacity: t.capacity || 4,
               status: t.status || 'AVAILABLE',
               isOccupied: t.is_occupied || false,
+              shape: t.shape || 'RECTANGLE',
+              isVip: t.is_vip ?? t.isVip ?? false,
+              positionX: t.position_x ?? t.positionX ?? 0,
+              positionY: t.position_y ?? t.positionY ?? 0,
+              rotation: t.rotation ?? 0,
               qrCodeUrl: cleanQr,
             };
           });
@@ -826,6 +832,11 @@ export class RestaurantClient {
       tableNumber: tblNum,
       section: tableData.section || 'Main Hall',
       capacity: tableData.capacity || 4,
+      shape: tableData.shape || 'RECTANGLE',
+      isVip: !!tableData.isVip,
+      positionX: tableData.positionX ?? tableData.posX ?? 0,
+      positionY: tableData.positionY ?? tableData.posY ?? 0,
+      rotation: tableData.rotation ?? 0,
     };
 
     const t = await this.base.executeProtectedRequest<any>(
@@ -852,6 +863,11 @@ export class RestaurantClient {
       capacity: t.capacity || 4,
       status: t.status || 'AVAILABLE',
       isOccupied: t.is_occupied || false,
+      shape: t.shape || tableData.shape || 'RECTANGLE',
+      isVip: t.is_vip ?? tableData.isVip ?? false,
+      positionX: t.position_x ?? tableData.positionX ?? 0,
+      positionY: t.position_y ?? tableData.positionY ?? 0,
+      rotation: t.rotation ?? tableData.rotation ?? 0,
       qrCodeUrl: cleanQr,
     };
     const existingIdx = this.base.tables.findIndex((x) => x.id === mapped.id);
@@ -872,6 +888,13 @@ export class RestaurantClient {
     if (updates.capacity !== undefined) payload.capacity = updates.capacity;
     if (updates.status !== undefined) payload.status = updates.status;
     if (updates.isOccupied !== undefined) payload.isOccupied = updates.isOccupied;
+    if (updates.shape !== undefined) payload.shape = updates.shape;
+    if (updates.isVip !== undefined) payload.isVip = updates.isVip;
+    if (updates.positionX !== undefined) payload.positionX = updates.positionX;
+    if (updates.positionY !== undefined) payload.positionY = updates.positionY;
+    if (updates.posX !== undefined) payload.positionX = updates.posX;
+    if (updates.posY !== undefined) payload.positionY = updates.posY;
+    if (updates.rotation !== undefined) payload.rotation = updates.rotation;
 
     const t = await this.base.executeProtectedRequest<any>(
       `/restaurants/${encodeURIComponent(targetRestId)}/tables/${encodeURIComponent(tableId)}`,
@@ -890,6 +913,11 @@ export class RestaurantClient {
       capacity: t.capacity || updates.capacity || table?.capacity || 4,
       status: t.status || updates.status || table?.status || 'AVAILABLE',
       isOccupied: t.is_occupied !== undefined ? t.is_occupied : (updates.isOccupied || false),
+      shape: t.shape || updates.shape || table?.shape || 'RECTANGLE',
+      isVip: t.is_vip !== undefined ? t.is_vip : (updates.isVip !== undefined ? updates.isVip : table?.isVip),
+      positionX: t.position_x !== undefined ? t.position_x : (updates.positionX !== undefined ? updates.positionX : table?.positionX),
+      positionY: t.position_y !== undefined ? t.position_y : (updates.positionY !== undefined ? updates.positionY : table?.positionY),
+      rotation: t.rotation !== undefined ? t.rotation : (updates.rotation !== undefined ? updates.rotation : table?.rotation),
       qrCodeUrl: t.qr_code_url || table?.qrCodeUrl || '',
     };
 
@@ -1925,6 +1953,90 @@ export class RestaurantClient {
       this.base.saveDatabase();
     }
     return emp;
+  }
+
+  // --- Terminals Management ---
+  async getTerminals(restaurantId?: string): Promise<RestaurantTerminal[]> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) return [];
+
+    try {
+      const terminals = await this.base.executeProtectedRequest<RestaurantTerminal[]>(
+        `/restaurants/${encodeURIComponent(targetId)}/terminals`,
+        { method: 'GET' },
+        'STAFF'
+      );
+      return Array.isArray(terminals) ? terminals : [];
+    } catch (e) {
+      console.warn('API fetch for terminals failed:', e);
+      return [];
+    }
+  }
+
+  async addTerminal(
+    terminalData: {
+      name: string;
+      terminalCode?: string;
+      terminalType?: string;
+      deviceInfo?: string;
+      pairingCode?: string;
+      status?: string;
+      restaurantId?: string;
+    }
+  ): Promise<RestaurantTerminal> {
+    const targetId = this.base.resolveTenantRestaurantId(terminalData.restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    const payload = {
+      name: terminalData.name.trim(),
+      terminalCode: terminalData.terminalCode?.trim() || undefined,
+      terminalType: (terminalData.terminalType || 'WAITER').trim().toUpperCase(),
+      deviceInfo: terminalData.deviceInfo,
+      pairingCode: terminalData.pairingCode,
+      status: terminalData.status || 'ACTIVE',
+    };
+
+    const term = await this.base.executeProtectedRequest<RestaurantTerminal>(
+      `/restaurants/${encodeURIComponent(targetId)}/terminals`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      'OWNER'
+    );
+    return term;
+  }
+
+  async updateTerminal(
+    terminalId: string,
+    updates: Partial<RestaurantTerminal>,
+    restaurantId?: string
+  ): Promise<RestaurantTerminal> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    const term = await this.base.executeProtectedRequest<RestaurantTerminal>(
+      `/restaurants/${encodeURIComponent(targetId)}/terminals/${encodeURIComponent(terminalId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      },
+      'OWNER'
+    );
+    return term;
+  }
+
+  async deleteTerminal(terminalId: string, restaurantId?: string): Promise<void> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    await this.base.executeProtectedRequest<any>(
+      `/restaurants/${encodeURIComponent(targetId)}/terminals/${encodeURIComponent(terminalId)}`,
+      {
+        method: 'DELETE',
+      },
+      'OWNER'
+    );
   }
 
   // --- Suppliers & Inventory ---

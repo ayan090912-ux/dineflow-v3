@@ -32,6 +32,7 @@ import type {
   Organization,
   AdminApplication,
   AdminRestaurant,
+  RestaurantTerminal,
 } from '../types';
 
 import {
@@ -410,6 +411,37 @@ export class DinelyApiClient extends BaseApiClient {
     arg4?: string
   ) {
     return this.restaurant.closeTableSession(arg1, arg2, arg3, arg4);
+  }
+
+  // ==========================================
+  // TERMINAL DOMAIN DELEGATES
+  // ==========================================
+  async getTerminals(restaurantId?: string): Promise<RestaurantTerminal[]> {
+    return this.restaurant.getTerminals(restaurantId);
+  }
+
+  async addTerminal(terminalData: {
+    name: string;
+    terminalCode?: string;
+    terminalType?: string;
+    deviceInfo?: string;
+    pairingCode?: string;
+    status?: string;
+    restaurantId?: string;
+  }): Promise<RestaurantTerminal> {
+    return this.restaurant.addTerminal(terminalData);
+  }
+
+  async updateTerminal(
+    terminalId: string,
+    updates: Partial<RestaurantTerminal>,
+    restaurantId?: string
+  ): Promise<RestaurantTerminal> {
+    return this.restaurant.updateTerminal(terminalId, updates, restaurantId);
+  }
+
+  async deleteTerminal(terminalId: string, restaurantId?: string): Promise<void> {
+    return this.restaurant.deleteTerminal(terminalId, restaurantId);
   }
 
   async getCategories(restaurantId?: string): Promise<MenuCategory[]> {

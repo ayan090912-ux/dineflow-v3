@@ -120,6 +120,14 @@ class CreateTableSchema(BaseModel):
     table_number: Optional[str] = None
     section: Optional[str] = "Main Hall"
     capacity: Optional[int] = 4
+    shape: Optional[str] = "RECTANGLE"
+    isVip: Optional[bool] = None
+    is_vip: Optional[bool] = None
+    positionX: Optional[float] = None
+    positionY: Optional[float] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+    rotation: Optional[float] = None
 
 class UpdateTableSchema(BaseModel):
     tableNumber: Optional[str] = None
@@ -129,6 +137,14 @@ class UpdateTableSchema(BaseModel):
     status: Optional[str] = None
     is_occupied: Optional[bool] = None
     isOccupied: Optional[bool] = None
+    shape: Optional[str] = None
+    isVip: Optional[bool] = None
+    is_vip: Optional[bool] = None
+    positionX: Optional[float] = None
+    positionY: Optional[float] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+    rotation: Optional[float] = None
 
 import time
 
@@ -197,15 +213,23 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
             "restaurantId": t.restaurant_id,
             "table_number": t.table_number,
             "tableNumber": t.table_number,
-            "section": t.section,
-            "capacity": t.capacity,
-            "status": t.status,
-            "is_occupied": t.is_occupied,
-            "isOccupied": t.is_occupied,
+            "section": t.section or "Main Hall",
+            "capacity": t.capacity or 4,
+            "status": t.status or "AVAILABLE",
+            "is_occupied": t.is_occupied or False,
+            "isOccupied": t.is_occupied or False,
             "qr_code_url": t.qr_code_url,
             "qrCodeUrl": t.qr_code_url,
             "active_session_id": t.active_session_id,
-            "activeSessionId": t.active_session_id
+            "activeSessionId": t.active_session_id,
+            "shape": getattr(t, "shape", None) or "RECTANGLE",
+            "is_vip": getattr(t, "is_vip", False) or False,
+            "isVip": getattr(t, "is_vip", False) or False,
+            "position_x": getattr(t, "position_x", 0) or 0,
+            "positionX": getattr(t, "position_x", 0) or 0,
+            "position_y": getattr(t, "position_y", 0) or 0,
+            "positionY": getattr(t, "position_y", 0) or 0,
+            "rotation": getattr(t, "rotation", 0) or 0,
         }
         for t in tables
     ]
@@ -270,14 +294,31 @@ async def create_table(
     result = await db.execute(query)
     existing = result.scalar_one_or_none()
 
+    clean_shape = payload.shape or "RECTANGLE"
+    clean_vip = payload.isVip if payload.isVip is not None else (payload.is_vip if payload.is_vip is not None else False)
+    pos_x = payload.positionX if payload.positionX is not None else (payload.position_x or 0)
+    pos_y = payload.positionY if payload.positionY is not None else (payload.position_y or 0)
+    rot = payload.rotation or 0
+
     if existing:
         if payload.section:
             existing.section = payload.section
         if payload.capacity:
             existing.capacity = payload.capacity
+        if payload.shape:
+            existing.shape = payload.shape
+        if payload.isVip is not None or payload.is_vip is not None:
+            existing.is_vip = clean_vip
+        if payload.positionX is not None or payload.position_x is not None:
+            existing.position_x = pos_x
+        if payload.positionY is not None or payload.position_y is not None:
+            existing.position_y = pos_y
+        if payload.rotation is not None:
+            existing.rotation = rot
         existing.qr_code_url = generate_canonical_qr_url(pub_slug, clean_num, existing.id)
         await db.commit()
         await db.refresh(existing)
+        invalidate_tables_cache(target_rest_id)
         return existing
 
     new_tbl = Table(
@@ -288,11 +329,17 @@ async def create_table(
         capacity=payload.capacity or 4,
         status="AVAILABLE",
         is_occupied=False,
-        qr_code_url=generate_canonical_qr_url(pub_slug, clean_num, t_id)
+        qr_code_url=generate_canonical_qr_url(pub_slug, clean_num, t_id),
+        shape=clean_shape,
+        is_vip=clean_vip,
+        position_x=pos_x,
+        position_y=pos_y,
+        rotation=rot
     )
     db.add(new_tbl)
     await db.commit()
     await db.refresh(new_tbl)
+    invalidate_tables_cache(target_rest_id)
     return new_tbl
 
 @router.put("/{restaurant_id}/tables/{table_id}")
@@ -336,9 +383,26 @@ async def update_table(
         tbl.is_occupied = payload.is_occupied
     elif payload.isOccupied is not None:
         tbl.is_occupied = payload.isOccupied
+    if payload.shape is not None:
+        tbl.shape = payload.shape
+    if payload.isVip is not None:
+        tbl.is_vip = payload.isVip
+    elif payload.is_vip is not None:
+        tbl.is_vip = payload.is_vip
+    if payload.positionX is not None:
+        tbl.position_x = payload.positionX
+    elif payload.position_x is not None:
+        tbl.position_x = payload.position_x
+    if payload.positionY is not None:
+        tbl.position_y = payload.positionY
+    elif payload.position_y is not None:
+        tbl.position_y = payload.position_y
+    if payload.rotation is not None:
+        tbl.rotation = payload.rotation
 
     await db.commit()
     await db.refresh(tbl)
+    invalidate_tables_cache(target_rest_id)
     return tbl
 
 @router.delete("/{restaurant_id}/tables/{table_id}")
@@ -367,6 +431,7 @@ async def delete_table(
     for tbl in tbls:
         await db.delete(tbl)
     await db.commit()
+    invalidate_tables_cache(target_rest_id)
     return {"status": "success", "message": "Table deleted successfully"}
 
 @router.get("/{restaurant_id}/tables/{table_id}/session")

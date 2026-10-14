@@ -22,10 +22,19 @@ import {
   Loader2,
   RefreshCw,
   Grid,
+  Smartphone,
+  Monitor,
+  Plus,
+  Trash2,
+  Wifi,
+  Clock,
+  Radio,
+  X,
 } from 'lucide-react';
 import { Button, Card, Badge } from '../../packages/ui';
 import { api } from '../../packages/api/client';
-import { Restaurant, BusinessType } from '../../packages/types';
+import { Restaurant, BusinessType, RestaurantTerminal } from '../../packages/types';
+import { realtimeBus } from '../../packages/api/realtime';
 import { getRestaurantPublicDomain, getRestaurantCustomerUrl } from '../../packages/utils/tenantResolver';
 
 interface WorkspaceSettingsTabProps {
@@ -47,6 +56,80 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [rowStatus, setRowStatus] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'failed'>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Terminals Management State
+  const [terminals, setTerminals] = useState<RestaurantTerminal[]>([]);
+  const [loadingTerminals, setLoadingTerminals] = useState(false);
+  const [showAddTerminalModal, setShowAddTerminalModal] = useState(false);
+  const [newTerminalName, setNewTerminalName] = useState('');
+  const [newTerminalType, setNewTerminalType] = useState('WAITER');
+  const [newTerminalCode, setNewTerminalCode] = useState('');
+  const [isSubmittingTerminal, setIsSubmittingTerminal] = useState(false);
+
+  const loadTerminals = async () => {
+    if (!restaurant?.id) return;
+    setLoadingTerminals(true);
+    try {
+      const data = await api.getTerminals(restaurant.id);
+      setTerminals(data);
+    } catch (e) {
+      console.warn('Failed to load terminals:', e);
+    } finally {
+      setLoadingTerminals(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTerminals();
+  }, [restaurant?.id]);
+
+  useEffect(() => {
+    const unsub = realtimeBus.subscribe((event: any) => {
+      if (event.type === 'terminal_registered' || event.type === 'TerminalRegistered') {
+        loadTerminals();
+      }
+    });
+    return () => unsub();
+  }, [restaurant?.id]);
+
+  const handleAddTerminal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restaurant?.id) return;
+    if (!newTerminalName.trim()) {
+      addToast('error', 'Missing Name', 'Please provide a name for this terminal.');
+      return;
+    }
+    setIsSubmittingTerminal(true);
+    try {
+      const created = await api.addTerminal({
+        restaurantId: restaurant.id,
+        name: newTerminalName.trim(),
+        terminalType: newTerminalType,
+        terminalCode: newTerminalCode.trim() || undefined,
+      });
+      addToast('success', 'Terminal Registered 📱', `Terminal ${created.terminalCode} (${created.name}) successfully linked.`);
+      setShowAddTerminalModal(false);
+      setNewTerminalName('');
+      setNewTerminalCode('');
+      loadTerminals();
+    } catch (err: any) {
+      addToast('error', 'Registration Failed', err.message || 'Could not register terminal.');
+    } finally {
+      setIsSubmittingTerminal(false);
+    }
+  };
+
+  const handleDeleteTerminal = async (termId: string, code: string) => {
+    if (!restaurant?.id) return;
+    if (!window.confirm(`Are you sure you want to remove terminal ${code}?`)) return;
+    try {
+      await api.deleteTerminal(termId, restaurant.id);
+      addToast('info', 'Terminal Removed', `Terminal ${code} was removed.`);
+      loadTerminals();
+    } catch (err: any) {
+      addToast('error', 'Delete Failed', err.message || 'Could not delete terminal.');
+    }
+  };
 
   useEffect(() => {
     if (restaurant) {
@@ -466,6 +549,210 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
           })}
         </div>
       </div>
+
+      {/* Operational Hardware & Mobile Terminals Section */}
+      <div className="bg-[#12151b] border border-[#1e232e] rounded-xl p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e232e] pb-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-emerald-400" /> Operational & Mobile Terminals
+            </h3>
+            <p className="text-xs text-slate-400">
+              Manage handheld devices, POS registers, kitchen tablets, and bar stations connected to your live dining floor.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadTerminals}
+              disabled={loadingTerminals}
+              className="text-xs flex items-center gap-1.5 border-[#2a303c] text-slate-300 hover:text-white"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingTerminals ? 'animate-spin' : ''}`} /> Refresh
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowAddTerminalModal(true)}
+              className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Register New Terminal
+            </Button>
+          </div>
+        </div>
+
+        {loadingTerminals && terminals.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-500" /> Loading connected terminals...
+          </div>
+        ) : terminals.length === 0 ? (
+          <div className="py-8 text-center border border-dashed border-[#1e232e] rounded-xl bg-[#0d1015] p-6 space-y-2">
+            <Radio className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+            <h4 className="text-xs font-semibold text-slate-300">No Dedicated Terminals Registered Yet</h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Link waiter phones, cashier tablets, or bar displays to receive real-time floor updates and order notifications.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddTerminalModal(true)}
+              className="text-xs mt-3 border-[#2a303c] text-emerald-400 hover:bg-emerald-500/10"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add First Terminal
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {terminals.map((term) => (
+              <div
+                key={term.id}
+                className="p-3.5 bg-[#0d1015] border border-[#1e232e] rounded-xl flex flex-col justify-between hover:border-[#2a303c] transition-all group"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      {term.terminalType === 'POS' || term.terminalType === 'CASHIER' ? (
+                        <Monitor className="w-4 h-4" />
+                      ) : (
+                        <Smartphone className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-white group-hover:text-emerald-400 transition-colors">
+                        {term.name}
+                      </h4>
+                      <span className="text-[10px] font-mono text-slate-500">{term.terminalCode}</span>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] uppercase font-mono px-2 py-0.5 border ${
+                      term.terminalType === 'WAITER'
+                        ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                        : term.terminalType === 'KITCHEN'
+                        ? 'border-amber-500/30 text-amber-400 bg-amber-500/10'
+                        : term.terminalType === 'BAR'
+                        ? 'border-purple-500/30 text-purple-400 bg-purple-500/10'
+                        : 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
+                    }`}
+                  >
+                    {term.terminalType}
+                  </Badge>
+                </div>
+
+                <div className="pt-2 border-t border-[#1a1f29] flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${term.isActive ? 'bg-emerald-500' : 'bg-slate-500'}`} />
+                    <span className="text-slate-400 capitalize">{term.status.toLowerCase()}</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {term.lastActiveAt && (
+                      <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1">
+                        <Clock className="w-2.5 h-2.5" />
+                        {new Date(term.lastActiveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTerminal(term.id, term.terminalCode)}
+                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      title="Remove Terminal"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add Terminal Modal */}
+      {showAddTerminalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#12151b] border border-[#232836] rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">Register Operational Terminal</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddTerminalModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddTerminal} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-slate-300 font-medium">Terminal Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newTerminalName}
+                  onChange={(e) => setNewTerminalName(e.target.value)}
+                  placeholder="e.g. Waiter Tablet 1 (Main Hall)"
+                  className="w-full px-3 py-2 bg-[#0a0c10] border border-[#1e232e] rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-slate-300 font-medium">Terminal Type</label>
+                <select
+                  value={newTerminalType}
+                  onChange={(e) => setNewTerminalType(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#0a0c10] border border-[#1e232e] rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="WAITER">Waiter Handheld (Floor Service)</option>
+                  <option value="KITCHEN">Kitchen Display Station (KDS)</option>
+                  <option value="BAR">Bar Display Station (BDS)</option>
+                  <option value="POS">Cashier / Central POS Register</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-slate-300 font-medium">Terminal Code (Optional)</label>
+                <input
+                  type="text"
+                  value={newTerminalCode}
+                  onChange={(e) => setNewTerminalCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. WAITER-02 (leave blank to auto-generate)"
+                  className="w-full px-3 py-2 bg-[#0a0c10] border border-[#1e232e] rounded-lg text-white font-mono uppercase focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-[10px] text-slate-500 block">
+                  Unique identifier used by staff to bind during shift logins.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1e232e]">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddTerminalModal(false)}
+                  className="border-[#2a303c] text-slate-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={isSubmittingTerminal}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1.5"
+                >
+                  {isSubmittingTerminal && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Register & Link
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Historical Data Safety Notice */}
       <div className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl flex items-start gap-3 text-xs text-slate-300">

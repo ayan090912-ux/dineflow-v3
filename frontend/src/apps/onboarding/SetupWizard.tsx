@@ -381,6 +381,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       if (enableBar && businessType !== 'FOOD_CART') enabledModules.push('bar');
       if (enableInventory) enabledModules.push('inventory');
       if (enableBilling) enabledModules.push('billing');
+      if (!isNoSeating) enabledModules.push('tables');
 
       // 1. Create new restaurant record with real owner identity
       const newRest = await api.createRestaurantForOwner({

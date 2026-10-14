@@ -318,8 +318,13 @@ async def approve_restaurant(
                 is_enabled=True
             ))
 
-    # Ensure tables exist for this tenant
+    # Ensure tables exist and tables module is active for this tenant
     if rest.has_tables:
+        current_modules = list(rest.enabled_modules or [])
+        if "tables" not in current_modules:
+            current_modules.append("tables")
+            rest.enabled_modules = current_modules
+
         tbl_query = select(Table).where(Table.restaurant_id == rest.id)
         tbl_res = await db.execute(tbl_query)
         if not tbl_res.scalars().first():
@@ -409,12 +414,18 @@ async def approve_restaurant(
         "isApproved": True,
         "is_approved": True,
         "lifecycleStatus": "LIVE",
+        "lifecycle_status": "LIVE",
+        "enabledModules": rest.enabled_modules,
+        "enabled_modules": rest.enabled_modules,
         "restaurant": {
             "id": rest.id,
             "name": rest.name,
             "isApproved": True,
             "lifecycleStatus": "LIVE",
+            "lifecycle_status": "LIVE",
             "status": "OPEN",
+            "enabledModules": rest.enabled_modules,
+            "enabled_modules": rest.enabled_modules,
             "approvedAt": rest.approved_at.isoformat() if rest.approved_at else None,
             "approvedBy": rest.approved_by,
         }
