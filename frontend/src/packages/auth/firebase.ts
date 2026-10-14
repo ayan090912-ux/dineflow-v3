@@ -129,15 +129,53 @@ function mapAndThrowAuthError(error: any): never {
     throw keyErr;
   }
 
+  const rawMsg = (error.message || '').toLowerCase();
+  if (
+    rawMsg.includes('database is closing') ||
+    rawMsg.includes('database is closing/hidden') ||
+    rawMsg.includes('connection is closing')
+  ) {
+    const storageErr = new Error('Browser authentication storage was briefly interrupted. Please click Continue with Google again.');
+    (storageErr as any).code = 'auth/storage-interrupted';
+    (storageErr as any).isTransient = true;
+    throw storageErr;
+  }
+
   const genErr = new Error(error.message || 'Google Authentication failed. Please try again.');
   (genErr as any).code = error.code || 'auth/unknown';
   throw genErr;
 }
 
 /**
+ * Safely executes signInWithPopup with automatic retry if browser IndexedDB visibility race occurs.
+ */
+async function safeSignInWithPopup(auth: any, provider: any, maxRetries = 2): Promise<UserCredential> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      const msg = (error?.message || '').toLowerCase();
+      const isDbClosing =
+        msg.includes('database is closing') ||
+        msg.includes('database is closing/hidden') ||
+        msg.includes('connection is closing') ||
+        error.code === 'auth/internal-error';
+      if (isDbClosing && attempt < maxRetries) {
+        attempt++;
+        console.warn(`[Firebase] Caught transient IndexedDB visibility closure (${attempt}/${maxRetries}). Retrying popup auth...`);
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+/**
  * Triggers Google Authentication with mobile redirect or desktop popup flow.
  * - Mobile / tablet devices (especially iOS Safari with ITP): Uses signInWithRedirect.
- * - Desktop browsers: Uses signInWithPopup, falling back to signInWithRedirect if popup is blocked.
+ * - Desktop browsers: Uses signInWithPopup, falling back to signInWithRedirect if popup is blocked or interrupted.
  * When redirect is used, this method returns null as the browser redirects away.
  * Results upon return from redirect must be collected via handleGoogleRedirectResult().
  */
@@ -162,13 +200,20 @@ export async function signInWithGoogle(options?: {
     }
   }
 
-  // Desktop popup flow with automatic popup-blocked fallback to redirect
+  // Desktop popup flow with automatic popup-blocked & storage-interrupted fallback to redirect
   try {
-    const result = await signInWithPopup(firebaseAuth, googleProvider);
+    const result = await safeSignInWithPopup(firebaseAuth, googleProvider);
     return await extractGoogleAuthResult(result, options?.forceRefreshIdToken);
   } catch (error: any) {
-    if (error.code === 'auth/popup-blocked') {
-      console.warn('Popup blocked on desktop browser. Falling back to redirect flow...');
+    const msg = (error?.message || '').toLowerCase();
+    const isDbClosing =
+      msg.includes('database is closing') ||
+      msg.includes('database is closing/hidden') ||
+      msg.includes('connection is closing') ||
+      error.code === 'auth/storage-interrupted';
+
+    if (error.code === 'auth/popup-blocked' || isDbClosing) {
+      console.warn('Popup blocked or browser storage interrupted. Seamlessly falling back to redirect flow...');
       try {
         if (typeof window?.sessionStorage?.setItem === 'function') {
           window.sessionStorage.setItem('dinely_auth_redirect_in_progress', '1');

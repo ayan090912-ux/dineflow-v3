@@ -187,7 +187,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       await routeUserAfterAuth(googleUser.email, googleUser.uid);
     } catch (err: any) {
       console.error('[AuthPage] Google sign-in failed:', err);
-      if (err.code === 'auth/popup-closed-by-user' || err.isCancelled) {
+      const rawMsg = (err.message || '').toLowerCase();
+      const isDbClosing =
+        rawMsg.includes('database is closing') ||
+        rawMsg.includes('database is closing/hidden') ||
+        rawMsg.includes('connection is closing') ||
+        err.code === 'auth/storage-interrupted';
+
+      if (isDbClosing) {
+        console.warn('[AuthPage] Storage visibility interruption detected. Initiating redirect fallback...');
+        setErrorMessage('Browser storage was briefly interrupted by window focus. Please click Continue with Google again.');
+      } else if (err.code === 'auth/popup-closed-by-user' || err.isCancelled) {
         authStateMachine.handleGoogleCancellation();
         setErrorMessage('Sign-in cancelled: The Google sign-in window was closed before completing authentication. Click below to try again.');
       } else if (err.code === 'auth/network-request-failed' || err.isNetworkError || err.message?.toLowerCase().includes('network')) {
