@@ -1081,8 +1081,40 @@ function AppContent() {
       );
     }
 
+    // Exempt public marketing and authentication routes from blocking auth guards
+    const isPublicOrAuthPath =
+      cleanPath === '/' ||
+      cleanPath === '/landing' ||
+      cleanPath === '/home' ||
+      cleanPath === '/about' ||
+      cleanPath === '/contact' ||
+      cleanPath === '/terms' ||
+      cleanPath === '/privacy' ||
+      cleanPath === '/features' ||
+      cleanPath === '/customer' ||
+      cleanPath.startsWith('/customer/') ||
+      cleanPath === '/auth' ||
+      cleanPath === '/login' ||
+      cleanPath === '/signin' ||
+      cleanPath === '/restaurant/login' ||
+      cleanPath === '/owner/login' ||
+      cleanPath === '/manager/login' ||
+      cleanPath === '/signup' ||
+      cleanPath === '/onboard' ||
+      cleanPath === '/register' ||
+      cleanPath === '/restaurant/register' ||
+      cleanPath === '/restaurant/pending-approval' ||
+      cleanPath === '/pending-approval' ||
+      cleanPath === '/role-login' ||
+      cleanPath === '/staff/login' ||
+      cleanPath === '/staff' ||
+      cleanPath === '/staff/signin' ||
+      cleanPath === '/staff-login' ||
+      cleanPath === '/admin/login' ||
+      cleanPath.endsWith('/login');
+
     // 0.1. Guard protected routes while Firebase Auth initializes session
-    if (authState === 'INITIALIZING' && !['/', '/landing', '/home', '/about', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
+    if (authState === 'INITIALIZING' && !isPublicOrAuthPath) {
       return (
         <LoadingScreen
           restaurantName={resolvedTenant?.name}
@@ -1092,8 +1124,8 @@ function AppContent() {
       );
     }
 
-    // 0.2. Explicit non-blocking error boundary for auth failures
-    if (authState === 'ERROR' && !['/', '/landing', '/home', '/about', '/contact', '/terms', '/privacy', '/features', '/customer'].includes(cleanPath)) {
+    // 0.2. Explicit non-blocking error boundary for auth failures on protected routes
+    if (authState === 'ERROR' && !isPublicOrAuthPath) {
       return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white text-center">
           <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-4 text-rose-400">

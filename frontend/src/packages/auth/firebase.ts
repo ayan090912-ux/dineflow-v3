@@ -149,9 +149,15 @@ export async function signInWithGoogle(options?: {
 
   if (shouldUseRedirect) {
     try {
+      if (typeof window?.sessionStorage?.setItem === 'function') {
+        window.sessionStorage.setItem('dinely_auth_redirect_in_progress', '1');
+      }
       await signInWithRedirect(firebaseAuth, googleProvider);
       return null;
     } catch (error: any) {
+      if (typeof window?.sessionStorage?.removeItem === 'function') {
+        window.sessionStorage.removeItem('dinely_auth_redirect_in_progress');
+      }
       mapAndThrowAuthError(error);
     }
   }
@@ -164,9 +170,15 @@ export async function signInWithGoogle(options?: {
     if (error.code === 'auth/popup-blocked') {
       console.warn('Popup blocked on desktop browser. Falling back to redirect flow...');
       try {
+        if (typeof window?.sessionStorage?.setItem === 'function') {
+          window.sessionStorage.setItem('dinely_auth_redirect_in_progress', '1');
+        }
         await signInWithRedirect(firebaseAuth, googleProvider);
         return null;
       } catch (redirectErr: any) {
+        if (typeof window?.sessionStorage?.removeItem === 'function') {
+          window.sessionStorage.removeItem('dinely_auth_redirect_in_progress');
+        }
         mapAndThrowAuthError(redirectErr);
       }
     }
@@ -194,17 +206,39 @@ export async function signInWithGooglePopup(forceRefreshIdToken: boolean = false
 let redirectResultPromise: Promise<GoogleAuthResult | null> | null = null;
 
 export async function handleGoogleRedirectResult(forceRefreshIdToken: boolean = false): Promise<GoogleAuthResult | null> {
-  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') return null;
+  if (typeof window === 'undefined') return null;
+
+  const hasRedirectPending = typeof window.sessionStorage?.getItem === 'function' &&
+    window.sessionStorage.getItem('dinely_auth_redirect_in_progress') === '1';
+  const hasAuthParams = Boolean(
+    (window.location?.search && (window.location.search.includes('apiKey=') || window.location.search.includes('mode='))) ||
+    (window.location?.hash && (window.location.hash.includes('access_token=') || window.location.hash.includes('id_token=')))
+  );
+
+  // If no redirect was initiated in this session and no OAuth parameters exist in URL, return null immediately
+  if (!hasRedirectPending && !hasAuthParams) {
+    return null;
+  }
 
   if (!redirectResultPromise) {
     redirectResultPromise = (async () => {
       try {
-        const result: UserCredential | null = await getRedirectResult(firebaseAuth);
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+        const result: UserCredential | null = await Promise.race([
+          getRedirectResult(firebaseAuth),
+          timeoutPromise,
+        ]);
+        if (typeof window.sessionStorage?.removeItem === 'function') {
+          window.sessionStorage.removeItem('dinely_auth_redirect_in_progress');
+        }
         if (!result || !result.user) {
           return null;
         }
         return await extractGoogleAuthResult(result, forceRefreshIdToken);
       } catch (error: any) {
+        if (typeof window.sessionStorage?.removeItem === 'function') {
+          window.sessionStorage.removeItem('dinely_auth_redirect_in_progress');
+        }
         if (error.code === 'auth/operation-not-supported-in-this-environment') {
           return null;
         }
@@ -241,8 +275,10 @@ export async function ensureFirebaseAuthReady(): Promise<any> {
   if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
   try {
     if (typeof (firebaseAuth as any).authStateReady === 'function') {
-      await (firebaseAuth as any).authStateReady();
-      return firebaseAuth.currentUser;
+      const readyPromise = (firebaseAuth as any).authStateReady();
+      const timeoutPromise = new Promise<void>((res) => setTimeout(res, 2500));
+      await Promise.race([readyPromise, timeoutPromise]);
+      if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
     }
   } catch (e) {
     console.warn('authStateReady check failed:', e);
@@ -262,7 +298,7 @@ export async function ensureFirebaseAuthReady(): Promise<any> {
         unsub();
         resolve(firebaseAuth.currentUser);
       }
-    }, 2500);
+    }, 2000);
   });
 }
 
