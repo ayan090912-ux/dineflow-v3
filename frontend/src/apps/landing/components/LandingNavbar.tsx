@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, ArrowRight } from 'lucide-react';
-import { DinelyLogo } from '../../../packages/ui';
+import { DinelyLogo, ProductSwitcher } from '../../../packages/ui';
 
 interface LandingNavbarProps {
   currentUser?: any;
@@ -83,24 +83,18 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
               <DinelyLogo size="md" />
             </button>
 
-            {/* Prominent Dual-Product Switcher */}
-            <div className="hidden lg:flex items-center p-1 rounded-full bg-white/[0.07] border border-white/[0.12] backdrop-blur-xl shadow-inner text-xs">
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-slate-950 font-semibold shadow-sm">
-                <span>🍽️</span>
-                <span>Restaurants</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => onNavigateWeddings ? onNavigateWeddings() : window.location.href = '/weddings'}
-                id="nav-switch-to-weddings-btn"
-                className="flex items-center gap-1.5 px-3 py-1 rounded-full text-amber-300 hover:text-white hover:bg-white/[0.10] transition-all cursor-pointer bg-transparent border-none"
-              >
-                <span>💍</span>
-                <span>Weddings & Events</span>
-                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-bold tracking-wider">
-                  PREMIUM
-                </span>
-              </button>
+            {/* Canonical Dual-Product Switcher */}
+            <div className="hidden sm:flex items-center">
+              <ProductSwitcher
+                activeProduct="restaurants"
+                theme="dark"
+                onSwitch={(p) => {
+                  if (p === 'weddings') {
+                    if (onNavigateWeddings) onNavigateWeddings();
+                    else window.location.href = '/weddings';
+                  }
+                }}
+              />
             </div>
           </div>
 
@@ -192,21 +186,19 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
           >
             <div className="flex flex-col gap-1.5 px-6 pt-24">
               {/* Product Switcher for Mobile */}
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (onNavigateWeddings) onNavigateWeddings();
-                  else window.location.href = '/weddings';
-                }}
-                className="rounded-xl px-4 py-3 text-[14px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 flex items-center justify-between mb-2 text-left cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <span>💍</span>
-                  <span>Weddings & Events</span>
-                </div>
-                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">NEW</span>
-              </button>
+              <div className="mb-3 flex justify-center">
+                <ProductSwitcher
+                  activeProduct="restaurants"
+                  theme="dark"
+                  onSwitch={(p) => {
+                    setMobileMenuOpen(false);
+                    if (p === 'weddings') {
+                      if (onNavigateWeddings) onNavigateWeddings();
+                      else window.location.href = '/weddings';
+                    }
+                  }}
+                />
+              </div>
 
               {navLinks.map((link) => (
                 <a

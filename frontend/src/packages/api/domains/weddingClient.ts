@@ -190,16 +190,22 @@ export class WeddingClient {
 
   async createWeddingWorkspaceTable(
     workspaceId: string,
-    data: { tableNumber: string; label?: string; capacity?: number },
+    data: { tableNumber: string; label?: string; tableLabel?: string; capacity?: number },
     email?: string
   ): Promise<{ status: string; table: EventTable; qrUrl: string }> {
     const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const payload = {
+      tableNumber: data.tableNumber,
+      tableLabel: data.tableLabel || data.label,
+      label: data.label || data.tableLabel,
+      capacity: data.capacity,
+    };
     return await this.base.executeProtectedRequest(
       `/weddings/workspaces/${encodeURIComponent(workspaceId)}/tables${query}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       },
       'OWNER'
     );

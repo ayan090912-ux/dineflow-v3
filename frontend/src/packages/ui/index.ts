@@ -22,3 +22,4 @@ export * from './DinelyLogo';
 export * from './AddressAutocomplete';
 export * from './LoadingScreen';
 export * from './AccessDeniedScreen';
+export * from './ProductSwitcher';

@@ -76,6 +76,7 @@ import {
   ToastMessage,
   DinelyLogo,
   LoadingScreen,
+  ProductSwitcher,
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
@@ -1538,9 +1539,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       <aside className="w-full md:w-64 bg-[#0e1117] border-r border-[#1e232e] p-4 flex flex-col justify-between shrink-0">
         <div>
           {/* Platform Branding Header */}
-          <div className="mb-4 px-2 flex items-center justify-between pb-3 border-b border-[#1e232e]">
+          <div className="mb-3 px-2 flex items-center justify-between pb-3 border-b border-[#1e232e]">
             <DinelyLogo size="sm" />
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 bg-[#151922] px-2 py-0.5 rounded border border-[#242b3b]">Owner OS</span>
+          </div>
+
+          {/* Dinely Dual-Product Switcher */}
+          <div className="mb-4 px-1 flex justify-center">
+            <ProductSwitcher
+              activeProduct="restaurants"
+              theme="dark"
+              className="w-full justify-between"
+              onSwitch={(p) => {
+                if (p === 'weddings') {
+                  window.location.href = 'https://dinely.food/weddings';
+                }
+              }}
+            />
           </div>
 
           {/* Multi-Restaurant Outlet Switcher Button */}
@@ -1848,6 +1863,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <div className="hidden lg:flex items-center mr-1">
+              <ProductSwitcher
+                activeProduct="restaurants"
+                theme="dark"
+                onSwitch={(p) => {
+                  if (p === 'weddings') {
+                    window.location.href = 'https://dinely.food/weddings';
+                  }
+                }}
+              />
+            </div>
             {activeTab === 'menu' && (
               <Button
                 variant="brand"

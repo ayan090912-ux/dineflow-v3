@@ -1537,7 +1537,10 @@ function AppContent() {
       return (
         <WeddingLandingPage
           onNavigate={navigateTo}
+          onNavigateHome={() => navigateTo('/')}
+          onNavigateOrganizerDashboard={() => navigateTo('/weddings/dashboard')}
           onOpenDashboard={() => navigateTo('/weddings/dashboard')}
+          currentUser={currentUser}
         />
       );
     }
@@ -1551,7 +1554,10 @@ function AppContent() {
       return (
         <WeddingOrganizerDashboard
           onNavigate={navigateTo}
+          onNavigateRestaurants={() => navigateTo('/restaurant/dashboard')}
+          onNavigateHome={() => navigateTo('/')}
           onLogout={() => handleLogout('/weddings')}
+          currentUser={currentUser}
         />
       );
     }

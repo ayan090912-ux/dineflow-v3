@@ -28,34 +28,62 @@ admin_weddings_router = APIRouter()
 # ---------------------------------------------------------------------------
 
 class CreateWeddingRequestSchema(BaseModel):
-    applicantName: str
-    applicantEmail: str
-    applicantPhone: str
-    weddingName: str
+    applicantName: Optional[str] = None
+    applicant_name: Optional[str] = None
+    applicantEmail: Optional[str] = None
+    applicant_email: Optional[str] = None
+    applicantPhone: Optional[str] = None
+    applicant_phone: Optional[str] = None
+    weddingName: Optional[str] = None
+    wedding_name: Optional[str] = None
     eventType: Optional[str] = "WEDDING"
-    eventDate: str
+    event_type: Optional[str] = None
+    eventDate: Optional[str] = None
+    event_date: Optional[str] = None
     startTime: Optional[str] = "18:00"
+    start_time: Optional[str] = None
     endTime: Optional[str] = "23:30"
-    venueName: str
-    venueCity: str
+    end_time: Optional[str] = None
+    venueName: Optional[str] = None
+    venue_name: Optional[str] = None
+    venueCity: Optional[str] = None
+    venue_city: Optional[str] = None
+    venueState: Optional[str] = None
+    venue_state: Optional[str] = None
     estimatedGuestCount: Optional[int] = 100
+    estimated_guest_count: Optional[int] = None
+    estimatedGuests: Optional[int] = None
+    estimated_guests: Optional[int] = None
     cateringNotes: Optional[str] = None
+    catering_notes: Optional[str] = None
     cateringRestaurantId: Optional[str] = None
+    catering_restaurant_id: Optional[str] = None
     additionalRequirements: Optional[str] = None
+    additional_requirements: Optional[str] = None
+    specialRequirements: Optional[str] = None
+    special_requirements: Optional[str] = None
     notes: Optional[str] = None
 
 
 class ApproveWeddingRequestSchema(BaseModel):
-    cateringRestaurantId: str
+    cateringRestaurantId: Optional[str] = None
+    catering_restaurant_id: Optional[str] = None
     reviewNotes: Optional[str] = None
+    review_notes: Optional[str] = None
 
 
 class RejectWeddingRequestSchema(BaseModel):
-    reason: str
+    reason: Optional[str] = None
+    rejectionReason: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    reviewNotes: Optional[str] = None
+    review_notes: Optional[str] = None
 
 
 class UpdateWeddingRequestNotesSchema(BaseModel):
-    notes: str
+    notes: Optional[str] = None
+    reviewNotes: Optional[str] = None
+    review_notes: Optional[str] = None
 
 
 class UpdateWorkspaceEventSchema(BaseModel):
@@ -79,8 +107,11 @@ class UpdateWorkspaceEventSchema(BaseModel):
 
 
 class AddWorkspaceTableSchema(BaseModel):
-    tableNumber: str
+    tableNumber: Optional[str] = None
+    table_number: Optional[str] = None
     tableLabel: Optional[str] = None
+    table_label: Optional[str] = None
+    label: Optional[str] = None
     capacity: Optional[int] = 8
 
 
@@ -143,18 +174,21 @@ async def submit_wedding_request(
     Submits an application for a wedding ordering workspace.
     Validates input and prevents duplicate active applications.
     """
-    clean_name = payload.applicantName.strip()
-    clean_email = payload.applicantEmail.strip().lower()
-    clean_phone = payload.applicantPhone.strip()
-    clean_wedding = payload.weddingName.strip()
-    clean_date = payload.eventDate.strip()
-    clean_venue = payload.venueName.strip()
-    clean_city = payload.venueCity.strip()
+    clean_name = (payload.applicantName or payload.applicant_name or "").strip()
+    clean_email = (payload.applicantEmail or payload.applicant_email or "").strip().lower()
+    clean_phone = (payload.applicantPhone or payload.applicant_phone or "").strip()
+    clean_wedding = (payload.weddingName or payload.wedding_name or "").strip()
+    clean_date = (payload.eventDate or payload.event_date or "").strip()
+    clean_venue = (payload.venueName or payload.venue_name or "").strip()
+    clean_city = (payload.venueCity or payload.venue_city or "").strip()
+    clean_state = (payload.venueState or payload.venue_state or "").strip()
+    if clean_state and clean_state not in clean_city:
+        clean_city = f"{clean_city}, {clean_state}"
 
     if not clean_name or not clean_email or not clean_phone or not clean_wedding or not clean_date or not clean_venue or not clean_city:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing required fields: applicantName, applicantEmail, applicantPhone, weddingName, eventDate, venueName, venueCity are required."
+            detail="Missing required fields: Name, Email, Phone, Wedding/Event Name, Event Date, Venue, and City are required."
         )
 
     # Email format validation
@@ -163,6 +197,12 @@ async def submit_wedding_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please provide a valid email address."
         )
+
+    clean_guest_count = max(1, payload.estimatedGuestCount or payload.estimated_guest_count or payload.estimatedGuests or payload.estimated_guests or 100)
+    clean_caterer = (payload.cateringRestaurantId or payload.catering_restaurant_id or "").strip() or None
+    clean_catering_notes = (payload.cateringNotes or payload.catering_notes or payload.specialRequirements or payload.special_requirements or "").strip() or None
+    clean_additional = (payload.additionalRequirements or payload.additional_requirements or "").strip() or None
+    clean_notes = (payload.notes or "").strip() or None
 
     # Deduplication check: Do not allow duplicate pending/submitted applications for the same email and event date
     dup_stmt = select(WeddingAccessRequest).where(
@@ -190,17 +230,17 @@ async def submit_wedding_request(
         applicant_email=clean_email,
         applicant_phone=clean_phone,
         wedding_name=clean_wedding,
-        event_type=payload.eventType or "WEDDING",
+        event_type=payload.eventType or payload.event_type or "WEDDING",
         event_date=clean_date,
-        start_time=payload.startTime or "18:00",
-        end_time=payload.endTime or "23:30",
+        start_time=payload.startTime or payload.start_time or "18:00",
+        end_time=payload.endTime or payload.end_time or "23:30",
         venue_name=clean_venue,
         venue_city=clean_city,
-        estimated_guest_count=max(1, payload.estimatedGuestCount or 100),
-        catering_notes=payload.cateringNotes.strip() if payload.cateringNotes else None,
-        catering_restaurant_id=payload.cateringRestaurantId.strip() if payload.cateringRestaurantId else None,
-        additional_requirements=payload.additionalRequirements.strip() if payload.additionalRequirements else None,
-        notes=payload.notes.strip() if payload.notes else None,
+        estimated_guest_count=clean_guest_count,
+        catering_notes=clean_catering_notes,
+        catering_restaurant_id=clean_caterer,
+        additional_requirements=clean_additional,
+        notes=clean_notes,
         lifecycle_status="SUBMITTED",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)
@@ -379,7 +419,7 @@ async def approve_wedding_request(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wedding request not found.")
 
     # Validate catering restaurant assignment
-    caterer_id = (payload.cateringRestaurantId or req.catering_restaurant_id or "").strip()
+    caterer_id = (payload.cateringRestaurantId or payload.catering_restaurant_id or req.catering_restaurant_id or "").strip()
     if not caterer_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -396,6 +436,7 @@ async def approve_wedding_request(
         )
 
     now = datetime.now(timezone.utc)
+    review_note_text = (payload.reviewNotes or payload.review_notes or "").strip()
 
     # Idempotent check: If workspace already provisioned for this request, return existing
     ws_stmt = select(WeddingWorkspace).where(WeddingWorkspace.request_id == req.id)
@@ -407,8 +448,8 @@ async def approve_wedding_request(
         req.catering_restaurant_id = restaurant.id
         req.reviewed_by = admin_email
         req.reviewed_at = now
-        if payload.reviewNotes:
-            req.review_notes = payload.reviewNotes
+        if review_note_text:
+            req.review_notes = review_note_text
         await db.commit()
         return {
             "status": "success",
@@ -462,6 +503,9 @@ async def approve_wedding_request(
     )
     db.add(new_event)
 
+    # CRITICAL: Flush WeddingWorkspace and WeddingEvent so that foreign key event_tables_event_id_fkey is satisfied!
+    await db.flush()
+
     # 3. Provision initial default tables
     table_configs = [
         ("01", "Head Table / Couple", 4),
@@ -486,13 +530,15 @@ async def approve_wedding_request(
             updated_at=now
         ))
 
+    await db.flush()
+
     # 4. Update request status
     req.lifecycle_status = "APPROVED"
     req.catering_restaurant_id = restaurant.id
     req.workspace_id = workspace_id
     req.reviewed_by = admin_email
     req.reviewed_at = now
-    req.review_notes = payload.reviewNotes.strip() if payload.reviewNotes else "Approved by Platform Admin."
+    req.review_notes = review_note_text or "Approved by Platform Admin."
     req.updated_at = now
 
     await db.commit()
@@ -544,15 +590,24 @@ async def reject_wedding_request(
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wedding request not found.")
 
-    clean_reason = payload.reason.strip()
+    clean_reason = (payload.reason or payload.rejectionReason or payload.rejection_reason or payload.reviewNotes or payload.review_notes or "Application declined by Platform Admin.").strip()
     if not clean_reason:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A rejection reason is required.")
+        clean_reason = "Application declined by Platform Admin."
 
     req.lifecycle_status = "REJECTED"
     req.review_notes = clean_reason
     req.reviewed_by = admin_email
     req.reviewed_at = datetime.now(timezone.utc)
     req.updated_at = datetime.now(timezone.utc)
+
+    # If a workspace was previously provisioned for this request, mark it archived
+    if req.workspace_id:
+        ws_stmt = select(WeddingWorkspace).where(WeddingWorkspace.id == req.workspace_id)
+        ws_res = await db.execute(ws_stmt)
+        ws = ws_res.scalar_one_or_none()
+        if ws:
+            ws.status = "ARCHIVED"
+            ws.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
 
@@ -952,7 +1007,7 @@ async def add_workspace_table(
     if not is_authorized:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden.")
 
-    clean_table = payload.tableNumber.strip()
+    clean_table = (payload.tableNumber or payload.table_number or "").strip()
     if not clean_table:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Table number is required.")
 
@@ -967,6 +1022,9 @@ async def add_workspace_table(
     rest = r_res.scalar_one_or_none()
     rest_slug = (rest.public_slug or rest.slug or rest.id) if rest else ws.restaurant_id
 
+    clean_label = (payload.tableLabel or payload.table_label or payload.label or f"Table {clean_table}").strip()
+    clean_capacity = max(1, payload.capacity or 8)
+
     table_id = f"etbl-{ws.event_id}-{clean_table}"
     qr_url = f"https://{rest_slug}.dinely.food/event/{ws.event_id}?table={clean_table}"
 
@@ -975,8 +1033,8 @@ async def add_workspace_table(
         event_id=ws.event_id,
         restaurant_id=ws.restaurant_id,
         table_number=clean_table,
-        table_label=payload.tableLabel.strip() if payload.tableLabel else f"Table {clean_table}",
-        capacity=max(1, payload.capacity or 8),
+        table_label=clean_label,
+        capacity=clean_capacity,
         qr_code_url=qr_url,
         is_active=True,
         created_at=datetime.now(timezone.utc),

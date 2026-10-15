@@ -26,11 +26,14 @@ import {
 } from 'lucide-react';
 import { api } from '../../packages/api/client';
 import { WeddingAccessRequest } from '../../packages/types';
+import { DinelyLogo, ProductSwitcher, Button, Modal } from '../../packages/ui';
 
 interface WeddingLandingPageProps {
-  onNavigateHome: () => void;
+  onNavigateHome?: () => void;
   onNavigateOrganizerLogin?: () => void;
   onNavigateOrganizerDashboard?: () => void;
+  onOpenDashboard?: () => void;
+  onNavigate?: (path: string) => void;
   currentUser?: any;
 }
 
@@ -38,6 +41,8 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
   onNavigateHome,
   onNavigateOrganizerLogin,
   onNavigateOrganizerDashboard,
+  onOpenDashboard,
+  onNavigate,
   currentUser,
 }) => {
   // Application Form State
@@ -149,6 +154,19 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const navigateHome = () => {
+    if (onNavigateHome) onNavigateHome();
+    else if (onNavigate) onNavigate('/');
+    else window.location.href = '/';
+  };
+
+  const navigateDashboard = () => {
+    if (onNavigateOrganizerDashboard) onNavigateOrganizerDashboard();
+    else if (onOpenDashboard) onOpenDashboard();
+    else if (onNavigate) onNavigate('/weddings/dashboard');
+    else window.location.href = '/weddings/dashboard';
+  };
+
   return (
     <div className="min-h-screen bg-[#faf8f5] text-[#2c2419] font-sans antialiased selection:bg-[#d4af37]/25 selection:text-[#1c150c]">
       {/* ========================================================================= */}
@@ -157,76 +175,79 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
       <header className="sticky top-0 z-40 bg-[#faf8f5]/90 backdrop-blur-md border-b border-[#ebdcc9] transition-all py-3.5 px-5 sm:px-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Brand + Experience Switcher */}
-          <div className="flex items-center gap-4 sm:gap-6">
-            <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#c59e2b] via-[#e5c568] to-[#f3e6b7] flex items-center justify-center text-white shadow-md shadow-[#d4af37]/20">
-                <Crown className="w-4 h-4 text-[#3d2f0d]" />
+          <div className="flex items-center gap-3 sm:gap-6">
+            <button
+              type="button"
+              onClick={navigateHome}
+              className="flex items-center gap-2.5 cursor-pointer bg-transparent border-none text-left p-0"
+              aria-label="Dinely Home"
+            >
+              <DinelyLogo size="md" />
+              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wider uppercase bg-[#eadecb] text-[#7a5e1d] border border-[#d6c5ad]">
+                Weddings & Events
               </span>
-              <div className="flex flex-col">
-                <span className="font-serif font-bold text-lg tracking-wide text-[#2c2419]">
-                  Dinely <span className="font-light italic text-[#9e7d23]">Weddings</span>
-                </span>
-                <span className="text-[10px] tracking-widest uppercase text-[#9e8b70] font-medium -mt-0.5">
-                  Private Events Edition
-                </span>
-              </div>
-            </div>
+            </button>
 
-            {/* Seamless Dual-Product Switcher */}
-            <div className="hidden md:flex items-center p-1 rounded-full bg-[#f0e7d8] border border-[#e2d4c0] shadow-inner text-xs">
-              <button
-                type="button"
-                onClick={onNavigateHome}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[#756854] hover:text-[#2c2419] hover:bg-white/60 transition-all cursor-pointer border-none bg-transparent"
-              >
-                <span>🍽️</span>
-                <span>Restaurants</span>
-              </button>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-[#916e18] font-semibold shadow-sm border border-[#ebdcc9]">
-                <span>💍</span>
-                <span>Weddings & Events</span>
-              </div>
+            {/* Canonical Dual-Product Switcher */}
+            <div className="hidden sm:flex items-center">
+              <ProductSwitcher
+                activeProduct="weddings"
+                theme="light"
+                onSwitch={(product) => {
+                  if (product === 'restaurants') {
+                    navigateHome();
+                  }
+                }}
+              />
             </div>
           </div>
 
           {/* Action CTAs */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {/* Switcher for mobile */}
-            <button
-              type="button"
-              onClick={onNavigateHome}
-              className="md:hidden text-xs text-[#756854] font-medium underline underline-offset-4"
-            >
-              &larr; Restaurants
-            </button>
+            <div className="sm:hidden">
+              <ProductSwitcher
+                activeProduct="weddings"
+                theme="light"
+                compact
+                onSwitch={(product) => {
+                  if (product === 'restaurants') {
+                    navigateHome();
+                  }
+                }}
+              />
+            </div>
 
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setTrackModalOpen(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-serif font-medium text-[#7a6435] bg-[#f5ede1] hover:bg-[#ede1d0] border border-[#dfd0bb] transition-all cursor-pointer"
+              className="border-[#dacfc0] text-[#6b5c49] hover:bg-stone-200/60 text-xs hidden md:inline-flex items-center gap-1.5"
             >
               <Search className="w-3.5 h-3.5 text-[#9e7d23]" />
               <span>Track Request</span>
-            </button>
+            </Button>
 
             {myWorkspaces.length > 0 ? (
-              <button
-                type="button"
-                onClick={onNavigateOrganizerDashboard}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-serif font-bold tracking-wider uppercase bg-gradient-to-r from-[#c59e2b] to-[#916e18] text-white shadow-md shadow-[#c59e2b]/30 hover:brightness-105 active:scale-98 transition-all cursor-pointer border-none"
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={navigateDashboard}
+                className="bg-gradient-to-r from-[#c59e2b] to-[#916e18] hover:brightness-105 text-white font-bold text-xs"
               >
                 <span>Open Workspace</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="brand"
+                size="sm"
                 onClick={scrollToApply}
-                className="inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-xs font-serif font-bold tracking-wider uppercase bg-gradient-to-r from-[#c59e2b] via-[#b89123] to-[#8d6911] text-white shadow-md shadow-[#c59e2b]/30 hover:brightness-105 active:scale-98 transition-all cursor-pointer border-none"
+                className="bg-gradient-to-r from-[#c59e2b] via-[#b89123] to-[#8d6911] hover:brightness-105 text-white font-bold text-xs"
               >
                 <span>Request Access</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
             )}
           </div>
         </div>
@@ -776,130 +797,122 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
       {/* ========================================================================= */}
       {/* 6. TRACK APPLICATION MODAL */}
       {/* ========================================================================= */}
-      {trackModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-[#ebdcc9] shadow-2xl space-y-6">
-            <div className="flex items-center justify-between border-b border-[#f0e4cf] pb-3">
-              <div className="flex items-center gap-2">
-                <Search className="w-4 h-4 text-[#9e7d23]" />
-                <h3 className="font-serif font-bold text-lg text-[#241a0f]">
-                  Track Application Status
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTrackModalOpen(false)}
-                className="text-[#8c7b67] hover:text-[#241a0f] text-sm bg-transparent border-none cursor-pointer"
+      {/* ========================================================================= */}
+      {/* 6. TRACK APPLICATION MODAL */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={trackModalOpen}
+        onClose={() => setTrackModalOpen(false)}
+        title="Track Application Status"
+        description="Check your celebration request review, kitchen assignment, and organizer access."
+        maxWidth="lg"
+      >
+        <form onSubmit={handleLookupStatus} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-[#574938] mb-1">
+              Application Reference ID *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. wreq-c98a72b14e"
+              value={lookupId}
+              onChange={(e) => setLookupId(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#faf8f5] border border-[#dfd0bb] focus:border-[#c59e2b] text-xs font-mono text-[#20180f] outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#574938] mb-1">
+              Registered Email Address (for verification)
+            </label>
+            <input
+              type="email"
+              placeholder="e.g. eleanor@vance-events.com"
+              value={lookupEmail}
+              onChange={(e) => setLookupEmail(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#faf8f5] border border-[#dfd0bb] focus:border-[#c59e2b] text-xs text-[#20180f] outline-none"
+            />
+          </div>
+
+          {lookupError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              {lookupError}
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            variant="brand"
+            size="md"
+            disabled={lookupLoading}
+            className="w-full bg-gradient-to-r from-[#c59e2b] to-[#916e18] hover:brightness-105 text-white font-bold text-xs"
+          >
+            {lookupLoading ? 'Locating Application...' : 'Check Status'}
+          </Button>
+        </form>
+
+        {/* Lookup Result View */}
+        {lookupResult && (
+          <div className="mt-5 p-4 rounded-2xl bg-[#faf8f5] border border-[#ebdcc9] space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-serif font-bold text-sm text-[#20180f]">
+                {lookupResult.weddingName}
+              </span>
+              <span
+                className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                  lookupResult.lifecycleStatus === 'APPROVED'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : lookupResult.lifecycleStatus === 'REJECTED'
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                }`}
               >
-                ✕
-              </button>
+                {lookupResult.lifecycleStatus}
+              </span>
             </div>
 
-            <form onSubmit={handleLookupStatus} className="space-y-4">
-              <div>
-                <label className="block text-xs font-serif font-semibold text-[#574938] mb-1">
-                  Application Reference ID *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. wreq-c98a72b14e"
-                  value={lookupId}
-                  onChange={(e) => setLookupId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#faf8f5] border border-[#dfd0bb] focus:border-[#c59e2b] text-xs font-mono text-[#20180f] outline-none"
-                />
+            <div className="space-y-1.5 text-xs text-[#6e5d48]">
+              <div className="flex justify-between">
+                <span>Date:</span>
+                <span className="font-medium text-[#20180f]">{lookupResult.eventDate}</span>
               </div>
-
-              <div>
-                <label className="block text-xs font-serif font-semibold text-[#574938] mb-1">
-                  Registered Email Address (Optional for verification)
-                </label>
-                <input
-                  type="email"
-                  placeholder="e.g. eleanor@vance-events.com"
-                  value={lookupEmail}
-                  onChange={(e) => setLookupEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#faf8f5] border border-[#dfd0bb] focus:border-[#c59e2b] text-xs text-[#20180f] outline-none"
-                />
+              <div className="flex justify-between">
+                <span>Venue:</span>
+                <span className="font-medium text-[#20180f]">{lookupResult.venueName}, {lookupResult.venueCity}</span>
               </div>
-
-              {lookupError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-                  {lookupError}
+              {lookupResult.cateringRestaurantName && (
+                <div className="flex justify-between">
+                  <span>Assigned Kitchen:</span>
+                  <span className="font-medium text-[#916e18]">{lookupResult.cateringRestaurantName}</span>
                 </div>
               )}
-
-              <button
-                type="submit"
-                disabled={lookupLoading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#c59e2b] to-[#916e18] text-white font-serif font-bold text-xs uppercase tracking-wider shadow-md hover:brightness-105 transition-all cursor-pointer border-none"
-              >
-                {lookupLoading ? 'Locating Application...' : 'Check Status'}
-              </button>
-            </form>
-
-            {/* Lookup Result View */}
-            {lookupResult && (
-              <div className="p-4 rounded-2xl bg-[#faf8f5] border border-[#ebdcc9] space-y-3 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <span className="font-serif font-bold text-sm text-[#20180f]">
-                    {lookupResult.weddingName}
-                  </span>
-                  <span
-                    className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                      lookupResult.lifecycleStatus === 'APPROVED'
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                        : lookupResult.lifecycleStatus === 'REJECTED'
-                        ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                        : 'bg-amber-100 text-amber-800 border border-amber-300'
-                    }`}
-                  >
-                    {lookupResult.lifecycleStatus}
-                  </span>
+              {lookupResult.reviewNotes && (
+                <div className="pt-2 border-t border-[#ebdcc9] text-[11px] text-[#806f5b]">
+                  <strong>Review Notes:</strong> {lookupResult.reviewNotes}
                 </div>
+              )}
+            </div>
 
-                <div className="space-y-1.5 text-xs text-[#6e5d48]">
-                  <div className="flex justify-between">
-                    <span>Date:</span>
-                    <span className="font-medium text-[#20180f]">{lookupResult.eventDate}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Venue:</span>
-                    <span className="font-medium text-[#20180f]">{lookupResult.venueName}, {lookupResult.venueCity}</span>
-                  </div>
-                  {lookupResult.cateringRestaurantName && (
-                    <div className="flex justify-between">
-                      <span>Assigned Kitchen:</span>
-                      <span className="font-medium text-[#916e18]">{lookupResult.cateringRestaurantName}</span>
-                    </div>
-                  )}
-                  {lookupResult.reviewNotes && (
-                    <div className="pt-2 border-t border-[#ebdcc9] text-[11px] text-[#806f5b]">
-                      <strong>Review Notes:</strong> {lookupResult.reviewNotes}
-                    </div>
-                  )}
-                </div>
-
-                {lookupResult.lifecycleStatus === 'APPROVED' && (
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTrackModalOpen(false);
-                        if (onNavigateOrganizerDashboard) onNavigateOrganizerDashboard();
-                      }}
-                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-serif font-bold text-xs uppercase tracking-wider shadow transition-all cursor-pointer border-none flex items-center justify-center gap-1.5"
-                    >
-                      <span>Access Your Wedding Studio</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+            {lookupResult.lifecycleStatus === 'APPROVED' && (
+              <div className="pt-2">
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => {
+                    setTrackModalOpen(false);
+                    navigateDashboard();
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                >
+                  <span>Access Your Wedding Studio</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                </Button>
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* ========================================================================= */}
       {/* 7. REFINED LUXURY FOOTER */}

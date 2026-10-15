@@ -38,11 +38,14 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
 import { firebaseAuth, ensureFirebaseAuthReady, signOutFirebase } from '../../packages/auth/firebase';
 import { WeddingWorkspace, WeddingWorkspaceDetail, EventTable } from '../../packages/types';
-import { Button, Badge, Modal, Card, StatsCard } from '../../packages/ui';
+import { DinelyLogo, ProductSwitcher, Button, Badge, Modal, Card, StatsCard } from '../../packages/ui';
 
 interface WeddingOrganizerDashboardProps {
   onNavigate?: (path: string) => void;
+  onNavigateRestaurants?: () => void;
+  onNavigateHome?: () => void;
   onLogout?: () => void;
+  currentUser?: any;
 }
 
 type DashboardTab =
@@ -57,7 +60,10 @@ type DashboardTab =
 
 export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps> = ({
   onNavigate,
+  onNavigateRestaurants,
+  onNavigateHome,
   onLogout,
+  currentUser,
 }) => {
   const [workspaces, setWorkspaces] = useState<WeddingWorkspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
@@ -370,7 +376,18 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
               Request Wedding Ordering Access
             </button>
             <button
-              onClick={() => (onNavigate ? onNavigate('/') : (window.location.href = '/'))}
+              onClick={() => {
+                if (onNavigateRestaurants) onNavigateRestaurants();
+                else if (onNavigate) onNavigate('/restaurant/dashboard');
+                else window.location.href = '/restaurant/dashboard';
+              }}
+              className="w-full py-2.5 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs font-medium transition-all flex items-center justify-center gap-2"
+            >
+              <Utensils className="w-4 h-4" />
+              Switch to Restaurant Platform
+            </button>
+            <button
+              onClick={() => (onNavigateHome ? onNavigateHome() : onNavigate ? onNavigate('/') : (window.location.href = '/'))}
               className="w-full py-2.5 px-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-white/70 text-xs font-medium transition-all"
             >
               Return to Dinely Home
@@ -390,26 +407,75 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
   return (
     <div className="min-h-screen bg-[#0b0c10] text-[#f7f5f0] flex flex-col font-sans">
       {/* Top Banner / Organizer Header */}
-      <header className="sticky top-0 z-30 bg-[#0f1118]/90 backdrop-blur-md border-b border-white/[0.08] px-4 sm:px-8 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-amber-600/10 border border-amber-400/40 flex items-center justify-center text-amber-300 shadow-sm">
-            <Crown className="w-5 h-5" />
+      <header className="sticky top-0 z-30 bg-[#0f1118]/90 backdrop-blur-md border-b border-white/[0.08] px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              if (onNavigateHome) onNavigateHome();
+              else if (onNavigate) onNavigate('/');
+              else window.location.href = '/';
+            }}
+            className="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0 text-left"
+            title="Dinely Home"
+          >
+            <DinelyLogo size="sm" />
+          </button>
+
+          <div className="hidden lg:block h-5 w-[1px] bg-white/[0.12]" />
+
+          <div className="hidden sm:flex items-center">
+            <ProductSwitcher
+              activeProduct="weddings"
+              theme="dark"
+              onSwitch={(prod) => {
+                if (prod === 'restaurants') {
+                  if (onNavigateRestaurants) onNavigateRestaurants();
+                  else if (onNavigate) onNavigate('/restaurant/dashboard');
+                  else window.location.href = '/restaurant/dashboard';
+                }
+              }}
+            />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono tracking-wider uppercase text-amber-400/80 font-medium">
-                Weddings & Celebrations OS
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+
+          <div className="h-5 w-[1px] bg-white/[0.12] hidden sm:block" />
+
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400/20 to-amber-600/10 border border-amber-400/40 flex items-center justify-center text-amber-300 shadow-sm shrink-0">
+              <Crown className="w-4 h-4" />
             </div>
-            <h1 className="text-base sm:text-lg font-serif font-bold text-white tracking-tight flex items-center gap-2">
-              {currentEvent?.coupleNames || currentEvent?.title || 'Banquet Celebration'}
-            </h1>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono tracking-wider uppercase text-amber-400/80 font-medium">
+                  Weddings OS
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              </div>
+              <h1 className="text-sm sm:text-base font-serif font-bold text-white tracking-tight truncate max-w-[180px] sm:max-w-xs">
+                {currentEvent?.coupleNames || currentEvent?.title || 'Banquet Celebration'}
+              </h1>
+            </div>
           </div>
         </div>
 
         {/* Workspace Switcher & Status Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {/* Mobile Product Switcher */}
+          <div className="sm:hidden">
+            <ProductSwitcher
+              activeProduct="weddings"
+              theme="dark"
+              compact
+              onSwitch={(prod) => {
+                if (prod === 'restaurants') {
+                  if (onNavigateRestaurants) onNavigateRestaurants();
+                  else if (onNavigate) onNavigate('/restaurant/dashboard');
+                  else window.location.href = '/restaurant/dashboard';
+                }
+              }}
+            />
+          </div>
+
           {workspaces.length > 1 && (
             <select
               value={selectedWorkspaceId}
