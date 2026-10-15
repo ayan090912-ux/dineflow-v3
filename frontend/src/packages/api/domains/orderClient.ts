@@ -121,6 +121,8 @@ export class OrderClient {
         customerName: orderData.customerName || 'Guest',
         notes: orderData.notes || '',
         orderType: orderData.orderType || 'DINE_IN',
+        eventId: orderData.eventId || undefined,
+        eventName: orderData.eventName || undefined,
         items: (orderData.items || []).map((i) => ({
           id: i.id,
           menuItemId: i.menuItemId || i.id,
@@ -153,6 +155,9 @@ export class OrderClient {
             barStatus: data.bar_status || 'PENDING',
             customerName: data.customer_name || 'Guest',
             notes: data.notes || '',
+            orderType: data.order_type || data.orderType || payload.orderType,
+            eventId: data.event_id || data.eventId || payload.eventId,
+            eventName: data.event_name || data.eventName || payload.eventName,
             items: (data.items || data.items_json || payload.items || []).map((i: any) => ({
               id: i.id || `oi-${data.id}`,
               menuItemId: i.menuItemId || i.menu_item_id || i.id,
