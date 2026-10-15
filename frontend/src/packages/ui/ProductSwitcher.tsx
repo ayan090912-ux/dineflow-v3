@@ -67,7 +67,7 @@ export const ProductSwitcher: React.FC<ProductSwitcherProps> = ({
         }`}
         title="Switch to Dinely Restaurant Management Platform"
       >
-        <span className="text-sm leading-none" role="img" aria-hidden="true">🍽️</span>
+        <Utensils className="w-3.5 h-3.5 shrink-0 opacity-80" />
         <span className={compact ? 'hidden sm:inline font-medium' : 'font-medium'}>
           Restaurants
         </span>
@@ -90,7 +90,7 @@ export const ProductSwitcher: React.FC<ProductSwitcherProps> = ({
         }`}
         title="Switch to Dinely Weddings & Events Ordering Platform"
       >
-        <span className="text-sm leading-none" role="img" aria-hidden="true">💍</span>
+        <Sparkles className="w-3.5 h-3.5 shrink-0 opacity-90" />
         <span className={compact ? 'hidden sm:inline font-medium' : 'font-medium'}>
           Weddings & Events
         </span>

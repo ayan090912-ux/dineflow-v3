@@ -405,9 +405,9 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
   const menuItems = detail?.menuItems || [];
 
   return (
-    <div className="min-h-screen bg-[#0b0c10] text-[#f7f5f0] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans">
       {/* Top Banner / Organizer Header */}
-      <header className="sticky top-0 z-30 bg-[#0f1118]/90 backdrop-blur-md border-b border-white/[0.08] px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-30 bg-[#0e1117]/95 backdrop-blur-md border-b border-[#1e232e] px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -530,7 +530,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
       {/* Main Layout Container */}
       <div className="flex-1 flex flex-col md:flex-row">
         {/* Navigation Sidebar */}
-        <aside className="w-full md:w-60 bg-[#0d0e14] border-r border-white/[0.06] p-4 flex md:flex-col justify-between shrink-0">
+        <aside className="w-full md:w-60 bg-[#0e1117] border-r border-[#1e232e] p-4 flex md:flex-col justify-between shrink-0">
           <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible w-full pb-2 md:pb-0">
             {[
               { id: 'overview', label: 'Overview', icon: <Heart className="w-4 h-4" /> },
