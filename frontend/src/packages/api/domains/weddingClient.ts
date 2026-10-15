@@ -140,8 +140,16 @@ export class WeddingClient {
   // 3. WEDDING ORGANIZER WORKSPACES
   // =========================================================================
 
+  private getEffectiveEmail(email?: string): string {
+    if (email && email.trim()) return email.trim().toLowerCase();
+    const cur = this.base.currentUser?.email;
+    if (cur && cur.trim()) return cur.trim().toLowerCase();
+    return '';
+  }
+
   async getMyWeddingWorkspaces(email?: string): Promise<{ workspaces: WeddingWorkspace[] }> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     try {
       return await this.base.executeProtectedRequest<{ workspaces: WeddingWorkspace[] }>(
         `/weddings/workspaces/my${query}`,
@@ -154,7 +162,8 @@ export class WeddingClient {
   }
 
   async getWeddingWorkspaceDetail(workspaceId: string, email?: string): Promise<WeddingWorkspaceDetail> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     return await this.base.executeProtectedRequest<WeddingWorkspaceDetail>(
       `/weddings/workspaces/${encodeURIComponent(workspaceId)}${query}`,
       { method: 'GET' },
@@ -163,7 +172,8 @@ export class WeddingClient {
   }
 
   async updateWeddingWorkspaceEvent(workspaceId: string, updates: any, email?: string): Promise<any> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     return await this.base.executeProtectedRequest(
       `/weddings/workspaces/${encodeURIComponent(workspaceId)}/event${query}`,
       {
@@ -176,7 +186,8 @@ export class WeddingClient {
   }
 
   async toggleWeddingOrdering(workspaceId: string, enabled?: boolean, email?: string): Promise<{ orderingEnabled: boolean; message: string }> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     return await this.base.executeProtectedRequest(
       `/weddings/workspaces/${encodeURIComponent(workspaceId)}/toggle-ordering${query}`,
       {
@@ -193,7 +204,8 @@ export class WeddingClient {
     data: { tableNumber: string; label?: string; tableLabel?: string; capacity?: number },
     email?: string
   ): Promise<{ status: string; table: EventTable; qrUrl: string }> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     const payload = {
       tableNumber: data.tableNumber,
       tableLabel: data.tableLabel || data.label,
@@ -212,7 +224,8 @@ export class WeddingClient {
   }
 
   async deleteWeddingWorkspaceTable(workspaceId: string, tableId: string, email?: string): Promise<{ success: boolean; message: string }> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     return await this.base.executeProtectedRequest(
       `/weddings/workspaces/${encodeURIComponent(workspaceId)}/tables/${encodeURIComponent(tableId)}${query}`,
       { method: 'DELETE' },
@@ -221,7 +234,8 @@ export class WeddingClient {
   }
 
   async getWeddingWorkspaceOrders(workspaceId: string, email?: string): Promise<{ orders: any[] }> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     try {
       const res = await this.base.executeProtectedRequest<{ orders: any[] }>(
         `/weddings/workspaces/${encodeURIComponent(workspaceId)}/orders${query}`,
@@ -237,7 +251,8 @@ export class WeddingClient {
   }
 
   async getWeddingWorkspaceReports(workspaceId: string, email?: string): Promise<any> {
-    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     try {
       return await this.base.executeProtectedRequest(
         `/weddings/workspaces/${encodeURIComponent(workspaceId)}/reports${query}`,

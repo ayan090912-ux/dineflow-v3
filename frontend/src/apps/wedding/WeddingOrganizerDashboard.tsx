@@ -58,6 +58,26 @@ type DashboardTab =
   | 'reports'
   | 'settings';
 
+export const parseTabFromUrl = (): DashboardTab => {
+  if (typeof window === 'undefined') return 'overview';
+  const path = window.location.pathname;
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length >= 3 && (parts[1] === 'dashboard' || parts[1] === 'manage')) {
+    const sub = parts[2].toLowerCase();
+    if (['overview', 'event', 'menu', 'tables', 'qr_studio', 'orders', 'reports', 'settings'].includes(sub)) {
+      return sub as DashboardTab;
+    }
+    if (sub === 'qr' || sub === 'qr-studio' || sub === 'qrstudio') return 'qr_studio';
+  }
+  const params = new URLSearchParams(window.location.search);
+  const tabParam = (params.get('tab') || params.get('section') || '').toLowerCase();
+  if (['overview', 'event', 'menu', 'tables', 'qr_studio', 'orders', 'reports', 'settings'].includes(tabParam)) {
+    return tabParam as DashboardTab;
+  }
+  if (tabParam === 'qr' || tabParam === 'qr-studio') return 'qr_studio';
+  return 'overview';
+};
+
 export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps> = ({
   onNavigate,
   onNavigateRestaurants,
@@ -71,8 +91,55 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => parseTabFromUrl());
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+
+  // Tab navigation sync with history pushState
+  const handleTabChange = (tab: DashboardTab) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      const targetPath = `/weddings/dashboard/${tab}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ tab }, '', targetPath);
+      }
+    }
+    if (onNavigate) {
+      onNavigate(`/weddings/dashboard/${tab}`);
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const tabFromUrl = parseTabFromUrl();
+      setActiveTab(tabFromUrl);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Empty state status tracking
+  const [lookupId, setLookupId] = useState('');
+  const [lookupEmail, setLookupEmail] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupResult, setLookupResult] = useState<any | null>(null);
+
+  const handleLookupApplicantStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lookupId.trim()) return;
+    setLookupLoading(true);
+    setLookupError(null);
+    setLookupResult(null);
+    try {
+      const effEmail = (lookupEmail.trim() || currentUserEmail).trim();
+      const res = await api.getWeddingRequestStatus(lookupId.trim(), effEmail || undefined);
+      setLookupResult(res);
+    } catch (err: any) {
+      setLookupError(err.message || 'Application not found with that reference ID.');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
 
   // Event form state
   const [eventForm, setEventForm] = useState({
@@ -116,49 +183,35 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
 
   const qrCanvasRef = useRef<HTMLDivElement>(null);
 
-  // Load current user and workspaces
-  useEffect(() => {
-    let isMounted = true;
-    const init = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        await ensureFirebaseAuthReady();
-        const user = firebaseAuth.currentUser;
-        if (!user && !api.getCurrentUser()) {
-          // If unauthenticated, allow viewing or show sign-in prompt
-          setError('Please sign in to access your approved wedding workspace.');
-          setLoading(false);
-          return;
-        }
+  const init = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await ensureFirebaseAuthReady();
+      const user = firebaseAuth.currentUser;
+      const email = user?.email || api.getCurrentUser()?.email || '';
+      setCurrentUserEmail(email);
 
-        const email = user?.email || api.getCurrentUser()?.email || '';
-        setCurrentUserEmail(email);
+      const res = await api.getMyWeddingWorkspaces(email || undefined);
+      const list = res?.workspaces || [];
+      setWorkspaces(list);
 
-        const res = await api.getMyWeddingWorkspaces();
-        if (!isMounted) return;
-
-        const list = res.workspaces || [];
-        setWorkspaces(list);
-
-        if (list.length > 0) {
-          const firstId = list[0].id;
-          setSelectedWorkspaceId(firstId);
-          await loadWorkspaceDetail(firstId);
-        } else {
-          setLoading(false);
-        }
-      } catch (err: any) {
-        if (!isMounted) return;
-        setError(err.message || 'Failed to initialize wedding organizer session.');
+      if (list.length > 0) {
+        const firstId = list[0].id;
+        setSelectedWorkspaceId(firstId);
+        await loadWorkspaceDetail(firstId);
+      } else {
         setLoading(false);
       }
-    };
+    } catch (err: any) {
+      setError(err.message || 'Failed to initialize wedding organizer session.');
+      setLoading(false);
+    }
+  };
 
+  // Load current user and workspaces
+  useEffect(() => {
     init();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const loadWorkspaceDetail = async (workspaceId: string) => {
@@ -177,7 +230,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
           venueName: data.event.venueName || '',
           welcomeMessage: data.event.welcomeMessage || '',
           themeColor: data.event.themeColor || '#d4af37',
-          estimatedGuests: data.event.estimatedGuests || 150,
+          estimatedGuests: (data.event as any).estimatedGuests || (data.event as any).estimatedGuestCount || 150,
           status: data.event.status || 'PUBLISHED',
           menuSelectionType: data.event.menuSelectionType || 'FULL',
           allowedCategoryIds: data.event.allowedCategoryIds || [],
@@ -207,7 +260,8 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
     setSaveSuccess(false);
     try {
       const updated = await api.updateWeddingWorkspaceEvent(selectedWorkspaceId, eventForm);
-      setDetail((prev) => (prev ? { ...prev, event: updated } : prev));
+      const evObj = (updated as any)?.event || updated;
+      setDetail((prev) => (prev ? { ...prev, event: { ...prev.event, ...evObj } } : prev));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err: any) {
@@ -221,11 +275,16 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
     if (!selectedWorkspaceId) return;
     try {
       const res = await api.toggleWeddingOrdering(selectedWorkspaceId, !currentStatus);
+      const isOpen = (res as any).orderingEnabled ?? (res as any).isOrderingOpen ?? !currentStatus;
       setDetail((prev) => {
         if (!prev || !prev.event) return prev;
         return {
           ...prev,
-          event: { ...prev.event, orderingEnabled: res.orderingEnabled },
+          event: {
+            ...prev.event,
+            orderingEnabled: isOpen,
+            isOrderingOpen: isOpen,
+          },
         };
       });
     } catch (err: any) {
@@ -358,37 +417,164 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
   if (!detail && workspaces.length === 0) {
     return (
       <div className="min-h-screen bg-[#0d0e12] text-white flex flex-col items-center justify-center p-6 text-center">
-        <div className="max-w-md w-full bg-[#14161f] border border-amber-500/20 rounded-3xl p-8 shadow-2xl backdrop-blur-xl">
-          <div className="w-16 h-16 rounded-2xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center mx-auto mb-5 text-amber-300">
-            <Crown className="w-8 h-8" />
+        <div className="max-w-md w-full bg-[#14161f] border border-amber-500/20 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl text-left">
+          <div className="w-14 h-14 rounded-2xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center mx-auto mb-4 text-amber-300">
+            <Crown className="w-7 h-7" />
           </div>
-          <h1 className="text-2xl font-serif font-bold text-amber-100 mb-2">No Active Wedding Workspace</h1>
-          <p className="text-sm text-white/60 mb-6 leading-relaxed">
+          <h1 className="text-xl sm:text-2xl font-serif font-bold text-amber-100 mb-2 text-center">
+            Wedding Organizer Studio
+          </h1>
+          <p className="text-xs text-white/60 mb-5 leading-relaxed text-center">
             {error ||
-              "Your wedding ordering application is either currently under administrative review or hasn't been submitted yet. Once approved by the Dinely team, your dedicated banquet workspace will unlock here."}
+              'This studio is for approved celebration organizers. If you recently applied, check your review status or refresh below.'}
           </p>
 
-          <div className="space-y-3">
+          {/* User Identity Info */}
+          <div className="mb-5 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between text-xs">
+            <div className="truncate">
+              <span className="text-white/40 block text-[10px] uppercase font-mono">Current Session</span>
+              <span className="text-white/80 font-medium truncate">{currentUserEmail || 'Unauthenticated'}</span>
+            </div>
+            {currentUserEmail ? (
+              <button
+                type="button"
+                onClick={() => {
+                  signOutFirebase().then(() => {
+                    window.location.href = '/auth?redirect=' + encodeURIComponent(window.location.pathname);
+                  });
+                }}
+                className="text-[11px] text-amber-300 hover:text-amber-200 underline shrink-0 ml-2 cursor-pointer"
+              >
+                Switch Account
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/auth?redirect=' + encodeURIComponent(window.location.pathname);
+                }}
+                className="text-[11px] text-amber-300 hover:text-amber-200 underline shrink-0 ml-2 font-medium cursor-pointer"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+
+          {/* Inline Application Status Tracker */}
+          <div className="mb-6 p-4 rounded-2xl bg-[#0e1017] border border-amber-500/20 space-y-3">
+            <div className="flex items-center gap-2 text-amber-300 text-xs font-semibold">
+              <Sparkles className="w-4 h-4" />
+              <span>Track Application Approval</span>
+            </div>
+            <form onSubmit={handleLookupApplicantStatus} className="space-y-2.5">
+              <div>
+                <label className="block text-[11px] text-white/70 mb-1">
+                  Application Reference ID *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. wreq-b4228c74ec"
+                  value={lookupId}
+                  onChange={(e) => setLookupId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#141722] border border-white/[0.1] focus:border-amber-400 text-xs text-white outline-none font-mono"
+                />
+              </div>
+
+              {!currentUserEmail && (
+                <div>
+                  <label className="block text-[11px] text-white/70 mb-1">
+                    Applicant Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. host@example.com"
+                    value={lookupEmail}
+                    onChange={(e) => setLookupEmail(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#141722] border border-white/[0.1] focus:border-amber-400 text-xs text-white outline-none"
+                  />
+                </div>
+              )}
+
+              {lookupError && (
+                <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px]">
+                  {lookupError}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                variant="brand"
+                size="sm"
+                disabled={lookupLoading}
+                className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs"
+              >
+                {lookupLoading ? 'Locating Application...' : 'Check Approval Status'}
+              </Button>
+            </form>
+
+            {lookupResult && (
+              <div className="mt-3 pt-3 border-t border-white/[0.08] space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white truncate max-w-[200px]">
+                    {lookupResult.weddingName}
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                      lookupResult.lifecycleStatus === 'APPROVED'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : lookupResult.lifecycleStatus === 'REJECTED'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}
+                  >
+                    {lookupResult.lifecycleStatus}
+                  </span>
+                </div>
+
+                {lookupResult.cateringRestaurantName && (
+                  <p className="text-[11px] text-white/60">
+                    <strong className="text-white/80">Assigned Kitchen:</strong> {lookupResult.cateringRestaurantName}
+                  </p>
+                )}
+
+                {lookupResult.reviewNotes && (
+                  <p className="text-[11px] text-white/60">
+                    <strong className="text-white/80">Review Notes:</strong> {lookupResult.reviewNotes}
+                  </p>
+                )}
+
+                {lookupResult.lifecycleStatus === 'APPROVED' && (
+                  <Button
+                    variant="brand"
+                    size="sm"
+                    onClick={() => init()}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs mt-2"
+                  >
+                    Open Approved Workspace
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2.5">
+            <button
+              onClick={() => init()}
+              className="w-full py-2.5 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Reload Workspaces
+            </button>
             <button
               onClick={() => (onNavigate ? onNavigate('/weddings') : (window.location.href = '/weddings'))}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-semibold text-sm hover:from-amber-300 hover:to-amber-400 transition-all shadow-lg"
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-semibold text-xs hover:from-amber-300 hover:to-amber-400 transition-all text-center cursor-pointer"
             >
               Request Wedding Ordering Access
             </button>
             <button
-              onClick={() => {
-                if (onNavigateRestaurants) onNavigateRestaurants();
-                else if (onNavigate) onNavigate('/restaurant/dashboard');
-                else window.location.href = '/restaurant/dashboard';
-              }}
-              className="w-full py-2.5 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs font-medium transition-all flex items-center justify-center gap-2"
-            >
-              <Utensils className="w-4 h-4" />
-              Switch to Restaurant Platform
-            </button>
-            <button
               onClick={() => (onNavigateHome ? onNavigateHome() : onNavigate ? onNavigate('/') : (window.location.href = '/'))}
-              className="w-full py-2.5 px-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-white/70 text-xs font-medium transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-white/70 text-xs font-medium transition-all text-center cursor-pointer"
             >
               Return to Dinely Home
             </button>
@@ -399,10 +585,10 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
   }
 
   const currentEvent = detail?.event;
-  const currentRestaurant = detail?.cateringRestaurant;
+  const currentRestaurant = detail?.cateringRestaurant || (detail as any)?.restaurant;
   const tables = detail?.tables || [];
-  const menuCategories = detail?.menuCategories || [];
-  const menuItems = detail?.menuItems || [];
+  const menuCategories = detail?.menuCategories || (detail as any)?.availableMenu || [];
+  const menuItems = detail?.menuItems || (detail as any)?.rawItems || [];
 
   return (
     <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans">
@@ -494,14 +680,14 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
           <div className="hidden sm:flex items-center gap-2 bg-[#141620] border border-white/[0.08] rounded-xl px-3 py-1.5">
             <span className="text-xs text-white/60">Ordering:</span>
             <button
-              onClick={() => handleToggleOrdering(currentEvent?.orderingEnabled ?? true)}
+              onClick={() => handleToggleOrdering((currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ?? true)}
               className={`text-xs font-medium px-2 py-0.5 rounded-md transition-colors ${
-                currentEvent?.orderingEnabled
+                (currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen)
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                   : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
               }`}
             >
-              {currentEvent?.orderingEnabled ? 'ACTIVE (Live)' : 'PAUSED'}
+              {(currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ? 'ACTIVE (Live)' : 'PAUSED'}
             </button>
           </div>
 
@@ -546,7 +732,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as DashboardTab)}
+                  onClick={() => handleTabChange(tab.id as DashboardTab)}
                   className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-gradient-to-r from-amber-500/15 to-transparent text-amber-200 border-l-2 border-amber-400 font-semibold'
@@ -627,23 +813,23 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                       <div className="flex items-center gap-2 mt-1">
                         <span
                           className={`w-2.5 h-2.5 rounded-full ${
-                            currentEvent?.orderingEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+                            (currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
                           }`}
                         />
                         <span className="text-sm font-semibold text-white">
-                          {currentEvent?.orderingEnabled ? 'Open for Guest Orders' : 'Paused / Closed'}
+                          {(currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ? 'Open for Guest Orders' : 'Paused / Closed'}
                         </span>
                       </div>
                     </div>
                     <button
-                      onClick={() => handleToggleOrdering(currentEvent?.orderingEnabled ?? true)}
+                      onClick={() => handleToggleOrdering((currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ?? true)}
                       className={`mt-4 w-full py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
-                        currentEvent?.orderingEnabled
+                        (currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen)
                           ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30'
                           : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30'
                       }`}
                     >
-                      {currentEvent?.orderingEnabled ? 'Temporarily Pause Ordering' : 'Enable Live Guest Ordering'}
+                      {(currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ? 'Temporarily Pause Ordering' : 'Enable Live Guest Ordering'}
                     </button>
                   </div>
                 </div>
@@ -701,7 +887,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
               {/* Quick Actions Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button
-                  onClick={() => setActiveTab('qr_studio')}
+                  onClick={() => handleTabChange('qr_studio')}
                   className="p-5 rounded-2xl bg-[#141620] border border-white/[0.08] hover:border-amber-400/40 text-left transition-all group"
                 >
                   <div className="w-10 h-10 rounded-xl bg-amber-400/10 text-amber-400 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
@@ -716,7 +902,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('orders')}
+                  onClick={() => handleTabChange('orders')}
                   className="p-5 rounded-2xl bg-[#141620] border border-white/[0.08] hover:border-amber-400/40 text-left transition-all group"
                 >
                   <div className="w-10 h-10 rounded-xl bg-rose-400/10 text-rose-400 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
@@ -731,7 +917,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('menu')}
+                  onClick={() => handleTabChange('menu')}
                   className="p-5 rounded-2xl bg-[#141620] border border-white/[0.08] hover:border-amber-400/40 text-left transition-all group"
                 >
                   <div className="w-10 h-10 rounded-xl bg-emerald-400/10 text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
@@ -1062,7 +1248,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                       <button
                         onClick={() => {
                           setSelectedTableForQr(tbl);
-                          setActiveTab('qr_studio');
+                          handleTabChange('qr_studio');
                         }}
                         className="text-xs text-amber-300 hover:text-amber-200 font-medium flex items-center gap-1.5"
                       >

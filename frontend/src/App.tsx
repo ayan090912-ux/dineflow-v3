@@ -1483,7 +1483,7 @@ function AppContent() {
                 const myRests = await api.getOwnerRestaurants(user?.email, user?.id);
                 if (!myRests || myRests.length === 0) {
                   try {
-                    const weddingRes = await api.getMyWeddingWorkspaces();
+                    const weddingRes = await api.getMyWeddingWorkspaces(user?.email);
                     if (weddingRes?.workspaces && weddingRes.workspaces.length > 0) {
                       navigateTo('/weddings/dashboard');
                       return;
@@ -1547,8 +1547,11 @@ function AppContent() {
 
     if (
       cleanPath === '/weddings/dashboard' ||
+      cleanPath.startsWith('/weddings/dashboard/') ||
       cleanPath === '/weddings/manage' ||
+      cleanPath.startsWith('/weddings/manage/') ||
       cleanPath === '/wedding/dashboard' ||
+      cleanPath.startsWith('/wedding/dashboard/') ||
       cleanPath.startsWith('/weddings/workspace')
     ) {
       return (

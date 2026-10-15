@@ -86,6 +86,19 @@ export const WeddingRequestsTab: React.FC<WeddingRequestsTabProps> = ({ onRefres
     try {
       const res = await api.approveAdminWeddingRequest(selectedRequest.id, selectedCatererId, reviewNotes);
       setActionSuccess(`Application approved! Workspace ${res.workspaceId} provisioned successfully.`);
+      setSelectedRequest((prev) =>
+        prev
+          ? {
+              ...prev,
+              lifecycleStatus: 'APPROVED',
+              workspaceId: res.workspaceId,
+              cateringRestaurantId: selectedCatererId,
+              reviewedBy: 'ayan090912@gmail.com',
+              reviewedAt: new Date().toISOString(),
+              reviewNotes: reviewNotes || prev.reviewNotes,
+            }
+          : null
+      );
       await loadRequests();
       if (onRefreshStats) onRefreshStats();
       setTimeout(() => {
@@ -111,6 +124,17 @@ export const WeddingRequestsTab: React.FC<WeddingRequestsTabProps> = ({ onRefres
     try {
       await api.rejectAdminWeddingRequest(selectedRequest.id, reviewNotes.trim());
       setActionSuccess('Application marked as rejected.');
+      setSelectedRequest((prev) =>
+        prev
+          ? {
+              ...prev,
+              lifecycleStatus: 'REJECTED',
+              reviewedBy: 'ayan090912@gmail.com',
+              reviewedAt: new Date().toISOString(),
+              reviewNotes: reviewNotes.trim(),
+            }
+          : null
+      );
       await loadRequests();
       if (onRefreshStats) onRefreshStats();
       setTimeout(() => {

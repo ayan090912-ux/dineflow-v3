@@ -99,10 +99,12 @@ class UpdateWorkspaceEventSchema(BaseModel):
     coverImageUrl: Optional[str] = None
     status: Optional[str] = None
     isOrderingOpen: Optional[bool] = None
+    orderingEnabled: Optional[bool] = None
     menuSelectionType: Optional[str] = None
     allowedCategoryIds: Optional[List[str]] = None
     allowedItemIds: Optional[List[str]] = None
     estimatedGuestCount: Optional[int] = None
+    estimatedGuests: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -155,6 +157,7 @@ def _format_table(table: EventTable) -> dict:
         "restaurantId": table.restaurant_id,
         "tableNumber": table.table_number,
         "tableLabel": table.table_label or f"Table {table.table_number}",
+        "label": table.table_label or f"Table {table.table_number}",
         "capacity": table.capacity or 8,
         "qrCodeUrl": table.qr_code_url or "",
         "isActive": table.is_active,
@@ -679,6 +682,19 @@ async def get_my_wedding_workspaces(
     res = await db.execute(stmt)
     workspaces = res.scalars().all()
 
+    # Link owner_uid dynamically if caller is authenticated and workspace owner_uid was not set at approval
+    needs_commit = False
+    if caller.uid:
+        for ws in workspaces:
+            if not ws.owner_uid and caller.email and ws.owner_email.lower() == caller.email.lower():
+                ws.owner_uid = caller.uid
+                needs_commit = True
+    if needs_commit:
+        try:
+            await db.commit()
+        except Exception:
+            pass
+
     # Pre-fetch restaurant details
     rest_ids = [w.restaurant_id for w in workspaces]
     rests = {}
@@ -697,6 +713,7 @@ async def get_my_wedding_workspaces(
             ev_res = await db.execute(select(WeddingEvent).where(WeddingEvent.id == ws.event_id))
             ev = ev_res.scalar_one_or_none()
 
+        ordering_open = ev.is_ordering_open if ev else False
         result.append({
             "id": ws.id,
             "name": ws.name,
@@ -708,7 +725,8 @@ async def get_my_wedding_workspaces(
             "eventId": ws.event_id,
             "eventTitle": ev.title if ev else ws.name,
             "eventDate": ev.event_date if ev else "",
-            "isOrderingOpen": ev.is_ordering_open if ev else False,
+            "isOrderingOpen": ordering_open,
+            "orderingEnabled": ordering_open,
             "createdAt": ws.created_at.isoformat() if ws.created_at else None,
         })
 
@@ -803,6 +821,51 @@ async def get_wedding_workspace_detail(
         order_revenue = float(rev or 0.0)
 
     rest_slug = rest.public_slug or rest.slug or rest.id
+    rest_data = {
+        "id": rest.id,
+        "name": rest.name,
+        "slug": rest_slug,
+        "phone": rest.phone or "",
+        "address": getattr(rest, "address", "") or "",
+        "currency": getattr(rest, "currency", "INR") or "INR",
+    }
+
+    event_data = {
+        "id": ev.id if ev else None,
+        "title": ev.title if ev else ws.name,
+        "coupleNames": ev.couple_names if ev else "",
+        "eventType": ev.event_type if ev else "WEDDING",
+        "eventDate": ev.event_date if ev else "",
+        "startTime": ev.start_time if ev else "18:00",
+        "endTime": ev.end_time if ev else "23:30",
+        "venueName": ev.venue_name if ev else rest.name,
+        "welcomeMessage": ev.welcome_message if ev else "",
+        "themeColor": ev.theme_color if ev else "champagne",
+        "coverImageUrl": ev.cover_image_url if ev else "",
+        "status": ev.status if ev else "DRAFT",
+        "isOrderingOpen": ev.is_ordering_open if ev else False,
+        "orderingEnabled": ev.is_ordering_open if ev else False,
+        "menuSelectionType": ev.menu_selection_type if ev else "FULL_MENU",
+        "allowedCategoryIds": ev.allowed_category_ids if ev else [],
+        "allowedItemIds": ev.allowed_item_ids if ev else [],
+        "estimatedGuestCount": ev.estimated_guest_count if ev else 100,
+        "estimatedGuests": ev.estimated_guest_count if ev else 100,
+        "orderCount": order_count,
+        "orderRevenue": round(order_revenue, 2),
+        "tableCount": len(tables),
+    } if ev else None
+
+    raw_items = [
+        {
+            "id": it.id,
+            "name": it.name,
+            "price": float(it.price or 0.0),
+            "categoryId": it.category_id,
+            "isVegetarian": it.is_vegetarian,
+            "isAlcoholic": it.is_alcoholic,
+        }
+        for it in items
+    ]
 
     return {
         "workspace": {
@@ -812,48 +875,14 @@ async def get_wedding_workspace_detail(
             "status": ws.status,
             "createdAt": ws.created_at.isoformat() if ws.created_at else None,
         },
-        "restaurant": {
-            "id": rest.id,
-            "name": rest.name,
-            "slug": rest_slug,
-            "phone": rest.phone or "",
-            "currency": getattr(rest, "currency", "INR") or "INR",
-        },
-        "event": {
-            "id": ev.id if ev else None,
-            "title": ev.title if ev else ws.name,
-            "coupleNames": ev.couple_names if ev else "",
-            "eventType": ev.event_type if ev else "WEDDING",
-            "eventDate": ev.event_date if ev else "",
-            "startTime": ev.start_time if ev else "18:00",
-            "endTime": ev.end_time if ev else "23:30",
-            "venueName": ev.venue_name if ev else rest.name,
-            "welcomeMessage": ev.welcome_message if ev else "",
-            "themeColor": ev.theme_color if ev else "champagne",
-            "coverImageUrl": ev.cover_image_url if ev else "",
-            "status": ev.status if ev else "DRAFT",
-            "isOrderingOpen": ev.is_ordering_open if ev else False,
-            "menuSelectionType": ev.menu_selection_type if ev else "FULL_MENU",
-            "allowedCategoryIds": ev.allowed_category_ids if ev else [],
-            "allowedItemIds": ev.allowed_item_ids if ev else [],
-            "estimatedGuestCount": ev.estimated_guest_count if ev else 100,
-            "orderCount": order_count,
-            "orderRevenue": round(order_revenue, 2),
-            "tableCount": len(tables),
-        } if ev else None,
+        "restaurant": rest_data,
+        "cateringRestaurant": rest_data,
+        "event": event_data,
         "tables": tables,
         "availableMenu": menu_categories,
-        "rawItems": [
-            {
-                "id": it.id,
-                "name": it.name,
-                "price": float(it.price or 0.0),
-                "categoryId": it.category_id,
-                "isVegetarian": it.is_vegetarian,
-                "isAlcoholic": it.is_alcoholic,
-            }
-            for it in items
-        ]
+        "menuCategories": menu_categories,
+        "rawItems": raw_items,
+        "menuItems": raw_items,
     }
 
 
@@ -917,6 +946,8 @@ async def update_workspace_event(
         ev.status = payload.status.strip().upper()
     if payload.isOrderingOpen is not None:
         ev.is_ordering_open = payload.isOrderingOpen
+    elif payload.orderingEnabled is not None:
+        ev.is_ordering_open = payload.orderingEnabled
     if payload.menuSelectionType is not None:
         ev.menu_selection_type = payload.menuSelectionType.strip().upper()
     if payload.allowedCategoryIds is not None:
@@ -925,6 +956,8 @@ async def update_workspace_event(
         ev.allowed_item_ids = payload.allowedItemIds
     if payload.estimatedGuestCount is not None:
         ev.estimated_guest_count = max(1, payload.estimatedGuestCount)
+    elif payload.estimatedGuests is not None:
+        ev.estimated_guest_count = max(1, payload.estimatedGuests)
     if payload.notes is not None:
         ev.notes = payload.notes.strip()
 
@@ -936,7 +969,25 @@ async def update_workspace_event(
         "status": "success",
         "message": "Wedding event updated successfully.",
         "eventId": ev.id,
-        "isOrderingOpen": ev.is_ordering_open
+        "isOrderingOpen": ev.is_ordering_open,
+        "orderingEnabled": ev.is_ordering_open,
+        "event": {
+            "id": ev.id,
+            "title": ev.title,
+            "coupleNames": ev.couple_names,
+            "eventType": ev.event_type,
+            "eventDate": ev.event_date,
+            "startTime": ev.start_time,
+            "endTime": ev.end_time,
+            "venueName": ev.venue_name,
+            "welcomeMessage": ev.welcome_message,
+            "themeColor": ev.theme_color,
+            "status": ev.status,
+            "isOrderingOpen": ev.is_ordering_open,
+            "orderingEnabled": ev.is_ordering_open,
+            "estimatedGuestCount": ev.estimated_guest_count,
+            "estimatedGuests": ev.estimated_guest_count,
+        }
     }
 
 
@@ -978,6 +1029,7 @@ async def toggle_workspace_ordering(
     return {
         "status": "success",
         "isOrderingOpen": ev.is_ordering_open,
+        "orderingEnabled": ev.is_ordering_open,
         "message": f"Ordering {'opened' if ev.is_ordering_open else 'paused'} for this wedding."
     }
 
@@ -1126,6 +1178,7 @@ async def get_workspace_orders(
             "kitchenStatus": o.kitchen_status or o.status,
             "barStatus": o.bar_status or "PENDING",
             "items": o.items_json or [],
+            "itemsJson": o.items_json or [],
             "totalAmount": float(o.total_amount or 0.0),
             "notes": o.notes or "",
             "createdAt": o.created_at.isoformat() if o.created_at else None,
@@ -1159,7 +1212,7 @@ async def get_workspace_reports(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden.")
 
     if not ws.event_id:
-        return {"totalOrders": 0, "totalGuests": 0, "dishesServed": 0, "itemBreakdown": [], "tableActivity": []}
+        return {"totalOrders": 0, "totalRevenue": 0.0, "totalAmount": 0.0, "totalGuests": 0, "dishesServed": 0, "itemBreakdown": [], "tableActivity": []}
 
     ord_stmt = select(Order).where(Order.event_id == ws.event_id)
     ord_res = await db.execute(ord_stmt)
@@ -1193,9 +1246,11 @@ async def get_workspace_reports(
         reverse=True
     )
 
+    formatted_rev = round(total_revenue, 2)
     return {
         "totalOrders": len(orders),
-        "totalRevenue": round(total_revenue, 2),
+        "totalRevenue": formatted_rev,
+        "totalAmount": formatted_rev,
         "dishesServed": total_dishes,
         "popularDishes": popular_dishes,
         "tableActivity": table_activity

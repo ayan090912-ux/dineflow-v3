@@ -59,9 +59,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
-  // Route user according to their existing restaurant state
+  // Route user according to their existing restaurant or wedding workspace state
   const routeUserAfterAuth = async (userEmail: string, userUid: string) => {
     try {
+      // 1. Honor explicit redirect query parameter if provided
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const redirectParam = urlParams.get('redirect') || urlParams.get('target');
+        if (redirectParam && (redirectParam.startsWith('/weddings') || redirectParam.startsWith('/wedding') || redirectParam.startsWith('/restaurant'))) {
+          navigateTo(redirectParam);
+          return;
+        }
+      }
+
+      // 2. Check for wedding workspaces first if user is an applicant / event organizer
+      try {
+        const weddingRes = await api.getMyWeddingWorkspaces(userEmail);
+        if (weddingRes?.workspaces && weddingRes.workspaces.length > 0) {
+          navigateTo('/weddings/dashboard');
+          return;
+        }
+      } catch (wErr) {
+        console.debug('[AuthPage] Wedding workspace check bypassed:', wErr);
+      }
+
       const myRests = await api.getOwnerRestaurants(userEmail, userUid);
       if (!myRests || myRests.length === 0) {
         navigateTo('/wizard?mode=create');
@@ -84,7 +105,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         navigateTo('/workspace');
       }
     } catch (err) {
-      console.warn('[AuthPage] Could not load restaurants, sending to workspace:', err);
+      console.warn('[AuthPage] Could not load restaurants, checking wedding fallback:', err);
+      try {
+        const weddingRes = await api.getMyWeddingWorkspaces(userEmail);
+        if (weddingRes?.workspaces && weddingRes.workspaces.length > 0) {
+          navigateTo('/weddings/dashboard');
+          return;
+        }
+      } catch {}
       navigateTo('/workspace');
     }
   };
