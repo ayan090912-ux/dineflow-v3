@@ -30,12 +30,20 @@ import {
   Clock,
   Radio,
   X,
+  Bell,
+  Volume2,
 } from 'lucide-react';
 import { Button, Card, Badge } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Restaurant, BusinessType, RestaurantTerminal } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
 import { getRestaurantPublicDomain, getRestaurantCustomerUrl } from '../../packages/utils/tenantResolver';
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  sendAppNotification,
+  NotificationPermissionStatus,
+} from '../../packages/utils/notifications';
 
 interface WorkspaceSettingsTabProps {
   restaurant: Restaurant | null;
@@ -57,7 +65,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
   const [rowStatus, setRowStatus] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'failed'>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Terminals Management State
+  // Terminals & Notifications State
   const [terminals, setTerminals] = useState<RestaurantTerminal[]>([]);
   const [loadingTerminals, setLoadingTerminals] = useState(false);
   const [showAddTerminalModal, setShowAddTerminalModal] = useState(false);
@@ -65,6 +73,35 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
   const [newTerminalType, setNewTerminalType] = useState('WAITER');
   const [newTerminalCode, setNewTerminalCode] = useState('');
   const [isSubmittingTerminal, setIsSubmittingTerminal] = useState(false);
+  const [notificationPerm, setNotificationPerm] = useState<NotificationPermissionStatus>('default');
+
+  useEffect(() => {
+    setNotificationPerm(getNotificationPermission());
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    const perm = await requestNotificationPermission();
+    setNotificationPerm(perm);
+    if (perm === 'granted') {
+      addToast('success', 'Notifications Enabled 🔔', 'Your browser and phone will receive terminal alerts.');
+      sendAppNotification('Dinely OS: Notifications Active 🔔', {
+        body: 'Real-time terminal alerts, haptics, and floor notifications are now enabled.',
+      });
+    } else if (perm === 'denied') {
+      addToast('error', 'Notifications Blocked ❌', 'Please allow notifications in your browser or device site settings.');
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    const success = await sendAppNotification('Dinely OS: Test Notification 📱', {
+      body: 'Real-time notification pipeline and device haptics verified successfully!',
+    });
+    if (success) {
+      addToast('success', 'Alert Sent 📱', 'Test notification dispatched to your device.');
+    } else {
+      addToast('warning', 'Notice', 'In-app alert and sound dispatched. Enable browser notifications for system banners.');
+    }
+  };
 
   const loadTerminals = async () => {
     if (!restaurant?.id) return;
@@ -579,6 +616,67 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
             >
               <Plus className="w-4 h-4" /> Register New Terminal
             </Button>
+          </div>
+        </div>
+
+        {/* Device Notifications & Mobile Alerts Card */}
+        <div className="p-4 bg-[#0d1015] border border-[#1e232e] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+              notificationPerm === 'granted'
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                : notificationPerm === 'denied'
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+            }`}>
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-white">Device & Mobile Notifications</h4>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] uppercase font-mono px-2 py-0.5 border ${
+                    notificationPerm === 'granted'
+                      ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
+                      : notificationPerm === 'denied'
+                      ? 'border-rose-500/30 text-rose-400 bg-rose-500/10'
+                      : 'border-amber-500/30 text-amber-400 bg-amber-500/10'
+                  }`}
+                >
+                  {notificationPerm === 'granted' ? 'Active 🟢' : notificationPerm === 'denied' ? 'Blocked 🔴' : 'Not Enabled 🟡'}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {notificationPerm === 'granted'
+                  ? 'System notifications, haptic vibration, and audio chimes are enabled on this device for real-time terminal registration.'
+                  : notificationPerm === 'denied'
+                  ? 'Notifications are blocked in your browser settings. Please allow notifications for dinely.food in site settings.'
+                  : 'Enable browser notifications to receive instant audio, haptic, and system alerts when terminals register or waiter calls arrive.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {notificationPerm !== 'granted' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEnableNotifications}
+                className="text-xs border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-1.5"
+              >
+                <Bell className="w-3.5 h-3.5" /> Enable Notifications
+              </Button>
+            )}
+            {notificationPerm === 'granted' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSendTestNotification}
+                className="text-xs border-[#2a303c] text-slate-300 hover:text-white flex items-center gap-1.5"
+              >
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400" /> Test Device Alert
+              </Button>
+            )}
           </div>
         </div>
 

@@ -93,6 +93,7 @@ import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
+import { sendAppNotification, registerServiceWorker } from '../../packages/utils/notifications';
 
 interface RestaurantAppProps {
   activeRestaurant?: any;
@@ -597,6 +598,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       realtimeBus.connect(restId, 'OWNER');
     }
 
+    registerServiceWorker().catch(() => {});
     loadData();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
@@ -757,18 +759,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         const msg = payload.message || `New terminal registered: ${tName} (${tCode})`;
         addToast('success', 'Terminal Registered 📱', msg);
 
-        // Native Phone & Browser Notification
-        try {
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('Dinely OS: Terminal Registered 📱', {
-              body: msg,
-              icon: '/favicon.ico',
-              tag: `terminal-${tCode || Date.now()}`,
-            });
-          }
-        } catch (nErr) {
+        // Native Phone & Browser Notification (Service Worker + Mobile Haptics + Desktop Fallback)
+        sendAppNotification('Dinely OS: Terminal Registered 📱', {
+          body: msg,
+          icon: '/favicon.png',
+          tag: `terminal-${tCode || Date.now()}`,
+          url: '/restaurant/dashboard',
+        }).catch((nErr) => {
           console.warn('[Notification] Trigger failed:', nErr);
-        }
+        });
       } else if (event.type === 'RECONNECTED') {
         loadData(false);
       }
