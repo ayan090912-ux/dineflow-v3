@@ -16,6 +16,9 @@ import {
   Organization,
   Order,
   RestaurantTerminal,
+  WeddingEvent,
+  EventTable,
+  PublicWeddingEventResponse,
 } from '../../types';
 import { firebaseAuth } from '../../auth/firebase';
 import { BaseApiClient } from '../core/baseClient';
@@ -2695,6 +2698,155 @@ export class RestaurantClient {
     this.base.organizations.push(newOrg);
     this.base.saveDatabase();
     return newOrg;
+  }
+
+  // --- Weddings & Events Management ---
+  async getEvents(restaurantId?: string): Promise<WeddingEvent[]> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) return [];
+
+    try {
+      const events = await this.base.executeProtectedRequest<WeddingEvent[]>(
+        `/restaurants/${encodeURIComponent(targetId)}/events`,
+        { method: 'GET' },
+        'STAFF'
+      );
+      return Array.isArray(events) ? events : [];
+    } catch (e) {
+      console.warn('API fetch for wedding events failed:', e);
+      return [];
+    }
+  }
+
+  async getEvent(eventId: string, restaurantId?: string): Promise<WeddingEvent> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<WeddingEvent>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}`,
+      { method: 'GET' },
+      'STAFF'
+    );
+  }
+
+  async createEvent(
+    eventData: Partial<WeddingEvent> & { title: string; eventDate: string; tableCount?: number },
+    restaurantId?: string
+  ): Promise<WeddingEvent> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<WeddingEvent>(
+      `/restaurants/${encodeURIComponent(targetId)}/events`,
+      {
+        method: 'POST',
+        body: JSON.stringify(eventData),
+      },
+      'OWNER'
+    );
+  }
+
+  async updateEvent(
+    eventId: string,
+    updates: Partial<WeddingEvent>,
+    restaurantId?: string
+  ): Promise<WeddingEvent> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<WeddingEvent>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      },
+      'OWNER'
+    );
+  }
+
+  async deleteEvent(eventId: string, restaurantId?: string): Promise<{ success: boolean }> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<{ success: boolean }>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}`,
+      { method: 'DELETE' },
+      'OWNER'
+    );
+  }
+
+  async toggleEventOrdering(eventId: string, restaurantId?: string): Promise<{ isOrderingOpen: boolean }> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<{ isOrderingOpen: boolean }>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/toggle-ordering`,
+      { method: 'POST' },
+      'STAFF'
+    );
+  }
+
+  async addEventTable(
+    eventId: string,
+    tableData: { tableNumber: string; tableLabel?: string; capacity?: number },
+    restaurantId?: string
+  ): Promise<EventTable> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<EventTable>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/tables`,
+      {
+        method: 'POST',
+        body: JSON.stringify(tableData),
+      },
+      'OWNER'
+    );
+  }
+
+  async deleteEventTable(
+    eventId: string,
+    tableId: string,
+    restaurantId?: string
+  ): Promise<{ success: boolean }> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<{ success: boolean }>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/tables/${encodeURIComponent(tableId)}`,
+      { method: 'DELETE' },
+      'OWNER'
+    );
+  }
+
+  async getEventOrders(eventId: string, restaurantId?: string): Promise<Order[]> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) return [];
+
+    try {
+      const orders = await this.base.executeProtectedRequest<Order[]>(
+        `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/orders`,
+        { method: 'GET' },
+        'STAFF'
+      );
+      return Array.isArray(orders) ? orders.map(normalizeOrder) : [];
+    } catch (e) {
+      console.warn('API fetch for event orders failed:', e);
+      return [];
+    }
+  }
+
+  async getPublicEvent(eventId: string, table?: string): Promise<PublicWeddingEventResponse> {
+    const apiBase = getApiBaseUrl();
+    const tableQuery = table ? `?table=${encodeURIComponent(table)}` : '';
+    const res = await fetch(`${apiBase}/public/events/${encodeURIComponent(eventId)}${tableQuery}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to load wedding event' }));
+      throw new Error(err.detail || `Error loading wedding event (${res.status})`);
+    }
+    return await res.json();
   }
 }
 

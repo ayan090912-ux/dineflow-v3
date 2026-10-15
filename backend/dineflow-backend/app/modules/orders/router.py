@@ -44,6 +44,8 @@ class CreateOrderSchema(BaseModel):
     customerName: Optional[str] = "Guest"
     notes: Optional[str] = ""
     orderType: Optional[str] = "DINE_IN"
+    eventId: Optional[str] = None
+    eventName: Optional[str] = None
 
 class UpdateOrderStatusSchema(BaseModel):
     status: Optional[str] = None
@@ -131,6 +133,12 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
         "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
         "business_day_id": getattr(order, "business_day_id", None),
         "businessDayId": getattr(order, "business_day_id", None),
+        "order_type": getattr(order, "order_type", "DINE_IN") or "DINE_IN",
+        "orderType": getattr(order, "order_type", "DINE_IN") or "DINE_IN",
+        "event_id": getattr(order, "event_id", None),
+        "eventId": getattr(order, "event_id", None),
+        "event_name": getattr(order, "event_name", None),
+        "eventName": getattr(order, "event_name", None),
         "created_at": created_at_val,
         "createdAt": created_at_val,
     }
@@ -465,7 +473,36 @@ async def create_order(
         res_bday = await db.execute(query_bday)
         active_bday_id = res_bday.scalar_one_or_none()
 
-        print(f"[ORDER_DATABASE_INSERT] order_id={order_id} restaurant_id={restaurant.id} table_id={tbl_id} session_id={session_id} business_day_id={active_bday_id}")
+        # Event Verification & Association (Weddings & Events Module)
+        eff_order_type = payload.orderType or "DINE_IN"
+        eff_event_id = None
+        eff_event_name = None
+        if payload.eventId:
+            from app.modules.weddings.models import WeddingEvent
+            evt_query = select(WeddingEvent).where(
+                WeddingEvent.id == payload.eventId,
+                WeddingEvent.restaurant_id == restaurant.id
+            )
+            evt_res = await db.execute(evt_query)
+            evt_obj = evt_res.scalar_one_or_none()
+            if not evt_obj:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Event '{payload.eventId}' was not found for this venue."
+                )
+            if not evt_obj.is_ordering_open:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Ordering is currently paused or closed for event '{evt_obj.title}'."
+                )
+            if evt_obj.status in ("COMPLETED", "CANCELLED"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"This event is marked as {evt_obj.status.lower()} and cannot receive new orders."
+                )
+            eff_order_type = "WEDDING_EVENT"
+            eff_event_id = evt_obj.id
+            eff_event_name = evt_obj.title
 
         new_order = Order(
             id=order_id,
@@ -487,6 +524,9 @@ async def create_order(
             eta_target_timestamp=None,
             items_json=items_list_dict,
             tax_breakdown_json=tax_breakdown,
+            order_type=eff_order_type,
+            event_id=eff_event_id,
+            event_name=eff_event_name,
             created_at=now_utc,
         )
         db.add(new_order)

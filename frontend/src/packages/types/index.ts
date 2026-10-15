@@ -679,7 +679,9 @@ export interface Order {
   tableNumber: string;
   tableSessionId?: string;
   businessDayId?: string;
-  orderType?: 'DINE_IN' | 'PICKUP';
+  orderType?: 'DINE_IN' | 'PICKUP' | 'WEDDING_EVENT' | string;
+  eventId?: string;
+  eventName?: string;
   customerName?: string;
   customerPhone?: string;
   notes?: string;
@@ -741,7 +743,7 @@ export interface FulfillmentTicket {
   updatedAt: string;
   completedAt?: string;
   customerName?: string;
-  orderType?: 'DINE_IN' | 'PICKUP';
+  orderType?: 'DINE_IN' | 'PICKUP' | 'WEDDING_EVENT' | string;
 }
 
 export function getFulfillmentStation(item: {
@@ -871,5 +873,96 @@ export interface AdminVerificationResult {
   email: string;
   role: string;
   custom_claims?: Record<string, any>;
+}
+
+export interface WeddingEvent {
+  id: string;
+  restaurantId: string;
+  title: string;
+  coupleNames?: string;
+  eventType: 'WEDDING' | 'RECEPTION' | 'ENGAGEMENT' | 'SANGEET' | 'ANNIVERSARY' | 'CELEBRATION' | string;
+  eventDate: string;
+  startTime?: string;
+  endTime?: string;
+  venueName?: string;
+  welcomeMessage?: string;
+  themeColor: 'champagne' | 'ivory_gold' | 'blush_rose' | 'emerald_elegance' | 'burgundy_velvet' | 'midnight_navy' | string;
+  coverImageUrl?: string;
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
+  isOrderingOpen: boolean;
+  menuSelectionType: 'FULL_MENU' | 'RESTRICTED';
+  allowedCategoryIds?: string[];
+  allowedItemIds?: string[];
+  estimatedGuestCount: number;
+  notes?: string;
+  tableCount?: number;
+  orderCount?: number;
+  totalRevenue?: number;
+  tables?: EventTable[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EventTable {
+  id: string;
+  eventId: string;
+  restaurantId: string;
+  tableNumber: string;
+  tableLabel?: string;
+  capacity: number;
+  qrCodeUrl?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PublicWeddingEventResponse {
+  event: {
+    id: string;
+    title: string;
+    coupleNames: string;
+    eventType: string;
+    eventDate: string;
+    startTime: string;
+    endTime: string;
+    venueName: string;
+    welcomeMessage: string;
+    themeColor: string;
+    coverImageUrl: string;
+    status: string;
+    isOrderingOpen: boolean;
+  };
+  restaurant: {
+    id: string;
+    name: string;
+    slug: string;
+    logoUrl?: string;
+    currency: string;
+  };
+  table?: {
+    id?: string;
+    tableNumber: string;
+    tableLabel?: string;
+    capacity?: number;
+  } | null;
+  menu: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    items: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      price: number;
+      imageUrl?: string;
+      isVegetarian?: boolean;
+      isAlcoholic?: boolean;
+      isAvailable?: boolean;
+      categoryName?: string;
+      categoryId?: string;
+      variants?: any;
+      modifiers?: any;
+    }>;
+  }>;
 }
 

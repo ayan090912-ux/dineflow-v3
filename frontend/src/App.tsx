@@ -28,6 +28,7 @@ const SetupWizard = lazy(() => import('./apps/onboarding/SetupWizard').then(m =>
 const RestaurantSignupPage = lazy(() => import('./apps/onboarding/RestaurantSignupPage').then(m => ({ default: m.RestaurantSignupPage })));
 const PendingApprovalPage = lazy(() => import('./apps/onboarding/PendingApprovalPage').then(m => ({ default: m.PendingApprovalPage })));
 const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector').then(m => ({ default: m.WorkspaceSelector })));
+const WeddingGuestApp = lazy(() => import('./apps/wedding/WeddingGuestApp').then(m => ({ default: m.WeddingGuestApp })));
 
 function RouteLoadingFallback() {
   return (
@@ -640,6 +641,8 @@ function AppContent() {
         cleanPath.startsWith('/table/') ||
         cleanPath === '/order' ||
         cleanPath.startsWith('/order/') ||
+        cleanPath.startsWith('/event') ||
+        cleanPath.startsWith('/wedding') ||
         cleanPath === '/login' ||
         cleanPath.endsWith('/login');
 
@@ -655,6 +658,15 @@ function AppContent() {
 
       // Inside Resolved Tenant: Route by Path to the corresponding Tenant Application
       const tenantApp = resolveTenantAppFromPath(cleanPath);
+
+      // 0. Weddings & Events Luxury Guest Application
+      if (
+        tenantApp === 'WEDDING' ||
+        cleanPath.startsWith('/event') ||
+        cleanPath.startsWith('/wedding')
+      ) {
+        return <WeddingGuestApp />;
+      }
 
       // 1. Customer Digital Menu & Ordering
       if (tenantApp === 'CUSTOMER') {
@@ -1093,6 +1105,8 @@ function AppContent() {
       cleanPath === '/features' ||
       cleanPath === '/customer' ||
       cleanPath.startsWith('/customer/') ||
+      cleanPath.startsWith('/event') ||
+      cleanPath.startsWith('/wedding') ||
       cleanPath === '/auth' ||
       cleanPath === '/login' ||
       cleanPath === '/signin' ||
@@ -1495,7 +1509,16 @@ function AppContent() {
     }
 
 
-    // 14. Customer Mobile Ordering Web App (Deep Linking Support)
+    // 14. Weddings & Luxury Events Guest Application (Platform or Root Domain Deep Link)
+    if (
+      cleanPath.startsWith('/event') ||
+      cleanPath.startsWith('/events') ||
+      cleanPath.startsWith('/wedding')
+    ) {
+      return <WeddingGuestApp />;
+    }
+
+    // 15. Customer Mobile Ordering Web App (Deep Linking Support)
     if (
       cleanPath.startsWith('/customer') ||
       cleanPath.startsWith('/order') ||
@@ -1505,7 +1528,7 @@ function AppContent() {
       return <CustomerApp />;
     }
 
-    // 15. Exhaustive Fallback: Never render a blank screen!
+    // 16. Exhaustive Fallback: Never render a blank screen!
     return <NotFoundPage onNavigate={navigateTo} />;
   }, [cleanPath, currentUser, currentRestaurant, kitchenOrders, activeOwnerData, checkWorkspaceAccess, navigateTo, handleLogout, domainResolution, resolvedTenant, tenantResolutionState, authState, authError]);
 

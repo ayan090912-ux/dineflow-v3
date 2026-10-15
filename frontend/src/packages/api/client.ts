@@ -33,6 +33,9 @@ import type {
   AdminApplication,
   AdminRestaurant,
   RestaurantTerminal,
+  WeddingEvent,
+  EventTable,
+  PublicWeddingEventResponse,
 } from '../types';
 
 import {
@@ -442,6 +445,64 @@ export class DinelyApiClient extends BaseApiClient {
 
   async deleteTerminal(terminalId: string, restaurantId?: string): Promise<void> {
     return this.restaurant.deleteTerminal(terminalId, restaurantId);
+  }
+
+  // ==========================================
+  // WEDDINGS & EVENTS DOMAIN DELEGATES
+  // ==========================================
+  async getEvents(restaurantId?: string): Promise<WeddingEvent[]> {
+    return this.restaurant.getEvents(restaurantId);
+  }
+
+  async getEvent(eventId: string, restaurantId?: string): Promise<WeddingEvent> {
+    return this.restaurant.getEvent(eventId, restaurantId);
+  }
+
+  async createEvent(
+    eventData: Partial<WeddingEvent> & { title: string; eventDate: string; tableCount?: number },
+    restaurantId?: string
+  ): Promise<WeddingEvent> {
+    return this.restaurant.createEvent(eventData, restaurantId);
+  }
+
+  async updateEvent(
+    eventId: string,
+    updates: Partial<WeddingEvent>,
+    restaurantId?: string
+  ): Promise<WeddingEvent> {
+    return this.restaurant.updateEvent(eventId, updates, restaurantId);
+  }
+
+  async deleteEvent(eventId: string, restaurantId?: string): Promise<{ success: boolean }> {
+    return this.restaurant.deleteEvent(eventId, restaurantId);
+  }
+
+  async toggleEventOrdering(eventId: string, restaurantId?: string): Promise<{ isOrderingOpen: boolean }> {
+    return this.restaurant.toggleEventOrdering(eventId, restaurantId);
+  }
+
+  async addEventTable(
+    eventId: string,
+    tableData: { tableNumber: string; tableLabel?: string; capacity?: number },
+    restaurantId?: string
+  ): Promise<EventTable> {
+    return this.restaurant.addEventTable(eventId, tableData, restaurantId);
+  }
+
+  async deleteEventTable(
+    eventId: string,
+    tableId: string,
+    restaurantId?: string
+  ): Promise<{ success: boolean }> {
+    return this.restaurant.deleteEventTable(eventId, tableId, restaurantId);
+  }
+
+  async getEventOrders(eventId: string, restaurantId?: string): Promise<Order[]> {
+    return this.restaurant.getEventOrders(eventId, restaurantId);
+  }
+
+  async getPublicEvent(eventId: string, table?: string): Promise<PublicWeddingEventResponse> {
+    return this.restaurant.getPublicEvent(eventId, table);
   }
 
   async getCategories(restaurantId?: string): Promise<MenuCategory[]> {

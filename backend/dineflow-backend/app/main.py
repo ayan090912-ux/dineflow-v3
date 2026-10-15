@@ -22,6 +22,7 @@ import app.modules.taxes.models
 import app.modules.inventory.models
 import app.modules.business_day.models
 import app.modules.terminals.models
+import app.modules.weddings.models
 
 
 from sqlalchemy import text
@@ -116,6 +117,47 @@ async def ensure_db_schema_columns(conn):
         );""",
         """CREATE INDEX IF NOT EXISTS ix_terminals_restaurant_id ON terminals (restaurant_id);""",
         """CREATE INDEX IF NOT EXISTS ix_terminals_terminal_code ON terminals (terminal_code);""",
+        """CREATE TABLE IF NOT EXISTS wedding_events (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            couple_names VARCHAR(255),
+            event_type VARCHAR(50) DEFAULT 'WEDDING' NOT NULL,
+            event_date VARCHAR(50) NOT NULL,
+            start_time VARCHAR(20) DEFAULT '18:00',
+            end_time VARCHAR(20) DEFAULT '23:30',
+            venue_name VARCHAR(255),
+            welcome_message TEXT,
+            theme_color VARCHAR(50) DEFAULT 'champagne' NOT NULL,
+            cover_image_url TEXT,
+            status VARCHAR(30) DEFAULT 'DRAFT' NOT NULL,
+            is_ordering_open BOOLEAN DEFAULT TRUE NOT NULL,
+            menu_selection_type VARCHAR(30) DEFAULT 'FULL_MENU' NOT NULL,
+            allowed_category_ids JSON,
+            allowed_item_ids JSON,
+            estimated_guest_count INTEGER DEFAULT 100 NOT NULL,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+        );""",
+        """CREATE INDEX IF NOT EXISTS ix_wedding_events_restaurant_id ON wedding_events (restaurant_id);""",
+        """CREATE INDEX IF NOT EXISTS ix_wedding_events_event_date ON wedding_events (event_date);""",
+        """CREATE INDEX IF NOT EXISTS ix_wedding_events_status ON wedding_events (status);""",
+        """CREATE TABLE IF NOT EXISTS event_tables (
+            id VARCHAR(255) PRIMARY KEY,
+            event_id VARCHAR(255) NOT NULL,
+            restaurant_id VARCHAR(255) NOT NULL,
+            table_number VARCHAR(50) NOT NULL,
+            table_label VARCHAR(100),
+            capacity INTEGER DEFAULT 8 NOT NULL,
+            qr_code_url TEXT,
+            is_active BOOLEAN DEFAULT TRUE NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            CONSTRAINT uq_event_table_number UNIQUE (event_id, table_number)
+        );""",
+        """CREATE INDEX IF NOT EXISTS ix_event_tables_event_id ON event_tables (event_id);""",
+        """CREATE INDEX IF NOT EXISTS ix_event_tables_restaurant_id ON event_tables (restaurant_id);""",
     ]
     for stmt in create_table_statements:
         try:
@@ -173,6 +215,10 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE tables ADD COLUMN IF NOT EXISTS position_x FLOAT DEFAULT 0.0;",
         "ALTER TABLE tables ADD COLUMN IF NOT EXISTS position_y FLOAT DEFAULT 0.0;",
         "ALTER TABLE tables ADD COLUMN IF NOT EXISTS rotation FLOAT DEFAULT 0.0;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(50) DEFAULT 'DINE_IN';",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS event_id VARCHAR(255);",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS event_name VARCHAR(255);",
+        "CREATE INDEX IF NOT EXISTS ix_orders_event_id ON orders (event_id);",
     ]
     for stmt in schema_patch_statements:
         try:
@@ -378,6 +424,7 @@ from app.modules.websocket.router import router as websocket_router
 from app.modules.business_day.router import router as business_day_router
 from app.modules.auth.staff_router import router as staff_auth_router
 from app.modules.terminals.router import router as terminal_router
+from app.modules.weddings.router import router as wedding_router, public_router as public_wedding_router
 
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -386,6 +433,9 @@ app.include_router(staff_auth_router, prefix="/api/v1/auth/staff", tags=["Staff 
 app.include_router(platform_router, prefix="/api/v1/admin", tags=["Platform Admin"])
 app.include_router(restaurant_router, prefix="/api/v1/restaurants", tags=["Restaurants"])
 app.include_router(terminal_router, prefix="/api/v1/restaurants", tags=["Terminals"])
+app.include_router(wedding_router, prefix="/api/v1/restaurants", tags=["Weddings & Events"])
+app.include_router(public_wedding_router, prefix="/api/v1/public", tags=["Public Wedding Events"])
+app.include_router(public_wedding_router, prefix="/api/v1", tags=["Public Wedding Events Alias"])
 app.include_router(tax_router, prefix="/api/v1/restaurants", tags=["Taxes"])
 app.include_router(billing_router, prefix="/api/v1/restaurants", tags=["Billing & Invoices"])
 app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])

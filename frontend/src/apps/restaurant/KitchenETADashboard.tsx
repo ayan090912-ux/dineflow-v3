@@ -811,6 +811,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     key={order.id}
                     className="bg-[#12151b] border border-amber-500/40 hover:border-amber-400 p-4 space-y-3 shadow-md transition-all rounded-xl"
                   >
+                    {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
+                      <div className="mb-2">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
+                          <span>💍</span>
+                          <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
+                            WEDDING EVENT · {order.eventName || 'Wedding'} · TABLE {order.tableNumber}
+                          </span>
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="flex items-center gap-2">
@@ -820,7 +830,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-300 mt-0.5">
-                          {order.customerName || 'Walk-in Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
+                          {order.customerName || 'Walk-in Guest'} • {order.orderType === 'WEDDING_EVENT' ? '💍 Wedding Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
                         </p>
                       </div>
                       <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
@@ -919,6 +929,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           : 'border-[#1e232e] bg-[#12151b]'
                       }`}
                     >
+                      {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
+                        <div className="mb-2">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
+                            <span>💍</span>
+                            <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
+                              WEDDING EVENT · {order.eventName || 'Wedding'} · TABLE {order.tableNumber}
+                            </span>
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center gap-2">
@@ -930,7 +950,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                             )}
                           </div>
                           <p className="text-xs text-slate-300 mt-0.5">
-                            {order.customerName || 'Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
+                            {order.customerName || 'Guest'} • {order.orderType === 'WEDDING_EVENT' ? '💍 Wedding Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
                           </p>
                         </div>
                         <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
@@ -1045,6 +1065,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     key={order.id}
                     className="bg-[#12151b] border border-emerald-500/40 p-4 space-y-3 shadow-md rounded-xl"
                   >
+                    {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
+                      <div className="mb-2">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm">
+                          <span>💍</span>
+                          <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
+                            WEDDING EVENT · {order.eventName || 'Wedding'} · TABLE {order.tableNumber}
+                          </span>
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-start">
                       <div>
                         <span className="font-mono font-bold text-emerald-400 text-lg">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>

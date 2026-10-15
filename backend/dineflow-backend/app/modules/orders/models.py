@@ -29,6 +29,9 @@ class Order(Base, TimestampMixin):
     eta_target_timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     items_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     tax_breakdown_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    order_type: Mapped[Optional[str]] = mapped_column(String(50), default="DINE_IN", nullable=True)  # DINE_IN | PICKUP | WEDDING_EVENT
+    event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    event_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 
 class OrderItem(Base, TimestampMixin):

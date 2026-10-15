@@ -22,6 +22,7 @@ export type TenantAppType =
   | 'BILLING'
   | 'SETTINGS'
   | 'AUTH'
+  | 'WEDDING'
   | 'NOT_FOUND';
 
 const RESERVED_SUBDOMAINS = new Set([
@@ -172,6 +173,18 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p.startsWith('/reports/')
   ) {
     return 'SETTINGS';
+  }
+
+  // 7.5. Wedding & Events Guest App
+  if (
+    p === '/event' ||
+    p.startsWith('/event/') ||
+    p === '/events' ||
+    p.startsWith('/events/') ||
+    p === '/wedding' ||
+    p.startsWith('/wedding/')
+  ) {
+    return 'WEDDING';
   }
 
   // 8. Customer Digital Menu / Table Ordering
