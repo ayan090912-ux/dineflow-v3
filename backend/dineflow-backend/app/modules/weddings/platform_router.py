@@ -313,10 +313,10 @@ async def list_admin_wedding_requests(
     """
     stmt = select(WeddingAccessRequest).order_by(WeddingAccessRequest.created_at.desc())
 
-    if status_filter and status_filter.upper() != "ALL":
+    if status_filter and isinstance(status_filter, str) and status_filter.upper() != "ALL":
         stmt = stmt.where(WeddingAccessRequest.lifecycle_status == status_filter.upper())
 
-    if search:
+    if search and isinstance(search, str):
         term = f"%{search.strip().lower()}%"
         stmt = stmt.where(
             or_(
