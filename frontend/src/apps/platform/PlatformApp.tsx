@@ -37,7 +37,9 @@ import {
   Lock,
   LogOut,
   Archive,
+  Crown,
 } from 'lucide-react';
+import { WeddingRequestsTab } from './WeddingRequestsTab';
 import {
   Button,
   Card,
@@ -78,7 +80,7 @@ interface PlatformAppProps {
 }
 
 export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pending' | 'restaurants' | 'orgs' | 'tickets' | 'audit'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pending' | 'wedding_requests' | 'restaurants' | 'orgs' | 'tickets' | 'audit'>('dashboard');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LIVE' | 'PENDING' | 'INACTIVE' | 'SUSPENDED' | 'DELETED'>('ALL');
   
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -682,9 +684,14 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
               { id: 'dashboard', label: 'Overview', icon: <BarChart3 className="w-4 h-4" /> },
               {
                 id: 'pending',
-                label: 'Pending Approvals',
+                label: 'Restaurant Approvals',
                 icon: <ClockIcon className="w-4 h-4 text-amber-400" />,
                 badge: (stats?.pendingApprovals ?? pendingRestaurants.length) > 0 ? (stats?.pendingApprovals ?? pendingRestaurants.length) : undefined,
+              },
+              {
+                id: 'wedding_requests',
+                label: 'Wedding Requests',
+                icon: <Crown className="w-4 h-4 text-amber-300" />,
               },
               { id: 'restaurants', label: 'All Restaurants', icon: <Utensils className="w-4 h-4" /> },
               { id: 'orgs', label: 'Tenant Organizations', icon: <Building2 className="w-4 h-4" /> },
@@ -825,6 +832,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
             <h2 className="text-xl font-semibold text-white tracking-tight mt-1">
               {activeTab === 'dashboard' && 'Platform Metrics & Overview'}
               {activeTab === 'pending' && 'Pending Approvals Queue'}
+              {activeTab === 'wedding_requests' && 'Weddings & Celebrations Access Applications'}
               {activeTab === 'restaurants' && 'Restaurant Outlet Directory'}
               {activeTab === 'orgs' && 'Tenant Organizations'}
               {activeTab === 'tickets' && 'Support Tickets & Inquiries'}
@@ -1548,6 +1556,11 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
           </div>
         )}
 
+        {/* TAB: WEDDING REQUESTS */}
+        {activeTab === 'wedding_requests' && (
+          <WeddingRequestsTab />
+        )}
+
         {/* TAB 6: AUDIT LOGS */}
         {activeTab === 'audit' && (
           <div className="space-y-6">
@@ -1870,6 +1883,7 @@ export const PlatformApp: React.FC<PlatformAppProps> = ({ onLogout }) => {
         options={[
           { id: '1', label: 'View Platform Metrics', category: 'Analytics', icon: <BarChart3 className="w-4 h-4" />, action: () => setActiveTab('dashboard') },
           { id: '2', label: 'Review Pending Applications', category: 'Approval', icon: <ClockIcon className="w-4 h-4" />, action: () => setActiveTab('pending') },
+          { id: '2b', label: 'Review Wedding Requests', category: 'Weddings', icon: <Crown className="w-4 h-4 text-amber-300" />, action: () => setActiveTab('wedding_requests') },
           { id: '3', label: 'Manage All Outlets', category: 'Directory', icon: <Utensils className="w-4 h-4" />, action: () => setActiveTab('restaurants') },
           { id: '4', label: 'Inspect Security Audit Logs', category: 'Security', icon: <ShieldAlert className="w-4 h-4" />, action: () => setActiveTab('audit') },
         ]}

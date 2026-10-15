@@ -29,6 +29,8 @@ const RestaurantSignupPage = lazy(() => import('./apps/onboarding/RestaurantSign
 const PendingApprovalPage = lazy(() => import('./apps/onboarding/PendingApprovalPage').then(m => ({ default: m.PendingApprovalPage })));
 const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector').then(m => ({ default: m.WorkspaceSelector })));
 const WeddingGuestApp = lazy(() => import('./apps/wedding/WeddingGuestApp').then(m => ({ default: m.WeddingGuestApp })));
+const WeddingLandingPage = lazy(() => import('./apps/wedding/WeddingLandingPage').then(m => ({ default: m.WeddingLandingPage })));
+const WeddingOrganizerDashboard = lazy(() => import('./apps/wedding/WeddingOrganizerDashboard').then(m => ({ default: m.WeddingOrganizerDashboard })));
 
 function RouteLoadingFallback() {
   return (
@@ -94,6 +96,13 @@ function PlatformTenantRedirector({
         if (!isMounted) return;
 
         if (!list || list.length === 0) {
+          try {
+            const weddingRes = await api.getMyWeddingWorkspaces();
+            if (weddingRes?.workspaces && weddingRes.workspaces.length > 0) {
+              onNavigate('/weddings/dashboard');
+              return;
+            }
+          } catch {}
           onNavigate('/wizard?mode=create');
           return;
         }
@@ -663,7 +672,8 @@ function AppContent() {
       if (
         tenantApp === 'WEDDING' ||
         cleanPath.startsWith('/event') ||
-        cleanPath.startsWith('/wedding')
+        cleanPath.startsWith('/events') ||
+        cleanPath.startsWith('/wedding/guest')
       ) {
         return <WeddingGuestApp />;
       }
@@ -1472,6 +1482,13 @@ function AppContent() {
               try {
                 const myRests = await api.getOwnerRestaurants(user?.email, user?.id);
                 if (!myRests || myRests.length === 0) {
+                  try {
+                    const weddingRes = await api.getMyWeddingWorkspaces();
+                    if (weddingRes?.workspaces && weddingRes.workspaces.length > 0) {
+                      navigateTo('/weddings/dashboard');
+                      return;
+                    }
+                  } catch {}
                   navigateTo('/wizard?mode=create');
                 } else if (myRests.length === 1) {
                   const onlyRest = myRests[0];
@@ -1509,11 +1526,42 @@ function AppContent() {
     }
 
 
+    // 13.5. Weddings & Events Platform Product
+    if (
+      cleanPath === '/weddings' ||
+      cleanPath === '/weddings/' ||
+      cleanPath === '/wedding-events' ||
+      cleanPath === '/weddings/request' ||
+      cleanPath === '/weddings/apply'
+    ) {
+      return (
+        <WeddingLandingPage
+          onNavigate={navigateTo}
+          onOpenDashboard={() => navigateTo('/weddings/dashboard')}
+        />
+      );
+    }
+
+    if (
+      cleanPath === '/weddings/dashboard' ||
+      cleanPath === '/weddings/manage' ||
+      cleanPath === '/wedding/dashboard' ||
+      cleanPath.startsWith('/weddings/workspace')
+    ) {
+      return (
+        <WeddingOrganizerDashboard
+          onNavigate={navigateTo}
+          onLogout={() => handleLogout('/weddings')}
+        />
+      );
+    }
+
     // 14. Weddings & Luxury Events Guest Application (Platform or Root Domain Deep Link)
     if (
       cleanPath.startsWith('/event') ||
       cleanPath.startsWith('/events') ||
-      cleanPath.startsWith('/wedding')
+      cleanPath === '/wedding/guest' ||
+      cleanPath.startsWith('/wedding/guest/')
     ) {
       return <WeddingGuestApp />;
     }

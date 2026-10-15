@@ -36,6 +36,7 @@ from app.modules.customer_requests.models import CustomerRequestModel
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot, TaxAuditLog
 from app.modules.inventory.models import InventoryItemModel, SupplierModel
 from app.modules.business_day.models import BusinessDay
+from app.modules.weddings.models import WeddingAccessRequest, WeddingWorkspace, WeddingEvent, EventTable
 
 TEST_TABLES = [
     PlatformAdmin.__table__,

@@ -61,6 +61,7 @@ import { AdminClient } from './domains/adminClient';
 import { OrderClient } from './domains/orderClient';
 import { BillingClient } from './domains/billingClient';
 import { CustomerClient } from './domains/customerClient';
+import { WeddingClient } from './domains/weddingClient';
 import { RestaurantClient } from './domains/restaurantClient';
 
 // Re-export core helpers, types, and bus for backwards compatibility
@@ -85,6 +86,7 @@ export {
   BillingClient,
   CustomerClient,
   RestaurantClient,
+  WeddingClient,
 };
 
 export type { PortalScope };
@@ -103,6 +105,7 @@ export class DinelyApiClient extends BaseApiClient {
   public readonly orderClient: OrderClient;
   public readonly billing: BillingClient;
   public readonly customer: CustomerClient;
+  public readonly weddings: WeddingClient;
 
   constructor() {
     super();
@@ -112,6 +115,7 @@ export class DinelyApiClient extends BaseApiClient {
     this.orderClient = new OrderClient(this);
     this.billing = new BillingClient(this);
     this.customer = new CustomerClient(this);
+    this.weddings = new WeddingClient(this);
   }
 
   // ==========================================
@@ -946,6 +950,107 @@ export class DinelyApiClient extends BaseApiClient {
   async markAllNotificationsRead() {
     return this.customer.markAllNotificationsRead();
   }
+
+  // ==========================================
+  // WEDDINGS & EVENTS DOMAIN DELEGATES
+  // ==========================================
+  async submitWeddingRequest(data: any) {
+    return this.weddings.submitWeddingRequest(data);
+  }
+
+  async getWeddingRequestStatus(requestId: string, email?: string) {
+    return this.weddings.getWeddingRequestStatus(requestId, email);
+  }
+
+  async getAdminWeddingRequests(status?: string, search?: string) {
+    return this.weddings.getAdminWeddingRequests(status, search);
+  }
+
+  async getAdminWeddingRequestDetail(requestId: string) {
+    return this.weddings.getAdminWeddingRequestDetail(requestId);
+  }
+
+  async approveAdminWeddingRequest(requestId: string, cateringRestaurantId: string, reviewNotes?: string) {
+    return this.weddings.approveAdminWeddingRequest(requestId, cateringRestaurantId, reviewNotes);
+  }
+
+  async rejectAdminWeddingRequest(requestId: string, reason: string) {
+    return this.weddings.rejectAdminWeddingRequest(requestId, reason);
+  }
+
+  async updateAdminWeddingRequestNotes(requestId: string, notes: string) {
+    return this.weddings.updateAdminWeddingRequestNotes(requestId, notes);
+  }
+
+  async getMyWeddingWorkspaces(email?: string) {
+    return this.weddings.getMyWeddingWorkspaces(email);
+  }
+
+  async getWeddingWorkspaceDetail(workspaceId: string, email?: string) {
+    return this.weddings.getWeddingWorkspaceDetail(workspaceId, email);
+  }
+
+  async updateWeddingWorkspaceEvent(workspaceId: string, updates: any, email?: string) {
+    return this.weddings.updateWeddingWorkspaceEvent(workspaceId, updates, email);
+  }
+
+  async updateWorkspaceEvent(workspaceId: string, updates: any, email?: string) {
+    return this.weddings.updateWeddingWorkspaceEvent(workspaceId, updates, email);
+  }
+
+  async toggleWeddingOrdering(workspaceId: string, enabled?: boolean, email?: string) {
+    return this.weddings.toggleWeddingOrdering(workspaceId, enabled, email);
+  }
+
+  async toggleWorkspaceOrdering(workspaceId: string, email?: string) {
+    return this.weddings.toggleWeddingOrdering(workspaceId, undefined, email);
+  }
+
+  async createWeddingWorkspaceTable(
+    workspaceId: string,
+    data: { tableNumber: string; label?: string; capacity?: number },
+    email?: string
+  ) {
+    return this.weddings.createWeddingWorkspaceTable(workspaceId, data, email);
+  }
+
+  async addWorkspaceTable(
+    workspaceId: string,
+    tableNumber: string,
+    tableLabel?: string,
+    capacity?: number,
+    email?: string
+  ) {
+    return this.weddings.createWeddingWorkspaceTable(
+      workspaceId,
+      { tableNumber, label: tableLabel, capacity },
+      email
+    );
+  }
+
+  async deleteWeddingWorkspaceTable(workspaceId: string, tableId: string, email?: string) {
+    return this.weddings.deleteWeddingWorkspaceTable(workspaceId, tableId, email);
+  }
+
+  async deleteWorkspaceTable(workspaceId: string, tableId: string, email?: string) {
+    return this.weddings.deleteWeddingWorkspaceTable(workspaceId, tableId, email);
+  }
+
+  async getWeddingWorkspaceOrders(workspaceId: string, email?: string) {
+    return this.weddings.getWeddingWorkspaceOrders(workspaceId, email);
+  }
+
+  async getWorkspaceOrders(workspaceId: string, email?: string) {
+    return this.weddings.getWeddingWorkspaceOrders(workspaceId, email);
+  }
+
+  async getWeddingWorkspaceReports(workspaceId: string, email?: string) {
+    return this.weddings.getWeddingWorkspaceReports(workspaceId, email);
+  }
+
+  async getWorkspaceReports(workspaceId: string, email?: string) {
+    return this.weddings.getWeddingWorkspaceReports(workspaceId, email);
+  }
 }
 
 // Single singleton facade instance consumed across the entire application
@@ -958,3 +1063,4 @@ export const restaurantApi = api.restaurant;
 export const orderApi = api.orderClient;
 export const billingApi = api.billing;
 export const customerApi = api.customer;
+export const weddingApi = api.weddings;

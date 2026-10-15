@@ -5,10 +5,51 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database.connection import Base
 from app.core.database.base_model import TimestampMixin
 
+class WeddingAccessRequest(Base, TimestampMixin):
+    __tablename__ = "wedding_access_requests"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    applicant_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    applicant_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    applicant_phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    wedding_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), default="WEDDING", nullable=False)  # WEDDING, RECEPTION, ENGAGEMENT, SANGEET, ANNIVERSARY, CELEBRATION
+    event_date: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # YYYY-MM-DD
+    start_time: Mapped[Optional[str]] = mapped_column(String(20), default="18:00", nullable=True)
+    end_time: Mapped[Optional[str]] = mapped_column(String(20), default="23:30", nullable=True)
+    venue_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    venue_city: Mapped[str] = mapped_column(String(100), nullable=False)
+    estimated_guest_count: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    catering_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    catering_restaurant_id: Mapped[Optional[str]] = mapped_column(String(255), ForeignKey("restaurants.id", ondelete="SET NULL"), nullable=True)
+    additional_requirements: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lifecycle_status: Mapped[str] = mapped_column(String(50), default="SUBMITTED", nullable=False, index=True)  # SUBMITTED, UNDER_REVIEW, APPROVED, REJECTED, WITHDRAWN
+    review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
+class WeddingWorkspace(Base, TimestampMixin):
+    __tablename__ = "wedding_workspaces"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    request_id: Mapped[Optional[str]] = mapped_column(String(255), ForeignKey("wedding_access_requests.id", ondelete="SET NULL"), nullable=True)
+    owner_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner_uid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    restaurant_id: Mapped[str] = mapped_column(String(255), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)  # ACTIVE, SUSPENDED, ARCHIVED
+
+
 class WeddingEvent(Base, TimestampMixin):
     __tablename__ = "wedding_events"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    workspace_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    organizer_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     restaurant_id: Mapped[str] = mapped_column(String(255), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     couple_names: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

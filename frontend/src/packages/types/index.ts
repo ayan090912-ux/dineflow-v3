@@ -878,6 +878,8 @@ export interface AdminVerificationResult {
 export interface WeddingEvent {
   id: string;
   restaurantId: string;
+  workspaceId?: string;
+  organizerEmail?: string;
   title: string;
   coupleNames?: string;
   eventType: 'WEDDING' | 'RECEPTION' | 'ENGAGEMENT' | 'SANGEET' | 'ANNIVERSARY' | 'CELEBRATION' | string;
@@ -888,12 +890,14 @@ export interface WeddingEvent {
   welcomeMessage?: string;
   themeColor: 'champagne' | 'ivory_gold' | 'blush_rose' | 'emerald_elegance' | 'burgundy_velvet' | 'midnight_navy' | string;
   coverImageUrl?: string;
-  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
-  isOrderingOpen: boolean;
-  menuSelectionType: 'FULL_MENU' | 'RESTRICTED';
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'PUBLISHED' | string;
+  isOrderingOpen?: boolean;
+  orderingEnabled?: boolean;
+  menuSelectionType: 'FULL_MENU' | 'RESTRICTED' | 'FULL' | string;
   allowedCategoryIds?: string[];
   allowedItemIds?: string[];
-  estimatedGuestCount: number;
+  estimatedGuestCount?: number;
+  estimatedGuests?: number;
   notes?: string;
   tableCount?: number;
   orderCount?: number;
@@ -909,9 +913,10 @@ export interface EventTable {
   restaurantId: string;
   tableNumber: string;
   tableLabel?: string;
+  label?: string;
   capacity: number;
   qrCodeUrl?: string;
-  isActive: boolean;
+  isActive?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -965,4 +970,87 @@ export interface PublicWeddingEventResponse {
     }>;
   }>;
 }
+
+export interface WeddingAccessRequest {
+  id: string;
+  applicantName: string;
+  applicantEmail: string;
+  applicantPhone: string;
+  weddingName: string;
+  eventType: string;
+  eventDate: string;
+  startTime?: string;
+  endTime?: string;
+  venueName: string;
+  venueCity: string;
+  estimatedGuestCount: number;
+  cateringNotes?: string;
+  cateringRestaurantId?: string;
+  cateringRestaurantName?: string;
+  additionalRequirements?: string;
+  notes?: string;
+  lifecycleStatus: 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
+  reviewNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  workspaceId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WeddingWorkspace {
+  id: string;
+  name: string;
+  ownerEmail: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+  restaurantId: string;
+  restaurantName?: string;
+  restaurantSlug?: string;
+  eventId?: string;
+  eventTitle?: string;
+  eventDate?: string;
+  isOrderingOpen?: boolean;
+  createdAt?: string;
+}
+
+export interface WeddingWorkspaceDetail {
+  workspace: {
+    id: string;
+    name: string;
+    ownerEmail: string;
+    status: string;
+    createdAt?: string;
+  };
+  restaurant: {
+    id: string;
+    name: string;
+    slug: string;
+    phone?: string;
+    currency: string;
+  };
+  event: (WeddingEvent & { orderCount?: number; orderRevenue?: number }) | null;
+  tables: EventTable[];
+  availableMenu: Array<{
+    id: string;
+    name: string;
+    items: Array<{
+      id: string;
+      name: string;
+      price: number;
+      description?: string;
+      isVegetarian?: boolean;
+      isAlcoholic?: boolean;
+      imageUrl?: string;
+    }>;
+  }>;
+  rawItems: Array<{
+    id: string;
+    name: string;
+    price: number;
+    categoryId: string;
+    isVegetarian?: boolean;
+    isAlcoholic?: boolean;
+  }>;
+}
+
 

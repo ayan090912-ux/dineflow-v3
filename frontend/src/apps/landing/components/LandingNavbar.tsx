@@ -9,6 +9,7 @@ interface LandingNavbarProps {
   onStaffLogin?: () => void;
   onOpenWorkspace: () => void;
   onNavigateSection: (sectionId: string) => void;
+  onNavigateWeddings?: () => void;
 }
 
 export const LandingNavbar: React.FC<LandingNavbarProps> = ({
@@ -18,6 +19,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
   onStaffLogin,
   onOpenWorkspace,
   onNavigateSection,
+  onNavigateWeddings,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -65,20 +67,42 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
         }`}
       >
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 flex items-center justify-between">
-          {/* Canonical Dinely Brand */}
-          <button
-            type="button"
-            onClick={() => {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              if (window.location.hash) {
-                window.history.replaceState(null, '', window.location.pathname);
-              }
-            }}
-            className="flex items-center cursor-pointer bg-transparent border-none text-white hover:opacity-95 transition-opacity"
-            aria-label="Dinely Home"
-          >
-            <DinelyLogo size="md" />
-          </button>
+          <div className="flex items-center gap-4 sm:gap-6">
+            {/* Canonical Dinely Brand */}
+            <button
+              type="button"
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                if (window.location.hash) {
+                  window.history.replaceState(null, '', window.location.pathname);
+                }
+              }}
+              className="flex items-center cursor-pointer bg-transparent border-none text-white hover:opacity-95 transition-opacity"
+              aria-label="Dinely Home"
+            >
+              <DinelyLogo size="md" />
+            </button>
+
+            {/* Prominent Dual-Product Switcher */}
+            <div className="hidden lg:flex items-center p-1 rounded-full bg-white/[0.07] border border-white/[0.12] backdrop-blur-xl shadow-inner text-xs">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-slate-950 font-semibold shadow-sm">
+                <span>🍽️</span>
+                <span>Restaurants</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateWeddings ? onNavigateWeddings() : window.location.href = '/weddings'}
+                id="nav-switch-to-weddings-btn"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full text-amber-300 hover:text-white hover:bg-white/[0.10] transition-all cursor-pointer bg-transparent border-none"
+              >
+                <span>💍</span>
+                <span>Weddings & Events</span>
+                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-bold tracking-wider">
+                  PREMIUM
+                </span>
+              </button>
+            </div>
+          </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-2" aria-label="Main navigation">
@@ -167,6 +191,23 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             aria-label="Mobile navigation"
           >
             <div className="flex flex-col gap-1.5 px-6 pt-24">
+              {/* Product Switcher for Mobile */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onNavigateWeddings) onNavigateWeddings();
+                  else window.location.href = '/weddings';
+                }}
+                className="rounded-xl px-4 py-3 text-[14px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 flex items-center justify-between mb-2 text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <span>💍</span>
+                  <span>Weddings & Events</span>
+                </div>
+                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">NEW</span>
+              </button>
+
               {navLinks.map((link) => (
                 <a
                   key={link.id}
