@@ -76,7 +76,6 @@ import {
   ToastMessage,
   DinelyLogo,
   LoadingScreen,
-  ProductSwitcher,
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
@@ -92,7 +91,6 @@ import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
-import { WeddingsTab } from './WeddingsTab';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
 import { sendAppNotification, registerServiceWorker } from '../../packages/utils/notifications';
@@ -111,7 +109,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   onNavigate,
 }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings' | 'weddings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings'>(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname.toLowerCase();
       if (p.includes('/menu')) return 'menu';
@@ -124,7 +122,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (p.includes('/waiter')) return 'waiter';
       if (p.includes('/kitchen')) return 'kitchen';
       if (p.includes('/bar')) return 'bar';
-      if (p.includes('/weddings') || p.includes('/events') || p.includes('/wedding')) return 'weddings';
       if (p.includes('/day-management') || p.includes('/daily-closing') || p.includes('/day') || p.includes('/closing')) return 'day_management';
       if (p.includes('/workspace_settings') || p.includes('/settings')) return 'workspace_settings';
     }
@@ -1539,23 +1536,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       <aside className="w-full md:w-64 bg-[#0e1117] border-r border-[#1e232e] p-4 flex flex-col justify-between shrink-0">
         <div>
           {/* Platform Branding Header */}
-          <div className="mb-3 px-2 flex items-center justify-between pb-3 border-b border-[#1e232e]">
+          <div className="mb-4 px-2 flex items-center justify-between pb-3 border-b border-[#1e232e]">
             <DinelyLogo size="sm" />
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 bg-[#151922] px-2 py-0.5 rounded border border-[#242b3b]">Owner OS</span>
-          </div>
-
-          {/* Dinely Dual-Product Switcher */}
-          <div className="mb-4 px-1 flex justify-center">
-            <ProductSwitcher
-              activeProduct="restaurants"
-              theme="dark"
-              className="w-full justify-between"
-              onSwitch={(p) => {
-                if (p === 'weddings') {
-                  window.location.href = 'https://dinely.food/weddings';
-                }
-              }}
-            />
           </div>
 
           {/* Multi-Restaurant Outlet Switcher Button */}
@@ -1646,7 +1629,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     ...(hasBillingModule
                       ? [{ id: 'billing', label: 'Billing & Invoices', icon: <Receipt className="w-4 h-4 text-emerald-400" /> }]
                       : []),
-                    { id: 'weddings', label: 'Weddings & Events', icon: <Sparkles className="w-4 h-4 text-amber-400" /> },
                     { id: 'menu', label: 'Menu & Pricing', icon: <UtensilsCrossed className="w-4 h-4" /> },
                     { id: 'staff', label: 'Staff & Shifts', icon: <Users className="w-4 h-4" /> },
                     {
@@ -1840,7 +1822,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'staff' && 'Employee Clock-In & Shifts'}
               {activeTab === 'inventory' && 'Raw Material Inventory'}
               {activeTab === 'billing' && 'Billing, Taxes & Invoices'}
-              {activeTab === 'weddings' && 'Weddings & Luxury Events'}
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management'}
               {activeTab === 'theme' && 'Brand Identity & Styling'}
               {activeTab === 'workspace_settings' && 'Terminals & Settings'}
@@ -1855,7 +1836,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'staff' && 'Employee profiles, shift schedules, username & password credentials, and assigned terminal stations.'}
               {activeTab === 'inventory' && 'Track kitchen and bar stock levels, minimum reorder thresholds, and suppliers.'}
               {activeTab === 'billing' && 'Table checkouts, split bills, GST/tax management, and payment receipts.'}
-              {activeTab === 'weddings' && 'Curate bespoke wedding banquets, provision decoupled QR table standees, and manage luxury guest dining.'}
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Authoritative operational business-day lifecycle, shift register reconciliation, station prechecks, and daily closing.'}
               {activeTab === 'theme' && "Customize your restaurant's digital storefront, logo, accent colors, and typography."}
               {activeTab === 'workspace_settings' && 'Manage active operational modules, terminal access URLs, and branch configuration.'}
@@ -1863,17 +1843,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="hidden lg:flex items-center mr-1">
-              <ProductSwitcher
-                activeProduct="restaurants"
-                theme="dark"
-                onSwitch={(p) => {
-                  if (p === 'weddings') {
-                    window.location.href = 'https://dinely.food/weddings';
-                  }
-                }}
-              />
-            </div>
             {activeTab === 'menu' && (
               <Button
                 variant="brand"
@@ -4315,14 +4284,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           />
         )}
 
-        {/* Tab: Weddings & Luxury Events */}
-        {activeTab === 'weddings' && (
-          <WeddingsTab
-            currentRestaurant={currentRestaurant}
-            currentUser={currentUser}
-            addToast={addToast}
-          />
-        )}
       </main>
 
       {/* QR Code Modal */}
