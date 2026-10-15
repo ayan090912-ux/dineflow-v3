@@ -149,6 +149,9 @@ export class WeddingClient {
 
   async getMyWeddingWorkspaces(email?: string): Promise<{ workspaces: WeddingWorkspace[] }> {
     const effEmail = this.getEffectiveEmail(email);
+    if (!effEmail && !this.base.currentUser) {
+      return { workspaces: [] };
+    }
     const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
     try {
       return await this.base.executeProtectedRequest<{ workspaces: WeddingWorkspace[] }>(

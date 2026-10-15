@@ -466,6 +466,14 @@ function AppContent() {
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
       if (currentPath.startsWith('/admin')) {
         navigateTo('/admin/login');
+      } else if (
+        currentPath.startsWith('/weddings') ||
+        currentPath.startsWith('/wedding') ||
+        currentPath.startsWith('/event') ||
+        currentPath.startsWith('/events')
+      ) {
+        // Do not redirect wedding applicants, organizers, or guests to restaurant management login
+        return;
       } else {
         navigateTo('/restaurant/login');
       }
@@ -1418,6 +1426,55 @@ function AppContent() {
       return <PlatformApp onLogout={() => handleLogout('/admin/login')} />;
     }
 
+    // 7.5. Weddings & Events Platform Product & Guest Application
+    if (
+      cleanPath === '/weddings' ||
+      cleanPath === '/weddings/' ||
+      cleanPath === '/wedding-events' ||
+      cleanPath === '/weddings/request' ||
+      cleanPath === '/weddings/apply'
+    ) {
+      return (
+        <WeddingLandingPage
+          onNavigate={navigateTo}
+          onNavigateHome={() => navigateTo('/')}
+          onNavigateOrganizerDashboard={() => navigateTo('/weddings/dashboard')}
+          onOpenDashboard={() => navigateTo('/weddings/dashboard')}
+          currentUser={currentUser}
+        />
+      );
+    }
+
+    if (
+      cleanPath === '/weddings/dashboard' ||
+      cleanPath.startsWith('/weddings/dashboard/') ||
+      cleanPath === '/weddings/manage' ||
+      cleanPath.startsWith('/weddings/manage/') ||
+      cleanPath === '/wedding/dashboard' ||
+      cleanPath.startsWith('/wedding/dashboard/') ||
+      cleanPath.startsWith('/weddings/workspace')
+    ) {
+      return (
+        <WeddingOrganizerDashboard
+          onNavigate={navigateTo}
+          onNavigateRestaurants={() => navigateTo('/restaurant/dashboard')}
+          onNavigateHome={() => navigateTo('/')}
+          onLogout={() => handleLogout('/weddings')}
+          currentUser={currentUser}
+        />
+      );
+    }
+
+    // Weddings & Luxury Events Guest Application (Platform or Root Domain Deep Link)
+    if (
+      cleanPath.startsWith('/event') ||
+      cleanPath.startsWith('/events') ||
+      cleanPath === '/wedding/guest' ||
+      cleanPath.startsWith('/wedding/guest/')
+    ) {
+      return <WeddingGuestApp />;
+    }
+
     // 8. Restaurant OS & Operational Terminals on PLATFORM DOMAIN (Root Domain Redirect)
     // Section 1, 5, 8, 9: Restaurant management & operational terminal routes belong exclusively on tenant domains (https://<slug>.dinely.food).
     // When visited on the platform domain (dinely.food), redirect to canonical tenant domain or workspace selector.
@@ -1523,56 +1580,6 @@ function AppContent() {
           onLogout={() => handleLogout('/restaurant/login')}
         />
       );
-    }
-
-
-    // 13.5. Weddings & Events Platform Product
-    if (
-      cleanPath === '/weddings' ||
-      cleanPath === '/weddings/' ||
-      cleanPath === '/wedding-events' ||
-      cleanPath === '/weddings/request' ||
-      cleanPath === '/weddings/apply'
-    ) {
-      return (
-        <WeddingLandingPage
-          onNavigate={navigateTo}
-          onNavigateHome={() => navigateTo('/')}
-          onNavigateOrganizerDashboard={() => navigateTo('/weddings/dashboard')}
-          onOpenDashboard={() => navigateTo('/weddings/dashboard')}
-          currentUser={currentUser}
-        />
-      );
-    }
-
-    if (
-      cleanPath === '/weddings/dashboard' ||
-      cleanPath.startsWith('/weddings/dashboard/') ||
-      cleanPath === '/weddings/manage' ||
-      cleanPath.startsWith('/weddings/manage/') ||
-      cleanPath === '/wedding/dashboard' ||
-      cleanPath.startsWith('/wedding/dashboard/') ||
-      cleanPath.startsWith('/weddings/workspace')
-    ) {
-      return (
-        <WeddingOrganizerDashboard
-          onNavigate={navigateTo}
-          onNavigateRestaurants={() => navigateTo('/restaurant/dashboard')}
-          onNavigateHome={() => navigateTo('/')}
-          onLogout={() => handleLogout('/weddings')}
-          currentUser={currentUser}
-        />
-      );
-    }
-
-    // 14. Weddings & Luxury Events Guest Application (Platform or Root Domain Deep Link)
-    if (
-      cleanPath.startsWith('/event') ||
-      cleanPath.startsWith('/events') ||
-      cleanPath === '/wedding/guest' ||
-      cleanPath.startsWith('/wedding/guest/')
-    ) {
-      return <WeddingGuestApp />;
     }
 
     // 15. Customer Mobile Ordering Web App (Deep Linking Support)

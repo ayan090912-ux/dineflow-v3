@@ -192,6 +192,11 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
       const email = user?.email || api.getCurrentUser()?.email || '';
       setCurrentUserEmail(email);
 
+      if (!email && !user) {
+        setLoading(false);
+        return;
+      }
+
       const res = await api.getMyWeddingWorkspaces(email || undefined);
       const list = res?.workspaces || [];
       setWorkspaces(list);
