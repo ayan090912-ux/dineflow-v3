@@ -113,51 +113,50 @@ async def create_category(
     db.add(new_cat)
     await db.commit()
     await db.refresh(new_cat)
-    invalidate_menu_cache(target_rest_id)
+    invalidate_menu_cache(target_rest_id, restaurant_id)
     return new_cat
 
 import time
 
 _MENU_CACHE: dict = {}
-_MENU_CACHE_TTL: float = 300.0  # 5 minutes warm cache
+_MENU_CACHE_TTL: float = 60.0  # 60s memory burst cache with immediate mutation invalidation
 
-def invalidate_menu_cache(restaurant_id: Optional[str] = None):
+def invalidate_menu_cache(*identifiers: Optional[str]):
     global _MENU_CACHE
-    if restaurant_id:
-        target = restaurant_id.lower()
-        to_del = [k for k in list(_MENU_CACHE.keys()) if k == restaurant_id or target in str(k).lower()]
+    if not identifiers or not any(identifiers):
+        _MENU_CACHE.clear()
+        return
+    for ident in identifiers:
+        if not ident:
+            continue
+        ident_str = str(ident).strip().lower()
+        to_del = [k for k in list(_MENU_CACHE.keys()) if k.lower() == ident_str or ident_str in k.lower() or k.lower() in ident_str]
         for k in to_del:
             _MENU_CACHE.pop(k, None)
-    else:
-        _MENU_CACHE.clear()
 
 @router.get("/{restaurant_id}/menu")
 async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     """
     Read-only retrieval of menu items and categories.
     Strictly idempotent; returns empty lists if empty without writing to database.
-    Resolves both slug and UUID to canonical restaurant ID.
-    Cached for 300s with instant invalidation on mutations to provide fast (<15ms) customer menu loading.
+    Resolves both slug and UUID to canonical restaurant ID before cache evaluation.
+    No-cache headers ensure clients and CDN always receive authoritative live menu data.
     """
     now_t = time.time()
     cache_headers = {
-        "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=60",
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
         "Vary": "Accept-Encoding"
     }
 
-    if restaurant_id in _MENU_CACHE:
-        cached_ts, cached_menu = _MENU_CACHE[restaurant_id]
-        if now_t - cached_ts < _MENU_CACHE_TTL:
-            return JSONResponse(content=cached_menu, headers=cache_headers)
-
-    if not restaurant_id.startswith("rest-"):
-        try:
-            canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
-        except HTTPException:
-            canonical_id = restaurant_id
-    else:
+    # 1. Resolve canonical restaurant ID first so slugs and IDs map to the same cache entry
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except HTTPException:
         canonical_id = restaurant_id
 
+    # 2. Check canonical cache entry
     if canonical_id in _MENU_CACHE:
         cached_ts, cached_menu = _MENU_CACHE[canonical_id]
         if now_t - cached_ts < _MENU_CACHE_TTL:
@@ -193,8 +192,9 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
         "categories": formatted_cats,
         "items": formatted_items
     }
-    _MENU_CACHE[restaurant_id] = (now_t, resp_data)
     _MENU_CACHE[canonical_id] = (now_t, resp_data)
+    if restaurant_id != canonical_id:
+        _MENU_CACHE[restaurant_id] = (now_t, resp_data)
     return JSONResponse(content=resp_data, headers=cache_headers)
 
 @router.post("/{restaurant_id}/menu", status_code=status.HTTP_201_CREATED)
@@ -269,7 +269,7 @@ async def create_menu_item(
     db.add(new_item)
     await db.commit()
     await db.refresh(new_item)
-    invalidate_menu_cache(target_rest_id)
+    invalidate_menu_cache(target_rest_id, restaurant_id)
 
     resp_dict = format_menu_item_response(new_item)
 
@@ -336,7 +336,7 @@ async def update_menu_item(
 
     await db.commit()
     await db.refresh(item)
-    invalidate_menu_cache(target_rest_id)
+    invalidate_menu_cache(target_rest_id, restaurant_id)
 
     resp_dict = format_menu_item_response(item)
 
@@ -377,7 +377,7 @@ async def delete_menu_item(
 
     await db.delete(item)
     await db.commit()
-    invalidate_menu_cache(target_rest_id)
+    invalidate_menu_cache(target_rest_id, restaurant_id)
 
     try:
         await ws_manager.broadcast_event(

@@ -1360,6 +1360,10 @@ export class RestaurantClient {
       'OWNER'
     );
 
+    this.base.invalidateQueryCache('menu:');
+    this.base.invalidateQueryCache('categories:');
+    realtimeBus.emit('CategoryCreated' as any, { categoryId: c.id, restaurantId: restId, data: c } as any);
+
     return {
       id: c.id,
       restaurantId: c.restaurant_id || c.restaurantId || restId,
@@ -1500,6 +1504,7 @@ export class RestaurantClient {
       isAlcoholic: m.is_alcoholic !== undefined ? m.is_alcoholic : payload.isAlcoholic,
       prepTimeMinutes: m.preparation_time_minutes || m.prepTimeMinutes || payload.prepTimeMinutes,
     };
+    this.base.invalidateQueryCache('menu:');
     realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
     return newItem;
   }
@@ -1546,6 +1551,7 @@ export class RestaurantClient {
       isAlcoholic: m.is_alcoholic !== undefined ? m.is_alcoholic : updates.isAlcoholic,
       prepTimeMinutes: m.preparation_time_minutes || m.prepTimeMinutes || updates.prepTimeMinutes,
     };
+    this.base.invalidateQueryCache('menu:');
     realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: itemId, restaurantId: restId, data: updatedItem });
     return updatedItem;
   }
@@ -1560,6 +1566,7 @@ export class RestaurantClient {
       'OWNER'
     );
 
+    this.base.invalidateQueryCache('menu:');
     realtimeBus.emit('MenuItemDeleted' as any, { menuItemId: itemId, restaurantId: restId });
     return true;
   }

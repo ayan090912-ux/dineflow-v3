@@ -114,6 +114,7 @@ export class OrderClient {
     try {
       const apiBase = getApiBaseUrl();
       const payload = {
+        id: orderData.id,
         restaurantId: restId,
         tableId: orderData.tableId || `tbl-${restId}-${(orderData.tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '_')}`,
         tableNumber: orderData.tableNumber || 'Table 01',

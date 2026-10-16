@@ -276,13 +276,25 @@ async def create_order(
 
         existing_tbl = None
         if payload.tableId:
-            res_tbl_check = await db.execute(select(Table).where(Table.id == payload.tableId))
+            res_tbl_check = await db.execute(select(Table).where(
+                (Table.id == payload.tableId) & (Table.restaurant_id == restaurant.id)
+            ))
             existing_tbl = res_tbl_check.scalar_one_or_none()
-            if existing_tbl and existing_tbl.restaurant_id != restaurant.id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Table '{payload.tableId}' does not belong to restaurant '{restaurant.id}'"
-                )
+            if not existing_tbl:
+                # Check if tableId was passed for table in another restaurant
+                res_wrong_rest = await db.execute(select(Table).where(Table.id == payload.tableId))
+                wrong_tbl = res_wrong_rest.scalar_one_or_none()
+                if wrong_tbl and wrong_tbl.restaurant_id != restaurant.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Table '{payload.tableId}' does not belong to restaurant '{restaurant.id}'"
+                    )
+                # Fallback: check if payload.tableId or tbl_num matches table_number
+                res_tbl_check = await db.execute(select(Table).where(
+                    (Table.restaurant_id == restaurant.id) &
+                    ((Table.table_number == payload.tableId) | (Table.table_number == tbl_num) | (Table.table_number == f"Table {tbl_num}"))
+                ))
+                existing_tbl = res_tbl_check.scalar_one_or_none()
         else:
             res_tbl_check = await db.execute(select(Table).where(
                 (Table.restaurant_id == restaurant.id) & 
@@ -297,7 +309,7 @@ async def create_order(
         else:
             tbl_id = None
 
-        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id or 'none'}-{int(now_utc.timestamp() * 1000)}"
+        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id or 'tbl'}-{int(now_utc.timestamp() * 1000)}"
 
         try:
             from sqlalchemy import case
@@ -317,13 +329,13 @@ async def create_order(
                     if direct_sess.table_number:
                         tbl_num = direct_sess.table_number
 
-            if not actual_session_id and tbl_id:
+            if not actual_session_id:
                 query_sess = select(TableSession).where(
                     (TableSession.restaurant_id == restaurant.id) &
                     (
                         (TableSession.id == session_id) |
                         (
-                            ((TableSession.table_id == tbl_id) | (TableSession.table_number == tbl_num)) &
+                            ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
                             (TableSession.status == "ACTIVE")
                         )
                     )
@@ -336,7 +348,7 @@ async def create_order(
 
                 if matched_sess and matched_sess.status == "ACTIVE":
                     actual_session_id = matched_sess.id
-                elif existing_tbl:
+                else:
                     try:
                         async with db.begin_nested():
                             new_sess = TableSession(
@@ -354,7 +366,7 @@ async def create_order(
                         print("[SESSION_CREATION_RACE_HANDLED]:", flush_err)
                         res_sess_race = await db.execute(select(TableSession).where(
                             (TableSession.restaurant_id == restaurant.id) &
-                            (TableSession.table_id == tbl_id) &
+                            ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
                             (TableSession.status == "ACTIVE")
                         ).order_by(TableSession.session_started_at.desc()).limit(1))
                         race_sess = res_sess_race.scalar_one_or_none()
@@ -379,18 +391,44 @@ async def create_order(
         menu_by_id = {m.id: m for m in db_menu_items}
         menu_by_name = {m.name.lower().strip(): m for m in db_menu_items}
 
+        is_staff_caller = caller.is_authenticated and (caller.role in ["OWNER", "RESTAURANT_OWNER", "WAITER", "CHEF", "BAR", "MANAGER", "ADMIN"])
+
         resolved_items_list = []
         for i in payload.items:
             m_rec = menu_by_id.get(i.menuItemId or i.id) or menu_by_name.get((i.name or "").lower().strip())
             if m_rec:
+                if m_rec.deleted_at is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Item '{m_rec.name}' has been deleted from the menu."
+                    )
+                if not m_rec.is_available:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Item '{m_rec.name}' is currently unavailable or sold out."
+                    )
                 station = "BAR" if (m_rec.target_destination == "BAR" or m_rec.is_alcoholic) else "KITCHEN"
                 is_alc = bool(m_rec.is_alcoholic)
+                auth_price = float(m_rec.price)
+                auth_name = m_rec.name
+                item_mid = m_rec.id
             else:
-                # Default to KITCHEN. Never silently assign unclassified items to Bar.
-                station = "KITCHEN"
-                is_alc = False
+                if not is_staff_caller and (payload.orderType or "") != "WEDDING_EVENT":
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Item '{i.name or i.menuItemId or i.id}' is not found on the menu."
+                    )
+                station = i.targetDestination or "KITCHEN"
+                is_alc = bool(i.isAlcoholic)
+                auth_price = float(i.price or 0.0)
+                auth_name = i.name
+                item_mid = i.menuItemId or i.id or f"item-custom-{int(now_utc.timestamp())}"
 
             d = i.model_dump()
+            d["id"] = item_mid
+            d["menuItemId"] = item_mid
+            d["name"] = auth_name
+            d["price"] = auth_price
             d["targetDestination"] = station
             d["target_destination"] = station
             d["isAlcoholic"] = is_alc
@@ -553,14 +591,16 @@ async def create_order(
 
         for idx, i in enumerate(payload.items):
             it_meta = items_list_dict[idx]
+            eff_price = float(it_meta.get("price") if it_meta.get("price") is not None else i.price)
+            eff_qty = int(it_meta.get("quantity") if it_meta.get("quantity") is not None else i.quantity)
             new_item = OrderItem(
                 id=f"oi-{int(now_utc.timestamp() * 1000)}-{idx}",
                 order_id=order_id,
-                menu_item_id=i.menuItemId or i.id or "item-unknown",
-                name=i.name,
-                quantity=i.quantity,
-                unit_price=i.price,
-                subtotal=i.price * i.quantity,
+                menu_item_id=it_meta.get("menuItemId") or it_meta.get("id") or i.menuItemId or i.id or "item-unknown",
+                name=it_meta.get("name") or i.name,
+                quantity=eff_qty,
+                unit_price=eff_price,
+                subtotal=eff_price * eff_qty,
                 notes=i.notes or "",
                 target_destination=it_meta["targetDestination"],
             )

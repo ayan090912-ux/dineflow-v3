@@ -81,6 +81,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   // Cart state
   const [cart, setCart] = useState<{ item: MenuItem; quantity: number; notes?: string; servingOption?: string }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   // Active Live Orders
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
@@ -185,6 +186,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         event.type === 'MenuItemUpdated' ||
         event.type === 'MenuItemDeleted'
       ) {
+        (api as any).base?.invalidateQueryCache?.('menu:');
+        (api as any).base?.invalidateQueryCache?.('categories:');
         api.getMenuItems(restId).then((items) => setMenuItems(items));
         api.getCategories(restId).then((cats) => setFoodCategories(cats));
       }
@@ -540,7 +543,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   };
 
   const handleCheckout = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isSubmittingOrder) return;
+    setIsSubmittingOrder(true);
 
     const subtotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
     const taxRatePercent = typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5.0;
@@ -571,7 +575,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const isNoTable = currentRestaurant?.hasTables === false;
 
     try {
+      const clientOrderId = `ord-cli-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const newOrd = await api.createOrder({
+        id: clientOrderId,
         restaurantId: restId,
         tableId: currentTable?.id,
         tableNumber: isNoTable ? 'COUNTER' : selectedTableNum,
@@ -599,6 +605,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     } catch (err: any) {
       console.error('Order checkout failed:', err);
       addToast('error', 'Unable to Place Order', err?.message || 'Server network error. Please check connection and try again.');
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
@@ -1040,11 +1048,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         <div className="space-y-3">
           {filteredItems.map((item) => {
             const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
+            const isAvailable = item.isAvailable !== false;
             return (
               <div
                 key={item.id}
-                className="p-3.5 flex gap-3.5 transition-colors cursor-pointer rounded-xl bg-[#12151b] border border-white/[0.08] hover:border-white/[0.16] shadow-sm group"
+                className={`p-3.5 flex gap-3.5 transition-colors rounded-xl bg-[#12151b] border shadow-sm group ${
+                  isAvailable
+                    ? 'cursor-pointer border-white/[0.08] hover:border-white/[0.16]'
+                    : 'opacity-60 border-white/[0.04] cursor-not-allowed'
+                }`}
                 onClick={() => {
+                  if (!isAvailable) return;
                   setSelectedItem(item);
                   setQuantity(1);
                   setSelectedServingOption(item.servingOptions?.[0] || '');
@@ -1079,15 +1093,22 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                         <h3 className="text-xs font-semibold text-white truncate">{item.name}</h3>
                       </div>
 
-                      <span
-                        className={`text-[9px] font-mono px-1.5 py-0.2 rounded shrink-0 ${
-                          isVeg
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                        }`}
-                      >
-                        {isVeg ? 'VEG' : 'NON-VEG'}
-                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {!isAvailable && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">
+                            SOLD OUT
+                          </span>
+                        )}
+                        <span
+                          className={`text-[9px] font-mono px-1.5 py-0.2 rounded shrink-0 ${
+                            isVeg
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}
+                        >
+                          {isVeg ? 'VEG' : 'NON-VEG'}
+                        </span>
+                      </div>
                     </div>
                     {item.brand && (
                       <p className="text-[10px] text-amber-400/90 font-mono mt-0.5">{item.brand}</p>
@@ -1104,28 +1125,34 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     <span className="text-xs font-mono font-semibold text-white">
                       {formatPrice(item.price)}
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const station = getFulfillmentStation(item);
-                        const itemToAdd = {
-                          ...item,
-                          targetDestination: station,
-                        };
-                        setCart((prev) => {
-                          const existing = prev.find((c) => c.item.id === item.id);
-                          if (existing) {
-                            return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
-                          }
-                          return [...prev, { item: itemToAdd, quantity: 1 }];
-                        });
-                        addToast('success', 'Added to order', `1x ${item.name}`);
-                      }}
-                      className="text-xs py-1 px-3 rounded-lg font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Add</span>
-                    </button>
+                    {isAvailable ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const station = getFulfillmentStation(item);
+                          const itemToAdd = {
+                            ...item,
+                            targetDestination: station,
+                          };
+                          setCart((prev) => {
+                            const existing = prev.find((c) => c.item.id === item.id);
+                            if (existing) {
+                              return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+                            }
+                            return [...prev, { item: itemToAdd, quantity: 1 }];
+                          });
+                          addToast('success', 'Added to order', `1x ${item.name}`);
+                        }}
+                        className="text-xs py-1 px-3 rounded-lg font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-mono py-1 px-2.5 rounded-lg font-medium bg-white/[0.06] text-white/40 border border-white/[0.08] cursor-not-allowed">
+                        Sold Out
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1283,8 +1310,35 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                   )}
                   {c.notes && <p className="text-[11px] text-amber-400/80 italic">{c.notes}</p>}
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono font-semibold text-white">{formatPrice(c.item.price * c.quantity)}</span>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1 bg-black/40 border border-white/[0.08] rounded-lg px-1.5 py-0.5">
+                    <button
+                      onClick={() => {
+                        setCart((prev) =>
+                          prev
+                            .map((item, i) => (i === idx ? { ...item, quantity: item.quantity - 1 } : item))
+                            .filter((item) => item.quantity > 0)
+                        );
+                      }}
+                      className="p-1 text-white/60 hover:text-white transition-colors"
+                      title="Decrease quantity"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="font-mono text-xs font-semibold text-white px-1">{c.quantity}</span>
+                    <button
+                      onClick={() => {
+                        setCart((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, quantity: item.quantity + 1 } : item))
+                        );
+                      }}
+                      className="p-1 text-white/60 hover:text-white transition-colors"
+                      title="Increase quantity"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <span className="font-mono font-semibold text-white min-w-[55px] text-right">{formatPrice(c.item.price * c.quantity)}</span>
                   <button
                     onClick={() => {
                       setCart((prev) => prev.filter((_, i) => i !== idx));
@@ -1318,10 +1372,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
           <Button
             variant="brand"
+            disabled={isSubmittingOrder || cart.length === 0}
             onClick={handleCheckout}
-            className="w-full py-3.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xl"
+            className="w-full py-3.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Confirm & Send to Kitchen
+            {isSubmittingOrder ? 'Transmitting Order...' : 'Confirm & Send to Kitchen'}
           </Button>
         </div>
       </Modal>
