@@ -280,6 +280,7 @@ def main():
         "export GIT_COMMIT_SHA=$(git rev-parse HEAD)",
         build_cmd,
         up_cmd,
+        "docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head || true",
         "sleep 5",
         "h_code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/healthz)",
         "if [ \"$h_code\" != \"200\" ]; then echo 'Health check failed with HTTP '$h_code; exit 1; fi",
