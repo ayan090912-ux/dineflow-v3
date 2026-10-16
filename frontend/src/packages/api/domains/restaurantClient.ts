@@ -2793,6 +2793,24 @@ export class RestaurantClient {
     );
   }
 
+  async extendEventServicePeriod(
+    eventId: string,
+    extensionData: { extensionMinutes?: number; newEndDatetimeUtc?: string; newEndDate?: string; newEndTime?: string; reason?: string },
+    restaurantId?: string
+  ): Promise<WeddingEvent> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<WeddingEvent>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/extend`,
+      {
+        method: 'POST',
+        body: JSON.stringify(extensionData),
+      },
+      'OWNER'
+    );
+  }
+
   async addEventTable(
     eventId: string,
     tableData: { tableNumber: string; tableLabel?: string; capacity?: number },

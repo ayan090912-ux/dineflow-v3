@@ -493,15 +493,38 @@ async def create_order(
 
         now_utc = datetime.now(timezone.utc)
         candidate_order_id = payload.id or payload.idempotencyKey or payload.clientOrderId
+        eff_idempotency_key = payload.idempotencyKey or payload.clientOrderId
+
         if candidate_order_id:
-            res_existing = await db.execute(select(Order).where(Order.id == candidate_order_id))
+            res_existing = await db.execute(
+                select(Order).where(
+                    Order.restaurant_id == restaurant.id,
+                    (Order.id == candidate_order_id) | (Order.idempotency_key == candidate_order_id)
+                )
+            )
             existing_ord = res_existing.scalar_one_or_none()
             if existing_ord:
-                print(f"[ORDER_IDEMPOTENCY_HIT] Returning existing order {candidate_order_id}")
+                print(f"[ORDER_IDEMPOTENCY_HIT] Returning existing order {existing_ord.id} for key {candidate_order_id}")
                 return format_order_response(existing_ord)
             order_id = candidate_order_id
         else:
             order_id = f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
+
+        # Rapid-tap duplicate guard for event orders
+        if payload.eventId and (tbl_id or tbl_num):
+            from datetime import timedelta
+            dup_cutoff = now_utc - timedelta(seconds=10)
+            dup_stmt = select(Order).where(
+                Order.restaurant_id == restaurant.id,
+                Order.event_id == payload.eventId,
+                Order.created_at >= dup_cutoff,
+                Order.total_amount == total
+            )
+            dup_res = await db.execute(dup_stmt)
+            for cand in dup_res.scalars().all():
+                if cand.table_number == tbl_num or (tbl_id and cand.table_id == tbl_id):
+                    print(f"[ORDER_RAPID_DUPLICATE_GUARD] Returning existing order {cand.id} to prevent double tap")
+                    return format_order_response(cand)
 
         # Query active OPEN business day for authoritative attribution
         query_bday = select(BusinessDay.id).where(
@@ -516,7 +539,9 @@ async def create_order(
         eff_event_id = None
         eff_event_name = None
         if payload.eventId:
-            from app.modules.weddings.models import WeddingEvent
+            from app.modules.weddings.models import WeddingEvent, EventTable
+            from app.modules.weddings.service_period import validate_order_within_event_window
+
             evt_query = select(WeddingEvent).where(
                 WeddingEvent.id == payload.eventId,
                 WeddingEvent.restaurant_id == restaurant.id
@@ -528,17 +553,25 @@ async def create_order(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Event '{payload.eventId}' was not found for this venue."
                 )
-            if not evt_obj.is_ordering_open:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Ordering is currently paused or closed for event '{evt_obj.title}'."
+
+            # Authoritative server-side service duration policy & status validation
+            validate_order_within_event_window(evt_obj, now_utc)
+
+            # Table mapping check: If tableId or tableNumber provided, verify/bind to EventTable
+            if tbl_num or tbl_id:
+                etbl_stmt = select(EventTable).where(
+                    EventTable.event_id == evt_obj.id,
+                    EventTable.restaurant_id == restaurant.id,
+                    EventTable.is_active.is_(True),
+                    (EventTable.table_number == tbl_num) | (EventTable.id == tbl_id)
                 )
-            if evt_obj.status in ("COMPLETED", "CANCELLED"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"This event is marked as {evt_obj.status.lower()} and cannot receive new orders."
-                )
-            eff_order_type = "WEDDING_EVENT"
+                etbl_res = await db.execute(etbl_stmt)
+                matched_etbl = etbl_res.scalar_one_or_none()
+                if matched_etbl:
+                    tbl_num = matched_etbl.table_number
+                    tbl_id = matched_etbl.id
+
+            eff_order_type = "EVENT_ORDER" if (evt_obj.event_type and evt_obj.event_type != "WEDDING") else "WEDDING_EVENT"
             eff_event_id = evt_obj.id
             eff_event_name = evt_obj.title
 
@@ -565,6 +598,7 @@ async def create_order(
             order_type=eff_order_type,
             event_id=eff_event_id,
             event_name=eff_event_name,
+            idempotency_key=eff_idempotency_key,
             created_at=now_utc,
         )
         db.add(new_order)

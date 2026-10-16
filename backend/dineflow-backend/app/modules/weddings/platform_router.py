@@ -44,10 +44,15 @@ class CreateWeddingRequestSchema(BaseModel):
     event_type: Optional[str] = None
     eventDate: Optional[str] = None
     event_date: Optional[str] = None
+    endDate: Optional[str] = None
+    end_date: Optional[str] = None
     startTime: Optional[str] = "18:00"
     start_time: Optional[str] = None
     endTime: Optional[str] = "23:30"
     end_time: Optional[str] = None
+    timezone: Optional[str] = "Asia/Kolkata"
+    serviceDays: Optional[int] = 1
+    service_days: Optional[int] = None
     venueName: Optional[str] = None
     venue_name: Optional[str] = None
     venueCity: Optional[str] = None
@@ -97,8 +102,11 @@ class UpdateWorkspaceEventSchema(BaseModel):
     coupleNames: Optional[str] = None
     eventType: Optional[str] = None
     eventDate: Optional[str] = None
+    endDate: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    timezone: Optional[str] = None
+    serviceDays: Optional[int] = None
     venueName: Optional[str] = None
     welcomeMessage: Optional[str] = None
     themeColor: Optional[str] = None
@@ -144,8 +152,13 @@ def _format_request(req: WeddingAccessRequest, rest_name: Optional[str] = None) 
         "weddingName": req.wedding_name,
         "eventType": req.event_type,
         "eventDate": req.event_date,
+        "endDate": getattr(req, "end_date", None) or req.event_date,
         "startTime": req.start_time,
         "endTime": req.end_time,
+        "timezone": getattr(req, "timezone", "Asia/Kolkata") or "Asia/Kolkata",
+        "serviceDays": getattr(req, "service_days", 1) or 1,
+        "startDatetimeUtc": req.start_datetime_utc.isoformat() if getattr(req, "start_datetime_utc", None) else None,
+        "endDatetimeUtc": req.end_datetime_utc.isoformat() if getattr(req, "end_datetime_utc", None) else None,
         "venueName": req.venue_name,
         "venueCity": req.venue_city,
         "estimatedGuestCount": req.estimated_guest_count,
@@ -241,6 +254,22 @@ async def submit_wedding_request(
     # Generate unique application ID
     request_id = f"wreq-{uuid.uuid4().hex[:10]}"
 
+    from app.modules.weddings.service_period import calculate_event_service_window
+    clean_start_time = payload.startTime or payload.start_time or "18:00"
+    clean_end_time = payload.endTime or payload.end_time or "23:30"
+    clean_end_date = (payload.endDate or payload.end_date or "").strip() or None
+    clean_tz = (payload.timezone or "Asia/Kolkata").strip()
+    clean_days = payload.serviceDays or payload.service_days or 1
+
+    start_dt_utc, end_dt_utc, eff_end_date, eff_days, duration_str, summary_str = calculate_event_service_window(
+        start_date_str=clean_date,
+        start_time_str=clean_start_time,
+        end_date_str=clean_end_date,
+        end_time_str=clean_end_time,
+        service_days=clean_days,
+        tz_name=clean_tz,
+    )
+
     new_req = WeddingAccessRequest(
         id=request_id,
         applicant_name=clean_name,
@@ -249,8 +278,13 @@ async def submit_wedding_request(
         wedding_name=clean_wedding,
         event_type=payload.eventType or payload.event_type or "WEDDING",
         event_date=clean_date,
-        start_time=payload.startTime or payload.start_time or "18:00",
-        end_time=payload.endTime or payload.end_time or "23:30",
+        end_date=eff_end_date,
+        start_time=clean_start_time,
+        end_time=clean_end_time,
+        timezone=clean_tz,
+        service_days=eff_days,
+        start_datetime_utc=start_dt_utc,
+        end_datetime_utc=end_dt_utc,
         venue_name=clean_venue,
         venue_city=clean_city,
         estimated_guest_count=clean_guest_count,
@@ -481,7 +515,12 @@ async def approve_wedding_request(
     Approves a wedding access request and provisions a dedicated WeddingWorkspace idempotently.
     Requires assigning or confirming the catering/kitchen restaurant.
     """
-    admin_email = admin_claims.get("email") or "ayan090912@gmail.com"
+    admin_email = (admin_claims.get("email") or "").strip().lower()
+    if admin_email != "ayan090912@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only authorized Platform Admin ayan090912@gmail.com can approve event setups."
+        )
 
     stmt = select(WeddingAccessRequest).where(WeddingAccessRequest.id == request_id)
     res = await db.execute(stmt)
@@ -561,9 +600,47 @@ async def approve_wedding_request(
         )
     )
     menu_item_count = menu_count_res.scalar() or 0
-    workspace_status = "ACTIVE" if menu_item_count > 0 else "SETUP_PENDING"
-    event_status = "ACTIVE" if menu_item_count > 0 else "SETUP_PENDING"
-    is_ordering_open = (menu_item_count > 0)
+
+    # Ensure service period timestamps exist
+    start_dt_utc = req.start_datetime_utc
+    end_dt_utc = req.end_datetime_utc
+    eff_end_date = getattr(req, "end_date", None) or req.event_date
+    eff_tz = getattr(req, "timezone", "Asia/Kolkata") or "Asia/Kolkata"
+    eff_days = getattr(req, "service_days", 1) or 1
+
+    if not start_dt_utc or not end_dt_utc:
+        from app.modules.weddings.service_period import calculate_event_service_window
+        start_dt_utc, end_dt_utc, eff_end_date, eff_days, _, _ = calculate_event_service_window(
+            start_date_str=req.event_date,
+            start_time_str=req.start_time or "18:00",
+            end_date_str=getattr(req, "end_date", None),
+            end_time_str=req.end_time or "23:30",
+            service_days=getattr(req, "service_days", 1) or 1,
+            tz_name=eff_tz,
+        )
+
+    from app.modules.weddings.service_period import _ensure_utc
+    start_dt_utc = _ensure_utc(start_dt_utc)
+    end_dt_utc = _ensure_utc(end_dt_utc)
+    now = _ensure_utc(now)
+
+    is_auto = getattr(req, "auto_activate", False) or False
+    # Initial event status governed by service window
+    if menu_item_count == 0:
+        workspace_status = "SETUP_PENDING"
+        event_status = "APPROVED_SETUP_PENDING"
+        is_ordering_open = False
+    else:
+        workspace_status = "ACTIVE"
+        if is_auto and start_dt_utc and now < start_dt_utc:
+            event_status = "SCHEDULED"
+            is_ordering_open = True
+        elif end_dt_utc and now > end_dt_utc:
+            event_status = "CLOSED"
+            is_ordering_open = False
+        else:
+            event_status = "ACTIVE"
+            is_ordering_open = True
 
     # Provision new WeddingWorkspace
     workspace_id = f"ws-wed-{uuid.uuid4().hex[:10]}"
@@ -584,19 +661,26 @@ async def approve_wedding_request(
     db.add(new_ws)
 
     # 2. Provision associated primary WeddingEvent
+    is_wedding = (req.event_type or "WEDDING").upper() == "WEDDING"
     new_event = WeddingEvent(
         id=event_id,
         workspace_id=workspace_id,
         organizer_email=req.applicant_email.lower(),
         restaurant_id=restaurant.id,
         title=req.wedding_name,
-        couple_names=req.wedding_name.replace(" Wedding", "").replace(" Celebration", ""),
+        couple_names=req.wedding_name.replace(" Wedding", "").replace(" Celebration", "") if is_wedding else None,
         event_type=req.event_type or "WEDDING",
         event_date=req.event_date,
+        end_date=eff_end_date,
         start_time=req.start_time or "18:00",
         end_time=req.end_time or "23:30",
+        timezone=eff_tz,
+        service_days=eff_days,
+        start_datetime_utc=start_dt_utc,
+        end_datetime_utc=end_dt_utc,
+        auto_activate=True,
         venue_name=req.venue_name,
-        welcome_message=f"Welcome to {req.wedding_name}! Please browse the banquet menu below and place your courses directly from your table.",
+        welcome_message=f"Welcome to {req.wedding_name}! Please browse the event menu below and place your orders directly from your table.",
         theme_color="champagne",
         status=event_status,
         is_ordering_open=is_ordering_open,
@@ -612,12 +696,20 @@ async def approve_wedding_request(
     await db.flush()
 
     # 3. Provision initial default tables
-    table_configs = [
-        ("01", "Head Table / Couple", 4),
-        ("02", "Bridal Party", 8),
-        ("03", "Groomsmen", 8),
-        ("04", "Family & VIP", 10),
-    ]
+    if is_wedding:
+        table_configs = [
+            ("01", "Head Table / Couple", 4),
+            ("02", "Bridal Party", 8),
+            ("03", "Groomsmen", 8),
+            ("04", "Family & VIP", 10),
+        ]
+    else:
+        table_configs = [
+            ("01", "VIP / Host Table", 6),
+            ("02", "Reserved Table A", 8),
+            ("03", "Reserved Table B", 8),
+            ("04", "General Seating", 10),
+        ]
     rest_slug = restaurant.public_slug or restaurant.slug or restaurant.id
     for t_num, t_label, t_cap in table_configs:
         t_id = f"etbl-{event_id}-{t_num}"

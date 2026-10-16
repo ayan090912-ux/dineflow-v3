@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from pydantic import BaseModel
@@ -16,29 +16,54 @@ from app.modules.menu.models import MenuCategory, MenuItem
 router = APIRouter()
 public_router = APIRouter()
 
+from app.modules.weddings.service_period import (
+    calculate_event_service_window,
+    get_authoritative_event_status,
+    format_service_duration,
+)
+
 def _format_event(event: WeddingEvent, table_count: int = 0, order_count: int = 0, total_revenue: float = 0.0) -> dict:
     created_str = event.created_at.isoformat() if event.created_at else None
     updated_str = event.updated_at.isoformat() if event.updated_at else None
+    now_utc = datetime.now(timezone.utc)
+    auth_status = get_authoritative_event_status(event, now_utc)
+    duration_fmt = format_service_duration(event.start_datetime_utc, event.end_datetime_utc) if (event.start_datetime_utc and event.end_datetime_utc) else None
+    is_active_window = (auth_status == "ACTIVE")
+
     return {
         "id": event.id,
         "restaurantId": event.restaurant_id,
+        "workspaceId": event.workspace_id,
+        "organizerEmail": event.organizer_email,
         "title": event.title,
         "coupleNames": event.couple_names or "",
         "eventType": event.event_type or "WEDDING",
         "eventDate": event.event_date,
+        "endDate": event.end_date or event.event_date,
         "startTime": event.start_time or "18:00",
         "endTime": event.end_time or "23:30",
+        "timezone": event.timezone or "Asia/Kolkata",
+        "serviceDays": event.service_days or 1,
+        "startDatetimeUtc": event.start_datetime_utc.isoformat() if event.start_datetime_utc else None,
+        "endDatetimeUtc": event.end_datetime_utc.isoformat() if event.end_datetime_utc else None,
+        "durationFormatted": duration_fmt,
         "venueName": event.venue_name or "",
         "welcomeMessage": event.welcome_message or "",
         "themeColor": event.theme_color or "champagne",
         "coverImageUrl": event.cover_image_url or "",
-        "status": event.status or "DRAFT",
-        "isOrderingOpen": event.is_ordering_open,
+        "status": auth_status,
+        "rawStatus": event.status or "DRAFT",
+        "isOrderingOpen": bool(event.is_ordering_open and auth_status == "ACTIVE"),
+        "isServiceActive": is_active_window,
+        "autoActivate": getattr(event, "auto_activate", True) if getattr(event, "auto_activate", None) is not None else True,
         "menuSelectionType": event.menu_selection_type or "FULL_MENU",
         "allowedCategoryIds": event.allowed_category_ids or [],
         "allowedItemIds": event.allowed_item_ids or [],
         "estimatedGuestCount": event.estimated_guest_count or 100,
         "notes": event.notes or "",
+        "extendedAt": event.extended_at.isoformat() if getattr(event, "extended_at", None) else None,
+        "extendedBy": getattr(event, "extended_by", None),
+        "extendedReason": getattr(event, "extended_reason", None),
         "tableCount": table_count,
         "orderCount": order_count,
         "totalRevenue": round(total_revenue, 2),
@@ -70,8 +95,12 @@ class CreateWeddingEventSchema(BaseModel):
     coupleNames: Optional[str] = ""
     eventType: Optional[str] = "WEDDING"
     eventDate: str
+    endDate: Optional[str] = None
     startTime: Optional[str] = "18:00"
     endTime: Optional[str] = "23:30"
+    timezone: Optional[str] = "Asia/Kolkata"
+    serviceDays: Optional[int] = 1
+    autoActivate: Optional[bool] = True
     venueName: Optional[str] = ""
     welcomeMessage: Optional[str] = ""
     themeColor: Optional[str] = "champagne"
@@ -91,8 +120,12 @@ class UpdateWeddingEventSchema(BaseModel):
     coupleNames: Optional[str] = None
     eventType: Optional[str] = None
     eventDate: Optional[str] = None
+    endDate: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    timezone: Optional[str] = None
+    serviceDays: Optional[int] = None
+    autoActivate: Optional[bool] = None
     venueName: Optional[str] = None
     welcomeMessage: Optional[str] = None
     themeColor: Optional[str] = None
@@ -104,6 +137,13 @@ class UpdateWeddingEventSchema(BaseModel):
     allowedItemIds: Optional[List[str]] = None
     estimatedGuestCount: Optional[int] = None
     notes: Optional[str] = None
+
+class ExtendEventServicePeriodSchema(BaseModel):
+    extensionMinutes: Optional[int] = None
+    newEndDatetimeUtc: Optional[str] = None
+    newEndDate: Optional[str] = None
+    newEndTime: Optional[str] = None
+    reason: Optional[str] = "Host requested extension"
 
 class CreateEventTableSchema(BaseModel):
     tableNumber: str
@@ -176,6 +216,26 @@ async def create_wedding_event(
     now_utc = datetime.now(timezone.utc)
     event_id = f"evt-{uuid.uuid4().hex[:10]}"
 
+    start_dt_utc, end_dt_utc, eff_end_date, eff_days, duration_str, summary_str = calculate_event_service_window(
+        start_date_str=payload.eventDate.strip(),
+        start_time_str=payload.startTime or "18:00",
+        end_date_str=payload.endDate.strip() if payload.endDate else None,
+        end_time_str=payload.endTime or "23:30",
+        service_days=payload.serviceDays or 1,
+        tz_name=payload.timezone or "Asia/Kolkata",
+    )
+
+    is_auto = payload.autoActivate if payload.autoActivate is not None else True
+    req_status = (payload.status or "DRAFT").strip().upper()
+    if req_status in ("DRAFT", "PENDING_APPROVAL", "APPROVED_SETUP_PENDING"):
+        eff_status = req_status
+    elif end_dt_utc and now_utc > end_dt_utc:
+        eff_status = "CLOSED"
+    elif req_status == "SCHEDULED" or (is_auto and start_dt_utc and now_utc < start_dt_utc and req_status != "ACTIVE"):
+        eff_status = "SCHEDULED"
+    else:
+        eff_status = req_status or "ACTIVE"
+
     new_event = WeddingEvent(
         id=event_id,
         restaurant_id=canonical_id,
@@ -183,13 +243,19 @@ async def create_wedding_event(
         couple_names=payload.coupleNames.strip() if payload.coupleNames else None,
         event_type=(payload.eventType or "WEDDING").strip().upper(),
         event_date=payload.eventDate.strip(),
+        end_date=eff_end_date,
         start_time=payload.startTime or "18:00",
         end_time=payload.endTime or "23:30",
+        timezone=payload.timezone or "Asia/Kolkata",
+        service_days=eff_days,
+        start_datetime_utc=start_dt_utc,
+        end_datetime_utc=end_dt_utc,
+        auto_activate=is_auto,
         venue_name=payload.venueName or rest.name,
         welcome_message=payload.welcomeMessage or f"Welcome to our celebration! We are honored to celebrate with you.",
         theme_color=payload.themeColor or "champagne",
         cover_image_url=payload.coverImageUrl or None,
-        status=(payload.status or "DRAFT").strip().upper(),
+        status=eff_status,
         is_ordering_open=payload.isOrderingOpen if payload.isOrderingOpen is not None else True,
         menu_selection_type=payload.menuSelectionType or "FULL_MENU",
         allowed_category_ids=payload.allowedCategoryIds or [],
@@ -302,10 +368,34 @@ async def update_wedding_event(
         ev.event_type = payload.eventType.strip().upper()
     if payload.eventDate is not None:
         ev.event_date = payload.eventDate.strip()
+    if payload.endDate is not None:
+        ev.end_date = payload.endDate.strip()
     if payload.startTime is not None:
         ev.start_time = payload.startTime.strip()
     if payload.endTime is not None:
         ev.end_time = payload.endTime.strip()
+    if payload.timezone is not None:
+        ev.timezone = payload.timezone.strip()
+    if payload.serviceDays is not None:
+        ev.service_days = payload.serviceDays
+    if payload.autoActivate is not None:
+        ev.auto_activate = payload.autoActivate
+
+    # Recalculate service window if date/time/tz changed
+    if any(x is not None for x in (payload.eventDate, payload.endDate, payload.startTime, payload.endTime, payload.timezone, payload.serviceDays)):
+        start_dt_utc, end_dt_utc, eff_end_date, eff_days, duration_str, summary_str = calculate_event_service_window(
+            start_date_str=ev.event_date,
+            start_time_str=ev.start_time or "18:00",
+            end_date_str=ev.end_date,
+            end_time_str=ev.end_time or "23:30",
+            service_days=ev.service_days or 1,
+            tz_name=ev.timezone or "Asia/Kolkata",
+        )
+        ev.start_datetime_utc = start_dt_utc
+        ev.end_datetime_utc = end_dt_utc
+        ev.end_date = eff_end_date
+        ev.service_days = eff_days
+
     if payload.venueName is not None:
         ev.venue_name = payload.venueName.strip()
     if payload.welcomeMessage is not None:
@@ -330,6 +420,80 @@ async def update_wedding_event(
         ev.notes = payload.notes
 
     ev.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(ev)
+
+    t_stmt = select(func.count(EventTable.id)).where(EventTable.event_id == ev.id, EventTable.is_active.is_(True))
+    t_res = await db.execute(t_stmt)
+    t_count = t_res.scalar() or 0
+
+    return _format_event(ev, table_count=t_count)
+
+@router.post("/{restaurant_id}/events/{event_id}/extend")
+async def extend_wedding_event(
+    restaurant_id: str,
+    event_id: str,
+    payload: ExtendEventServicePeriodSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(WeddingEvent).where(WeddingEvent.id == event_id, WeddingEvent.restaurant_id == canonical_id)
+    res = await db.execute(stmt)
+    ev = res.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    from app.modules.weddings.service_period import _ensure_utc
+    now_utc = datetime.now(timezone.utc)
+    base_end = _ensure_utc(ev.end_datetime_utc) or now_utc
+    if base_end < now_utc:
+        base_end = now_utc
+
+    if payload.extensionMinutes:
+        new_end_utc = base_end + timedelta(minutes=payload.extensionMinutes)
+    elif payload.newEndDatetimeUtc:
+        try:
+            dt = datetime.fromisoformat(payload.newEndDatetimeUtc.replace("Z", "+00:00"))
+            new_end_utc = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid newEndDatetimeUtc format")
+    elif payload.newEndDate and payload.newEndTime:
+        from app.modules.weddings.service_period import _parse_local_datetime_to_utc
+        tz_name = ev.timezone or "Asia/Kolkata"
+        new_end_utc = _parse_local_datetime_to_utc(payload.newEndDate, payload.newEndTime, tz_name)
+    else:
+        new_end_utc = base_end + timedelta(minutes=60)
+
+    import zoneinfo
+    try:
+        zi = zoneinfo.ZoneInfo(ev.timezone or "Asia/Kolkata")
+    except Exception:
+        zi = timezone.utc
+    local_end_dt = new_end_utc.astimezone(zi)
+    eff_new_end_date = local_end_dt.strftime("%Y-%m-%d")
+    eff_new_end_time = local_end_dt.strftime("%H:%M")
+
+    # Persist audited extension
+    ev.original_end_datetime_utc = ev.original_end_datetime_utc or ev.end_datetime_utc
+    ev.end_datetime_utc = new_end_utc
+    ev.end_date = eff_new_end_date
+    ev.end_time = eff_new_end_time
+    ev.extended_at = now_utc
+    ev.extended_by = caller.email or caller.uid or "authorized_owner"
+    ev.extended_reason = payload.reason or "Host requested extension"
+    ev.updated_at = now_utc
+
+    # Re-activate ordering if closed or paused
+    if ev.status in ("CLOSED", "PAUSED", "COMPLETED"):
+        ev.status = "ACTIVE"
+    ev.is_ordering_open = True
+
     await db.commit()
     await db.refresh(ev)
 
@@ -609,6 +773,12 @@ async def get_public_wedding_event(
                 ]
             })
 
+    now_utc = datetime.now(timezone.utc)
+    auth_status = get_authoritative_event_status(ev, now_utc)
+    duration_fmt = format_service_duration(ev.start_datetime_utc, ev.end_datetime_utc) if (ev.start_datetime_utc and ev.end_datetime_utc) else None
+    is_active_window = (auth_status == "ACTIVE")
+    is_ordering_available = bool(ev.is_ordering_open and is_active_window)
+
     return {
         "event": {
             "id": ev.id,
@@ -616,14 +786,22 @@ async def get_public_wedding_event(
             "coupleNames": ev.couple_names or "",
             "eventType": ev.event_type or "WEDDING",
             "eventDate": ev.event_date,
+            "endDate": ev.end_date or ev.event_date,
             "startTime": ev.start_time or "18:00",
             "endTime": ev.end_time or "23:30",
+            "timezone": ev.timezone or "Asia/Kolkata",
+            "serviceDays": ev.service_days or 1,
+            "startDatetimeUtc": ev.start_datetime_utc.isoformat() if ev.start_datetime_utc else None,
+            "endDatetimeUtc": ev.end_datetime_utc.isoformat() if ev.end_datetime_utc else None,
+            "durationFormatted": duration_fmt,
             "venueName": ev.venue_name or rest.name,
             "welcomeMessage": ev.welcome_message or "",
             "themeColor": ev.theme_color or "champagne",
             "coverImageUrl": ev.cover_image_url or "",
-            "status": ev.status or "DRAFT",
-            "isOrderingOpen": ev.is_ordering_open,
+            "status": auth_status,
+            "rawStatus": ev.status or "DRAFT",
+            "isOrderingOpen": is_ordering_available,
+            "isServiceActive": is_active_window,
         },
         "restaurant": {
             "id": rest.id,

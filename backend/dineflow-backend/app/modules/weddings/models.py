@@ -15,8 +15,13 @@ class WeddingAccessRequest(Base, TimestampMixin):
     wedding_name: Mapped[str] = mapped_column(String(255), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), default="WEDDING", nullable=False)  # WEDDING, RECEPTION, ENGAGEMENT, SANGEET, ANNIVERSARY, CELEBRATION
     event_date: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # YYYY-MM-DD
+    end_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # YYYY-MM-DD
     start_time: Mapped[Optional[str]] = mapped_column(String(20), default="18:00", nullable=True)
     end_time: Mapped[Optional[str]] = mapped_column(String(20), default="23:30", nullable=True)
+    timezone: Mapped[str] = mapped_column(String(50), default="Asia/Kolkata", nullable=False)
+    service_days: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    start_datetime_utc: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_datetime_utc: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     venue_name: Mapped[str] = mapped_column(String(255), nullable=False)
     venue_city: Mapped[str] = mapped_column(String(100), nullable=False)
     estimated_guest_count: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
@@ -53,15 +58,25 @@ class WeddingEvent(Base, TimestampMixin):
     restaurant_id: Mapped[str] = mapped_column(String(255), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     couple_names: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    event_type: Mapped[str] = mapped_column(String(50), default="WEDDING", nullable=False)  # WEDDING, RECEPTION, ENGAGEMENT, SANGEET, ANNIVERSARY, CELEBRATION
+    event_type: Mapped[str] = mapped_column(String(50), default="WEDDING", nullable=False)  # WEDDING, RECEPTION, BIRTHDAY, CORPORATE, PARTY, ANNIVERSARY, GALA, OTHER
     event_date: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # YYYY-MM-DD
+    end_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # YYYY-MM-DD
     start_time: Mapped[Optional[str]] = mapped_column(String(20), default="18:00", nullable=True)
     end_time: Mapped[Optional[str]] = mapped_column(String(20), default="23:30", nullable=True)
+    timezone: Mapped[str] = mapped_column(String(50), default="Asia/Kolkata", nullable=False)
+    service_days: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    start_datetime_utc: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    end_datetime_utc: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    auto_activate: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    extended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    extended_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    extended_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    original_end_datetime_utc: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     venue_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     welcome_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     theme_color: Mapped[str] = mapped_column(String(50), default="champagne", nullable=False)  # champagne, ivory_gold, blush_rose, emerald_elegance, burgundy_velvet, midnight_navy
     cover_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(30), default="DRAFT", nullable=False, index=True)  # DRAFT, ACTIVE, PAUSED, COMPLETED, CANCELLED
+    status: Mapped[str] = mapped_column(String(30), default="DRAFT", nullable=False, index=True)  # DRAFT, PENDING_APPROVAL, APPROVED_SETUP_PENDING, SCHEDULED, ACTIVE, PAUSED, CLOSED, COMPLETED, CANCELLED
     is_ordering_open: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     menu_selection_type: Mapped[str] = mapped_column(String(30), default="FULL_MENU", nullable=False)  # FULL_MENU, RESTRICTED
     allowed_category_ids: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)

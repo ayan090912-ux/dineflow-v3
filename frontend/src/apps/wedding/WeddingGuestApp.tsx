@@ -37,6 +37,19 @@ interface CartItem {
   imageUrl?: string;
 }
 
+const GUEST_EVENT_BRANDING: Record<string, { label: string; icon: string; tableIcon: string }> = {
+  WEDDING: { label: 'Wedding Banquet', icon: '💍', tableIcon: '💍' },
+  RECEPTION: { label: 'Evening Reception', icon: '🥂', tableIcon: '🥂' },
+  BIRTHDAY: { label: 'Birthday Celebration', icon: '🎂', tableIcon: '🎂' },
+  CORPORATE: { label: 'Corporate Banquet', icon: '🏢', tableIcon: '🏢' },
+  PARTY: { label: 'Private Party & Cocktail', icon: '🎉', tableIcon: '🎉' },
+  ANNIVERSARY: { label: 'Anniversary Celebration', icon: '✨', tableIcon: '✨' },
+  GALA: { label: 'Gala Dinner', icon: '🌟', tableIcon: '🌟' },
+  CATERING: { label: 'Banquet Dining', icon: '🍽️', tableIcon: '🍽️' },
+  ENGAGEMENT: { label: 'Engagement Celebration', icon: '💎', tableIcon: '💎' },
+  SANGEET: { label: 'Sangeet & Cocktail Night', icon: '🎶', tableIcon: '🎶' },
+};
+
 export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propEventId, initialTable: propInitialTable }) => {
   // Extract eventId and table from URL params if not passed as props
   const [eventId, setEventId] = useState<string>(() => {
@@ -173,11 +186,22 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
     });
   };
 
-  // Place wedding guest order
+  // Place event guest order
   const handlePlaceOrder = async () => {
-    if (!data || cart.length === 0) return;
+    if (!data || cart.length === 0 || isSubmitting) return;
+
+    if (data.event.status === 'SCHEDULED') {
+      alert('Event ordering has not opened yet. Please check back when service starts.');
+      return;
+    }
+    if (data.event.status === 'CLOSED' || !data.event.isOrderingOpen) {
+      alert('Ordering for this event is currently closed.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      const idempotencyKey = `evt-${data.event.id}-tbl${tableNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const orderPayload = {
         restaurantId: data.restaurant.id,
         tableNumber: tableNumber || '01',
@@ -185,6 +209,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
         orderType: 'WEDDING_EVENT',
         eventId: data.event.id,
         eventName: data.event.title,
+        idempotencyKey,
         items: cart.map((ci) => ({
           menuItemId: ci.itemId,
           name: ci.name,
@@ -192,7 +217,9 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
           quantity: ci.quantity,
           notes: ci.notes || '',
         })),
-        notes: guestNotes.trim() ? `[Wedding Banquet] ${guestNotes.trim()}` : `[Wedding Banquet Order for Table ${tableNumber}]`,
+        notes: guestNotes.trim()
+          ? `[${data.event.eventType || 'Event'} Banquet] ${guestNotes.trim()}`
+          : `[${data.event.eventType || 'Event'} Banquet Order for Table ${tableNumber}]`,
       };
 
       const res = await api.createOrder(orderPayload);
@@ -211,7 +238,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
         });
       } catch (e) {}
     } catch (err: any) {
-      console.error('Failed to place wedding order:', err);
+      console.error('Failed to place event order:', err);
       alert(err.message || 'Failed to place order. Please check with your banquet waiter.');
     } finally {
       setIsSubmitting(false);
@@ -269,7 +296,10 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
   }
 
   const { event, restaurant } = data;
-  const isOrderingOpen = event.isOrderingOpen;
+  const branding = GUEST_EVENT_BRANDING[event.eventType] || { label: 'Banquet Dining', icon: '🍽️', tableIcon: '🍽️' };
+  const isScheduled = event.status === 'SCHEDULED';
+  const isClosed = event.status === 'CLOSED';
+  const isOrderingOpen = event.isOrderingOpen && !isScheduled && !isClosed;
 
   return (
     <div className="min-h-screen bg-[#faf8f5] text-[#292218] font-sans pb-32 selection:bg-[#d4af37]/30">
@@ -280,9 +310,9 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
 
         <div className="relative z-10 max-w-xl mx-auto space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/80 border border-[#d4af37]/40 shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 text-[#d4af37]" />
+            <span className="text-sm">{branding.icon}</span>
             <span className="text-[11px] font-serif font-bold tracking-widest uppercase text-[#8f7528]">
-              {event.eventType || 'Wedding Celebration'}
+              {branding.label}
             </span>
           </div>
 
@@ -299,7 +329,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
           {/* Table Badge */}
           <div className="pt-2">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1e1912] text-[#f7eed9] text-xs font-mono font-bold tracking-wider shadow-md border border-[#d4af37]">
-              <span>💍 TABLE {tableNumber}</span>
+              <span>{branding.tableIcon} TABLE {tableNumber}</span>
               <span className="w-1 h-1 rounded-full bg-[#d4af37]" />
               <span className="font-serif font-normal text-[11px] text-[#e0d6c2]">Seated Guest</span>
             </div>
@@ -316,11 +346,11 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
           <div className="flex flex-wrap items-center justify-center gap-4 pt-3 text-[11px] text-[#857764] font-medium border-t border-[#ede4d5] mt-4">
             <span className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
-              {event.eventDate}
+              {event.eventDate} {event.endDate && event.endDate !== event.eventDate ? `→ ${event.endDate}` : ''}
             </span>
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-[#d4af37]" />
-              {event.startTime} - {event.endTime}
+              {event.startTime} - {event.endTime} ({event.timezone || 'IST'})
             </span>
             <span className="flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-[#d4af37]" />
@@ -330,12 +360,20 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
         </div>
       </header>
 
-      {/* Live Ordering Status Banner if Paused */}
-      {!isOrderingOpen && (
-        <div className="bg-amber-100/80 border-y border-amber-300 text-amber-900 px-4 py-3 text-center text-xs font-serif">
-          <strong>Banquet Dining Update:</strong> Online ordering is temporarily paused by the hosts or dining staff. Please consult your banquet attendant.
+      {/* Live Ordering Status Banners */}
+      {isScheduled ? (
+        <div className="bg-sky-50 border-y border-sky-300 text-sky-950 px-4 py-3 text-center text-xs font-serif">
+          <strong>Service Scheduled:</strong> Banquet dining opens on <strong>{event.eventDate} at {event.startTime} ({event.timezone || 'IST'})</strong>. Please browse the dishes below while kitchen preparation is finalized.
         </div>
-      )}
+      ) : isClosed ? (
+        <div className="bg-slate-100 border-y border-slate-300 text-slate-800 px-4 py-3 text-center text-xs font-serif">
+          <strong>Service Concluded:</strong> Event dining for this session has officially ended. We thank you for celebrating with us!
+        </div>
+      ) : !event.isOrderingOpen ? (
+        <div className="bg-amber-100/80 border-y border-amber-300 text-amber-900 px-4 py-3 text-center text-xs font-serif">
+          <strong>Banquet Dining Update:</strong> Online ordering is temporarily paused by the dining staff. Please consult your banquet attendant.
+        </div>
+      ) : null}
 
       {/* Main Container */}
       <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
@@ -656,11 +694,21 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
             {/* Place Order Button */}
             <button
               onClick={handlePlaceOrder}
-              disabled={isSubmitting || cart.length === 0}
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#c79f29] to-[#b38b19] text-white font-serif font-bold text-xs uppercase tracking-widest shadow-xl shadow-[#d4af37]/30 hover:brightness-105 active:scale-98 transition-all flex items-center justify-center gap-2"
+              disabled={isSubmitting || cart.length === 0 || !isOrderingOpen}
+              className={`w-full py-3.5 rounded-xl text-white font-serif font-bold text-xs uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-2 ${
+                !isOrderingOpen
+                  ? 'bg-slate-400 cursor-not-allowed shadow-none'
+                  : 'bg-gradient-to-r from-[#d4af37] via-[#c79f29] to-[#b38b19] shadow-[#d4af37]/30 hover:brightness-105 active:scale-98'
+              }`}
             >
               {isSubmitting ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : isScheduled ? (
+                <span>Ordering Opens Soon</span>
+              ) : isClosed ? (
+                <span>Service Ended</span>
+              ) : !event.isOrderingOpen ? (
+                <span>Ordering Paused</span>
               ) : (
                 <>
                   <span>Place Dining Order for Table {tableNumber}</span>

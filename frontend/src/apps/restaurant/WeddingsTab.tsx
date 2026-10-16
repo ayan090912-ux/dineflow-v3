@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
 import { WeddingEvent, EventTable, Restaurant, Order, MenuCategory, MenuItem, isModuleEnabled } from '../../packages/types';
@@ -31,7 +31,9 @@ import {
   Copy,
   ExternalLink,
   ShieldCheck,
-  Search
+  Search,
+  Timer,
+  CalendarClock,
 } from 'lucide-react';
 
 interface WeddingsTabProps {
@@ -49,10 +51,36 @@ const THEME_OPTIONS = [
   { id: 'midnight_navy', name: 'Midnight Starlight', bg: 'bg-[#0a1128]', accent: '#93c5fd', text: 'text-sky-200', border: 'border-sky-800' },
 ];
 
+export const EVENT_TYPES: Record<string, { label: string; icon: string; honoreeLabel: string; prefix: string }> = {
+  WEDDING: { label: 'Wedding Ceremony & Banquet', icon: '💍', honoreeLabel: 'Couple Names (e.g. Aria & Julian)', prefix: 'In honor of' },
+  RECEPTION: { label: 'Evening Reception', icon: '🥂', honoreeLabel: 'Honoring Couple / Hosts', prefix: 'Hosted by' },
+  BIRTHDAY: { label: 'Birthday Celebration', icon: '🎂', honoreeLabel: 'Celebrant Name (e.g. Maya’s 30th)', prefix: 'Celebrating' },
+  CORPORATE: { label: 'Corporate Gala & Conference', icon: '🏢', honoreeLabel: 'Host Company / Organization', prefix: 'Presented by' },
+  PARTY: { label: 'Private Party & Cocktail Night', icon: '🎉', honoreeLabel: 'Host / Organizer Names', prefix: 'Hosted by' },
+  ANNIVERSARY: { label: 'Anniversary Celebration', icon: '✨', honoreeLabel: 'Couple / Honorees', prefix: 'Honoring' },
+  GALA: { label: 'Charity & Formal Gala Dinner', icon: '🌟', honoreeLabel: 'Beneficiary / Host Foundation', prefix: 'Benefiting' },
+  CATERING: { label: 'Banquet & Catered Dining', icon: '🍽️', honoreeLabel: 'Host / Organizer', prefix: 'Catered for' },
+  ENGAGEMENT: { label: 'Engagement Celebration', icon: '💎', honoreeLabel: 'Engaged Couple', prefix: 'Celebrating' },
+  SANGEET: { label: 'Sangeet & Cocktail Night', icon: '🎶', honoreeLabel: 'Couple / Families', prefix: 'In honor of' },
+};
+
+export const COMMON_TIMEZONES = [
+  { value: 'Asia/Kolkata', label: 'India Standard Time (IST · UTC+5:30)' },
+  { value: 'UTC', label: 'Coordinated Universal Time (UTC)' },
+  { value: 'America/New_York', label: 'Eastern Time (ET · US/Canada)' },
+  { value: 'America/Chicago', label: 'Central Time (CT · US/Canada)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT · US/Canada)' },
+  { value: 'Europe/London', label: 'British Time (GMT/BST · London)' },
+  { value: 'Europe/Paris', label: 'Central European Time (CET · Paris)' },
+  { value: 'Asia/Dubai', label: 'Gulf Standard Time (GST · Dubai)' },
+  { value: 'Asia/Singapore', label: 'Singapore Time (SGT · Singapore)' },
+  { value: 'Australia/Sydney', label: 'Australian Eastern Time (AEST · Sydney)' },
+];
+
 export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, currentUser, addToast }) => {
   const [events, setEvents] = useState<WeddingEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DRAFT' | 'PAUSED' | 'COMPLETED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'SCHEDULED' | 'CLOSED' | 'PAUSED' | 'DRAFT' | 'COMPLETED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Creation/Edit Wizard Modal State
@@ -65,8 +93,13 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [formCoupleNames, setFormCoupleNames] = useState('');
   const [formEventType, setFormEventType] = useState('WEDDING');
   const [formEventDate, setFormEventDate] = useState('');
+  const [formEndDate, setFormEndDate] = useState('');
   const [formStartTime, setFormStartTime] = useState('18:00');
   const [formEndTime, setFormEndTime] = useState('23:30');
+  const [formTimezone, setFormTimezone] = useState('Asia/Kolkata');
+  const [formServiceDays, setFormServiceDays] = useState(1);
+  const [formIsMultiDay, setFormIsMultiDay] = useState(false);
+  const [formAutoActivate, setFormAutoActivate] = useState(true);
   const [formVenueName, setFormVenueName] = useState('');
   const [formWelcomeMessage, setFormWelcomeMessage] = useState('');
   const [formThemeColor, setFormThemeColor] = useState('champagne');
@@ -78,6 +111,14 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [formTableCount, setFormTableCount] = useState(10);
   const [formNotes, setFormNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Extension Modal State
+  const [extendingEvent, setExtendingEvent] = useState<WeddingEvent | null>(null);
+  const [extensionMinutes, setExtensionMinutes] = useState(60);
+  const [extensionReason, setExtensionReason] = useState('Host requested dining extension');
+  const [customExtensionDate, setCustomExtensionDate] = useState('');
+  const [customExtensionTime, setCustomExtensionTime] = useState('');
+  const [isExtending, setIsExtending] = useState(false);
 
   // Restaurant Menu Data (for Restricted Menu Step)
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
@@ -96,6 +137,46 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [selectedEventForOrders, setSelectedEventForOrders] = useState<WeddingEvent | null>(null);
   const [eventOrders, setEventOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+
+  // Calculated Service Window (for Wizard live preview)
+  const calculatedServiceWindow = useMemo(() => {
+    if (!formEventDate || !formStartTime || !formEndTime) {
+      return null;
+    }
+    const isCrossMidnight = !formIsMultiDay && formEndTime <= formStartTime;
+    let resolvedEndDate = formEventDate;
+
+    if (formIsMultiDay && formEndDate) {
+      resolvedEndDate = formEndDate;
+    } else if (isCrossMidnight) {
+      const d = new Date(formEventDate);
+      d.setDate(d.getDate() + 1);
+      resolvedEndDate = d.toISOString().split('T')[0];
+    }
+
+    let durationHours = 0;
+    try {
+      const startLocal = new Date(`${formEventDate}T${formStartTime}:00`);
+      const endLocal = new Date(`${resolvedEndDate}T${formEndTime}:00`);
+      const diffMs = endLocal.getTime() - startLocal.getTime();
+      if (diffMs > 0) {
+        durationHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(1));
+      }
+    } catch (e) {
+      durationHours = 0;
+    }
+
+    return {
+      startDate: formEventDate,
+      startTime: formStartTime,
+      endDate: resolvedEndDate,
+      endTime: formEndTime,
+      timezone: formTimezone,
+      durationHours,
+      isCrossMidnight,
+      isMultiDay: formIsMultiDay || formServiceDays > 1,
+    };
+  }, [formEventDate, formStartTime, formEndTime, formEndDate, formIsMultiDay, formServiceDays, formTimezone]);
 
   // Load events
   const loadEvents = async () => {
@@ -138,11 +219,17 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     setFormEventType('WEDDING');
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 7);
-    setFormEventDate(tomorrow.toISOString().split('T')[0]);
+    const startStr = tomorrow.toISOString().split('T')[0];
+    setFormEventDate(startStr);
+    setFormEndDate(startStr);
     setFormStartTime('18:00');
     setFormEndTime('23:30');
+    setFormTimezone('Asia/Kolkata');
+    setFormServiceDays(1);
+    setFormIsMultiDay(false);
+    setFormAutoActivate(true);
     setFormVenueName(currentRestaurant?.name || '');
-    setFormWelcomeMessage('Welcome to our wedding banquet! Scan the QR code at your table to explore our curated dishes and place your dining order.');
+    setFormWelcomeMessage('Welcome to our banquet! Scan the QR code at your table to explore our curated dishes and place your dining order.');
     setFormThemeColor('champagne');
     setFormStatus('ACTIVE');
     setFormMenuSelectionType('FULL_MENU');
@@ -162,8 +249,13 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     setFormCoupleNames(ev.coupleNames || '');
     setFormEventType(ev.eventType || 'WEDDING');
     setFormEventDate(ev.eventDate);
+    setFormEndDate(ev.endDate || ev.eventDate);
     setFormStartTime(ev.startTime || '18:00');
     setFormEndTime(ev.endTime || '23:30');
+    setFormTimezone(ev.timezone || 'Asia/Kolkata');
+    setFormServiceDays(ev.serviceDays || 1);
+    setFormIsMultiDay(Boolean(ev.serviceDays && ev.serviceDays > 1) || (Boolean(ev.endDate) && ev.endDate !== ev.eventDate));
+    setFormAutoActivate(ev.autoActivate !== false);
     setFormVenueName(ev.venueName || '');
     setFormWelcomeMessage(ev.welcomeMessage || '');
     setFormThemeColor(ev.themeColor || 'champagne');
@@ -187,8 +279,12 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
         coupleNames: formCoupleNames.trim(),
         eventType: formEventType,
         eventDate: formEventDate,
+        endDate: formIsMultiDay && formEndDate ? formEndDate : (calculatedServiceWindow?.endDate || formEventDate),
         startTime: formStartTime,
         endTime: formEndTime,
+        timezone: formTimezone,
+        serviceDays: formIsMultiDay ? Math.max(1, formServiceDays) : 1,
+        autoActivate: formAutoActivate,
         venueName: formVenueName.trim(),
         welcomeMessage: formWelcomeMessage.trim(),
         themeColor: formThemeColor,
@@ -236,6 +332,43 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
       }
     } catch (err: any) {
       if (addToast) addToast({ type: 'error', title: 'Failed to toggle ordering', message: err.message });
+    }
+  };
+
+  // Extend event service period
+  const handleExtendServicePeriod = async () => {
+    if (!currentRestaurant?.id || !extendingEvent) return;
+    setIsExtending(true);
+    try {
+      const payload: any = {
+        reason: extensionReason.trim() || 'Host requested dining extension',
+      };
+      if (customExtensionDate && customExtensionTime) {
+        payload.newEndDate = customExtensionDate;
+        payload.newEndTime = customExtensionTime;
+      } else {
+        payload.extensionMinutes = extensionMinutes;
+      }
+
+      const updated = await api.extendEventServicePeriod(extendingEvent.id, payload, currentRestaurant.id);
+      setEvents((prev) =>
+        prev.map((e) => (e.id === extendingEvent.id ? { ...e, ...updated, status: updated.status || 'ACTIVE', isOrderingOpen: true } : e))
+      );
+      if (addToast) {
+        addToast({
+          type: 'success',
+          title: 'Service Window Extended',
+          message: `Event dining extended until ${updated.endTime || ''} ${updated.endDate || ''}. Kitchen ordering is active.`,
+        });
+      }
+      setExtendingEvent(null);
+    } catch (err: any) {
+      console.error('Failed to extend event:', err);
+      if (addToast) {
+        addToast({ type: 'error', title: 'Extension Failed', message: err.message });
+      }
+    } finally {
+      setIsExtending(false);
     }
   };
 
@@ -472,7 +605,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#11151e] border border-[#1e2533] p-3 rounded-xl">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {(['ALL', 'ACTIVE', 'DRAFT', 'PAUSED', 'COMPLETED'] as const).map((st) => (
+          {(['ALL', 'ACTIVE', 'SCHEDULED', 'CLOSED', 'PAUSED', 'DRAFT', 'COMPLETED'] as const).map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
@@ -503,7 +636,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
           <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-mono">Loading wedding banquets...</p>
+          <p className="text-xs font-mono">Loading event banquets...</p>
         </div>
       ) : filteredEvents.length === 0 ? (
         <div className="bg-[#121620] border border-[#1e2533] rounded-2xl p-12 text-center space-y-4">
@@ -511,11 +644,11 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             <Heart className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-white">No Wedding Events Found</h3>
+            <h3 className="text-base font-semibold text-white">No Events Found</h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
               {searchQuery
-                ? 'No events match your current search query. Try searching for a different couple name or title.'
-                : 'Host elegant wedding banquets and galas with dedicated tables and personalized menus.'}
+                ? 'No events match your current search query. Try searching for a different host or title.'
+                : 'Host elegant wedding banquets, corporate conferences, birthdays, and private galas with dedicated tables and personalized menus.'}
             </p>
           </div>
           <Button
@@ -524,13 +657,14 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             onClick={handleOpenNewWizard}
             className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs"
           >
-            Create Your First Wedding Event
+            Create Your First Event
           </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredEvents.map((ev) => {
             const themeConfig = THEME_OPTIONS.find((t) => t.id === ev.themeColor) || THEME_OPTIONS[0];
+            const typeMeta = EVENT_TYPES[ev.eventType] || { label: ev.eventType, icon: '🍽️', prefix: 'In honor of' };
             const isLive = ev.status === 'ACTIVE' && ev.isOrderingOpen;
 
             return (
@@ -541,22 +675,33 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 <div>
                   {/* Card Header: Type, Status, Ordering Toggle */}
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                        {ev.eventType}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <span>{typeMeta.icon}</span>
+                        <span>{ev.eventType}</span>
                       </span>
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
                           ev.status === 'ACTIVE'
                             ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : ev.status === 'SCHEDULED'
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                            : ev.status === 'CLOSED'
+                            ? 'bg-slate-700/60 text-slate-300 border border-slate-600'
                             : ev.status === 'DRAFT'
-                            ? 'bg-slate-700/40 text-slate-300 border border-slate-600'
+                            ? 'bg-slate-700/40 text-slate-400 border border-slate-600'
                             : ev.status === 'PAUSED'
                             ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                             : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                         }`}
                       >
-                        {ev.status}
+                        {ev.status === 'ACTIVE'
+                          ? 'ACTIVE · LIVE'
+                          : ev.status === 'SCHEDULED'
+                          ? 'SCHEDULED · UPCOMING'
+                          : ev.status === 'CLOSED'
+                          ? 'CLOSED · EXPIRED'
+                          : ev.status}
                       </span>
                       <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] bg-[#1a202d] text-slate-300 border border-[#2a3447]">
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: themeConfig.accent }} />
@@ -568,7 +713,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                     <button
                       onClick={() => handleToggleOrdering(ev)}
                       title="Toggle Live Ordering"
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 ${
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
                         ev.isOrderingOpen
                           ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
                           : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30'
@@ -579,34 +724,45 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                     </button>
                   </div>
 
-                  {/* Title & Couple */}
+                  {/* Title & Couple / Host */}
                   <div className="mt-3">
                     <h3 className="text-base font-bold text-white font-serif tracking-tight">{ev.title}</h3>
                     {ev.coupleNames && (
                       <p className="text-xs text-amber-200/90 font-serif italic mt-0.5">
-                        In honor of {ev.coupleNames}
+                        {typeMeta.prefix} {ev.coupleNames}
                       </p>
                     )}
                   </div>
 
-                  {/* Date, Time, Venue Meta */}
-                  <div className="grid grid-cols-2 gap-2 mt-3 text-[11px] text-slate-300">
+                  {/* Service Period & Venue Meta */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-[11px] text-slate-300 bg-[#0c0e14] p-2.5 rounded-xl border border-[#1b2230]">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      <span>{ev.eventDate}</span>
+                      <span>{ev.eventDate} {ev.endDate && ev.endDate !== ev.eventDate ? `→ ${ev.endDate}` : ''}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      <span>{ev.startTime} - {ev.endTime}</span>
+                      <span>{ev.startTime} - {ev.endTime} ({ev.timezone || 'IST'})</span>
                     </div>
-                    <div className="flex items-center gap-1.5 col-span-2">
+                    <div className="flex items-center gap-1.5 sm:col-span-2">
                       <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                       <span className="truncate">{ev.venueName || currentRestaurant?.name || 'Grand Ballroom'}</span>
                     </div>
+                    {ev.durationFormatted && (
+                      <div className="flex items-center gap-1.5 sm:col-span-2 pt-1 border-t border-[#1a202c] text-[10px] text-slate-400">
+                        <Timer className="w-3 h-3 text-emerald-400" />
+                        <span>Service Duration: <strong className="text-slate-200">{ev.durationFormatted}</strong></span>
+                        {ev.extendedAt && (
+                          <span className="ml-auto px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px]">
+                            Extended: {ev.extendedReason || 'Host request'}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Metrics Row */}
-                  <div className="grid grid-cols-3 gap-2 mt-4 bg-[#0d1017] p-2.5 rounded-xl border border-[#1b2230] text-center">
+                  <div className="grid grid-cols-3 gap-2 mt-3 bg-[#0d1017] p-2.5 rounded-xl border border-[#1b2230] text-center">
                     <div>
                       <p className="text-[10px] font-mono text-slate-400 uppercase">Tables</p>
                       <p className="text-sm font-bold text-white mt-0.5">{ev.tableCount || 0}</p>
@@ -623,8 +779,8 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 </div>
 
                 {/* Card Actions */}
-                <div className="pt-3 border-t border-[#1e2533] flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                <div className="pt-3 border-t border-[#1e2533] flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
@@ -643,6 +799,23 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                     >
                       <UtensilsCrossed className="w-3.5 h-3.5 text-purple-400" />
                       <span>Orders ({ev.orderCount || 0})</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setExtendingEvent(ev);
+                        setExtensionMinutes(60);
+                        setExtensionReason('Host requested dining extension');
+                        setCustomExtensionDate(ev.endDate || ev.eventDate);
+                        setCustomExtensionTime(ev.endTime || '23:30');
+                      }}
+                      className="text-xs bg-[#171c26] hover:bg-[#1f2635] border-[#293244] text-amber-300 hover:text-amber-200 flex items-center gap-1.5 h-8 px-2.5"
+                      title="Extend ordering window"
+                    >
+                      <Timer className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Extend</span>
                     </Button>
                   </div>
 
@@ -714,7 +887,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Aria & Julian's Black Tie Gala"
+                  placeholder="e.g. Acme Tech Annual Dinner Gala, or Aria & Julian's Wedding Banquet"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
@@ -723,70 +896,209 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Couple / Host Names</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Aria Montgomery & Julian Vance"
-                    value={formCoupleNames}
-                    onChange={(e) => setFormCoupleNames(e.target.value)}
-                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Event Type</label>
                   <select
                     value={formEventType}
                     onChange={(e) => setFormEventType(e.target.value)}
                     className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
                   >
-                    <option value="WEDDING">Wedding Ceremony & Banquet</option>
-                    <option value="RECEPTION">Evening Reception</option>
-                    <option value="ENGAGEMENT">Engagement Gala</option>
-                    <option value="SANGEET">Sangeet & Cocktail Night</option>
-                    <option value="ANNIVERSARY">Anniversary Celebration</option>
-                    <option value="CELEBRATION">Private Luxury Gala</option>
+                    {Object.entries(EVENT_TYPES).map(([code, meta]) => (
+                      <option key={code} value={code}>
+                        {meta.icon} {meta.label}
+                      </option>
+                    ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    {EVENT_TYPES[formEventType]?.honoreeLabel || 'Host / Honoree Names'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Aria Montgomery & Julian Vance, or Acme Leadership"
+                    value={formCoupleNames}
+                    onChange={(e) => setFormCoupleNames(e.target.value)}
+                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Event Date <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={formEventDate}
-                    onChange={(e) => setFormEventDate(e.target.value)}
-                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                  />
+              {/* Service Duration Mode Selector */}
+              <div className="bg-[#0b0e14] border border-[#1e2535] rounded-xl p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200">Service Duration & Timings</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormIsMultiDay(false);
+                        setFormServiceDays(1);
+                        setFormEndDate(formEventDate);
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        !formIsMultiDay
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Single Day / Evening
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormIsMultiDay(true);
+                        setFormServiceDays(3);
+                        if (formEventDate) {
+                          const d = new Date(formEventDate);
+                          d.setDate(d.getDate() + 2);
+                          setFormEndDate(d.toISOString().split('T')[0]);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        formIsMultiDay
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Multi-Day Banquet
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    value={formStartTime}
-                    onChange={(e) => setFormStartTime(e.target.value)}
-                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                      Start Date <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formEventDate}
+                      onChange={(e) => {
+                        setFormEventDate(e.target.value);
+                        if (!formIsMultiDay) setFormEndDate(e.target.value);
+                      }}
+                      className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      value={formStartTime}
+                      onChange={(e) => setFormStartTime(e.target.value)}
+                      className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">End Time</label>
+                    <input
+                      type="time"
+                      value={formEndTime}
+                      onChange={(e) => setFormEndTime(e.target.value)}
+                      className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">End Time</label>
-                  <input
-                    type="time"
-                    value={formEndTime}
-                    onChange={(e) => setFormEndTime(e.target.value)}
-                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                  />
+
+                {formIsMultiDay && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#18202d]">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Number of Service Days</label>
+                      <input
+                        type="number"
+                        min={2}
+                        max={14}
+                        value={formServiceDays}
+                        onChange={(e) => {
+                          const days = Math.max(2, parseInt(e.target.value) || 2);
+                          setFormServiceDays(days);
+                          if (formEventDate) {
+                            const d = new Date(formEventDate);
+                            d.setDate(d.getDate() + (days - 1));
+                            setFormEndDate(d.toISOString().split('T')[0]);
+                          }
+                        }}
+                        className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Calculated End Date</label>
+                      <input
+                        type="date"
+                        value={formEndDate}
+                        onChange={(e) => setFormEndDate(e.target.value)}
+                        className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#18202d]">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Timezone</label>
+                    <select
+                      value={formTimezone}
+                      onChange={(e) => setFormTimezone(e.target.value)}
+                      className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                    >
+                      {COMMON_TIMEZONES.map((tz) => (
+                        <option key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center pt-5">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={formAutoActivate}
+                        onChange={(e) => setFormAutoActivate(e.target.checked)}
+                        className="rounded text-amber-500 focus:ring-0"
+                      />
+                      <span>Auto-activate ordering when start time arrives</span>
+                    </label>
+                  </div>
                 </div>
+
+                {/* Live Service Duration Preview */}
+                {calculatedServiceWindow && (
+                  <div className="bg-[#121927] border border-amber-500/30 rounded-xl p-3 text-xs flex items-center justify-between text-slate-200">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300">
+                        <CalendarClock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                          <span>Service Window:</span>
+                          <span className="text-amber-300 font-mono">
+                            {calculatedServiceWindow.startDate} {calculatedServiceWindow.startTime} → {calculatedServiceWindow.endDate} {calculatedServiceWindow.endTime}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                            {calculatedServiceWindow.timezone}
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Calculated Duration: <strong className="text-emerald-400">{calculatedServiceWindow.durationHours} hours</strong>
+                          {calculatedServiceWindow.isCrossMidnight && ' · Spans past midnight'}
+                          {calculatedServiceWindow.isMultiDay && ' · Multi-day service'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
+                      AUTO-EXPIRY
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Venue / Hall Name</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Venue / Hall / Room Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. The Rose Conservatory Ballroom"
+                  placeholder="e.g. The Grand Ballroom, or Terrace Pavilion"
                   value={formVenueName}
                   onChange={(e) => setFormVenueName(e.target.value)}
                   className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
@@ -987,22 +1299,44 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                   <span className="text-xs text-slate-400">Event Title</span>
                   <span className="text-xs font-bold text-white">{formTitle || 'Untitled Event'}</span>
                 </div>
+                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
+                  <span className="text-xs text-slate-400">Event Type</span>
+                  <span className="text-xs font-mono font-bold text-amber-300">
+                    {EVENT_TYPES[formEventType]?.icon} {EVENT_TYPES[formEventType]?.label || formEventType}
+                  </span>
+                </div>
                 {formCoupleNames && (
                   <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                    <span className="text-xs text-slate-400">Honoring Couple</span>
+                    <span className="text-xs text-slate-400">
+                      {EVENT_TYPES[formEventType]?.honoreeLabel || 'Honoree / Host'}
+                    </span>
                     <span className="text-xs font-serif text-amber-200">{formCoupleNames}</span>
                   </div>
                 )}
                 <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Date & Time</span>
-                  <span className="text-xs text-white">{formEventDate} ({formStartTime} - {formEndTime})</span>
+                  <span className="text-xs text-slate-400">Calculated Service Window</span>
+                  <div className="text-right">
+                    <p className="text-xs text-white font-mono font-semibold">
+                      {formEventDate} {formStartTime} → {calculatedServiceWindow?.endDate || formEndDate || formEventDate} {formEndTime}
+                    </p>
+                    <p className="text-[10px] text-emerald-400 mt-0.5">
+                      {calculatedServiceWindow?.durationHours} hrs · {formTimezone}
+                      {calculatedServiceWindow?.isCrossMidnight ? ' · Crosses midnight' : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
+                  <span className="text-xs text-slate-400">Auto-Activation</span>
+                  <span className="text-xs font-mono text-slate-200">
+                    {formAutoActivate ? 'Enabled (Automated server open)' : 'Manual'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
                   <span className="text-xs text-slate-400">Venue</span>
                   <span className="text-xs text-white">{formVenueName || currentRestaurant?.name}</span>
                 </div>
                 <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Menu Mode</span>
+                  <span className="text-xs text-slate-400">Menu Scope</span>
                   <span className="text-xs font-mono text-emerald-400">{formMenuSelectionType}</span>
                 </div>
                 {!editingEventId && (
@@ -1371,6 +1705,123 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* EXTEND SERVICE PERIOD MODAL */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={!!extendingEvent}
+        onClose={() => setExtendingEvent(null)}
+        title={`Extend Service Period — ${extendingEvent?.title || ''}`}
+        maxWidth="lg"
+      >
+        {extendingEvent && (
+          <div className="space-y-4">
+            <div className="bg-[#10141d] border border-[#1e2535] rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-slate-300">
+                <span>Current Scheduled End:</span>
+                <span className="font-mono font-bold text-amber-300">
+                  {extendingEvent.endDate || extendingEvent.eventDate} at {extendingEvent.endTime || '23:30'} ({extendingEvent.timezone || 'Asia/Kolkata'})
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-400 text-[11px]">
+                <span>Current Status:</span>
+                <span className="font-mono uppercase font-semibold text-emerald-400">
+                  {extendingEvent.status}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-2">
+                Quick Extend Ordering Window:
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: '+30 Mins', mins: 30 },
+                  { label: '+1 Hour', mins: 60 },
+                  { label: '+2 Hours', mins: 120 },
+                  { label: '+4 Hours', mins: 240 },
+                ].map((opt) => (
+                  <button
+                    key={opt.mins}
+                    type="button"
+                    onClick={() => {
+                      setExtensionMinutes(opt.mins);
+                      setCustomExtensionDate('');
+                      setCustomExtensionTime('');
+                    }}
+                    className={`py-2 px-1 rounded-lg text-xs font-semibold border transition-all ${
+                      extensionMinutes === opt.mins && !customExtensionDate
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md'
+                        : 'bg-[#121620] text-slate-300 border-[#222b3b] hover:border-slate-500'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-[#0e121a] border border-[#1e2535] rounded-xl p-3 space-y-2">
+              <span className="text-[11px] font-medium text-slate-400">Or Set Custom End Time:</span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">New End Date</label>
+                  <input
+                    type="date"
+                    value={customExtensionDate}
+                    onChange={(e) => setCustomExtensionDate(e.target.value)}
+                    className="w-full bg-[#080a0f] border border-[#252f40] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">New End Time</label>
+                  <input
+                    type="time"
+                    value={customExtensionTime}
+                    onChange={(e) => setCustomExtensionTime(e.target.value)}
+                    className="w-full bg-[#080a0f] border border-[#252f40] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Extension Reason (Audited)
+              </label>
+              <input
+                type="text"
+                value={extensionReason}
+                onChange={(e) => setExtensionReason(e.target.value)}
+                placeholder="e.g. Host requested dining extension for celebration"
+                className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1e2533]">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setExtendingEvent(null)}
+                className="text-xs bg-[#161c28] border-[#252f42] text-slate-400 hover:text-white"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="brand"
+                size="sm"
+                disabled={isExtending}
+                onClick={handleExtendServicePeriod}
+                className="text-xs bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold px-4"
+              >
+                {isExtending ? 'Extending...' : 'Confirm Extension & Activate'}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -485,6 +485,14 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.toggleEventOrdering(eventId, restaurantId);
   }
 
+  async extendEventServicePeriod(
+    eventId: string,
+    extensionData: { extensionMinutes?: number; newEndDatetimeUtc?: string; newEndDate?: string; newEndTime?: string; reason?: string },
+    restaurantId?: string
+  ): Promise<WeddingEvent> {
+    return this.restaurant.extendEventServicePeriod(eventId, extensionData, restaurantId);
+  }
+
   async addEventTable(
     eventId: string,
     tableData: { tableNumber: string; tableLabel?: string; capacity?: number },

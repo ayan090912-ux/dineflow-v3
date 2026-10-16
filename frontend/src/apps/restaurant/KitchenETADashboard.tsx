@@ -814,9 +814,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
                       <div className="mb-2">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
-                          <span>💍</span>
+                          <span>🎉</span>
                           <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                            WEDDING EVENT · {order.eventName || 'Wedding'} · TABLE {order.tableNumber}
+                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {order.tableNumber}
                           </span>
                         </span>
                       </div>
@@ -830,7 +830,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-300 mt-0.5">
-                          {order.customerName || 'Walk-in Guest'} • {order.orderType === 'WEDDING_EVENT' ? '💍 Wedding Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
+                          {order.customerName || 'Walk-in Guest'} • {order.orderType === 'WEDDING_EVENT' ? '🎉 Event Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
                         </p>
                       </div>
                       <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
@@ -932,9 +932,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
                         <div className="mb-2">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
-                            <span>💍</span>
+                            <span>🎉</span>
                             <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                              WEDDING EVENT · {order.eventName || 'Wedding'} · TABLE {order.tableNumber}
+                              EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {order.tableNumber}
                             </span>
                           </span>
                         </div>
@@ -950,7 +950,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                             )}
                           </div>
                           <p className="text-xs text-slate-300 mt-0.5">
-                            {order.customerName || 'Guest'} • {order.orderType === 'WEDDING_EVENT' ? '💍 Wedding Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
+                            {order.customerName || 'Guest'} • {order.orderType === 'WEDDING_EVENT' ? '🎉 Event Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
                           </p>
                         </div>
                         <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
@@ -1068,9 +1068,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
                       <div className="mb-2">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm">
-                          <span>💍</span>
+                          <span>🎉</span>
                           <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                            WEDDING EVENT · {order.eventName || 'Wedding'} · TABLE {order.tableNumber}
+                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {order.tableNumber}
                           </span>
                         </span>
                       </div>
