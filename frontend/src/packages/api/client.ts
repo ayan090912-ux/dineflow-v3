@@ -962,6 +962,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.weddings.getWeddingRequestStatus(requestId, email);
   }
 
+  async getWeddingApplicantStatus(email?: string) {
+    return this.weddings.getWeddingApplicantStatus(email);
+  }
+
   async getAdminWeddingRequests(status?: string, search?: string) {
     return this.weddings.getAdminWeddingRequests(status, search);
   }
@@ -1026,6 +1030,14 @@ export class DinelyApiClient extends BaseApiClient {
       { tableNumber, label: tableLabel, capacity },
       email
     );
+  }
+
+  async batchCreateWeddingWorkspaceTables(
+    workspaceId: string,
+    data: { count: number; capacity?: number; startNumber?: number; prefix?: string },
+    email?: string
+  ) {
+    return this.weddings.batchCreateWeddingWorkspaceTables(workspaceId, data, email);
   }
 
   async deleteWeddingWorkspaceTable(workspaceId: string, tableId: string, email?: string) {

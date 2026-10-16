@@ -32,7 +32,9 @@ import {
   ChevronDown,
   Info,
   Flame,
-  ChefHat
+  ChefHat,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
@@ -166,6 +168,15 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
   const [newTableLabel, setNewTableLabel] = useState('');
   const [newTableCapacity, setNewTableCapacity] = useState(8);
   const [creatingTable, setCreatingTable] = useState(false);
+
+  // Batch table creation state
+  const [batchTableModal, setBatchTableModal] = useState(false);
+  const [batchCount, setBatchCount] = useState(10);
+  const [batchStartNumber, setBatchStartNumber] = useState(1);
+  const [batchCapacity, setBatchCapacity] = useState(8);
+  const [batchPrefix, setBatchPrefix] = useState('Table');
+  const [batchCreating, setBatchCreating] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
 
   // Live orders state
   const [orders, setOrders] = useState<any[]>([]);
@@ -344,6 +355,44 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
     }
   };
 
+  const handleBatchCreateTables = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedWorkspaceId) return;
+    setBatchCreating(true);
+    setBatchError(null);
+    try {
+      const res = await api.batchCreateWeddingWorkspaceTables(selectedWorkspaceId, {
+        count: Number(batchCount),
+        startNumber: Number(batchStartNumber),
+        capacity: Number(batchCapacity),
+        prefix: batchPrefix.trim() || 'Table',
+      });
+      if (res && res.tables) {
+        setDetail((prev) => {
+          if (!prev) return prev;
+          const existingIds = new Set((prev.tables || []).map((t) => t.id));
+          const newTables = res.tables.filter((t: any) => !existingIds.has(t.id));
+          return {
+            ...prev,
+            tables: [...(prev.tables || []), ...newTables],
+          };
+        });
+      }
+      setBatchTableModal(false);
+    } catch (err: any) {
+      setBatchError(err.message || 'Failed to batch generate tables.');
+    } finally {
+      setBatchCreating(false);
+    }
+  };
+
+  const getGuestOrderingUrl = (tableNum?: string) => {
+    if (!detail?.event?.id) return '/weddings';
+    const base = window.location.origin;
+    const tableParam = tableNum ? `?table=${encodeURIComponent(tableNum)}` : '';
+    return `${base}/event/${detail.event.id}${tableParam}`;
+  };
+
   const loadLiveOrders = async () => {
     if (!selectedWorkspaceId) return;
     setOrdersLoading(true);
@@ -383,9 +432,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
 
   const copyGuestLink = (tableNum?: string) => {
     if (!detail?.event?.id) return;
-    const base = window.location.origin;
-    const tableParam = tableNum ? `?table=${encodeURIComponent(tableNum)}` : '';
-    const link = `${base}/event/${detail.event.id}${tableParam}`;
+    const link = getGuestOrderingUrl(tableNum);
     navigator.clipboard.writeText(link);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2500);
@@ -445,7 +492,8 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                 type="button"
                 onClick={() => {
                   signOutFirebase().then(() => {
-                    window.location.href = '/auth?redirect=' + encodeURIComponent(window.location.pathname);
+                    if (onNavigate) onNavigate('/weddings/login');
+                    else window.location.href = '/weddings/login';
                   });
                 }}
                 className="text-[11px] text-amber-300 hover:text-amber-200 underline shrink-0 ml-2 cursor-pointer"
@@ -456,7 +504,8 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
               <button
                 type="button"
                 onClick={() => {
-                  window.location.href = '/auth?redirect=' + encodeURIComponent(window.location.pathname);
+                  if (onNavigate) onNavigate('/weddings/login');
+                  else window.location.href = '/weddings/login';
                 }}
                 className="text-[11px] text-amber-300 hover:text-amber-200 underline shrink-0 ml-2 font-medium cursor-pointer"
               >
@@ -565,6 +614,13 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
 
           <div className="space-y-2.5">
             <button
+              onClick={() => (onNavigate ? onNavigate('/weddings/login') : (window.location.href = '/weddings/login'))}
+              className="w-full py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+            >
+              <Crown className="w-3.5 h-3.5" />
+              Sign in with Organizer Account
+            </button>
+            <button
               onClick={() => init()}
               className="w-full py-2.5 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -573,7 +629,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
             </button>
             <button
               onClick={() => (onNavigate ? onNavigate('/weddings') : (window.location.href = '/weddings'))}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-semibold text-xs hover:from-amber-300 hover:to-amber-400 transition-all text-center cursor-pointer"
+              className="w-full py-2.5 px-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-white/80 font-medium text-xs transition-all text-center cursor-pointer border border-white/[0.1]"
             >
               Request Wedding Ordering Access
             </button>
@@ -594,6 +650,91 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
   const tables = detail?.tables || [];
   const menuCategories = detail?.menuCategories || (detail as any)?.availableMenu || [];
   const menuItems = detail?.menuItems || (detail as any)?.rawItems || [];
+
+  // Automated Setup Checklist items calculation (8-Step Real-Time Readiness)
+  const checklistItems = [
+    {
+      id: 'event_details',
+      title: 'Event Details & Timing',
+      desc: Boolean(currentEvent?.coupleNames && currentEvent?.eventDate && currentEvent?.venueName)
+        ? `${currentEvent?.coupleNames} · ${currentEvent?.venueName}`
+        : 'Set couple names, celebration date, banquet venue, and welcome note.',
+      isComplete: Boolean(currentEvent?.coupleNames && currentEvent?.eventDate && currentEvent?.venueName),
+      actionLabel: 'Configure Event',
+      onAction: () => handleTabChange('event'),
+    },
+    {
+      id: 'caterer_partner',
+      title: 'Catering Kitchen Partner',
+      desc: currentRestaurant?.name ? `Connected to ${currentRestaurant.name}.` : 'Assigned catering partner and active kitchen.',
+      isComplete: Boolean(currentRestaurant?.id),
+      actionLabel: 'View Partner',
+      onAction: () => handleTabChange('menu'),
+    },
+    {
+      id: 'menu_curation',
+      title: 'Banquet Menu Selection',
+      desc: menuItems.length > 0 ? `${menuItems.length} courses across ${menuCategories.length} categories active.` : 'Activate appetizers, mains, and celebration drinks.',
+      isComplete: menuItems.length > 0,
+      actionLabel: 'Curate Menu',
+      onAction: () => handleTabChange('menu'),
+    },
+    {
+      id: 'tables_setup',
+      title: 'Banqueting Tables & Seating',
+      desc: tables.length > 0 ? `${tables.length} tables provisioned (${tables.reduce((s, t) => s + (t.capacity || 0), 0)} total seats).` : 'Add individual tables or batch provision seating.',
+      isComplete: tables.length > 0,
+      actionLabel: tables.length > 0 ? 'Manage Tables' : 'Batch Add Tables',
+      onAction: () => {
+        if (tables.length === 0) {
+          setBatchStartNumber(1);
+          setBatchTableModal(true);
+        } else {
+          handleTabChange('tables');
+        }
+      },
+    },
+    {
+      id: 'qr_standees',
+      title: 'Table QR Code Generation',
+      desc: tables.length > 0 ? 'Unique high-res QR codes ready for printing & guest scanning.' : 'Provision tables to generate individual table QR codes.',
+      isComplete: tables.length > 0,
+      actionLabel: 'QR Studio',
+      onAction: () => handleTabChange('qr_studio'),
+    },
+    {
+      id: 'kitchen_terminal',
+      title: 'Connected Kitchen Terminal',
+      desc: 'Live kitchen display system ready to receive instant banquet tickets.',
+      isComplete: Boolean(currentRestaurant?.id),
+      actionLabel: 'Verify Kitchen',
+      onAction: () => handleTabChange('overview'),
+    },
+    {
+      id: 'guest_preview',
+      title: 'Guest Mobile Experience',
+      desc: 'Preview the mobile dining web application from a guest viewpoint.',
+      isComplete: Boolean(currentEvent?.id),
+      actionLabel: 'Preview Dining',
+      onAction: () => {
+        const url = getGuestOrderingUrl();
+        window.open(url, '_blank');
+      },
+    },
+    {
+      id: 'live_ordering',
+      title: 'Live Banquet Ordering Activation',
+      desc: (currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen)
+        ? 'Ordering is ACTIVE. Guests can scan and place requests.'
+        : 'Ordering is currently paused until reception begins.',
+      isComplete: Boolean(currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen),
+      actionLabel: (currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ? 'Pause Ordering' : 'Enable Live Ordering',
+      onAction: () => handleToggleOrdering((currentEvent?.orderingEnabled ?? currentEvent?.isOrderingOpen) ?? true),
+    },
+  ];
+
+  const completedStepsCount = checklistItems.filter((i) => i.isComplete).length;
+  const checklistProgressPercent = Math.round((completedStepsCount / checklistItems.length) * 100);
 
   return (
     <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans">
@@ -886,6 +1027,98 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                   <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
                     <CheckCircle className="w-3 h-3" /> Live Terminal Connected
                   </p>
+                </div>
+              </div>
+
+              {/* ========================================================= */}
+              {/* AUTOMATED SETUP CHECKLIST (8-STEP REAL-TIME LAUNCH READINESS) */}
+              {/* ========================================================= */}
+              <div className="bg-[#12141d] border border-amber-500/20 rounded-3xl p-6 sm:p-7 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/[0.08]">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                      <h3 className="text-base sm:text-lg font-serif font-bold text-white">
+                        Automated Celebration Launch Checklist
+                      </h3>
+                    </div>
+                    <p className="text-xs text-white/50 mt-1">
+                      Real-time verification of your wedding banquet workflow, menu readiness, table seating, and kitchen links.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <span className="text-xs font-mono font-bold text-amber-300">
+                        {completedStepsCount} of {checklistItems.length} Ready
+                      </span>
+                      <span className="block text-[10px] text-white/40">
+                        {checklistProgressPercent}% Complete
+                      </span>
+                    </div>
+                    <div className="w-16 h-2 rounded-full bg-white/[0.08] overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 transition-all duration-500"
+                        style={{ width: `${checklistProgressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 8-Step Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-5">
+                  {checklistItems.map((step, idx) => (
+                    <div
+                      key={step.id}
+                      className={`p-4 rounded-2xl border transition-all flex items-start justify-between gap-3 ${
+                        step.isComplete
+                          ? 'bg-[#151822]/80 border-emerald-500/20 hover:border-emerald-500/40'
+                          : 'bg-[#141620] border-amber-500/20 hover:border-amber-500/40'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                            step.isComplete
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono text-xs font-bold'
+                          }`}
+                        >
+                          {step.isComplete ? <Check className="w-4 h-4" /> : idx + 1}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs sm:text-sm font-semibold text-white">
+                              {step.title}
+                            </h4>
+                            <span
+                              className={`text-[9px] font-mono px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                step.isComplete
+                                  ? 'bg-emerald-500/15 text-emerald-400'
+                                  : 'bg-amber-500/15 text-amber-300'
+                              }`}
+                            >
+                              {step.isComplete ? 'Ready' : 'Pending'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-white/50 mt-1 leading-snug">
+                            {step.desc}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={step.onAction}
+                        className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors cursor-pointer border ${
+                          step.isComplete
+                            ? 'bg-white/[0.04] hover:bg-white/[0.08] text-white/70 border-white/[0.08]'
+                            : 'bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border-amber-400/30 font-semibold'
+                        }`}
+                      >
+                        {step.actionLabel}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -1212,15 +1445,29 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                     Each table has a dedicated QR code that routes guest orders directly to that exact table.
                   </p>
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setAddTableModal(true)}
-                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold"
-                  icon={<Plus className="w-4 h-4" />}
-                >
-                  Add Event Table
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBatchStartNumber(tables.length + 1);
+                      setBatchTableModal(true);
+                    }}
+                    className="border-amber-400/30 text-amber-300 hover:bg-amber-400/10 font-medium"
+                    icon={<Layers className="w-4 h-4" />}
+                  >
+                    Batch Provision
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setAddTableModal(true)}
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold"
+                    icon={<Plus className="w-4 h-4" />}
+                  >
+                    Add Event Table
+                  </Button>
+                </div>
               </div>
 
               {/* Table List */}
@@ -1759,6 +2006,115 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
               className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold"
             >
               Create Table & QR
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Batch Table Provisioning Modal */}
+      <Modal
+        isOpen={batchTableModal}
+        onClose={() => setBatchTableModal(false)}
+        title="Batch Provision Event Tables"
+      >
+        <form onSubmit={handleBatchCreateTables} className="space-y-4">
+          <p className="text-xs text-white/60">
+            Rapidly provision multiple banquet tables and automatically generate unique QR codes for every seat grouping.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1">
+                Number of Tables <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                min={1}
+                max={100}
+                value={batchCount}
+                onChange={(e) => setBatchCount(parseInt(e.target.value) || 1)}
+                className="w-full bg-[#181a24] border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1">
+                Starting Number <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                min={1}
+                value={batchStartNumber}
+                onChange={(e) => setBatchStartNumber(parseInt(e.target.value) || 1)}
+                className="w-full bg-[#181a24] border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1">
+                Seats per Table
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={batchCapacity}
+                onChange={(e) => setBatchCapacity(parseInt(e.target.value) || 8)}
+                className="w-full bg-[#181a24] border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1">
+                Table Prefix / Label
+              </label>
+              <input
+                type="text"
+                value={batchPrefix}
+                onChange={(e) => setBatchPrefix(e.target.value)}
+                placeholder="e.g. Table, VIP, Banquet"
+                className="w-full bg-[#181a24] border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              />
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-amber-400/[0.06] border border-amber-400/20 text-xs text-amber-200/90 flex items-center justify-between">
+            <span>
+              Preview: <strong>{batchPrefix} {batchStartNumber}</strong> through <strong>{batchPrefix} {Number(batchStartNumber) + Number(batchCount) - 1}</strong>
+            </span>
+            <span className="font-mono text-[11px] text-amber-300">
+              {Number(batchCount) * Number(batchCapacity)} seats
+            </span>
+          </div>
+
+          {batchError && (
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">
+              {batchError}
+            </div>
+          )}
+
+          <div className="pt-4 flex justify-end gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setBatchTableModal(false)}
+              className="border-white/[0.1] text-white"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              isLoading={batchCreating}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold"
+            >
+              Generate {batchCount} Tables & QRs
             </Button>
           </div>
         </form>

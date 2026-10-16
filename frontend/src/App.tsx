@@ -31,6 +31,7 @@ const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector
 const WeddingGuestApp = lazy(() => import('./apps/wedding/WeddingGuestApp').then(m => ({ default: m.WeddingGuestApp })));
 const WeddingLandingPage = lazy(() => import('./apps/wedding/WeddingLandingPage').then(m => ({ default: m.WeddingLandingPage })));
 const WeddingOrganizerDashboard = lazy(() => import('./apps/wedding/WeddingOrganizerDashboard').then(m => ({ default: m.WeddingOrganizerDashboard })));
+const WeddingLoginPage = lazy(() => import('./apps/wedding/WeddingLoginPage').then(m => ({ default: m.WeddingLoginPage })));
 
 function RouteLoadingFallback() {
   return (
@@ -1427,6 +1428,24 @@ function AppContent() {
     }
 
     // 7.5. Weddings & Events Platform Product & Guest Application
+    if (
+      cleanPath === '/weddings/login' ||
+      cleanPath === '/weddings/login/' ||
+      cleanPath === '/wedding/login' ||
+      cleanPath === '/wedding/login/' ||
+      cleanPath === '/weddings/signin' ||
+      cleanPath === '/wedding/signin'
+    ) {
+      return (
+        <WeddingLoginPage
+          onNavigate={navigateTo}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+          }}
+        />
+      );
+    }
+
     if (
       cleanPath === '/weddings' ||
       cleanPath === '/weddings/' ||

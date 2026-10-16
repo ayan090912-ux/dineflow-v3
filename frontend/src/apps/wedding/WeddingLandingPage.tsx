@@ -23,7 +23,8 @@ import {
   X,
   Store,
   Layers,
-  Heart
+  Heart,
+  Crown
 } from 'lucide-react';
 import { api } from '../../packages/api/client';
 import { WeddingAccessRequest } from '../../packages/types';
@@ -292,6 +293,12 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
     else window.location.href = '/weddings/dashboard';
   };
 
+  const navigateOrganizerLogin = () => {
+    if (onNavigateOrganizerLogin) onNavigateOrganizerLogin();
+    else if (onNavigate) onNavigate('/weddings/login');
+    else window.location.href = '/weddings/login';
+  };
+
   return (
     <div className="min-h-screen w-full bg-[#0b0d11] text-slate-100 flex flex-col selection:bg-amber-500 selection:text-slate-950 font-sans antialiased">
       {/* ========================================================================= */}
@@ -375,6 +382,14 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
 
             {/* Auth / Workspace CTAs */}
             <div className="flex items-center gap-2 ml-3">
+              <button
+                type="button"
+                onClick={navigateOrganizerLogin}
+                className="rounded-full px-3.5 py-2 text-[13px] font-medium text-amber-300 transition-colors hover:text-amber-200 hover:bg-amber-400/[0.08] cursor-pointer bg-transparent border border-amber-400/30 flex items-center gap-1.5"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>Organizer Sign In</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setTrackModalOpen(true)}
@@ -471,6 +486,17 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
               Celebrations
             </button>
             <div className="pt-2 border-t border-white/[0.08] flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigateOrganizerLogin();
+                }}
+                className="w-full py-2.5 text-center text-xs font-medium text-amber-300 border border-amber-400/30 rounded-xl bg-amber-400/[0.06] flex items-center justify-center gap-1.5"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>Organizer Sign In</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -1554,7 +1580,15 @@ export const WeddingLandingPage: React.FC<WeddingLandingPageProps> = ({
           <p className="max-w-md mx-auto text-white/60">
             Elevating wedding and banquet hospitality with quiet digital elegance. Connected directly to professional restaurant kitchens.
           </p>
-          <div className="pt-2 flex items-center justify-center gap-6">
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-6">
+            <button
+              type="button"
+              onClick={navigateOrganizerLogin}
+              className="text-amber-300 font-medium hover:underline bg-transparent border-none cursor-pointer text-xs flex items-center gap-1.5"
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <span>Organizer Portal Login</span>
+            </button>
             <button
               type="button"
               onClick={navigateHome}

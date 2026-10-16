@@ -59,6 +59,24 @@ export class WeddingClient {
     return await res.json();
   }
 
+  async getWeddingApplicantStatus(email?: string): Promise<{
+    hasApplication: boolean;
+    application: WeddingAccessRequest | null;
+  }> {
+    const apiBase = getApiBaseUrl();
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
+    const res = await fetch(`${apiBase}/weddings/applicant-status${query}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!res.ok) {
+      return { hasApplication: false, application: null };
+    }
+
+    return await res.json();
+  }
+
   // =========================================================================
   // 2. PLATFORM ADMIN WEDDING REQUESTS
   // =========================================================================
@@ -221,6 +239,24 @@ export class WeddingClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+      },
+      'OWNER'
+    );
+  }
+
+  async batchCreateWeddingWorkspaceTables(
+    workspaceId: string,
+    data: { count: number; capacity?: number; startNumber?: number; prefix?: string },
+    email?: string
+  ): Promise<{ status: string; createdCount: number; tables: EventTable[] }> {
+    const effEmail = this.getEffectiveEmail(email);
+    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
+    return await this.base.executeProtectedRequest(
+      `/weddings/workspaces/${encodeURIComponent(workspaceId)}/tables/batch${query}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
       },
       'OWNER'
     );

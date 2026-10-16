@@ -9,6 +9,10 @@ from sqlalchemy import select, func, or_, and_
 from app.core.database.connection import get_db
 from app.core.security.rbac import require_platform_admin, get_current_firebase_admin
 from app.core.security.tenant_auth import get_caller_context, CallerContext
+from app.core.config.settings import get_settings
+from app.core.notifications.provider import notification_service, NotificationChannel
+
+settings = get_settings()
 from app.modules.admin.audit_service import AdminAuditLogger
 from app.modules.restaurants.models import Restaurant
 from app.modules.weddings.models import WeddingAccessRequest, WeddingWorkspace, WeddingEvent, EventTable
@@ -68,6 +72,8 @@ class CreateWeddingRequestSchema(BaseModel):
 class ApproveWeddingRequestSchema(BaseModel):
     cateringRestaurantId: Optional[str] = None
     catering_restaurant_id: Optional[str] = None
+    assignedCateringRestaurantId: Optional[str] = None
+    assigned_catering_restaurant_id: Optional[str] = None
     reviewNotes: Optional[str] = None
     review_notes: Optional[str] = None
 
@@ -115,6 +121,14 @@ class AddWorkspaceTableSchema(BaseModel):
     table_label: Optional[str] = None
     label: Optional[str] = None
     capacity: Optional[int] = 8
+
+
+class BatchAddWorkspaceTablesSchema(BaseModel):
+    count: int = 5
+    capacity: Optional[int] = 8
+    startNumber: Optional[int] = None
+    start_number: Optional[int] = None
+    prefix: Optional[str] = "Table "
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +313,60 @@ async def get_wedding_request_status(
     return _format_request(req, rest_name)
 
 
+@weddings_router.get("/applicant-status")
+async def get_applicant_latest_status(
+    email: Optional[str] = Query(None),
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieves the most recent wedding application status for an applicant.
+    Matches either query param email or caller's authenticated email.
+    Used by /weddings/login to inform applicants on their request progress.
+    """
+    target_email = (email or caller.email or "").strip().lower()
+    if not target_email:
+        return {"hasApplication": False, "application": None}
+
+    # Security boundary: non-admin callers cannot query another person's email
+    if caller.email and not caller.is_admin and caller.email.lower() != target_email:
+        target_email = caller.email.lower()
+
+    stmt = (
+        select(WeddingAccessRequest)
+        .where(func.lower(WeddingAccessRequest.applicant_email) == target_email)
+        .order_by(WeddingAccessRequest.created_at.desc())
+    )
+    res = await db.execute(stmt)
+    req = res.scalars().first()
+
+    if not req:
+        return {
+            "hasApplication": False,
+            "application": None,
+            "lifecycleStatus": "NO_APPLICATION",
+            "applicantEmail": target_email,
+        }
+
+    rest_name = None
+    if req.catering_restaurant_id:
+        r_res = await db.execute(select(Restaurant.name).where(Restaurant.id == req.catering_restaurant_id))
+        rest_name = r_res.scalar_one_or_none()
+
+    formatted = _format_request(req, rest_name)
+    return {
+        "hasApplication": True,
+        "application": formatted,
+        "lifecycleStatus": req.lifecycle_status,
+        "workspaceId": req.workspace_id,
+        "weddingName": req.wedding_name,
+        "requestId": req.id,
+        "cateringRestaurantName": rest_name,
+        "applicantEmail": req.applicant_email,
+        "reviewNotes": req.review_notes,
+    }
+
+
 # ===========================================================================
 # PART 3 & 4: PLATFORM ADMIN WEDDING REQUESTS MANAGEMENT
 # ===========================================================================
@@ -422,7 +490,14 @@ async def approve_wedding_request(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wedding request not found.")
 
     # Validate catering restaurant assignment
-    caterer_id = (payload.cateringRestaurantId or payload.catering_restaurant_id or req.catering_restaurant_id or "").strip()
+    caterer_id = (
+        payload.cateringRestaurantId or
+        payload.catering_restaurant_id or
+        payload.assignedCateringRestaurantId or
+        payload.assigned_catering_restaurant_id or
+        req.catering_restaurant_id or
+        ""
+    ).strip()
     if not caterer_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -460,10 +535,28 @@ async def approve_wedding_request(
             "workspaceId": existing_ws.id,
             "eventId": existing_ws.event_id,
             "restaurantId": existing_ws.restaurant_id,
-            "ownerEmail": existing_ws.owner_email
+            "ownerEmail": existing_ws.owner_email,
+            "workspace": {
+                "id": existing_ws.id,
+                "name": existing_ws.name,
+                "status": existing_ws.status,
+            }
         }
 
-    # 1. Provision new WeddingWorkspace
+    # 1. Check catering restaurant menu availability
+    menu_count_res = await db.execute(
+        select(func.count(MenuItem.id)).where(
+            MenuItem.restaurant_id == restaurant.id,
+            MenuItem.is_available == True,
+            MenuItem.deleted_at == None
+        )
+    )
+    menu_item_count = menu_count_res.scalar() or 0
+    workspace_status = "ACTIVE" if menu_item_count > 0 else "SETUP_PENDING"
+    event_status = "ACTIVE" if menu_item_count > 0 else "SETUP_PENDING"
+    is_ordering_open = (menu_item_count > 0)
+
+    # Provision new WeddingWorkspace
     workspace_id = f"ws-wed-{uuid.uuid4().hex[:10]}"
     event_id = f"evt-wed-{uuid.uuid4().hex[:10]}"
 
@@ -475,7 +568,7 @@ async def approve_wedding_request(
         name=req.wedding_name,
         restaurant_id=restaurant.id,
         event_id=event_id,
-        status="ACTIVE",
+        status=workspace_status,
         created_at=now,
         updated_at=now
     )
@@ -496,8 +589,8 @@ async def approve_wedding_request(
         venue_name=req.venue_name,
         welcome_message=f"Welcome to {req.wedding_name}! Please browse the banquet menu below and place your courses directly from your table.",
         theme_color="champagne",
-        status="ACTIVE",
-        is_ordering_open=True,
+        status=event_status,
+        is_ordering_open=is_ordering_open,
         menu_selection_type="FULL_MENU",
         estimated_guest_count=req.estimated_guest_count,
         notes=f"Auto-provisioned from approved request {req.id}",
@@ -561,17 +654,72 @@ async def approve_wedding_request(
         }
     )
 
+    # Automated Welcome / Access Notification
+    email_delivery = {
+        "sent": False,
+        "provider": None,
+        "recipient": req.applicant_email,
+        "reason": "Email provider not configured (SENDGRID_API_KEY is not set). In-app status tracking and login via https://dinely.food/weddings/login are active."
+    }
+    if getattr(settings, "SENDGRID_API_KEY", None):
+        try:
+            subject = f"Your Dinely Celebration Ordering Access is Approved! — {req.wedding_name}"
+            content = (
+                f"Dear {req.applicant_name},\n\n"
+                f"Congratulations! Your celebration ordering request for '{req.wedding_name}' has been approved by Dinely.\n\n"
+                f"Your dedicated Wedding Organizer Studio is now active:\n"
+                f"• Organizer Login: https://dinely.food/weddings/login\n"
+                f"• Authorized Email: {req.applicant_email}\n"
+                f"• Reference ID: {req.id}\n"
+                f"• Workspace Reference: {workspace_id}\n\n"
+                f"Next Steps to Go Live:\n"
+                f"1. Log in securely using Google or your email at https://dinely.food/weddings/login\n"
+                f"2. Complete your banquet menu selections and dining rules\n"
+                f"3. Generate and print table QR standees from the QR Studio\n"
+                f"4. Turn on Guest Ordering when your reception starts\n\n"
+                f"Warm regards,\n"
+                f"Dinely Weddings & Luxury Events Team\n"
+                f"https://dinely.food/weddings"
+            )
+            sent = await notification_service.send_notification(
+                NotificationChannel.EMAIL,
+                recipient=req.applicant_email,
+                subject=subject,
+                content=content
+            )
+            email_delivery = {
+                "sent": bool(sent),
+                "provider": "SendGrid",
+                "recipient": req.applicant_email,
+                "reason": "Approval email dispatched via SendGrid." if sent else "Failed to dispatch via SendGrid."
+            }
+        except Exception as e:
+            email_delivery = {
+                "sent": False,
+                "provider": "SendGrid",
+                "recipient": req.applicant_email,
+                "reason": f"SendGrid error: {str(e)}"
+            }
+
     return {
         "status": "success",
         "message": f"Wedding request '{req.wedding_name}' approved successfully.",
         "workspaceId": workspace_id,
         "eventId": event_id,
+        "workspace": {
+            "id": workspace_id,
+            "name": req.wedding_name,
+            "status": workspace_status,
+        },
         "cateringRestaurant": {
             "id": restaurant.id,
             "name": restaurant.name,
             "slug": rest_slug
         },
-        "ownerEmail": req.applicant_email
+        "ownerEmail": req.applicant_email,
+        "emailDelivery": email_delivery,
+        "eventStatus": event_status,
+        "isOrderingOpen": is_ordering_open
     }
 
 
@@ -1097,6 +1245,98 @@ async def add_workspace_table(
     await db.refresh(new_table)
 
     return {"status": "success", "table": _format_table(new_table), "qrUrl": qr_url}
+
+
+@weddings_router.post("/workspaces/{workspace_id}/tables/batch", status_code=status.HTTP_201_CREATED)
+async def batch_add_workspace_tables(
+    workspace_id: str,
+    payload: BatchAddWorkspaceTablesSchema,
+    email: Optional[str] = Query(None),
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Batch provisions multiple event tables with sequential numbers and canonical QR URLs.
+    """
+    stmt = select(WeddingWorkspace).where(WeddingWorkspace.id == workspace_id)
+    res = await db.execute(stmt)
+    ws = res.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wedding workspace not found.")
+
+    effective_email = (caller.email or email or "").strip().lower()
+    is_authorized = (
+        caller.is_admin or
+        (effective_email and ws.owner_email.lower() == effective_email)
+    )
+    if not is_authorized:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden.")
+
+    count = max(1, min(50, payload.count or 5))
+    capacity = max(1, payload.capacity or 8)
+    prefix = (payload.prefix or "Table ").strip()
+
+    r_stmt = select(Restaurant).where(Restaurant.id == ws.restaurant_id)
+    r_res = await db.execute(r_stmt)
+    rest = r_res.scalar_one_or_none()
+    rest_slug = (rest.public_slug or rest.slug or rest.id) if rest else ws.restaurant_id
+
+    # Query all existing table numbers for this event
+    existing_tables_res = await db.execute(
+        select(EventTable.table_number).where(EventTable.event_id == ws.event_id)
+    )
+    existing_nums = set(existing_tables_res.scalars().all())
+
+    # Find highest numeric existing table number if startNumber not provided
+    start_num = payload.startNumber or payload.start_number
+    if not start_num:
+        max_num = 0
+        for num_str in existing_nums:
+            clean_digits = "".join(ch for ch in num_str if ch.isdigit())
+            if clean_digits:
+                try:
+                    max_num = max(max_num, int(clean_digits))
+                except ValueError:
+                    pass
+        start_num = max_num + 1
+
+    new_tables = []
+    now = datetime.now(timezone.utc)
+    curr_num = start_num
+    created_count = 0
+
+    while created_count < count and curr_num < start_num + 200:
+        table_num_str = f"{curr_num:02d}" if curr_num < 100 else str(curr_num)
+        if table_num_str not in existing_nums:
+            t_id = f"etbl-{ws.event_id}-{table_num_str}"
+            qr_url = f"https://{rest_slug}.dinely.food/event/{ws.event_id}?table={table_num_str}"
+            tbl = EventTable(
+                id=t_id,
+                event_id=ws.event_id,
+                restaurant_id=ws.restaurant_id,
+                table_number=table_num_str,
+                table_label=f"{prefix} {table_num_str}".strip(),
+                capacity=capacity,
+                qr_code_url=qr_url,
+                is_active=True,
+                created_at=now,
+                updated_at=now
+            )
+            db.add(tbl)
+            new_tables.append(tbl)
+            existing_nums.add(table_num_str)
+            created_count += 1
+        curr_num += 1
+
+    await db.commit()
+    for tbl in new_tables:
+        await db.refresh(tbl)
+
+    return {
+        "status": "success",
+        "createdCount": len(new_tables),
+        "tables": [_format_table(t) for t in new_tables]
+    }
 
 
 @weddings_router.delete("/workspaces/{workspace_id}/tables/{table_id}")
