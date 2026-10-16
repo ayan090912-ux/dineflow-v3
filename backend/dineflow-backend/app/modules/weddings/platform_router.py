@@ -528,6 +528,14 @@ async def approve_wedding_request(
         req.reviewed_at = now
         if review_note_text:
             req.review_notes = review_note_text
+
+        # Ensure weddings module is activated on restaurant
+        current_mods = list(restaurant.enabled_modules or [])
+        if "weddings" not in current_mods:
+            current_mods.append("weddings")
+            restaurant.enabled_modules = current_mods
+            restaurant.updated_at = now
+
         await db.commit()
         return {
             "status": "success",
@@ -536,6 +544,7 @@ async def approve_wedding_request(
             "eventId": existing_ws.event_id,
             "restaurantId": existing_ws.restaurant_id,
             "ownerEmail": existing_ws.owner_email,
+            "enabledModules": restaurant.enabled_modules,
             "workspace": {
                 "id": existing_ws.id,
                 "name": existing_ws.name,
@@ -628,7 +637,14 @@ async def approve_wedding_request(
 
     await db.flush()
 
-    # 4. Update request status
+    # 4. Activate weddings module on catering restaurant
+    curr_mods = list(restaurant.enabled_modules or [])
+    if "weddings" not in curr_mods:
+        curr_mods.append("weddings")
+        restaurant.enabled_modules = curr_mods
+        restaurant.updated_at = now
+
+    # Update request status
     req.lifecycle_status = "APPROVED"
     req.catering_restaurant_id = restaurant.id
     req.workspace_id = workspace_id
@@ -659,27 +675,28 @@ async def approve_wedding_request(
         "sent": False,
         "provider": None,
         "recipient": req.applicant_email,
-        "reason": "Email provider not configured (SENDGRID_API_KEY is not set). In-app status tracking and login via https://dinely.food/weddings/login are active."
+        "reason": "Email provider not configured (SENDGRID_API_KEY is not set). In-app status tracking and login via https://dinely.food/restaurant/login are active."
     }
     if getattr(settings, "SENDGRID_API_KEY", None):
         try:
-            subject = f"Your Dinely Celebration Ordering Access is Approved! — {req.wedding_name}"
+            subject = f"Your Dinely Wedding Ordering Access is Approved! — {req.wedding_name}"
             content = (
                 f"Dear {req.applicant_name},\n\n"
                 f"Congratulations! Your celebration ordering request for '{req.wedding_name}' has been approved by Dinely.\n\n"
-                f"Your dedicated Wedding Organizer Studio is now active:\n"
-                f"• Organizer Login: https://dinely.food/weddings/login\n"
+                f"Your Wedding Ordering capability is now active in your Dinely Owner OS:\n"
+                f"• Owner OS: https://dinely.food/restaurant/dashboard?tab=weddings\n"
                 f"• Authorized Email: {req.applicant_email}\n"
                 f"• Reference ID: {req.id}\n"
-                f"• Workspace Reference: {workspace_id}\n\n"
-                f"Next Steps to Go Live:\n"
-                f"1. Log in securely using Google or your email at https://dinely.food/weddings/login\n"
-                f"2. Complete your banquet menu selections and dining rules\n"
-                f"3. Generate and print table QR standees from the QR Studio\n"
-                f"4. Turn on Guest Ordering when your reception starts\n\n"
+                f"• Catering Partner: {restaurant.name}\n\n"
+                f"Next Steps in your Owner Dashboard:\n"
+                f"1. Log in securely using Google or your email at https://dinely.food/restaurant/login\n"
+                f"2. Navigate to 'Wedding Ordering' in your dashboard\n"
+                f"3. Review your banquet menu and dining rules\n"
+                f"4. Generate and print table QR standees from the QR Studio\n"
+                f"5. Turn on Guest Ordering when your reception starts\n\n"
                 f"Warm regards,\n"
-                f"Dinely Weddings & Luxury Events Team\n"
-                f"https://dinely.food/weddings"
+                f"Dinely Weddings Team\n"
+                f"https://dinely.food"
             )
             sent = await notification_service.send_notification(
                 NotificationChannel.EMAIL,
@@ -706,6 +723,9 @@ async def approve_wedding_request(
         "message": f"Wedding request '{req.wedding_name}' approved successfully.",
         "workspaceId": workspace_id,
         "eventId": event_id,
+        "restaurantId": restaurant.id,
+        "restaurantName": restaurant.name,
+        "enabledModules": restaurant.enabled_modules,
         "workspace": {
             "id": workspace_id,
             "name": req.wedding_name,

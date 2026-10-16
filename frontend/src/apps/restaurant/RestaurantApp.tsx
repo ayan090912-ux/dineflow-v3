@@ -91,6 +91,7 @@ import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
+import { WeddingsTab } from './WeddingsTab';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
 import { sendAppNotification, registerServiceWorker } from '../../packages/utils/notifications';
@@ -109,9 +110,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   onNavigate,
 }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings' | 'weddings'>(() => {
     if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab')?.toLowerCase();
+      if (tabParam === 'weddings' || tabParam === 'wedding') return 'weddings';
+      if (tabParam === 'menu') return 'menu';
+      if (tabParam === 'tables' || tabParam === 'floorplan') return 'tables';
+      if (tabParam === 'orders') return 'orders';
+      if (tabParam === 'kitchen') return 'kitchen';
+      if (tabParam === 'bar') return 'bar';
+      if (tabParam === 'waiter') return 'waiter';
+      if (tabParam === 'inventory') return 'inventory';
+      if (tabParam === 'billing') return 'billing';
+      if (tabParam === 'theme') return 'theme';
+      if (tabParam === 'staff') return 'staff';
+      if (tabParam === 'day_management' || tabParam === 'business_day') return 'day_management';
+      if (tabParam === 'workspace_settings' || tabParam === 'settings') return 'workspace_settings';
+
       const p = window.location.pathname.toLowerCase();
+      if (p.includes('/weddings') || p.includes('/wedding')) return 'weddings';
       if (p.includes('/menu')) return 'menu';
       if (p.includes('/floorplan') || p.includes('/tables')) return 'tables';
       if (p.includes('/staff') || p.includes('/employees')) return 'staff';
@@ -127,6 +145,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     }
     return 'dashboard';
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      const url = new URL(window.location.href);
+      if (activeTab === 'dashboard') {
+        url.searchParams.delete('tab');
+      } else {
+        url.searchParams.set('tab', activeTab);
+      }
+      window.history.replaceState(null, '', url.toString());
+    }
+  }, [activeTab]);
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -1607,6 +1637,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     ...(isFoodCart && !hasTablesModule
                       ? [{ id: 'qr_pickup', label: 'Counter Pickup QR', icon: <QrCode className="w-4 h-4 text-sky-400" />, badge: 'PICKUP' }]
                       : []),
+                    {
+                      id: 'weddings',
+                      label: 'Wedding Ordering',
+                      icon: <Sparkles className="w-4 h-4 text-amber-400" />,
+                      badge: isModuleEnabled(currentRestaurant, 'weddings') ? 'BANQUET' : undefined,
+                    },
                   ],
                 },
                 {
@@ -1675,6 +1711,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                   ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                                   : item.badge === 'PICKUP'
                                   ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                                  : item.badge === 'BANQUET'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                                   : item.badge === 'OPEN'
                                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                   : item.badge === 'CLOSED'
@@ -1825,6 +1863,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management'}
               {activeTab === 'theme' && 'Brand Identity & Styling'}
               {activeTab === 'workspace_settings' && 'Terminals & Settings'}
+              {activeTab === 'weddings' && 'Weddings & Banquet Ordering'}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               {activeTab === 'dashboard' && 'Live performance metrics, revenue analytics, and station status across your restaurant.'}
@@ -1839,6 +1878,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Authoritative operational business-day lifecycle, shift register reconciliation, station prechecks, and daily closing.'}
               {activeTab === 'theme' && "Customize your restaurant's digital storefront, logo, accent colors, and typography."}
               {activeTab === 'workspace_settings' && 'Manage active operational modules, terminal access URLs, and branch configuration.'}
+              {activeTab === 'weddings' && 'Curate bespoke banquet menus, provision decoupled table QR codes, and monitor live guest orders.'}
             </p>
           </div>
 
@@ -4281,6 +4321,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             onNavigateTab={(tab) => setActiveTab(tab as any)}
             onRefreshData={loadData}
             addToast={addToast}
+          />
+        )}
+
+        {/* Tab: Wedding & Banquet Ordering */}
+        {activeTab === 'weddings' && (
+          <WeddingsTab
+            currentRestaurant={currentRestaurant}
+            currentUser={currentUser}
+            addToast={(t: any) => {
+              if (t && typeof t === 'object') {
+                addToast(t.type || 'info', t.title || '', t.message);
+              }
+            }}
           />
         )}
 

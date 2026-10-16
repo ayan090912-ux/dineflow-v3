@@ -29,9 +29,6 @@ const RestaurantSignupPage = lazy(() => import('./apps/onboarding/RestaurantSign
 const PendingApprovalPage = lazy(() => import('./apps/onboarding/PendingApprovalPage').then(m => ({ default: m.PendingApprovalPage })));
 const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector').then(m => ({ default: m.WorkspaceSelector })));
 const WeddingGuestApp = lazy(() => import('./apps/wedding/WeddingGuestApp').then(m => ({ default: m.WeddingGuestApp })));
-const WeddingLandingPage = lazy(() => import('./apps/wedding/WeddingLandingPage').then(m => ({ default: m.WeddingLandingPage })));
-const WeddingOrganizerDashboard = lazy(() => import('./apps/wedding/WeddingOrganizerDashboard').then(m => ({ default: m.WeddingOrganizerDashboard })));
-const WeddingLoginPage = lazy(() => import('./apps/wedding/WeddingLoginPage').then(m => ({ default: m.WeddingLoginPage })));
 
 function RouteLoadingFallback() {
   return (
@@ -97,13 +94,6 @@ function PlatformTenantRedirector({
         if (!isMounted) return;
 
         if (!list || list.length === 0) {
-          try {
-            const weddingRes = await api.getMyWeddingWorkspaces();
-            if (weddingRes?.workspaces && weddingRes.workspaces.length > 0) {
-              onNavigate('/weddings/dashboard');
-              return;
-            }
-          } catch {}
           onNavigate('/wizard?mode=create');
           return;
         }
@@ -468,12 +458,12 @@ function AppContent() {
       if (currentPath.startsWith('/admin')) {
         navigateTo('/admin/login');
       } else if (
-        currentPath.startsWith('/weddings') ||
-        currentPath.startsWith('/wedding') ||
         currentPath.startsWith('/event') ||
-        currentPath.startsWith('/events')
+        currentPath.startsWith('/events') ||
+        currentPath === '/wedding/guest' ||
+        currentPath.startsWith('/wedding/guest/')
       ) {
-        // Do not redirect wedding applicants, organizers, or guests to restaurant management login
+        // Do not redirect event banquet guests to restaurant management login
         return;
       } else {
         navigateTo('/restaurant/login');
@@ -1436,14 +1426,8 @@ function AppContent() {
       cleanPath === '/weddings/signin' ||
       cleanPath === '/wedding/signin'
     ) {
-      return (
-        <WeddingLoginPage
-          onNavigate={navigateTo}
-          onLoginSuccess={(user) => {
-            setCurrentUser(user);
-          }}
-        />
-      );
+      navigateTo('/restaurant/login');
+      return null;
     }
 
     if (
@@ -1453,15 +1437,12 @@ function AppContent() {
       cleanPath === '/weddings/request' ||
       cleanPath === '/weddings/apply'
     ) {
-      return (
-        <WeddingLandingPage
-          onNavigate={navigateTo}
-          onNavigateHome={() => navigateTo('/')}
-          onNavigateOrganizerDashboard={() => navigateTo('/weddings/dashboard')}
-          onOpenDashboard={() => navigateTo('/weddings/dashboard')}
-          currentUser={currentUser}
-        />
-      );
+      if (currentUser) {
+        navigateTo('/restaurant/dashboard?tab=weddings');
+      } else {
+        navigateTo('/wizard?mode=create&type=WEDDING_ORDERING');
+      }
+      return null;
     }
 
     if (
@@ -1473,15 +1454,8 @@ function AppContent() {
       cleanPath.startsWith('/wedding/dashboard/') ||
       cleanPath.startsWith('/weddings/workspace')
     ) {
-      return (
-        <WeddingOrganizerDashboard
-          onNavigate={navigateTo}
-          onNavigateRestaurants={() => navigateTo('/restaurant/dashboard')}
-          onNavigateHome={() => navigateTo('/')}
-          onLogout={() => handleLogout('/weddings')}
-          currentUser={currentUser}
-        />
-      );
+      navigateTo('/restaurant/dashboard?tab=weddings');
+      return null;
     }
 
     // Weddings & Luxury Events Guest Application (Platform or Root Domain Deep Link)
@@ -1558,13 +1532,6 @@ function AppContent() {
               try {
                 const myRests = await api.getOwnerRestaurants(user?.email, user?.id);
                 if (!myRests || myRests.length === 0) {
-                  try {
-                    const weddingRes = await api.getMyWeddingWorkspaces(user?.email);
-                    if (weddingRes?.workspaces && weddingRes.workspaces.length > 0) {
-                      navigateTo('/weddings/dashboard');
-                      return;
-                    }
-                  } catch {}
                   navigateTo('/wizard?mode=create');
                 } else if (myRests.length === 1) {
                   const onlyRest = myRests[0];

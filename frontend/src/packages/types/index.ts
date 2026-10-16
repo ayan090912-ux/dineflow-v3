@@ -109,6 +109,7 @@ export function isModuleEnabled(
   if (module === 'inventory') return restaurant.hasInventory !== false;
   if (module === 'billing') return restaurant.hasBilling !== false;
   if (module === 'tables') return restaurant.hasTables !== false;
+  if (modLower === 'weddings') return (restaurant as any).hasWeddings === true || bType === 'WEDDING_ORDERING';
   if (module === 'dashboard' || module === 'restaurant' || module === 'operations') return true;
 
   return true;
@@ -177,7 +178,7 @@ export type RestaurantLifecycleStatus =
   | 'ARCHIVED'
   | 'DELETED';
 
-export type BusinessType = 'RESTAURANT' | 'CAFE' | 'BAR' | 'FOOD_CART' | 'FOOD_TRUCK';
+export type BusinessType = 'RESTAURANT' | 'CAFE' | 'BAR' | 'FOOD_CART' | 'FOOD_TRUCK' | 'WEDDING_ORDERING';
 
 export interface Restaurant {
   id: string;

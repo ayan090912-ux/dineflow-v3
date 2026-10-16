@@ -36,6 +36,7 @@ import {
   Receipt,
   LayoutDashboard,
   Check,
+  QrCode,
 } from 'lucide-react';
 import { Restaurant, User, BusinessType } from '../../packages/types';
 
@@ -45,7 +46,7 @@ interface SetupWizardProps {
   onNavigate?: (path: string) => void;
 }
 
-// STRICTLY 3 BUSINESS TYPES
+// 4 BUSINESS TYPES
 const BUSINESS_TYPES: Array<{
   id: BusinessType;
   name: string;
@@ -73,6 +74,13 @@ const BUSINESS_TYPES: Array<{
     icon: Truck,
     tagline: 'Kiosk, Stall & Food Truck',
     desc: 'Mobile food carts, fast counter kiosks, street food stalls, and quick-pickup stands.',
+  },
+  {
+    id: 'WEDDING_ORDERING',
+    name: 'Wedding Ordering Setup',
+    icon: Sparkles,
+    tagline: 'Banquets & Event Catering',
+    desc: 'Provide wedding guests with table-specific QR codes for ordering food directly to the kitchen.',
   },
 ];
 
@@ -110,7 +118,31 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
 
   // Step 1: Business Type
-  const [businessType, setBusinessType] = useState<BusinessType>('RESTAURANT');
+  const [businessType, setBusinessType] = useState<BusinessType>(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const t = sp.get('type') || sp.get('businessType');
+      if (t === 'WEDDING_ORDERING' || t === 'WEDDINGS' || t === 'wedding') return 'WEDDING_ORDERING';
+    }
+    return 'RESTAURANT';
+  });
+
+  // Existing Owner Restaurants (for Wedding Ordering association)
+  const [ownerRestaurants, setOwnerRestaurants] = useState<Restaurant[]>([]);
+  const [selectedCateringRestaurantId, setSelectedCateringRestaurantId] = useState<string>('');
+
+  // Wedding Specific Setup Fields
+  const [weddingName, setWeddingName] = useState('');
+  const [weddingDate, setWeddingDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
+  const [weddingVenueName, setWeddingVenueName] = useState('');
+  const [weddingVenueCity, setWeddingVenueCity] = useState('');
+  const [weddingGuestCount, setWeddingGuestCount] = useState<number>(120);
+  const [weddingTableCount, setWeddingTableCount] = useState<number>(15);
+  const [weddingCateringNotes, setWeddingCateringNotes] = useState('');
 
   // Step 2: Business Details & Location
   const [restaurantName, setRestaurantName] = useState(initialOwnerData?.restaurantName || '');
@@ -166,6 +198,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       setEnableBilling(true);
       setHasSeating(true);
       if (tablesCount === 0) setTablesCount(10);
+    } else if (type === 'WEDDING_ORDERING') {
+      setEnableKitchen(true);
+      setEnableWaiter(true);
+      setEnableBar(true);
+      setEnableInventory(true);
+      setEnableBilling(true);
+      setHasSeating(true);
+      if (tablesCount === 0) setTablesCount(15);
     } else {
       // RESTAURANT
       setEnableKitchen(true);
@@ -233,8 +273,20 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const resolveOwnerState = async (user: User) => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
-      const isCreateMode = searchParams.get('mode') === 'create' || searchParams.get('new') === 'true' || window.location.hash.includes('create');
+      const isWeddingType = searchParams.get('type') === 'WEDDING_ORDERING' || searchParams.get('type') === 'WEDDINGS' || searchParams.get('type') === 'wedding';
+      const isCreateMode = searchParams.get('mode') === 'create' || searchParams.get('new') === 'true' || window.location.hash.includes('create') || isWeddingType;
       
+      if (isWeddingType) {
+        setBusinessType('WEDDING_ORDERING');
+      }
+
+      const restaurants = await api.getOwnerRestaurants(user.email);
+      setOwnerRestaurants(restaurants || []);
+      if (restaurants && restaurants.length > 0 && !selectedCateringRestaurantId) {
+        setSelectedCateringRestaurantId(restaurants[0].id);
+        if (!restaurantName) setRestaurantName(restaurants[0].name);
+      }
+
       if (isCreateMode) {
         const stepParam = parseInt(searchParams.get('step') || '', 10);
         if (stepParam >= 1 && stepParam <= 4) {
@@ -245,7 +297,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         return;
       }
 
-      const restaurants = await api.getOwnerRestaurants(user.email);
       if (restaurants.length > 0) {
         const activeRest = restaurants.find((r) => r.isApproved || r.lifecycleStatus === 'APPROVED' || r.lifecycleStatus === 'LIVE' || r.lifecycleStatus === 'ACTIVE');
         const pendingRest = restaurants.find((r) => r.lifecycleStatus === 'PENDING_APPROVAL' || (!r.isApproved && r.lifecycleStatus !== 'REJECTED'));
@@ -310,35 +361,78 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const handleNextStep = () => {
     setErrorMessage('');
     if (currentStep === 1) {
+      if (businessType === 'WEDDING_ORDERING' && ownerRestaurants.length > 0 && !selectedCateringRestaurantId) {
+        setSelectedCateringRestaurantId(ownerRestaurants[0].id);
+      }
       setCurrentStep(2);
     } else if (currentStep === 2) {
-      if (!restaurantName.trim()) {
-        setErrorMessage('Please enter your business / restaurant name.');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
+      if (businessType === 'WEDDING_ORDERING') {
+        const isExisting = selectedCateringRestaurantId && selectedCateringRestaurantId !== 'NEW';
+        if (!weddingName.trim()) {
+          setErrorMessage('Please enter the wedding or celebration event name (e.g. Julian & Clara\'s Reception).');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        if (!weddingDate) {
+          setErrorMessage('Please select the wedding reception date.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        if (!weddingVenueName.trim()) {
+          setErrorMessage('Please enter the banquet hall or reception venue name.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        const phoneCheck = validatePhone(phone);
+        if (!phoneCheck.valid) {
+          setErrorMessage(phoneCheck.error || 'Please provide a valid owner contact phone number.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        if (!isExisting) {
+          if (!restaurantName.trim()) {
+            setErrorMessage('Please enter your catering kitchen / restaurant name.');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+          if (!country.trim() || !city.trim() || !address.trim()) {
+            setErrorMessage('Please enter catering kitchen country, city, and street address.');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+        }
+        setCurrentStep(3);
+      } else {
+        if (!restaurantName.trim()) {
+          setErrorMessage('Please enter your business / restaurant name.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        const phoneCheck = validatePhone(phone);
+        if (!phoneCheck.valid) {
+          setErrorMessage(phoneCheck.error || 'Please provide a valid owner contact phone number.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        if (!country.trim() || !city.trim() || !address.trim()) {
+          setErrorMessage('Please enter country, city, and street address.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        const isNoSeating = businessType === 'FOOD_CART' && !hasSeating;
+        if (!isNoSeating && (!tablesCount || tablesCount < 1)) {
+          setErrorMessage('Please enter at least 1 table for your venue.');
+          return;
+        }
+        setCurrentStep(3);
       }
-      const phoneCheck = validatePhone(phone);
-      if (!phoneCheck.valid) {
-        setErrorMessage(phoneCheck.error || 'Please provide a valid owner contact phone number.');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-      if (!country.trim() || !city.trim() || !address.trim()) {
-        setErrorMessage('Please enter country, city, and street address.');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-      const isNoSeating = businessType === 'FOOD_CART' && !hasSeating;
-      if (!isNoSeating && (!tablesCount || tablesCount < 1)) {
-        setErrorMessage('Please enter at least 1 table for your venue.');
-        return;
-      }
-      setCurrentStep(3);
     } else if (currentStep === 3) {
-      const anySelected = enableKitchen || enableWaiter || enableBar || enableInventory || enableBilling;
-      if (!anySelected) {
-        setErrorMessage('Please select at least one operational terminal for your business.');
-        return;
+      if (businessType !== 'WEDDING_ORDERING') {
+        const anySelected = enableKitchen || enableWaiter || enableBar || enableInventory || enableBilling;
+        if (!anySelected) {
+          setErrorMessage('Please select at least one operational terminal for your business.');
+          return;
+        }
       }
       setCurrentStep(4);
     }
@@ -368,6 +462,89 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       const phoneCheck = validatePhone(phone);
       if (!phoneCheck.valid) {
         throw new Error(phoneCheck.error || 'Please provide a valid owner phone number.');
+      }
+
+      // INTEGRATED WEDDING ORDERING SETUP SUBMISSION
+      if (businessType === 'WEDDING_ORDERING') {
+        let cateringRestId = selectedCateringRestaurantId;
+        let fulfillingRestaurant = ownerRestaurants.find((r) => r.id === selectedCateringRestaurantId);
+
+        // If user is registering a new catering kitchen or has no existing restaurant yet
+        if (!fulfillingRestaurant || selectedCateringRestaurantId === 'NEW') {
+          const fullAddress = [address, city, state, country, postalCode ? `PIN: ${postalCode}` : ''].filter(Boolean).join(', ');
+          const finalTableCount = Math.max(1, weddingTableCount || 15);
+
+          const createdCaterer = await api.createRestaurantForOwner({
+            name: restaurantName.trim() || 'Wedding Catering Kitchen',
+            businessType: 'RESTAURANT',
+            hasBar: enableBar,
+            hasTables: true,
+            hasKitchen: true,
+            hasWaiter: true,
+            tableCount: finalTableCount,
+            address: fullAddress,
+            phone: phone.trim(),
+            email: user.email,
+            ownerName: user.name || user.firstName || user.email.split('@')[0],
+            ownerEmail: user.email,
+            ownerUid: user.id || (user as any).uid || (user as any).googleUid,
+          });
+
+          await api.submitRestaurantLaunch({
+            id: createdCaterer.id,
+            restaurantName: restaurantName.trim() || 'Wedding Catering Kitchen',
+            businessType: 'RESTAURANT',
+            hasBar: enableBar,
+            hasTables: true,
+            hasKitchen: true,
+            hasWaiter: true,
+            hasInventory: true,
+            hasBilling: true,
+            enabledModules: ['kitchen', 'waiter', 'bar', 'inventory', 'billing', 'tables', 'weddings'],
+            address: fullAddress,
+            locality,
+            city,
+            state,
+            country,
+            postalCode,
+            latitude,
+            longitude,
+            placeId,
+            phone: phone.trim(),
+            email: user.email,
+            tables: { indoor: finalTableCount, outdoor: 0, vip: 0 },
+            totalTablesCount: finalTableCount,
+          });
+
+          cateringRestId = createdCaterer.id;
+          fulfillingRestaurant = createdCaterer;
+        }
+
+        // Submit the persistent wedding setup request for Platform Admin review
+        await api.submitWeddingRequest({
+          applicantName: user.name || user.firstName || user.email.split('@')[0],
+          applicantEmail: user.email,
+          applicantPhone: phone.trim(),
+          weddingName: weddingName.trim(),
+          eventType: 'WEDDING',
+          eventDate: weddingDate,
+          venueName: weddingVenueName.trim(),
+          venueCity: weddingVenueCity.trim() || city.trim() || 'Bengaluru',
+          estimatedGuestCount: Number(weddingGuestCount) || 120,
+          cateringRestaurantId: cateringRestId,
+          cateringNotes: weddingCateringNotes.trim(),
+        });
+
+        setIsSubmitting(false);
+        if (fulfillingRestaurant) {
+          await api.switchActiveRestaurant(fulfillingRestaurant.id);
+          api.setCurrentRestaurantId(fulfillingRestaurant.id);
+          onFinishSetup(fulfillingRestaurant);
+          if (onNavigate) {
+            onNavigate('/restaurant/dashboard?tab=weddings');
+          }
+        }
+        return;
       }
 
       const fullAddress = [address, city, state, country, postalCode ? `PIN: ${postalCode}` : ''].filter(Boolean).join(', ');
@@ -610,8 +787,264 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             </div>
           )}
 
-          {/* STEP 2: BUSINESS DETAILS & LOCATION */}
-          {currentStep === 2 && (
+          {/* STEP 2: BUSINESS DETAILS & LOCATION (OR WEDDING ORDERING REQUIREMENTS) */}
+          {currentStep === 2 && businessType === 'WEDDING_ORDERING' ? (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
+                  Wedding Ordering Setup & Banquet Details
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Provide wedding guests with table-specific QR codes for ordering food directly to your kitchen.
+                </p>
+              </div>
+
+              {/* Verified Owner Identity */}
+              {currentUser && (
+                <div className="p-3 bg-[#0b0d11] rounded-lg border border-[#1e232e] flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-slate-400">Authenticated Dinely Account:</span>
+                    <strong className="text-white font-mono">{currentUser.email}</strong>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400">VERIFIED</span>
+                </div>
+              )}
+
+              {/* Fulfilling Restaurant / Kitchen Selection */}
+              <div className="p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e] space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    <Store className="w-4 h-4 text-[#f97316]" /> Fulfilling Restaurant or Catering Kitchen *
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-mono">Kitchen Terminal</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Select your existing restaurant or catering kitchen partner that will prepare and fulfill banquet orders placed by wedding guests.
+                </p>
+
+                {ownerRestaurants.length > 0 ? (
+                  <div className="space-y-2 pt-1">
+                    {ownerRestaurants.map((r) => {
+                      const isChosen = selectedCateringRestaurantId === r.id;
+                      return (
+                        <div
+                          key={r.id}
+                          onClick={() => {
+                            setSelectedCateringRestaurantId(r.id);
+                            if (r.address) {
+                              const parts = r.address.split(',');
+                              if (!weddingVenueCity && parts.length > 1) {
+                                setWeddingVenueCity(parts[parts.length - 2].trim());
+                              }
+                            }
+                          }}
+                          className={`p-3.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                            isChosen
+                              ? 'bg-[#1a1e27] border-[#f97316] text-white shadow-sm'
+                              : 'bg-[#12151b] border-[#2d3545] text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${isChosen ? 'bg-[#f97316]/20 text-[#f97316]' : 'bg-[#1e232e] text-slate-400'}`}>
+                              <UtensilsCrossed className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-white">{r.name}</h4>
+                              <p className="text-[11px] text-slate-400 truncate max-w-sm">{r.address || 'Active Dinely Restaurant'}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                              r.isApproved || r.lifecycleStatus === 'LIVE' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                            }`}>
+                              {r.isApproved || r.lifecycleStatus === 'LIVE' ? 'ACTIVE VENUE' : 'PENDING'}
+                            </span>
+                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                              isChosen ? 'border-[#f97316] bg-[#f97316] text-[#0b0d11]' : 'border-slate-700'
+                            }`}>
+                              {isChosen && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div
+                      onClick={() => setSelectedCateringRestaurantId('NEW')}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                        selectedCateringRestaurantId === 'NEW'
+                          ? 'bg-[#1a1e27] border-[#f97316] text-white'
+                          : 'bg-[#0b0d11] border-dashed border-[#2d3545] text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-xs font-medium">+ Register a new catering restaurant or kitchen partner</span>
+                      {selectedCateringRestaurantId === 'NEW' && <Check className="w-3.5 h-3.5 text-[#f97316]" />}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-200 space-y-1">
+                    <p className="font-semibold flex items-center gap-1.5 text-amber-300">
+                      <AlertCircle className="w-4 h-4 shrink-0" /> Catering Kitchen Required
+                    </p>
+                    <p className="text-[11px] text-amber-300/80">
+                      Wedding ordering requires an authenticated kitchen to receive and prepare food orders. Complete your catering venue details below to establish your kitchen terminal.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* If registering new catering kitchen profile */}
+              {(selectedCateringRestaurantId === 'NEW' || ownerRestaurants.length === 0) && (
+                <div className="space-y-4 p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e]">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Catering Kitchen Parameters</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300">Catering Kitchen / Restaurant Name *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Royal Banquet Caterers"
+                        value={restaurantName}
+                        onChange={(e) => setRestaurantName(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300">Kitchen Phone *</label>
+                      <input
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300">Street Address *</label>
+                      <input
+                        type="text"
+                        placeholder="123 Culinary Boulevard"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300">City *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Bengaluru"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Wedding Event Parameters */}
+              <div className="space-y-4 p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e]">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Wedding Event Parameters</h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Wedding / Celebration Event Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Julian & Clara's Wedding Reception"
+                      value={weddingName}
+                      onChange={(e) => setWeddingName(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Event Date *</label>
+                    <input
+                      type="date"
+                      value={weddingDate}
+                      onChange={(e) => setWeddingDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Banquet Venue / Hall Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. The Grand Glasshouse Atrium"
+                      value={weddingVenueName}
+                      onChange={(e) => setWeddingVenueName(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Venue City / Area *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Bengaluru, Karnataka"
+                      value={weddingVenueCity}
+                      onChange={(e) => setWeddingVenueCity(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Estimated Guest Count</label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={2000}
+                      value={weddingGuestCount}
+                      onChange={(e) => setWeddingGuestCount(Math.max(1, parseInt(e.target.value) || 100))}
+                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Banquet Tables Count *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={weddingTableCount}
+                      onChange={(e) => setWeddingTableCount(Math.max(1, parseInt(e.target.value) || 10))}
+                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white font-bold text-[#f97316] focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Catering & Dietary Requirements</label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. 3-course plated service, craft mocktail bar, allergen-aware kitchen."
+                    value={weddingCateringNotes}
+                    onChange={(e) => setWeddingCateringNotes(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-xs text-white focus:outline-none focus:border-[#f97316]"
+                  />
+                </div>
+
+                {ownerRestaurants.length > 0 && selectedCateringRestaurantId !== 'NEW' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300">Owner Contact Phone *</label>
+                    <input
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : currentStep === 2 ? (
             <div className="space-y-6">
               <div className="space-y-1">
                 <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
@@ -773,10 +1206,83 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 )}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {/* STEP 3: CHOOSE YOUR DINELY TERMINALS */}
-          {currentStep === 3 && (
+          {/* STEP 3: CHOOSE YOUR DINELY TERMINALS / WEDDING ARCHITECTURE */}
+          {currentStep === 3 && businessType === 'WEDDING_ORDERING' ? (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
+                  Wedding ordering architecture
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Direct kitchen routing, banquet table QR codes, and digital catering workflow.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
+                  <div className="p-2 rounded-lg border bg-[#12151b] text-[#f97316] border-[#2d3545]">
+                    <ChefHat className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white text-xs">Direct Kitchen KDS Routing</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#f97316]/10 text-[#f97316]">Active</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Wedding guest orders from banquet tables route directly to the catering kitchen KDS bump board with table numbers and dietary flags.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
+                  <div className="p-2 rounded-lg border bg-[#12151b] text-[#10b981] border-[#2d3545]">
+                    <QrCode className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white text-xs">Table-Specific Banquet QR Codes</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400">Automated</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Decoupled table QR codes generated for print or standees. Guests scan and order instantly without app installation.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
+                  <div className="p-2 rounded-lg border bg-[#12151b] text-purple-400 border-[#2d3545]">
+                    <UtensilsCrossed className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white text-xs">Authoritative Catering Menu</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-400">Configurable</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Choose full restaurant catalog or curate a custom banquet menu with dietary preferences, live course pacing, and beverage options.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
+                  <div className="p-2 rounded-lg border bg-[#12151b] text-sky-400 border-[#2d3545]">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white text-xs">Platform Admin Approval</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400">Enterprise</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Submitted setup requests are reviewed and provisioned by Dinely Platform Admin (ayan090912@gmail.com) for production live execution.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : currentStep === 3 ? (
             <div className="space-y-6">
               <div className="space-y-1">
                 <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
@@ -923,10 +1429,73 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* STEP 4: REVIEW & CREATE WORKSPACE */}
-          {currentStep === 4 && (
+          {currentStep === 4 && businessType === 'WEDDING_ORDERING' ? (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
+                  Review wedding setup request
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Confirm wedding celebration details and catering kitchen partner before submitting.
+                </p>
+              </div>
+
+              <div className="p-5 bg-[#0b0d11] rounded-xl border border-[#1e232e] space-y-4 text-left">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Event Name</span>
+                    <span className="font-bold text-white text-sm">{weddingName || 'Wedding Reception'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Operational Mode</span>
+                    <span className="font-semibold text-[#f97316] text-sm">Wedding Ordering</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Event Date</span>
+                    <span className="text-slate-300 font-mono">{weddingDate || 'Scheduled date'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Scale & Capacity</span>
+                    <span className="font-semibold text-white">{weddingGuestCount} Guests • {weddingTableCount} Banquet Tables</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Banquet Venue</span>
+                    <span className="text-slate-300">{weddingVenueName || 'Venue hall'}, {weddingVenueCity}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Catering Kitchen</span>
+                    <span className="font-semibold text-emerald-400">
+                      {selectedCateringRestaurantId === 'NEW'
+                        ? `${restaurantName} (New Catering Kitchen)`
+                        : (ownerRestaurants.find((r) => r.id === selectedCateringRestaurantId)?.name || 'Existing Kitchen')}
+                    </span>
+                  </div>
+                </div>
+
+                {weddingCateringNotes && (
+                  <div className="pt-3 border-t border-[#1e232e] text-xs">
+                    <span className="text-[10px] text-slate-500 uppercase font-mono block mb-1">Catering Notes:</span>
+                    <p className="text-slate-300 italic">{weddingCateringNotes}</p>
+                  </div>
+                )}
+
+                <div className="p-3 bg-[#1a1e27] rounded-lg border border-[#2d3545] text-xs text-slate-300 flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-[#f97316] shrink-0 mt-0.5" />
+                  <p className="text-[11px] leading-relaxed">
+                    Upon submission, your wedding ordering workspace will be configured under your restaurant. Dinely Platform Admin (<span className="text-white font-mono">ayan090912@gmail.com</span>) will review and provision the live banquet module.
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-[#1e232e] text-xs text-slate-400 flex items-center justify-between">
+                  <span>Owner Account:</span>
+                  <span className="font-mono text-white">{currentUser.email}</span>
+                </div>
+              </div>
+            </div>
+          ) : currentStep === 4 ? (
             <div className="space-y-6">
               <div className="space-y-1">
                 <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
@@ -974,7 +1543,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Navigation Controls */}
           <div className="flex items-center justify-between pt-4 border-t border-[#1e232e]">
@@ -1006,7 +1575,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 disabled={isSubmitting}
                 className="px-8 py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-2"
               >
-                <span>{isSubmitting ? 'Submitting Application...' : 'Create Workspace & Submit'}</span>
+                <span>
+                  {businessType === 'WEDDING_ORDERING'
+                    ? (isSubmitting ? 'Submitting Wedding Request...' : 'Submit Wedding Setup Request')
+                    : (isSubmitting ? 'Submitting Application...' : 'Create Workspace & Submit')}
+                </span>
                 {!isSubmitting && <ArrowRight className="w-4 h-4" />}
               </button>
             )}

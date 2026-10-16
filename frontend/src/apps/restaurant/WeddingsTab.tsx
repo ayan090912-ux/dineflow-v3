@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
-import { WeddingEvent, EventTable, Restaurant, Order, MenuCategory, MenuItem } from '../../packages/types';
+import { WeddingEvent, EventTable, Restaurant, Order, MenuCategory, MenuItem, isModuleEnabled } from '../../packages/types';
 import { Modal } from '../../packages/ui/Modal';
 import { Button } from '../../packages/ui/Button';
 import { Badge } from '../../packages/ui/Badge';
@@ -116,9 +116,12 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
 
   useEffect(() => {
     loadEvents();
+    if (currentRestaurant?.id) {
+      api.getMenuItems(currentRestaurant.id).then(setMenuItems).catch(() => {});
+    }
   }, [currentRestaurant?.id]);
 
-  // Load Menu items when wizard opens
+  // Load Menu items & categories when wizard opens
   useEffect(() => {
     if (isWizardOpen && currentRestaurant?.id) {
       api.getCategories(currentRestaurant.id).then(setMenuCategories).catch(() => {});
@@ -432,6 +435,39 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
           </div>
         </div>
       </div>
+
+      {/* Platform Admin Approval Pending Banner */}
+      {!isModuleEnabled(currentRestaurant, 'weddings') && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-300">
+                Platform Admin Verification Pending
+              </p>
+              <p className="text-slate-400 text-[11px] mt-0.5">
+                The Wedding Ordering module is undergoing live verification by Platform Admin (<span className="text-white font-mono">ayan090912@gmail.com</span>). You can configure banquets, create menus, and test table QR standees now.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded font-mono text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+            PENDING ADMIN APPROVAL
+          </span>
+        </div>
+      )}
+
+      {/* Catering Menu Notice */}
+      {!loading && menuItems.length === 0 && (
+        <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 flex items-start gap-3 text-xs text-sky-200">
+          <AlertCircle className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-sky-300">Catering Menu Notice: 0 Dishes Configured</p>
+            <p className="text-slate-400 text-[11px] mt-0.5">
+              Your restaurant menu currently has 0 items. Add dishes and beverages under the <strong className="text-white">Menu & Pricing</strong> tab so wedding guests have catalog items available when scanning their banquet table QR codes.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#11151e] border border-[#1e2533] p-3 rounded-xl">
