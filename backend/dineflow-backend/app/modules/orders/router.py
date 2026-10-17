@@ -592,7 +592,7 @@ async def create_order(
                 matched_etbl = etbl_res.scalar_one_or_none()
                 if matched_etbl:
                     tbl_num = matched_etbl.table_number
-                    tbl_id = matched_etbl.id
+                tbl_id = None
 
             eff_order_type = "EVENT_ORDER" if (evt_obj.event_type and evt_obj.event_type != "WEDDING") else "WEDDING_EVENT"
             eff_event_id = evt_obj.id
