@@ -289,6 +289,7 @@ async def create_wedding_event(
         updated_at=now_utc,
     )
     db.add(new_event)
+    await db.flush()
 
     # Initialize tables
     initial_tables = []
