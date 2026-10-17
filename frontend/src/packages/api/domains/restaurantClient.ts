@@ -2715,8 +2715,7 @@ export class RestaurantClient {
     try {
       const events = await this.base.executeProtectedRequest<WeddingEvent[]>(
         `/restaurants/${encodeURIComponent(targetId)}/events`,
-        { method: 'GET' },
-        'STAFF'
+        { method: 'GET' }
       );
       return Array.isArray(events) ? events : [];
     } catch (e) {
@@ -2730,9 +2729,8 @@ export class RestaurantClient {
     if (!targetId) throw new Error("No active restaurant selected");
 
     return await this.base.executeProtectedRequest<WeddingEvent>(
-      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}`,
-      { method: 'GET' },
-      'STAFF'
+        `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}`,
+        { method: 'GET' }
     );
   }
 
@@ -2748,8 +2746,7 @@ export class RestaurantClient {
       {
         method: 'POST',
         body: JSON.stringify(eventData),
-      },
-      'OWNER'
+      }
     );
   }
 
@@ -2766,8 +2763,7 @@ export class RestaurantClient {
       {
         method: 'PUT',
         body: JSON.stringify(updates),
-      },
-      'OWNER'
+      }
     );
   }
 
@@ -2777,8 +2773,7 @@ export class RestaurantClient {
 
     return await this.base.executeProtectedRequest<{ success: boolean }>(
       `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}`,
-      { method: 'DELETE' },
-      'OWNER'
+      { method: 'DELETE' }
     );
   }
 
@@ -2788,8 +2783,7 @@ export class RestaurantClient {
 
     return await this.base.executeProtectedRequest<{ isOrderingOpen: boolean }>(
       `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/toggle-ordering`,
-      { method: 'POST' },
-      'STAFF'
+      { method: 'POST' }
     );
   }
 
@@ -2806,8 +2800,7 @@ export class RestaurantClient {
       {
         method: 'POST',
         body: JSON.stringify(extensionData),
-      },
-      'OWNER'
+      }
     );
   }
 
@@ -2824,8 +2817,7 @@ export class RestaurantClient {
       {
         method: 'POST',
         body: JSON.stringify(tableData),
-      },
-      'OWNER'
+      }
     );
   }
 
@@ -2839,8 +2831,7 @@ export class RestaurantClient {
 
     return await this.base.executeProtectedRequest<{ success: boolean }>(
       `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/tables/${encodeURIComponent(tableId)}`,
-      { method: 'DELETE' },
-      'OWNER'
+      { method: 'DELETE' }
     );
   }
 
@@ -2851,8 +2842,7 @@ export class RestaurantClient {
     try {
       const orders = await this.base.executeProtectedRequest<Order[]>(
         `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/orders`,
-        { method: 'GET' },
-        'STAFF'
+        { method: 'GET' }
       );
       return Array.isArray(orders) ? orders.map(normalizeOrder) : [];
     } catch (e) {

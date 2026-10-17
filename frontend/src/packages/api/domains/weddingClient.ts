@@ -59,13 +59,17 @@ export class WeddingClient {
     return await res.json();
   }
 
-  async getWeddingApplicantStatus(email?: string): Promise<{
+  async getWeddingApplicantStatus(email?: string, restaurantId?: string): Promise<{
     hasApplication: boolean;
     application: WeddingAccessRequest | null;
   }> {
     const apiBase = getApiBaseUrl();
     const effEmail = this.getEffectiveEmail(email);
-    const query = effEmail ? `?email=${encodeURIComponent(effEmail)}` : '';
+    const effRestId = restaurantId || this.base.resolveTenantRestaurantId() || this.base.getCurrentRestaurantId();
+    const params = new URLSearchParams();
+    if (effEmail) params.append('email', effEmail);
+    if (effRestId) params.append('restaurant_id', effRestId);
+    const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${apiBase}/weddings/applicant-status${query}`, {
       headers: { 'Accept': 'application/json' },
     });

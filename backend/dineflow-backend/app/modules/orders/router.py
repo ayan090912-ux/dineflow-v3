@@ -603,25 +603,27 @@ async def create_order(
         )
         db.add(new_order)
 
-        try:
-            tbl_target = existing_tbl
-            if not tbl_target:
-                query_tbl = select(Table).where(
-                    (Table.restaurant_id == restaurant.id) &
-                    ((Table.id == tbl_id) | (Table.table_number == tbl_num))
-                )
-                res_tbl = await db.execute(query_tbl)
-                tbls = res_tbl.scalars().all()
-                if tbls:
-                    tbl_target = tbls[0]
-            if tbl_target:
-                tbl_target.status = "OCCUPIED"
-                tbl_target.is_occupied = True
-                tbl_target.active_session_id = session_id
-                from app.modules.tables.router import invalidate_tables_cache
-                invalidate_tables_cache(restaurant.id)
-        except Exception as tbl_err:
-            print("[TABLE_UPDATE_NOTICE] Table update skipped:", tbl_err)
+        # For event orders, do NOT modify ordinary restaurant floorplan tables
+        if not payload.eventId:
+            try:
+                tbl_target = existing_tbl
+                if not tbl_target:
+                    query_tbl = select(Table).where(
+                        (Table.restaurant_id == restaurant.id) &
+                        ((Table.id == tbl_id) | (Table.table_number == tbl_num))
+                    )
+                    res_tbl = await db.execute(query_tbl)
+                    tbls = res_tbl.scalars().all()
+                    if tbls:
+                        tbl_target = tbls[0]
+                if tbl_target:
+                    tbl_target.status = "OCCUPIED"
+                    tbl_target.is_occupied = True
+                    tbl_target.active_session_id = session_id
+                    from app.modules.tables.router import invalidate_tables_cache
+                    invalidate_tables_cache(restaurant.id)
+            except Exception as tbl_err:
+                print("[TABLE_UPDATE_NOTICE] Table update skipped:", tbl_err)
 
         for idx, i in enumerate(payload.items):
             it_meta = items_list_dict[idx]
@@ -676,8 +678,8 @@ async def create_order(
                 payload=resp_data,
                 target_audience=order_target_aud
             )
-            # Instantly update Active Tables across Owner, Waiter, and Customer terminals
-            if tbl_id or tbl_num:
+            # Instantly update Active Tables across Owner, Waiter, and Customer terminals (ordinary orders only)
+            if not payload.eventId and (tbl_id or tbl_num):
                 table_evt_payload = {
                     "restaurant_id": restaurant.id,
                     "restaurantId": restaurant.id,

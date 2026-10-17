@@ -50,6 +50,11 @@ const GUEST_EVENT_BRANDING: Record<string, { label: string; icon: string; tableI
   SANGEET: { label: 'Sangeet & Cocktail Night', icon: '🎶', tableIcon: '🎶' },
 };
 
+const cleanTableBadge = (tbl?: string): string => {
+  if (!tbl) return '';
+  return tbl.replace(/^table\s*/i, '').trim();
+};
+
 export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propEventId, initialTable: propInitialTable }) => {
   // Extract eventId and table from URL params if not passed as props
   const [eventId, setEventId] = useState<string>(() => {
@@ -205,7 +210,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
       const orderPayload = {
         restaurantId: data.restaurant.id,
         tableNumber: tableNumber || '01',
-        customerName: guestName.trim() || `Guest at Table ${tableNumber}`,
+        customerName: guestName.trim() || `Guest at Table ${cleanTableBadge(tableNumber) || '01'}`,
         orderType: 'WEDDING_EVENT',
         eventId: data.event.id,
         eventName: data.event.title,
@@ -219,7 +224,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
         })),
         notes: guestNotes.trim()
           ? `[${data.event.eventType || 'Event'} Banquet] ${guestNotes.trim()}`
-          : `[${data.event.eventType || 'Event'} Banquet Order for Table ${tableNumber}]`,
+          : `[${data.event.eventType || 'Event'} Banquet Order for Table ${cleanTableBadge(tableNumber) || '01'}]`,
       };
 
       const res = await api.createOrder(orderPayload);
@@ -329,7 +334,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
           {/* Table Badge */}
           <div className="pt-2">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1e1912] text-[#f7eed9] text-xs font-mono font-bold tracking-wider shadow-md border border-[#d4af37]">
-              <span>{branding.tableIcon} TABLE {tableNumber}</span>
+              <span>{branding.tableIcon} TABLE {cleanTableBadge(tableNumber)}</span>
               <span className="w-1 h-1 rounded-full bg-[#d4af37]" />
               <span className="font-serif font-normal text-[11px] text-[#e0d6c2]">Seated Guest</span>
             </div>
@@ -575,7 +580,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
               </div>
               <div className="text-left">
                 <p className="text-xs font-serif font-bold text-[#f7eed9]">Review Banquet Order</p>
-                <p className="text-[10px] text-[#c2b297] font-mono">Table {tableNumber}</p>
+                <p className="text-[10px] text-[#c2b297] font-mono">Table {cleanTableBadge(tableNumber)}</p>
               </div>
             </div>
 
@@ -615,7 +620,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
                   <span className="text-xs font-serif font-bold">Table Assignment:</span>
                 </div>
                 <span className="text-xs font-mono font-bold text-[#e6c86a]">
-                  TABLE {tableNumber}
+                  TABLE {cleanTableBadge(tableNumber)}
                 </span>
               </div>
 
@@ -711,7 +716,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
                 <span>Ordering Paused</span>
               ) : (
                 <>
-                  <span>Place Dining Order for Table {tableNumber}</span>
+                  <span>Place Dining Order for Table {cleanTableBadge(tableNumber)}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -751,7 +756,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
               <div className="flex items-center justify-between border-b border-[#f0e8dc] pb-2.5">
                 <span className="text-xs font-serif text-[#786956]">Assigned Table</span>
                 <span className="font-mono font-bold text-amber-800 bg-amber-100/60 px-2.5 py-0.5 rounded-full text-xs">
-                  TABLE {placedOrder.tableNumber}
+                  TABLE {cleanTableBadge(placedOrder.tableNumber)}
                 </span>
               </div>
               <div className="flex items-center justify-between border-b border-[#f0e8dc] pb-2.5">

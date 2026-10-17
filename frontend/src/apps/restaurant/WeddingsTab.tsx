@@ -34,7 +34,16 @@ import {
   Search,
   Timer,
   CalendarClock,
+  ChefHat,
+  Send,
+  RefreshCw,
+  TableProperties,
 } from 'lucide-react';
+
+export const cleanTableBadge = (tbl?: string): string => {
+  if (!tbl) return '';
+  return tbl.replace(/^table\s*/i, '').trim();
+};
 
 interface WeddingsTabProps {
   currentRestaurant: Restaurant | null;
@@ -112,6 +121,22 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [formNotes, setFormNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Wizard table live edit state for Step 3
+  const [wizardTables, setWizardTables] = useState<EventTable[]>([]);
+  const [loadingWizardTables, setLoadingWizardTables] = useState(false);
+
+  // Platform Admin Request & Capability State
+  const [applicantStatus, setApplicantStatus] = useState<any>(null);
+  const [isApplicantStatusLoading, setIsApplicantStatusLoading] = useState(false);
+  const [isApplyingModalOpen, setIsApplyingModalOpen] = useState(false);
+  const [applyWeddingName, setApplyWeddingName] = useState('');
+  const [applyEventType, setApplyEventType] = useState('WEDDING');
+  const [applyDate, setApplyDate] = useState('');
+  const [applyPhone, setApplyPhone] = useState('');
+  const [applyNotes, setApplyNotes] = useState('');
+  const [isSubmittingApplication, setIsSubmittingApplication] = useState(false);
+  const [isSeedingMenu, setIsSeedingMenu] = useState(false);
+
   // Extension Modal State
   const [extendingEvent, setExtendingEvent] = useState<WeddingEvent | null>(null);
   const [extensionMinutes, setExtensionMinutes] = useState(60);
@@ -178,6 +203,20 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     };
   }, [formEventDate, formStartTime, formEndTime, formEndDate, formIsMultiDay, formServiceDays, formTimezone]);
 
+  // Load applicant status from Platform Admin approval queue
+  const loadApplicantStatus = async () => {
+    if (!currentRestaurant?.id) return;
+    setIsApplicantStatusLoading(true);
+    try {
+      const res = await api.getWeddingApplicantStatus(currentUser?.email, currentRestaurant.id);
+      setApplicantStatus(res?.application || (res?.hasApplication ? res : null));
+    } catch (e) {
+      console.warn('Failed to load applicant status:', e);
+    } finally {
+      setIsApplicantStatusLoading(false);
+    }
+  };
+
   // Load events
   const loadEvents = async () => {
     if (!currentRestaurant?.id) return;
@@ -197,10 +236,11 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
 
   useEffect(() => {
     loadEvents();
+    loadApplicantStatus();
     if (currentRestaurant?.id) {
       api.getMenuItems(currentRestaurant.id).then(setMenuItems).catch(() => {});
     }
-  }, [currentRestaurant?.id]);
+  }, [currentRestaurant?.id, currentUser?.email]);
 
   // Load Menu items & categories when wizard opens
   useEffect(() => {
@@ -214,6 +254,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const handleOpenNewWizard = () => {
     setEditingEventId(null);
     setWizardStep(1);
+    setWizardTables([]);
     setFormTitle('');
     setFormCoupleNames('');
     setFormEventType('WEDDING');
@@ -242,7 +283,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   };
 
   // Open Wizard for edit
-  const handleOpenEditWizard = (ev: WeddingEvent) => {
+  const handleOpenEditWizard = async (ev: WeddingEvent) => {
     setEditingEventId(ev.id);
     setWizardStep(1);
     setFormTitle(ev.title);
@@ -267,11 +308,41 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     setFormTableCount(ev.tableCount || 5);
     setFormNotes(ev.notes || '');
     setIsWizardOpen(true);
+
+    if (currentRestaurant?.id) {
+      try {
+        const fullEv = await api.getEvent(ev.id, currentRestaurant.id);
+        setWizardTables(fullEv.tables || []);
+      } catch (e) {
+        console.warn('Could not pre-fetch tables for wizard edit:', e);
+      }
+    }
   };
 
-  // Save Event from Wizard
-  const handleSaveWizard = async () => {
-    if (!currentRestaurant?.id || !formTitle || !formEventDate) return;
+  // Resume an existing draft
+  const handleResumeDraft = async (ev: WeddingEvent) => {
+    await handleOpenEditWizard(ev);
+    if (ev.tableCount && ev.tableCount > 0 && ev.menuSelectionType) {
+      setWizardStep(3);
+    } else if (ev.title && ev.eventDate) {
+      setWizardStep(2);
+    } else {
+      setWizardStep(1);
+    }
+  };
+
+  // Step-by-Step Backend Persistence: saves draft or active status at every step
+  const persistStepToBackend = async (targetStatus: 'DRAFT' | 'ACTIVE' = 'DRAFT'): Promise<WeddingEvent | null> => {
+    if (!currentRestaurant?.id) return null;
+    if (!formTitle.trim()) {
+      if (addToast) addToast({ type: 'error', title: 'Title Required', message: 'Please enter an event title before continuing.' });
+      return null;
+    }
+    if (!formEventDate) {
+      if (addToast) addToast({ type: 'error', title: 'Start Date Required', message: 'Please select an event start date before continuing.' });
+      return null;
+    }
+
     setIsSaving(true);
     try {
       const payload: any = {
@@ -285,11 +356,11 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
         timezone: formTimezone,
         serviceDays: formIsMultiDay ? Math.max(1, formServiceDays) : 1,
         autoActivate: formAutoActivate,
-        venueName: formVenueName.trim(),
+        venueName: formVenueName.trim() || currentRestaurant.name || '',
         welcomeMessage: formWelcomeMessage.trim(),
         themeColor: formThemeColor,
-        status: formStatus,
-        isOrderingOpen: true,
+        status: targetStatus,
+        isOrderingOpen: targetStatus === 'ACTIVE',
         menuSelectionType: formMenuSelectionType,
         allowedCategoryIds: formAllowedCategoryIds,
         allowedItemIds: formAllowedItemIds,
@@ -297,21 +368,200 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
         notes: formNotes.trim(),
       };
 
+      let saved: WeddingEvent;
       if (editingEventId) {
-        await api.updateEvent(editingEventId, payload, currentRestaurant.id);
-        if (addToast) addToast({ type: 'success', title: 'Event updated successfully' });
+        saved = await api.updateEvent(editingEventId, payload, currentRestaurant.id);
       } else {
         payload.tableCount = Number(formTableCount) || 10;
-        await api.createEvent(payload, currentRestaurant.id);
-        if (addToast) addToast({ type: 'success', title: 'Event created with tables provisioned' });
+        saved = await api.createEvent(payload, currentRestaurant.id);
+        setEditingEventId(saved.id);
       }
-      setIsWizardOpen(false);
+
       await loadEvents();
+      return saved;
     } catch (err: any) {
-      console.error('Save event failed:', err);
-      if (addToast) addToast({ type: 'error', title: 'Save failed', message: err.message });
+      console.error('Failed to persist step to backend:', err);
+      if (addToast) addToast({ type: 'error', title: 'Save Step Failed', message: err.message });
+      return null;
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Move forward in wizard with automatic backend save
+  const handleWizardStepAdvance = async (nextStep: number) => {
+    if (wizardStep === 1) {
+      if (!formTitle.trim() || !formEventDate) {
+        if (addToast) addToast({ type: 'error', title: 'Incomplete Details', message: 'Please provide event title and start date.' });
+        return;
+      }
+      const saved = await persistStepToBackend('DRAFT');
+      if (!saved) return;
+    } else if (wizardStep === 2) {
+      const saved = await persistStepToBackend('DRAFT');
+      if (!saved) return;
+      if (editingEventId || saved?.id) {
+        setLoadingWizardTables(true);
+        try {
+          const fullEv = await api.getEvent(editingEventId || saved.id, currentRestaurant?.id);
+          setWizardTables(fullEv.tables || []);
+        } catch (e) {
+          console.warn('Failed to load wizard tables:', e);
+        } finally {
+          setLoadingWizardTables(false);
+        }
+      }
+    } else if (wizardStep === 3) {
+      const saved = await persistStepToBackend('DRAFT');
+      if (!saved) return;
+    }
+    setWizardStep(nextStep);
+  };
+
+  // Final Action 1: Save progress as Draft
+  const handleSaveDraftAndClose = async () => {
+    const saved = await persistStepToBackend('DRAFT');
+    if (saved) {
+      if (addToast) {
+        addToast({
+          type: 'success',
+          title: 'Banquet Setup Saved as Draft 💾',
+          message: `Your setup progress for "${saved.title}" is saved in the database. You can resume anytime from the dashboard.`,
+        });
+      }
+      setIsWizardOpen(false);
+    }
+  };
+
+  // Final Action 2: Activate Event Ordering
+  const handleActivateEventOrdering = async () => {
+    const saved = await persistStepToBackend('ACTIVE');
+    if (saved) {
+      if (addToast) {
+        addToast({
+          type: 'success',
+          title: 'Event Ordering is LIVE! 🎉',
+          message: `"${saved.title}" is published and accepting guest dining orders via table QR codes.`,
+        });
+      }
+      setIsWizardOpen(false);
+    }
+  };
+
+  // Quick Seed Sample Catering Menu if 0 dishes
+  const handleSeedSampleMenu = async () => {
+    if (!currentRestaurant?.id) return;
+    setIsSeedingMenu(true);
+    try {
+      let cats = menuCategories;
+      if (cats.length === 0) {
+        cats = await api.getCategories(currentRestaurant.id);
+      }
+      const catStarters = cats.find((c) => c.name.toLowerCase().includes('starter')) || cats[0];
+      const catMains = cats.find((c) => c.name.toLowerCase().includes('main')) || cats[1] || catStarters;
+      const catDesserts = cats.find((c) => c.name.toLowerCase().includes('dessert')) || cats[2] || catStarters;
+      const catBeverages = cats.find((c) => c.name.toLowerCase().includes('beverage') || c.name.toLowerCase().includes('drink')) || cats[3] || catStarters;
+
+      const sampleItems: Partial<MenuItem>[] = [
+        {
+          name: 'Royal Paneer Tikka & Herb Chutney',
+          description: 'Chargrilled cottage cheese infused with saffron spices and fresh mint chutney.',
+          price: 320.0,
+          categoryId: catStarters?.id,
+          targetDestination: 'KITCHEN',
+          isVegetarian: true,
+          dietaryType: 'VEG',
+          isAvailable: true,
+        },
+        {
+          name: 'Butter Chicken Grand Banquet Platter',
+          description: 'Slow-simmered tender chicken in rich aromatic tomato butter gravy.',
+          price: 480.0,
+          categoryId: catMains?.id,
+          targetDestination: 'KITCHEN',
+          isVegetarian: false,
+          dietaryType: 'NON_VEG',
+          isAvailable: true,
+        },
+        {
+          name: 'Kesari Mango Kulfi Royale',
+          description: 'Traditional slow-reduced milk kulfi topped with crushed pistachios.',
+          price: 180.0,
+          categoryId: catDesserts?.id,
+          targetDestination: 'KITCHEN',
+          isVegetarian: true,
+          dietaryType: 'VEG',
+          isAvailable: true,
+        },
+        {
+          name: 'Sparkling Berry Banquet Mocktail',
+          description: 'Chilled wild berries, lime cordial, and sparkling fizz with fresh rosemary.',
+          price: 160.0,
+          categoryId: catBeverages?.id,
+          targetDestination: 'BAR',
+          isVegetarian: true,
+          isAlcoholic: false,
+          isAvailable: true,
+        },
+      ];
+
+      for (const item of sampleItems) {
+        await api.createMenuItem({ ...item, restaurantId: currentRestaurant.id });
+      }
+
+      const updated = await api.getMenuItems(currentRestaurant.id);
+      setMenuItems(updated);
+      if (addToast) {
+        addToast({
+          type: 'success',
+          title: 'Sample Catering Menu Added 🍽️',
+          message: 'Added 4 gourmet dishes to your catering catalog. Guests can now order from their banquet table QR codes.',
+        });
+      }
+    } catch (err: any) {
+      if (addToast) {
+        addToast({ type: 'error', title: 'Menu seed failed', message: err.message });
+      }
+    } finally {
+      setIsSeedingMenu(false);
+    }
+  };
+
+  // Submit Application to Platform Admin
+  const handleSubmitApplication = async () => {
+    if (!currentRestaurant?.id || !applyWeddingName.trim() || !applyDate) {
+      if (addToast) addToast({ type: 'error', title: 'Incomplete Request', message: 'Please provide event name and date.' });
+      return;
+    }
+    setIsSubmittingApplication(true);
+    try {
+      const res = await api.submitWeddingRequest({
+        applicantName: currentUser?.name || currentUser?.email || 'Restaurant Owner',
+        applicantEmail: currentUser?.email || 'owner@dinely.food',
+        applicantPhone: applyPhone.trim() || '+91 98765 43210',
+        weddingName: applyWeddingName.trim(),
+        eventType: applyEventType,
+        eventDate: applyDate,
+        venueName: currentRestaurant.name || 'Grand Ballroom',
+        venueCity: currentRestaurant.address || 'Mumbai',
+        cateringRestaurantId: currentRestaurant.id,
+        notes: applyNotes.trim() || 'Submitted via Owner OS dashboard',
+      });
+
+      if (addToast) {
+        addToast({
+          type: 'success',
+          title: 'Application Submitted to Platform Admin 📨',
+          message: `Request ${res.requestId} submitted for verification by ayan090912@gmail.com.`,
+        });
+      }
+      setIsApplyingModalOpen(false);
+      setApplyWeddingName('');
+      await loadApplicantStatus();
+    } catch (err: any) {
+      if (addToast) addToast({ type: 'error', title: 'Submission Failed', message: err.message });
+    } finally {
+      setIsSubmittingApplication(false);
     }
   };
 
@@ -500,6 +750,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const totalTablesCount = events.reduce((acc, e) => acc + (e.tableCount || 0), 0);
   const totalOrdersCount = events.reduce((acc, e) => acc + (e.orderCount || 0), 0);
   const totalRevenueSum = events.reduce((acc, e) => acc + (e.totalRevenue || 0), 0);
+  const draftEvent = useMemo(() => events.find((e) => e.status === 'DRAFT'), [events]);
 
   return (
     <div className="space-y-6 pb-20">
@@ -557,7 +808,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             <p className="text-[10px] text-slate-400 mt-0.5">Decoupled QR tables</p>
           </div>
           <div className="bg-[#10141d]/80 border border-[#202838] rounded-xl p-3.5">
-            <p className="text-[11px] font-mono text-slate-400 uppercase">Event Orders</p>
+            <p className="text-[11px] font-mono text-purple-400 uppercase">Event Orders</p>
             <p className="text-xl font-bold text-purple-400 mt-1">{totalOrdersCount}</p>
             <p className="text-[10px] text-slate-400 mt-0.5">Processed by KDS</p>
           </div>
@@ -569,36 +820,120 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
         </div>
       </div>
 
-      {/* Platform Admin Approval Pending Banner */}
-      {!isModuleEnabled(currentRestaurant, 'weddings') && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-amber-300">
-                Platform Admin Verification Pending
+      {/* Platform Admin Approval Status Card */}
+      <div className="bg-[#121622] border border-[#232c3e] rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-white">Platform Admin Capability & Module Status:</span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  isModuleEnabled(currentRestaurant, 'weddings')
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : applicantStatus?.status === 'APPROVED'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : applicantStatus?.status === 'REJECTED'
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                }`}
+              >
+                {isModuleEnabled(currentRestaurant, 'weddings')
+                  ? 'MODULE ENABLED · ACTIVE'
+                  : applicantStatus?.status || 'PENDING SUBMISSION'}
+              </span>
+            </div>
+            {applicantStatus ? (
+              <p className="text-slate-400 text-[11px]">
+                Request ID: <span className="font-mono text-amber-300 font-semibold">{applicantStatus.requestId}</span> · Applicant: <span className="text-slate-300">{applicantStatus.applicantEmail}</span> · Event: <span className="text-slate-200">{applicantStatus.weddingName}</span>
+                {applicantStatus.status === 'SUBMITTED' && (
+                  <span className="text-amber-400 ml-1">(Awaiting review by Platform Admin ayan090912@gmail.com)</span>
+                )}
               </p>
-              <p className="text-slate-400 text-[11px] mt-0.5">
-                The Wedding Ordering module is undergoing live verification by Platform Admin (<span className="text-white font-mono">ayan090912@gmail.com</span>). You can configure banquets, create menus, and test table QR standees now.
+            ) : (
+              <p className="text-slate-400 text-[11px]">
+                Event ordering enables guest mobile orders with zero payments, live duration tracking, and dedicated banquet table QR codes.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadApplicantStatus}
+            disabled={isApplicantStatusLoading}
+            className="text-xs bg-[#161c28] border-[#252f42] text-slate-300 hover:text-white flex items-center gap-1.5"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isApplicantStatusLoading ? 'animate-spin' : ''}`} />
+            <span>Check Status & Sync</span>
+          </Button>
+          {!applicantStatus && !isModuleEnabled(currentRestaurant, 'weddings') && (
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={() => setIsApplyingModalOpen(true)}
+              className="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold"
+            >
+              Request Event Ordering
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Resume Setup Draft Banner */}
+      {draftEvent && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-[#1b2234] to-[#121622] border border-amber-500/40 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <CalendarClock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">Unfinished Banquet Setup Draft</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-semibold">DRAFT</span>
+              </div>
+              <p className="text-sm font-semibold text-amber-200 mt-0.5">{draftEvent.title || 'Untitled Event'}</p>
+              <p className="text-[11px] text-slate-400">
+                Scheduled for {draftEvent.eventDate} · {draftEvent.venueName || currentRestaurant?.name} · Step-by-step progress persisted in database
               </p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded font-mono text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
-            PENDING ADMIN APPROVAL
-          </span>
+          <Button
+            variant="brand"
+            size="sm"
+            onClick={() => handleResumeDraft(draftEvent)}
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shadow-md"
+          >
+            <span>Resume 4-Step Setup</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
         </div>
       )}
 
-      {/* Catering Menu Notice */}
+      {/* Catering Menu 0-Dishes Notice & Seeder */}
       {!loading && menuItems.length === 0 && (
-        <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 flex items-start gap-3 text-xs text-sky-200">
-          <AlertCircle className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold text-sky-300">Catering Menu Notice: 0 Dishes Configured</p>
-            <p className="text-slate-400 text-[11px] mt-0.5">
-              Your restaurant menu currently has 0 items. Add dishes and beverages under the <strong className="text-white">Menu & Pricing</strong> tab so wedding guests have catalog items available when scanning their banquet table QR codes.
-            </p>
+        <div className="bg-sky-500/10 border border-sky-500/25 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-sky-200">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sky-300">Catering Menu Notice: 0 Dishes Configured</p>
+              <p className="text-slate-400 text-[11px] mt-0.5">
+                Your restaurant menu currently has 0 items. Wedding and event guests scanning their table QR codes won't see dishes to order until items are added to your catalog.
+              </p>
+            </div>
           </div>
+          <Button
+            variant="brand"
+            size="sm"
+            onClick={handleSeedSampleMenu}
+            disabled={isSeedingMenu}
+            className="bg-sky-500 hover:bg-sky-600 text-slate-950 font-semibold text-xs flex items-center gap-1.5 whitespace-nowrap shadow-md shrink-0"
+          >
+            <ChefHat className={`w-3.5 h-3.5 ${isSeedingMenu ? 'animate-spin' : ''}`} />
+            <span>{isSeedingMenu ? 'Seeding Dishes...' : 'Seed Sample Catering Menu'}</span>
+          </Button>
         </div>
       )}
 
@@ -843,23 +1178,22 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
       )}
 
       {/* ========================================================================= */}
-      {/* 5-STEP EVENT CREATION & EDITING WIZARD MODAL */}
+      {/* 4-STEP EVENT CREATION & EDITING WIZARD MODAL */}
       {/* ========================================================================= */}
       <Modal
         isOpen={isWizardOpen}
         onClose={() => setIsWizardOpen(false)}
-        title={editingEventId ? 'Edit Wedding & Banquet Details' : 'Guided Wedding & Event Creator'}
+        title={editingEventId ? 'Edit Wedding & Banquet Details' : 'Guided Event Ordering Setup'}
         maxWidth="2xl"
       >
         <div className="space-y-6">
           {/* Wizard Step Progress Bar */}
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5">
             {[
-              { num: 1, label: 'Details' },
-              { num: 2, label: 'Theme' },
-              { num: 3, label: 'Menu' },
-              { num: 4, label: 'Tables' },
-              { num: 5, label: 'Review' },
+              { num: 1, label: '1. Event Details' },
+              { num: 2, label: '2. Menu & Kitchen' },
+              { num: 3, label: '3. Tables & QR' },
+              { num: 4, label: '4. Review & Activate' },
             ].map((st) => (
               <button
                 key={st.num}
@@ -878,7 +1212,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             ))}
           </div>
 
-          {/* STEP 1: EVENT DETAILS */}
+          {/* STEP 1: EVENT DETAILS & STYLING */}
           {wizardStep === 1 && (
             <div className="space-y-4">
               <div>
@@ -924,7 +1258,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 </div>
               </div>
 
-              {/* Service Duration Mode Selector */}
+              {/* Service Duration Mode Selector & Dates */}
               <div className="bg-[#0b0e14] border border-[#1e2535] rounded-xl p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-200">Service Duration & Timings</span>
@@ -1094,76 +1428,100 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 )}
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Venue / Hall / Room Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. The Grand Ballroom, or Terrace Pavilion"
-                  value={formVenueName}
-                  onChange={(e) => setFormVenueName(e.target.value)}
-                  className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-            </div>
-          )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Venue / Hall / Room Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. The Grand Ballroom, or Terrace Pavilion"
+                    value={formVenueName}
+                    onChange={(e) => setFormVenueName(e.target.value)}
+                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
 
-          {/* STEP 2: THEME & WELCOME */}
-          {wizardStep === 2 && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-2">Luxury Color Palette</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  {THEME_OPTIONS.map((theme) => {
-                    const isSelected = formThemeColor === theme.id;
-                    return (
-                      <button
-                        key={theme.id}
-                        type="button"
-                        onClick={() => setFormThemeColor(theme.id)}
-                        className={`p-3 rounded-xl border text-left transition-all ${
-                          isSelected
-                            ? 'bg-[#1a2130] border-amber-400 shadow-md shadow-amber-500/10'
-                            : 'bg-[#0f131a] border-[#222b3b] hover:border-slate-500'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="w-3.5 h-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} />
-                          <span className="text-xs font-semibold text-white">{theme.name}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-400">Atmospheric wedding styling</p>
-                      </button>
-                    );
-                  })}
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Estimated Attendance (Guests)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formEstimatedGuestCount}
+                    onChange={(e) => setFormEstimatedGuestCount(parseInt(e.target.value) || 100)}
+                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Welcome Message to Guests</label>
-                <textarea
-                  rows={3}
-                  placeholder="Message displayed prominently on the wedding guest mobile ordering portal..."
-                  value={formWelcomeMessage}
-                  onChange={(e) => setFormWelcomeMessage(e.target.value)}
-                  className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+              {/* Theme Styling & Notes */}
+              <div className="pt-2 border-t border-[#1e2535] space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-2">Luxury Color Palette</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {THEME_OPTIONS.map((theme) => {
+                      const isSelected = formThemeColor === theme.id;
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => setFormThemeColor(theme.id)}
+                          className={`p-2.5 rounded-xl border text-left transition-all ${
+                            isSelected
+                              ? 'bg-[#1a2130] border-amber-400 shadow-md shadow-amber-500/10'
+                              : 'bg-[#0f131a] border-[#222b3b] hover:border-slate-500'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="w-3.5 h-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} />
+                            <span className="text-xs font-semibold text-white">{theme.name}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400">Atmospheric wedding styling</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Special Banquet Notes (Internal / Staff)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. VIP table 01 reserved for couple; Champagne toast at 19:30"
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-                />
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Welcome Message to Guests</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Message displayed prominently on the wedding guest mobile ordering portal..."
+                    value={formWelcomeMessage}
+                    onChange={(e) => setFormWelcomeMessage(e.target.value)}
+                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Special Banquet Notes (Internal / Staff)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. VIP table 01 reserved for couple; Champagne toast at 19:30"
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
             </div>
           )}
 
-          {/* STEP 3: DINING & MENU SELECTION */}
-          {wizardStep === 3 && (
+          {/* STEP 2: MENU & KITCHEN */}
+          {wizardStep === 2 && (
             <div className="space-y-4">
+              {/* Assigned Catering Restaurant Banner */}
+              <div className="bg-[#10141e] border border-[#20293a] rounded-xl p-3.5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-400">Assigned Catering Restaurant</p>
+                  <p className="text-sm font-bold text-white mt-0.5">{currentRestaurant?.name || 'Current Restaurant'}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {menuItems.length} Dishes Configured
+                  </span>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-2">Guest Menu Scope</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -1239,60 +1597,156 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                   )}
                 </div>
               )}
+
+              {/* Station Routing Preview */}
+              <div className="bg-[#0f141f] border border-[#20293b] rounded-xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200">Station Routing Preview</span>
+                  <span className="text-[10px] text-slate-400">Kitchen KDS vs Bar Terminals</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-[#131926] border border-[#243044] rounded-lg">
+                    <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs mb-1">
+                      <ChefHat className="w-4 h-4" />
+                      <span>Kitchen Station (KDS)</span>
+                    </div>
+                    <p className="text-lg font-bold text-white">
+                      {menuItems.filter((i) => (i.targetDestination || (i.isAlcoholic ? 'BAR' : 'KITCHEN')) !== 'BAR').length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Appetizers, mains, bread, desserts</p>
+                  </div>
+                  <div className="p-3 bg-[#131926] border border-[#243044] rounded-lg">
+                    <div className="flex items-center gap-2 text-sky-400 font-semibold text-xs mb-1">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Bar Station</span>
+                    </div>
+                    <p className="text-lg font-bold text-white">
+                      {menuItems.filter((i) => (i.targetDestination || (i.isAlcoholic ? 'BAR' : 'KITCHEN')) === 'BAR').length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Mocktails, wine, cocktails, sodas</p>
+                  </div>
+                </div>
+
+                {menuItems.length === 0 && (
+                  <div className="pt-2 border-t border-[#1c2433] flex items-center justify-between gap-3">
+                    <p className="text-xs text-amber-300">Catalog is empty. Seed sample banquet dishes?</p>
+                    <Button
+                      variant="brand"
+                      size="sm"
+                      onClick={handleSeedSampleMenu}
+                      disabled={isSeedingMenu}
+                      className="bg-sky-500 hover:bg-sky-600 text-slate-950 font-semibold text-xs flex items-center gap-1.5"
+                    >
+                      <ChefHat className={`w-3.5 h-3.5 ${isSeedingMenu ? 'animate-spin' : ''}`} />
+                      <span>{isSeedingMenu ? 'Seeding Dishes...' : 'Seed Sample Menu'}</span>
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* STEP 4: TABLE SETUP */}
-          {wizardStep === 4 && (
+          {/* STEP 3: TABLES & QR CODE PROVISIONING */}
+          {wizardStep === 3 && (
             <div className="space-y-4">
-              {!editingEventId ? (
-                <>
-                  <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-transparent border border-amber-500/20 p-3.5 rounded-xl text-xs text-amber-200 leading-relaxed">
-                    <strong>Decoupled Event Tables:</strong> Event tables are isolated from your everyday dining room floorplan. Creating an event auto-provisions dedicated tables (Table 01 through Table {formTableCount}) with unique QR code tokens.
-                  </div>
+              <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-transparent border border-amber-500/20 p-3.5 rounded-xl text-xs text-amber-200 leading-relaxed">
+                <strong>Decoupled Event Tables:</strong> Event tables are isolated from your everyday dining room floorplan. Provisioning tables automatically generates dedicated table numbers (Table 01 through Table {formTableCount}) with unique QR code tokens that never overwrite regular restaurant tables.
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Number of Banquet Tables to Provision
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={formTableCount}
-                        onChange={(e) => setFormTableCount(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                      />
-                      <p className="text-[10px] text-slate-400 mt-1">Generates Table 01 to Table {String(formTableCount).padStart(2, '0')}</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">Estimated Total Guest Attendance</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={formEstimatedGuestCount}
-                        onChange={(e) => setFormEstimatedGuestCount(parseInt(e.target.value) || 100)}
-                        className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                      />
-                      <p className="text-[10px] text-slate-400 mt-1">Used for kitchen prep metrics & planning</p>
-                    </div>
+              {!editingEventId && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                      Number of Banquet Tables to Provision
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={formTableCount}
+                      onChange={(e) => setFormTableCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Generates Table 01 to Table {String(formTableCount).padStart(2, '0')}</p>
                   </div>
-                </>
-              ) : (
-                <div className="bg-[#111520] border border-[#222a3a] p-4 rounded-xl text-xs text-slate-300 space-y-2">
-                  <p className="font-semibold text-white">Event Tables Already Configured</p>
-                  <p className="text-slate-400">
-                    Tables have already been provisioned for this event. You can add extra tables or download individual QR codes using the <strong>Tables & QR Studio</strong> button on the event card.
-                  </p>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Seats per Table (Estimate)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      defaultValue={8}
+                      className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Standard round banquet table seating</p>
+                  </div>
                 </div>
               )}
+
+              {/* Live QR Standees Preview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200">Table QR Standees Preview</span>
+                  <span className="text-[10px] text-slate-400">
+                    {wizardTables.length > 0 ? `${wizardTables.length} Active Provisioned Tables` : `Preview of ${formTableCount} Tables to be provisioned`}
+                  </span>
+                </div>
+
+                {loadingWizardTables ? (
+                  <div className="py-8 text-center text-xs text-slate-400">Loading provisioned event tables...</div>
+                ) : wizardTables.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[300px] overflow-y-auto pr-1">
+                    {wizardTables.map((tbl) => {
+                      const guestUrl = editingEventId ? getEventGuestUrl(editingEventId, tbl.tableNumber) : '';
+                      return (
+                        <div key={tbl.id} className="p-2.5 rounded-lg bg-[#111622] border border-[#20293c] flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono font-bold text-amber-300 text-xs">
+                                TABLE {cleanTableBadge(tbl.tableNumber)}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">{tbl.capacity} seats</span>
+                            </div>
+                            <p className="text-[10px] text-emerald-400 mt-0.5">Isolated Event Table</p>
+                          </div>
+                          {guestUrl && (
+                            <div className="mt-2 pt-2 border-t border-[#1d2537] flex items-center justify-between">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyLink(guestUrl)}
+                                className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-1 font-mono"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>Copy Link</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {Array.from({ length: Math.min(8, formTableCount) }).map((_, idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-[#111622] border border-[#20293c] text-center">
+                        <span className="font-mono font-bold text-amber-300 text-xs">
+                          TABLE {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Auto-generated QR</p>
+                      </div>
+                    ))}
+                    {formTableCount > 8 && (
+                      <div className="p-2.5 rounded-lg bg-[#0e121a] border border-[#1b2230] text-center flex items-center justify-center">
+                        <span className="text-[11px] text-slate-400 font-mono">+{formTableCount - 8} more tables</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* STEP 5: REVIEW & PUBLISH */}
-          {wizardStep === 5 && (
+          {/* STEP 4: REVIEW & ACTIVATE */}
+          {wizardStep === 4 && (
             <div className="space-y-4">
               <div className="bg-[#0e121a] border border-[#232c3d] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
@@ -1326,51 +1780,28 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                   </div>
                 </div>
                 <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Auto-Activation</span>
-                  <span className="text-xs font-mono text-slate-200">
-                    {formAutoActivate ? 'Enabled (Automated server open)' : 'Manual'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
                   <span className="text-xs text-slate-400">Venue</span>
                   <span className="text-xs text-white">{formVenueName || currentRestaurant?.name}</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
+                  <span className="text-xs text-slate-400">Catering Restaurant</span>
+                  <span className="text-xs text-slate-200">{currentRestaurant?.name}</span>
                 </div>
                 <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
                   <span className="text-xs text-slate-400">Menu Scope</span>
                   <span className="text-xs font-mono text-emerald-400">{formMenuSelectionType}</span>
                 </div>
-                {!editingEventId && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400">Tables Provisioned</span>
-                    <span className="text-xs font-mono text-amber-300">{formTableCount} Tables</span>
-                  </div>
-                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">Tables Provisioned</span>
+                  <span className="text-xs font-mono text-amber-300">{formTableCount} Dedicated Event Tables</span>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Publication Status</label>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 text-xs text-white cursor-pointer">
-                    <input
-                      type="radio"
-                      name="formStatus"
-                      checked={formStatus === 'ACTIVE'}
-                      onChange={() => setFormStatus('ACTIVE')}
-                      className="text-amber-500 focus:ring-0"
-                    />
-                    <span>Active (Ready for guest ordering)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="formStatus"
-                      checked={formStatus === 'DRAFT'}
-                      onChange={() => setFormStatus('DRAFT')}
-                      className="text-amber-500 focus:ring-0"
-                    />
-                    <span>Draft (Saved privately)</span>
-                  </label>
-                </div>
+              <div className="bg-gradient-to-r from-emerald-500/10 to-transparent border border-emerald-500/20 rounded-xl p-3 text-xs text-emerald-200">
+                <p className="font-semibold text-emerald-300">Ready to Publish</p>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Clicking <strong>Publish & Activate Event Ordering</strong> will open guest orders for table QR codes during your scheduled service window. You can also save progress as draft and return later.
+                </p>
               </div>
             </div>
           )}
@@ -1399,27 +1830,38 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 Cancel
               </Button>
 
-              {wizardStep < 5 ? (
+              {wizardStep < 4 ? (
                 <Button
                   variant="brand"
                   size="sm"
-                  onClick={() => setWizardStep(wizardStep + 1)}
-                  disabled={wizardStep === 1 && (!formTitle || !formEventDate)}
+                  onClick={() => handleWizardStepAdvance(wizardStep + 1)}
+                  disabled={isSaving || (wizardStep === 1 && (!formTitle || !formEventDate))}
                   className="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold"
                 >
-                  Continue
+                  {isSaving ? 'Saving...' : 'Save & Continue'}
                   <ChevronRight className="w-3.5 h-3.5 ml-1" />
                 </Button>
               ) : (
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={handleSaveWizard}
-                  disabled={isSaving || !formTitle || !formEventDate}
-                  className="text-xs bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-bold px-4"
-                >
-                  {isSaving ? 'Saving...' : editingEventId ? 'Update Event' : 'Publish Banquet Event'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveDraftAndClose}
+                    disabled={isSaving || !formTitle || !formEventDate}
+                    className="text-xs bg-[#161c28] border-amber-500/40 text-amber-300 hover:bg-amber-500/10 font-semibold"
+                  >
+                    {isSaving ? 'Saving...' : 'Save as Draft 💾'}
+                  </Button>
+                  <Button
+                    variant="brand"
+                    size="sm"
+                    onClick={handleActivateEventOrdering}
+                    disabled={isSaving || !formTitle || !formEventDate}
+                    className="text-xs bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-bold px-4 shadow-lg shadow-amber-500/20"
+                  >
+                    {isSaving ? 'Saving...' : editingEventId ? 'Update & Save' : 'Publish & Activate Event Ordering 🎉'}
+                  </Button>
+                </div>
               )}
             </div>
           </div>

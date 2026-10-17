@@ -970,8 +970,8 @@ export class DinelyApiClient extends BaseApiClient {
     return this.weddings.getWeddingRequestStatus(requestId, email);
   }
 
-  async getWeddingApplicantStatus(email?: string) {
-    return this.weddings.getWeddingApplicantStatus(email);
+  async getWeddingApplicantStatus(email?: string, restaurantId?: string) {
+    return this.weddings.getWeddingApplicantStatus(email, restaurantId);
   }
 
   async getAdminWeddingRequests(status?: string, search?: string) {

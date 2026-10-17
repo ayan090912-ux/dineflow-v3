@@ -206,6 +206,11 @@ interface KitchenETADashboardProps {
   onLogout?: () => void;
 }
 
+export const cleanTableBadge = (tbl?: string): string => {
+  if (!tbl) return '';
+  return tbl.replace(/^table\s*/i, '').trim();
+};
+
 export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   restaurant,
   orders: initialOrders,
@@ -816,7 +821,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
                           <span>🎉</span>
                           <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {order.tableNumber}
+                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {cleanTableBadge(order.tableNumber)}
                           </span>
                         </span>
                       </div>
@@ -934,7 +939,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
                             <span>🎉</span>
                             <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                              EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {order.tableNumber}
+                              EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {cleanTableBadge(order.tableNumber)}
                             </span>
                           </span>
                         </div>
@@ -1070,7 +1075,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm">
                           <span>🎉</span>
                           <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {order.tableNumber}
+                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {cleanTableBadge(order.tableNumber)}
                           </span>
                         </span>
                       </div>
@@ -1134,7 +1139,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                   </div>
 
                   <div className="p-3 bg-[#0c0e14] rounded-lg border border-emerald-500/20 text-center">
-                    <p className="text-2xl font-bold text-emerald-400 font-mono tracking-tight">TABLE {order.tableNumber}</p>
+                    <p className="text-2xl font-bold text-emerald-400 font-mono tracking-tight">TABLE {cleanTableBadge(order.tableNumber)}</p>
                     <p className="text-xs text-slate-400 mt-0.5">Guest: {order.customerName || 'Walk-in'}</p>
                   </div>
 

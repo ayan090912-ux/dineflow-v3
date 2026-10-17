@@ -350,25 +350,33 @@ async def get_wedding_request_status(
 @weddings_router.get("/applicant-status")
 async def get_applicant_latest_status(
     email: Optional[str] = Query(None),
+    restaurant_id: Optional[str] = Query(None),
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Retrieves the most recent wedding application status for an applicant.
-    Matches either query param email or caller's authenticated email.
-    Used by /weddings/login to inform applicants on their request progress.
+    Matches either query param email or caller's authenticated email, or catering restaurant ID.
+    Used by Owner OS and /weddings/login to inform applicants on their request progress.
     """
     target_email = (email or caller.email or "").strip().lower()
-    if not target_email:
+    clean_rid = (restaurant_id or caller.restaurant_id or "").strip()
+    if not target_email and not clean_rid:
         return {"hasApplication": False, "application": None}
 
-    # Security boundary: non-admin callers cannot query another person's email
-    if caller.email and not caller.is_admin and caller.email.lower() != target_email:
+    # Security boundary: non-admin callers cannot query another person's email unless matching restaurant
+    if caller.email and not caller.is_admin and target_email and caller.email.lower() != target_email:
         target_email = caller.email.lower()
+
+    conditions = []
+    if target_email:
+        conditions.append(func.lower(WeddingAccessRequest.applicant_email) == target_email)
+    if clean_rid:
+        conditions.append(WeddingAccessRequest.catering_restaurant_id == clean_rid)
 
     stmt = (
         select(WeddingAccessRequest)
-        .where(func.lower(WeddingAccessRequest.applicant_email) == target_email)
+        .where(or_(*conditions))
         .order_by(WeddingAccessRequest.created_at.desc())
     )
     res = await db.execute(stmt)
