@@ -89,7 +89,7 @@ async def terminal_login(
             detail="Administrative and Owner accounts cannot authenticate via terminal PIN. Authenticate using authorized Google credentials."
         )
 
-    ALLOWED_STAFF_ROLES = {"KITCHEN", "CHEF", "COOK", "WAITER", "SERVER", "HOST", "BAR", "BARTENDER", "INVENTORY", "CASHIER", "STAFF"}
+    ALLOWED_STAFF_ROLES = {"KITCHEN", "CHEF", "COOK", "WAITER", "SERVER", "HOST", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "INVENTORY", "CASHIER", "STAFF"}
     if role_candidate not in ALLOWED_STAFF_ROLES:
         role_candidate = "STAFF"
 

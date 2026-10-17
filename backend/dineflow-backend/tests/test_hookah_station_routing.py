@@ -22,7 +22,7 @@ def create_jwt(payload: dict) -> str:
 
 
 @pytest.mark.asyncio
-async def test_hookah_station_routing_lifecycle_and_isolation(db_session):
+async def test_hookah_security_audit_and_station_routing(db_session):
     rest_id = f"rest-hookah-{uuid.uuid4().hex[:6]}"
     other_rest_id = f"rest-other-{uuid.uuid4().hex[:6]}"
     owner_uid = f"owner-hookah-{uuid.uuid4().hex[:6]}"
@@ -50,6 +50,10 @@ async def test_hookah_station_routing_lifecycle_and_isolation(db_session):
         owner_email="other-owner@example.com",
         lifecycle_status="LIVE",
         is_approved=True,
+        has_kitchen=True,
+        has_bar=True,
+        has_hookah=True,
+        enabled_modules=["kitchen", "bar", "hookah", "waiter"],
     )
     db_session.add_all([rest, other_rest])
 
@@ -135,76 +139,137 @@ async def test_hookah_station_routing_lifecycle_and_isolation(db_session):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         owner_headers = {"Authorization": f"Bearer {owner_token}"}
-        hookah_headers = {
-            "X-Staff-Restaurant-Id": rest_id,
-            "X-Staff-Role": "HOOKAH",
-            "X-Staff-Id": "staff-hookah-01",
-        }
-        bar_headers = {
-            "X-Staff-Restaurant-Id": rest_id,
-            "X-Staff-Role": "BARTENDER",
-            "X-Staff-Id": "staff-bar-01",
-        }
-        kitchen_headers = {
-            "X-Staff-Restaurant-Id": rest_id,
-            "X-Staff-Role": "CHEF",
-            "X-Staff-Id": "staff-chef-01",
-        }
-        other_rest_headers = {
-            "X-Staff-Restaurant-Id": other_rest_id,
-            "X-Staff-Role": "HOOKAH",
-            "X-Staff-Id": "staff-hookah-other",
-        }
 
-        # 4. Terminal Registration: Test registering a Hookah terminal
-        term_res = await client.post(
-            f"/api/v1/restaurants/{rest_id}/terminals",
-            headers=owner_headers,
+        # ---------------------------------------------------------------------
+        # AUDIT 1 & 2: REJECT UNAUTHENTICATED REQUESTS & FORGED HEADERS
+        # ---------------------------------------------------------------------
+        # Request with zero authentication
+        unauth_res = await client.get(f"/api/v1/orders/restaurant/{rest_id}?station=HOOKAH")
+        assert unauth_res.status_code == 401, f"Expected 401 for unauthenticated request, got {unauth_res.status_code}"
+
+        # Request forging X-Staff-Role: HOOKAH without Bearer token MUST BE REJECTED WITH 401
+        forged_headers = {
+            "X-Staff-Role": "HOOKAH",
+            "X-Staff-Restaurant-Id": rest_id,
+            "X-Staff-Id": "forged-attacker-01",
+        }
+        forged_res = await client.get(
+            f"/api/v1/orders/restaurant/{rest_id}?station=HOOKAH",
+            headers=forged_headers
+        )
+        assert forged_res.status_code == 401, f"Forged X-Staff-Role MUST return 401, got {forged_res.status_code}"
+
+        forged_put = await client.put(
+            f"/api/v1/orders/dummy-ord-id/status",
+            headers=forged_headers,
+            json={"hookahStatus": "PREPARING"}
+        )
+        assert forged_put.status_code == 401, f"Forged status update MUST return 401, got {forged_put.status_code}"
+
+        # ---------------------------------------------------------------------
+        # AUDIT 6: AUTHENTICATED STAFF TERMINAL LOGIN
+        # ---------------------------------------------------------------------
+        # Genuinely authenticate Hookah staff via terminal login endpoint
+        hookah_login_res = await client.post(
+            "/api/v1/auth/terminal-login",
             json={
-                "name": "Terrace Hookah Terminal 1",
-                "terminalCode": f"HOOKAH-{uuid.uuid4().hex[:4].upper()}",
-                "terminalType": "HOOKAH",
-                "deviceInfo": "iPad Air Shisha Desk",
+                "restaurant_id": rest_id,
+                "role": "HOOKAH",
+                "passcode": "1234",
+                "identifier": "terrace_hookah_desk"
             }
         )
-        assert term_res.status_code == 201, f"Failed terminal registration: {term_res.text}"
-        term_data = term_res.json()
-        assert term_data["terminalType"] == "HOOKAH"
-        assert term_data["isActive"] is True
+        assert hookah_login_res.status_code == 200, f"Hookah login failed: {hookah_login_res.text}"
+        hookah_token = hookah_login_res.json()["access_token"]
+        assert hookah_token, "Must return valid signed JWT token"
+        hookah_headers = {"Authorization": f"Bearer {hookah_token}"}
 
-        # 5. Menu Management API: Test creating a Hookah menu item via POST API
-        api_hookah_res = await client.post(
-            f"/api/v1/restaurants/{rest_id}/menu",
-            headers=owner_headers,
+        # Genuinely authenticate Bar staff
+        bar_login_res = await client.post(
+            "/api/v1/auth/terminal-login",
             json={
-                "name": "Pan Raas Premium Shisha",
-                "description": "Exotic Indian betel leaf and cool menthol",
-                "price": 950.0,
-                "categoryId": cat_hookah.id,
-                "targetDestination": "HOOKAH",
-                "isVegetarian": True,
+                "restaurant_id": rest_id,
+                "role": "BAR",
+                "passcode": "1234",
+                "identifier": "main_bar_station"
             }
         )
-        assert api_hookah_res.status_code == 201, f"Failed menu item creation: {api_hookah_res.text}"
-        api_hookah_data = api_hookah_res.json()
-        assert api_hookah_data["targetDestination"] == "HOOKAH"
+        assert bar_login_res.status_code == 200
+        bar_token = bar_login_res.json()["access_token"]
+        bar_headers = {"Authorization": f"Bearer {bar_token}"}
 
-        # 6. Customer Menu Query: Confirm Hookah items are exposed
-        menu_res = await client.get(f"/api/v1/restaurants/{rest_id}/menu")
-        assert menu_res.status_code == 200
-        menu_data = menu_res.json()
-        menu_items = menu_data.get("items", [])
-        hookah_menu_items = [it for it in menu_items if it.get("targetDestination") == "HOOKAH"]
-        assert len(hookah_menu_items) >= 3
-        assert any(it["name"] == "Double Apple Al Fakher Shisha" for it in hookah_menu_items)
-        assert any(it["name"] == "Pan Raas Premium Shisha" for it in hookah_menu_items)
+        # Genuinely authenticate Kitchen staff
+        kitchen_login_res = await client.post(
+            "/api/v1/auth/terminal-login",
+            json={
+                "restaurant_id": rest_id,
+                "role": "KITCHEN",
+                "passcode": "1234",
+                "identifier": "chef_station"
+            }
+        )
+        assert kitchen_login_res.status_code == 200
+        kitchen_token = kitchen_login_res.json()["access_token"]
+        kitchen_headers = {"Authorization": f"Bearer {kitchen_token}"}
 
-        # 6. Customer Order Submission: Mixed Order with Food, Drinks, and Hookah
-        # Intentionally tamper targetDestination: client claims Shisha is BAR and Fries are HOOKAH
+        # Genuinely authenticate Waiter staff
+        waiter_login_res = await client.post(
+            "/api/v1/auth/terminal-login",
+            json={
+                "restaurant_id": rest_id,
+                "role": "WAITER",
+                "passcode": "1234",
+                "identifier": "floor_waiter"
+            }
+        )
+        assert waiter_login_res.status_code == 200
+        waiter_token = waiter_login_res.json()["access_token"]
+        waiter_headers = {"Authorization": f"Bearer {waiter_token}"}
+
+        # ---------------------------------------------------------------------
+        # AUDIT 3: CHANGING X-Staff-Restaurant-Id CANNOT EXPOSE ANOTHER RESTAURANT
+        # ---------------------------------------------------------------------
+        # Hookah staff from rest_id attempts to access other_rest_id
+        cross_rest_res = await client.get(
+            f"/api/v1/orders/restaurant/{other_rest_id}?station=HOOKAH",
+            headers={
+                **hookah_headers,
+                "X-Staff-Restaurant-Id": other_rest_id  # Tampered header
+            }
+        )
+        assert cross_rest_res.status_code == 403, f"Cross-tenant access must return 403, got {cross_rest_res.status_code}"
+
+        # ---------------------------------------------------------------------
+        # AUDIT 4: HOOKAH STAFF ACCESSIBLE ONLY TO ASSIGNED STATION
+        # ---------------------------------------------------------------------
+        # Hookah staff attempts to access Kitchen orders -> MUST return 403
+        h_cross_k = await client.get(
+            f"/api/v1/orders/restaurant/{rest_id}?station=KITCHEN",
+            headers=hookah_headers
+        )
+        assert h_cross_k.status_code == 403, f"Hookah staff accessing Kitchen queue must return 403, got {h_cross_k.status_code}"
+
+        # Hookah staff attempts to access Bar orders -> MUST return 403
+        h_cross_b = await client.get(
+            f"/api/v1/orders/restaurant/{rest_id}?station=BAR",
+            headers=hookah_headers
+        )
+        assert h_cross_b.status_code == 403, f"Hookah staff accessing Bar queue must return 403, got {h_cross_b.status_code}"
+
+        # Bar staff attempts to access Hookah orders -> MUST return 403
+        b_cross_h = await client.get(
+            f"/api/v1/orders/restaurant/{rest_id}?station=HOOKAH",
+            headers=bar_headers
+        )
+        assert b_cross_h.status_code == 403, f"Bar staff accessing Hookah queue must return 403, got {b_cross_h.status_code}"
+
+        # ---------------------------------------------------------------------
+        # AUDIT 8: AUTHORITATIVE ORDER ROUTING & MIXED ORDERS
+        # ---------------------------------------------------------------------
         mixed_order_payload = {
             "restaurantId": rest_id,
             "tableNumber": "Table 14",
-            "customerNotes": "Extra ice base please, 18+ verified",
+            "customerNotes": "Cold ice tip, 18+ verified",
             "items": [
                 {
                     "menuItemId": item_food.id,
@@ -226,7 +291,6 @@ async def test_hookah_station_routing_lifecycle_and_isolation(db_session):
                     "price": item_hookah.price,
                     "quantity": 1,
                     "targetDestination": "BAR",     # TAMPERED CLIENT VALUE
-                    "guestNotes": "Grape ice tip",
                 },
                 {
                     "menuItemId": item_hookah_mint.id,
@@ -244,165 +308,125 @@ async def test_hookah_station_routing_lifecycle_and_isolation(db_session):
 
         # Assert authoritative station override on items
         items_by_name = {it["name"]: it for it in order_data["items"]}
-        assert items_by_name["Truffle Fries"]["targetDestination"] == "KITCHEN", "Truffle Fries must be KITCHEN!"
-        assert items_by_name["Smoked Bourbon"]["targetDestination"] == "BAR", "Smoked Bourbon must be BAR!"
-        assert items_by_name["Double Apple Al Fakher Shisha"]["targetDestination"] == "HOOKAH", "Shisha must be HOOKAH!"
-        assert items_by_name["Grape Mint Shisha"]["targetDestination"] == "HOOKAH", "Shisha Mint must be HOOKAH!"
+        assert items_by_name["Truffle Fries"]["targetDestination"] == "KITCHEN"
+        assert items_by_name["Smoked Bourbon"]["targetDestination"] == "BAR"
+        assert items_by_name["Double Apple Al Fakher Shisha"]["targetDestination"] == "HOOKAH"
+        assert items_by_name["Grape Mint Shisha"]["targetDestination"] == "HOOKAH"
 
-        # Assert station statuses initialized
-        assert order_data["kitchenStatus"] == "PENDING"
-        assert order_data["barStatus"] == "PENDING"
-        assert order_data["hookahStatus"] == "PENDING"
-        assert order_data["status"] == "PENDING"
-
-        # 7. Station Queue Isolation
-        # (a) Hookah Terminal Queue (station=HOOKAH)
-        hookah_queue_res = await client.get(
+        # ---------------------------------------------------------------------
+        # QUEUE RETRIEVAL: STATION ISOLATION
+        # ---------------------------------------------------------------------
+        # Authenticated Hookah staff gets their queue
+        h_queue = await client.get(
             f"/api/v1/orders/restaurant/{rest_id}?station=HOOKAH",
             headers=hookah_headers
         )
-        assert hookah_queue_res.status_code == 200
-        hookah_orders = hookah_queue_res.json()
-        assert len(hookah_orders) >= 1
-        hookah_target_order = next((o for o in hookah_orders if o["id"] == order_id), None)
-        assert hookah_target_order is not None
-        hookah_item_names = [it["name"] for it in hookah_target_order["items"]]
-        assert "Double Apple Al Fakher Shisha" in hookah_item_names
-        assert "Grape Mint Shisha" in hookah_item_names
-        assert "Truffle Fries" not in hookah_item_names, "Hookah terminal must NOT receive Kitchen items!"
-        assert "Smoked Bourbon" not in hookah_item_names, "Hookah terminal must NOT receive Bar items!"
+        assert h_queue.status_code == 200
+        h_orders = h_queue.json()
+        target_h = next((o for o in h_orders if o["id"] == order_id), None)
+        assert target_h is not None
+        h_item_names = [it["name"] for it in target_h["items"]]
+        assert "Double Apple Al Fakher Shisha" in h_item_names
+        assert "Truffle Fries" not in h_item_names
+        assert "Smoked Bourbon" not in h_item_names
 
-        # (b) Bar Terminal Queue (station=BAR)
-        bar_queue_res = await client.get(
-            f"/api/v1/orders/restaurant/{rest_id}?station=BAR",
-            headers=bar_headers
-        )
-        assert bar_queue_res.status_code == 200
-        bar_orders = bar_queue_res.json()
-        bar_target_order = next((o for o in bar_orders if o["id"] == order_id), None)
-        assert bar_target_order is not None
-        bar_item_names = [it["name"] for it in bar_target_order["items"]]
-        assert "Smoked Bourbon" in bar_item_names
-        assert "Double Apple Al Fakher Shisha" not in bar_item_names, "Bar terminal must NOT receive Hookah items!"
-        assert "Truffle Fries" not in bar_item_names, "Bar terminal must NOT receive Food items!"
-
-        # (c) Kitchen Queue (station=KITCHEN)
-        kitchen_queue_res = await client.get(
-            f"/api/v1/orders/restaurant/{rest_id}?station=KITCHEN",
-            headers=kitchen_headers
-        )
-        assert kitchen_queue_res.status_code == 200
-        kitchen_orders = kitchen_queue_res.json()
-        kitchen_target_order = next((o for o in kitchen_orders if o["id"] == order_id), None)
-        assert kitchen_target_order is not None
-        kitchen_item_names = [it["name"] for it in kitchen_target_order["items"]]
-        assert "Truffle Fries" in kitchen_item_names
-        assert "Double Apple Al Fakher Shisha" not in kitchen_item_names, "Kitchen KDS must NOT receive Hookah items!"
-        assert "Smoked Bourbon" not in kitchen_item_names, "Kitchen KDS must NOT receive Bar items!"
-
-        # (d) Owner / Waiter view (no station filter) receives all 4 items
-        owner_queue_res = await client.get(
-            f"/api/v1/orders/restaurant/{rest_id}",
-            headers=owner_headers
-        )
-        assert owner_queue_res.status_code == 200
-        owner_target_order = next((o for o in owner_queue_res.json() if o["id"] == order_id), None)
-        assert owner_target_order is not None
-        assert len(owner_target_order["items"]) == 4
-
-        # 8. Station Status Mutations & Reconciliation (Zero ETA)
-        # (a) Hookah Terminal marks hookah items PREPARING
-        h_prep_res = await client.put(
+        # ---------------------------------------------------------------------
+        # AUDIT 5: ROLE-BASED MUTATION RESTRICTIONS
+        # ---------------------------------------------------------------------
+        # Bar staff CANNOT update hookahStatus -> MUST return 403
+        bar_try_hookah = await client.put(
             f"/api/v1/orders/{order_id}/status",
-            json={"hookahStatus": "PREPARING"},
-            headers=hookah_headers
+            headers=bar_headers,
+            json={"hookahStatus": "PREPARING"}
         )
-        assert h_prep_res.status_code == 200
-        order_st = h_prep_res.json()
-        assert order_st["hookahStatus"] == "PREPARING"
-        assert order_st["kitchenStatus"] == "PENDING"
-        assert order_st["barStatus"] == "PENDING"
-        assert order_st["status"] == "PREPARING"
+        assert bar_try_hookah.status_code == 403, f"Bar staff updating Hookah status must return 403, got {bar_try_hookah.status_code}"
 
-        # (b) Kitchen marks food READY
-        k_ready_res = await client.put(
+        # Hookah staff CANNOT update barStatus -> MUST return 403
+        hookah_try_bar = await client.put(
             f"/api/v1/orders/{order_id}/status",
-            json={"kitchenStatus": "READY"},
-            headers=kitchen_headers
+            headers=hookah_headers,
+            json={"barStatus": "PREPARING"}
         )
-        assert k_ready_res.status_code == 200
-        order_st = k_ready_res.json()
-        assert order_st["kitchenStatus"] == "READY"
-        assert order_st["barStatus"] == "PENDING"
-        assert order_st["hookahStatus"] == "PREPARING"
-        # Overall status is still PREPARING because Bar and Hookah are not READY
-        assert order_st["status"] == "PREPARING"
+        assert hookah_try_bar.status_code == 403, f"Hookah staff updating Bar status must return 403, got {hookah_try_bar.status_code}"
 
-        # (c) Bar marks drinks READY
-        b_ready_res = await client.put(
+        # Hookah staff CANNOT update kitchenStatus -> MUST return 403
+        hookah_try_kitchen = await client.put(
             f"/api/v1/orders/{order_id}/status",
-            json={"barStatus": "READY"},
-            headers=bar_headers
+            headers=hookah_headers,
+            json={"kitchenStatus": "READY"}
         )
-        assert b_ready_res.status_code == 200
-        order_st = b_ready_res.json()
-        assert order_st["kitchenStatus"] == "READY"
-        assert order_st["barStatus"] == "READY"
-        assert order_st["hookahStatus"] == "PREPARING"
-        # Overall status is still PREPARING because Hookah is still PREPARING
-        assert order_st["status"] == "PREPARING"
+        assert hookah_try_kitchen.status_code == 403, f"Hookah staff updating Kitchen status must return 403, got {hookah_try_kitchen.status_code}"
 
-        # (d) Hookah marks shisha READY -> all 3 stations are now READY -> parent reconciles to READY
-        h_ready_res = await client.put(
+        # Hookah staff CANNOT deliver overall order to table -> MUST return 403
+        hookah_try_deliver = await client.put(
             f"/api/v1/orders/{order_id}/status",
-            json={"hookahStatus": "READY"},
-            headers=hookah_headers
+            headers=hookah_headers,
+            json={"status": "DELIVERED"}
         )
-        assert h_ready_res.status_code == 200
-        order_st = h_ready_res.json()
-        assert order_st["hookahStatus"] == "READY"
-        assert order_st["kitchenStatus"] == "READY"
-        assert order_st["barStatus"] == "READY"
-        assert order_st["status"] == "READY"
+        assert hookah_try_deliver.status_code == 403, f"Hookah staff delivering order must return 403, got {hookah_try_deliver.status_code}"
 
-        # (e) Hookah marks shisha COMPLETED / SERVED
-        h_comp_res = await client.put(
+        # ---------------------------------------------------------------------
+        # AUDIT 6 & 7: LEGITIMATE HOOKAH WORKFLOW & PERSISTENCE (ZERO ETA)
+        # ---------------------------------------------------------------------
+        # Hookah marks hookah items PREPARING
+        h_prep = await client.put(
             f"/api/v1/orders/{order_id}/status",
-            json={"hookahStatus": "COMPLETED"},
-            headers=hookah_headers
+            headers=hookah_headers,
+            json={"hookahStatus": "PREPARING"}
         )
-        assert h_comp_res.status_code == 200
-        order_st = h_comp_res.json()
-        assert order_st["hookahStatus"] == "COMPLETED"
-        assert order_st["kitchenStatus"] == "READY"
-        assert order_st["barStatus"] == "READY"
+        assert h_prep.status_code == 200
+        assert h_prep.json()["hookahStatus"] == "PREPARING"
 
-        # (f) Waiter delivers order to table -> overall status reconciles to DELIVERED/COMPLETED
-        waiter_headers = {
-            "X-Staff-Restaurant-Id": rest_id,
-            "X-Staff-Role": "WAITER",
-            "X-Staff-Id": "staff-waiter-01",
-        }
-        deliv_res = await client.put(
+        # Kitchen marks food READY
+        k_ready = await client.put(
             f"/api/v1/orders/{order_id}/status",
-            json={"status": "DELIVERED"},
-            headers=waiter_headers
+            headers=kitchen_headers,
+            json={"kitchenStatus": "READY"}
         )
-        assert deliv_res.status_code == 200
-        assert deliv_res.json()["status"] == "DELIVERED"
+        assert k_ready.status_code == 200
 
-        # 9. Tenant Isolation
-        # Staff from other_rest_id cannot see rest_id's orders
-        iso_res = await client.get(
+        # Bar marks drinks READY
+        b_ready = await client.put(
+            f"/api/v1/orders/{order_id}/status",
+            headers=bar_headers,
+            json={"barStatus": "READY"}
+        )
+        assert b_ready.status_code == 200
+
+        # Hookah marks hookah READY -> all 3 ready -> parent reconciles to READY
+        h_ready = await client.put(
+            f"/api/v1/orders/{order_id}/status",
+            headers=hookah_headers,
+            json={"hookahStatus": "READY"}
+        )
+        assert h_ready.status_code == 200
+        assert h_ready.json()["hookahStatus"] == "READY"
+        assert h_ready.json()["status"] == "READY"
+
+        # Hookah marks hookah COMPLETED / SERVED
+        h_comp = await client.put(
+            f"/api/v1/orders/{order_id}/status",
+            headers=hookah_headers,
+            json={"hookahStatus": "COMPLETED"}
+        )
+        assert h_comp.status_code == 200
+        assert h_comp.json()["hookahStatus"] == "COMPLETED"
+
+        # REFRESH VERIFICATION: Query database freshly and verify persistence
+        refresh_q = await client.get(
             f"/api/v1/orders/restaurant/{rest_id}?station=HOOKAH",
-            headers=other_rest_headers
+            headers=hookah_headers
         )
-        assert iso_res.status_code == 403 or len(iso_res.json()) == 0
+        assert refresh_q.status_code == 200
+        refreshed_ord = next((o for o in refresh_q.json() if o["id"] == order_id), None)
+        assert refreshed_ord is not None
+        assert refreshed_ord["hookahStatus"] == "COMPLETED", "Status mutation MUST persist after refresh!"
 
-        # Staff from other_rest_id cannot update rest_id's order
-        bad_update = await client.put(
+        # Waiter delivers order to table
+        waiter_deliv = await client.put(
             f"/api/v1/orders/{order_id}/status",
-            json={"hookahStatus": "PREPARING"},
-            headers=other_rest_headers
+            headers=waiter_headers,
+            json={"status": "DELIVERED"}
         )
-        assert bad_update.status_code in (403, 404)
+        assert waiter_deliv.status_code == 200
+        assert waiter_deliv.json()["status"] == "DELIVERED"

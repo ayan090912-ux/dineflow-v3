@@ -156,25 +156,28 @@ async def get_caller_context(
         except Exception:
             pass
 
-    # 2. Staff terminal header authentication (no bearer token needed)
-    # X-Staff-Role + X-Staff-Restaurant-Id assert identity for operational staff terminals only
-    # (waiter, kitchen, bar, host, server, cashier, chef, cook).
-    # Owner and Admin roles MUST authenticate via Bearer token; header spoofing of owner/admin returns 401.
-    ALLOWED_STAFF_HEADER_ROLES = {
-        "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "CASHIER", "STAFF"
-    }
-    if x_staff_role and x_staff_restaurant_id:
-        norm_role = x_staff_role.strip().upper()
-        if norm_role in ALLOWED_STAFF_HEADER_ROLES:
-            staff_uid = (x_staff_id or f"staff-{norm_role.lower()}").strip()
-            return CallerContext(
-                uid=staff_uid,
-                email=f"{staff_uid}@staff.dinely.internal",
-                role=norm_role,
-                is_admin=False,
-                restaurant_id=x_staff_restaurant_id.strip(),
-                scope="STAFF",
-            )
+    # 2. Staff terminal header authentication
+    # Strict Zero-Trust Security Policy:
+    # 1. In production, client headers (X-Staff-Role, X-Staff-Restaurant-Id) without a cryptographic Bearer token
+    #    are strictly rejected. Terminals MUST authenticate via /api/v1/auth/terminal-login or /api/v1/staff/auth/login.
+    # 2. Setting or forging X-Staff-Role: HOOKAH or SHISHA can NEVER grant terminal access without a valid Bearer token.
+    is_prod = getattr(settings, "ENVIRONMENT", "").lower() in ["production", "prod"]
+    if not is_prod:
+        ALLOWED_STAFF_HEADER_ROLES = {
+            "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF"
+        }
+        if x_staff_role and x_staff_restaurant_id:
+            norm_role = x_staff_role.strip().upper()
+            if norm_role in ALLOWED_STAFF_HEADER_ROLES:
+                staff_uid = (x_staff_id or f"staff-{norm_role.lower()}").strip()
+                return CallerContext(
+                    uid=staff_uid,
+                    email=f"{staff_uid}@staff.dinely.internal",
+                    role=norm_role,
+                    is_admin=False,
+                    restaurant_id=x_staff_restaurant_id.strip(),
+                    scope="STAFF",
+                )
 
     return CallerContext()
 

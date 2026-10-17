@@ -811,14 +811,30 @@ async def get_restaurant_orders(
             if caller_canon and caller_canon.lower() != target_rest_id.lower() and caller.role not in ["OWNER", "SUPER_ADMIN", "ADMIN"]:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
 
-        effective_station = station.upper() if station else None
-        if not effective_station:
-            if caller.role in ["BAR", "BARTENDER"]:
-                effective_station = "BAR"
-            elif caller.role in ["CHEF", "KITCHEN"]:
-                effective_station = "KITCHEN"
-            elif caller.role in ["HOOKAH", "SHISHA"]:
-                effective_station = "HOOKAH"
+        caller_role = (caller.role or "").upper()
+        if caller_role in ["HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF"]:
+            if station and station.upper() not in ["HOOKAH", "SHISHA"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Forbidden: Hookah staff cannot access station '{station}'. Only Hookah station queue is accessible."
+                )
+            effective_station = "HOOKAH"
+        elif caller_role in ["BAR", "BARTENDER"]:
+            if station and station.upper() != "BAR":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Forbidden: Bar staff cannot access station '{station}'. Only Bar station queue is accessible."
+                )
+            effective_station = "BAR"
+        elif caller_role in ["CHEF", "KITCHEN", "COOK"]:
+            if station and station.upper() != "KITCHEN":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Forbidden: Kitchen staff cannot access station '{station}'. Only Kitchen station queue is accessible."
+                )
+            effective_station = "KITCHEN"
+        else:
+            effective_station = station.upper() if station else None
 
         query = select(Order).where(Order.restaurant_id == target_rest_id)
 
@@ -937,17 +953,17 @@ async def update_order_status(
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Order).where(Order.id == order_id)
-    result = await db.execute(query)
-    order = result.scalar_one_or_none()
-    if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-
     if not caller.is_authenticated:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required to update order status"
         )
+
+    query = select(Order).where(Order.id == order_id)
+    result = await db.execute(query)
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
     r_obj = res_r.scalar_one_or_none()
@@ -990,12 +1006,33 @@ async def update_order_status(
                 detail=f"Forbidden: Station staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
             )
 
-    if payload.kitchenStatus:
-        order.kitchen_status = payload.kitchenStatus
-    if payload.barStatus:
-        order.bar_status = payload.barStatus
+    # Station-specific mutation role authorization
     if payload.hookahStatus:
+        allowed_hookah_roles = ["HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN"]
+        if not caller.is_admin and caller_role not in allowed_hookah_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: Staff role '{caller_role}' is not authorized to update Hookah status. Only Hookah staff and managers can update Hookah station."
+            )
         order.hookah_status = payload.hookahStatus
+
+    if payload.barStatus:
+        allowed_bar_roles = ["BAR", "BARTENDER", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN"]
+        if not caller.is_admin and caller_role not in allowed_bar_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: Staff role '{caller_role}' is not authorized to update Bar status. Only Bar staff and managers can update Bar station."
+            )
+        order.bar_status = payload.barStatus
+
+    if payload.kitchenStatus:
+        allowed_kitchen_roles = ["KITCHEN", "CHEF", "COOK", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN"]
+        if not caller.is_admin and caller_role not in allowed_kitchen_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: Staff role '{caller_role}' is not authorized to update Kitchen status. Only Kitchen staff and managers can update Kitchen station."
+            )
+        order.kitchen_status = payload.kitchenStatus
 
     # Determine station items in order
     has_k_items = False

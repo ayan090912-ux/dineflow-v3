@@ -444,7 +444,7 @@ export class AuthClient {
     };
   }
 
-  async loginStaffTerminal(role: 'KITCHEN' | 'WAITER' | 'BAR' | 'INVENTORY', identifier: string, password?: string) {
+  async loginStaffTerminal(role: 'KITCHEN' | 'WAITER' | 'BAR' | 'INVENTORY' | 'HOOKAH' | 'SHISHA', identifier: string, password?: string) {
     await delay(200);
     const targetRestId = this.base.getCurrentRestaurantId() || 'the-start';
     const roleKey = role.toLowerCase();
