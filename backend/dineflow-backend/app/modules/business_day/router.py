@@ -725,7 +725,7 @@ async def close_business_day(
                 "closedDay": closed_formatted,
                 "timestamp": now_utc.isoformat(),
             },
-            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR", "CUSTOMER"]
+            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR", "HOOKAH", "CUSTOMER"]
         )
         await ws_manager.broadcast_event(
             restaurant_id=rest.id,
@@ -739,7 +739,7 @@ async def close_business_day(
                 "closedDay": closed_formatted,
                 "timestamp": now_utc.isoformat(),
             },
-            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR", "CUSTOMER"]
+            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR", "HOOKAH", "CUSTOMER"]
         )
     except Exception as ws_err:
         logger.warning(f"[WS_BROADCAST_NOTICE] DayClosed error: {ws_err}")
@@ -862,7 +862,7 @@ async def open_business_day(
                 "businessDay": formatted,
                 "timestamp": now_utc.isoformat()
             },
-            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR"]
+            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR", "HOOKAH"]
         )
         await ws_manager.broadcast_event(
             restaurant_id=rest.id,
@@ -875,7 +875,7 @@ async def open_business_day(
                 "businessDay": formatted,
                 "timestamp": now_utc.isoformat()
             },
-            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR"]
+            target_audience=["OWNER", "MANAGER", "WAITER", "KITCHEN", "BAR", "HOOKAH"]
         )
     except Exception as e:
         logger.warning(f"[WS_BROADCAST_NOTICE] BusinessDayOpened error: {e}")

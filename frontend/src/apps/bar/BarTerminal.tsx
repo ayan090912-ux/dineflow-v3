@@ -24,7 +24,7 @@ import {
   ArrowRight,
   SlidersHorizontal,
 } from 'lucide-react';
-import { Button, Card, Badge, Input, Modal, DinelyLogo } from '../../packages/ui';
+import { Badge, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Order, OrderItem, OrderStatus, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
@@ -40,8 +40,6 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
   const [isLoading, setIsLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastNotification, setLastNotification] = useState<string>('');
-  const [selectedOrderForEta, setSelectedOrderForEta] = useState<Order | null>(null);
-  const [customEtaInput, setCustomEtaInput] = useState('10');
 
   useEffect(() => {
     const currentRestId = api.getCurrentRestaurantId() || '';
@@ -209,28 +207,6 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
       console.error('Failed to update drink order status:', err);
     }
   };
-
-  const handleAdjustEta = async (orderId: string, deltaMinutes: number) => {
-    try {
-      const order = orders.find((o) => o.id === orderId);
-      const currentEta = order?.estimatedPrepTimeMinutes || 10;
-      const newEta = Math.max(1, currentEta + deltaMinutes);
-      await api.updateOrderETA(orderId, newEta, `Adjusted by ${deltaMinutes > 0 ? '+' : ''}${deltaMinutes}m`);
-      await loadBarOrders();
-    } catch (err) {
-      console.error('Failed to adjust ETA:', err);
-    }
-  };
-
-  const handleSaveCustomEta = async () => {
-    if (!selectedOrderForEta) return;
-    const mins = parseInt(customEtaInput, 10);
-    if (isNaN(mins) || mins <= 0) return;
-    await api.updateOrderETA(selectedOrderForEta.id, mins, 'Custom Bartender ETA');
-    setSelectedOrderForEta(null);
-    await loadBarOrders();
-  };
-
   // Divide orders into Bar Pipeline stages based strictly on authoritative station and order status
   const pendingOrders = orders.filter(
     (o) =>
@@ -404,8 +380,6 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                   actionLabel="Start Prep"
                   actionVariant="primary"
                   onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
-                  onAdjustEta={(delta) => handleAdjustEta(ord.id, delta)}
-                  onCustomEta={() => setSelectedOrderForEta(ord)}
                 />
               ))}
               {pendingOrders.length === 0 && (
@@ -436,8 +410,6 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                   actionLabel="Mark as Ready"
                   actionVariant="success"
                   onAction={() => handleUpdateStatus(ord.id, 'READY')}
-                  onAdjustEta={(delta) => handleAdjustEta(ord.id, delta)}
-                  onCustomEta={() => setSelectedOrderForEta(ord)}
                 />
               ))}
               {preparingOrders.length === 0 && (
@@ -503,30 +475,6 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
           </div>
         </div>
       </main>
-
-      {/* CUSTOM ETA MODAL */}
-      <Modal
-        isOpen={!!selectedOrderForEta}
-        onClose={() => setSelectedOrderForEta(null)}
-        title={`Set Beverage Prep Time • Table ${selectedOrderForEta?.tableNumber}`}
-      >
-        <div className="space-y-4 text-xs">
-          <Input
-            label="Estimated Prep Duration (Minutes)"
-            type="number"
-            value={customEtaInput}
-            onChange={(e) => setCustomEtaInput(e.target.value)}
-          />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setSelectedOrderForEta(null)}>
-              Cancel
-            </Button>
-            <Button variant="brand" size="sm" onClick={handleSaveCustomEta} className="font-medium">
-              Save Duration
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };
@@ -537,10 +485,8 @@ const BarOrderCard: React.FC<{
   actionLabel?: string;
   actionVariant?: 'primary' | 'success' | 'neutral';
   onAction?: () => void;
-  onAdjustEta?: (deltaMinutes: number) => void;
-  onCustomEta?: () => void;
   isCompleted?: boolean;
-}> = ({ order, actionLabel, actionVariant = 'primary', onAction, onAdjustEta, onCustomEta, isCompleted }) => {
+}> = ({ order, actionLabel, actionVariant = 'primary', onAction, isCompleted }) => {
   const drinkItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
   if (drinkItems.length === 0) {
     return null;
@@ -564,8 +510,8 @@ const BarOrderCard: React.FC<{
             <span className="text-[11px] font-mono text-slate-400">#{order.id.slice(-4)}</span>
           </div>
           <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
-            <Clock className="w-3 h-3 text-emerald-400" />
-            <span>{order.estimatedPrepTimeMinutes || 10}m ETA</span>
+            <Clock className="w-3 h-3 text-slate-500" />
+            <span>{order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ordered'}</span>
           </div>
         </div>
 
@@ -602,37 +548,6 @@ const BarOrderCard: React.FC<{
             </div>
           ))}
         </div>
-
-        {/* ETA Adjustment Buttons */}
-        {!isCompleted && onAdjustEta && (
-          <div className="flex items-center justify-between gap-2 text-[10px] font-mono bg-[#0e1117] px-2 py-1 rounded-lg border border-[#1e232e]">
-            <span className="text-slate-400">Adjust prep:</span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => onAdjustEta(-5)}
-                className="px-1.5 py-0.5 rounded bg-[#181d27] text-slate-300 hover:text-white hover:bg-[#222838] border border-[#2d3545] transition-colors"
-                title="Minus 5 minutes"
-              >
-                -5m
-              </button>
-              <button
-                onClick={() => onAdjustEta(5)}
-                className="px-1.5 py-0.5 rounded bg-[#181d27] text-slate-300 hover:text-white hover:bg-[#222838] border border-[#2d3545] transition-colors"
-                title="Plus 5 minutes"
-              >
-                +5m
-              </button>
-              {onCustomEta && (
-                <button
-                  onClick={onCustomEta}
-                  className="px-1.5 py-0.5 rounded bg-[#181d27] text-emerald-400 border border-[#2d3545] hover:bg-[#222838] transition-colors"
-                >
-                  Custom
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Special Instructions */}
         {order.specialInstructions && (

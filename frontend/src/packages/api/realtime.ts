@@ -59,7 +59,7 @@ export interface RealTimeEventPayload {
   paymentMethod?: string;
   parentOrderId?: string;
   ticketId?: string;
-  station?: 'KITCHEN' | 'BAR';
+  station?: 'KITCHEN' | 'BAR' | 'HOOKAH';
   restaurantId?: string;
   restaurantName?: string;
   tableNumber?: string;
@@ -75,6 +75,7 @@ export interface RealTimeEventPayload {
   actor?: string;
   barStatus?: string;
   kitchenStatus?: string;
+  hookahStatus?: string;
   status?: string;
   sessionId?: string;
   businessDayId?: string;
@@ -89,6 +90,7 @@ export interface RealTimeEventPayload {
   hasKitchen?: boolean;
   hasWaiter?: boolean;
   hasBar?: boolean;
+  hasHookah?: boolean;
   hasInventory?: boolean;
   hasBilling?: boolean;
   hasTables?: boolean;

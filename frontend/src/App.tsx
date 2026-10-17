@@ -18,6 +18,7 @@ const CustomerApp = lazy(() => import('./apps/customer/CustomerApp').then(m => (
 const WaiterTerminalOS = lazy(() => import('./apps/waiter/WaiterTerminalOS').then(m => ({ default: m.WaiterTerminalOS })));
 const KitchenETADashboard = lazy(() => import('./apps/restaurant/KitchenETADashboard').then(m => ({ default: m.KitchenETADashboard })));
 const BarTerminal = lazy(() => import('./apps/bar/BarTerminal').then(m => ({ default: m.BarTerminal })));
+const HookahTerminal = lazy(() => import('./apps/hookah/HookahTerminal').then(m => ({ default: m.HookahTerminal })));
 const InventoryTerminalOS = lazy(() => import('./apps/inventory/InventoryTerminalOS').then(m => ({ default: m.InventoryTerminalOS })));
 const RestaurantOperationsCenter = lazy(() => import('./apps/operations/RestaurantOperationsCenter').then(m => ({ default: m.RestaurantOperationsCenter })));
 const AuthPage = lazy(() => import('./apps/auth/AuthPage').then(m => ({ default: m.AuthPage })));
@@ -70,7 +71,7 @@ function PlatformTenantRedirector({
 
         // Explicit Staff Guard: Staff accounts NEVER enter Owner Workspace selection
         const isStaffUser = (user as any)?.scope === 'STAFF' ||
-          ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes(user?.role as string);
+          ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'HOOKAH', 'SHISHA', 'INVENTORY', 'CASHIER'].includes(user?.role as string);
 
         if (isStaffUser) {
           const r = (user?.role || '').toUpperCase();
@@ -78,6 +79,7 @@ function PlatformTenantRedirector({
             r === 'WAITER' ? '/waiter' :
             r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
             r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+            r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
             r === 'INVENTORY' ? '/inventory' : '/waiter'
           );
 
@@ -116,7 +118,7 @@ function PlatformTenantRedirector({
             return;
           }
 
-          const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/inventory', '/billing'].some((r) => targetPath.startsWith(r));
+          const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/hookah', '/shisha', '/inventory', '/billing'].some((r) => targetPath.startsWith(r));
           const finalPath = targetPath.startsWith('/restaurant') || isStaffRoute ? targetPath : '/restaurant/dashboard';
           const targetUrl = getTenantUrl(onlyRest, finalPath);
           window.location.replace(targetUrl);
@@ -180,7 +182,7 @@ function PlatformTenantRedirector({
             rest.lifecycleStatus !== 'SUSPENDED');
 
         if (isLive) {
-          const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/inventory', '/billing'].some((r) => targetPath.startsWith(r));
+          const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/hookah', '/shisha', '/inventory', '/billing'].some((r) => targetPath.startsWith(r));
           const finalPath = targetPath.startsWith('/restaurant') || isStaffRoute ? targetPath : '/restaurant/dashboard';
           window.location.href = getTenantUrl(rest, finalPath);
         } else {
@@ -853,6 +855,49 @@ function AppContent() {
         return <BarTerminal restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
       }
 
+      // 4.5. Hookah & Shisha Terminal
+      if (tenantApp === 'HOOKAH') {
+        if (!isModuleEnabled(resolvedTenant, 'hookah')) {
+          return (
+            <ModuleNotEnabledPage
+              moduleName="Hookah & Shisha Terminal"
+              restaurant={resolvedTenant}
+              onNavigate={navigateTo}
+            />
+          );
+        }
+
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="hookah"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                navigateTo('/hookah');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedStaff =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['HOOKAH', 'SHISHA', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedStaff) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="HOOKAH STAFF"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <HookahTerminal restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
+      }
+
       // 5. Inventory Terminal
       if (tenantApp === 'INVENTORY') {
         if (!isModuleEnabled(resolvedTenant, 'inventory')) {
@@ -1069,6 +1114,7 @@ function AppContent() {
                 r === 'WAITER' ? '/waiter' :
                 r === 'CHEF' || r === 'KITCHEN' ? '/kitchen' :
                 r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+                r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
                 r === 'INVENTORY' ? '/inventory' : '/billing'
               );
               navigateTo(target);
@@ -1278,6 +1324,19 @@ function AppContent() {
       );
     }
 
+    if (cleanPath === '/hookah/login' || cleanPath === '/shisha/login') {
+      return (
+        <RoleLoginPage
+          portal="hookah"
+          onNavigate={navigateTo}
+          onLoginSuccess={(_, user) => {
+            setCurrentUser(user);
+            navigateTo('/hookah');
+          }}
+        />
+      );
+    }
+
     if (cleanPath === '/waiter/login' || cleanPath === '/servo/login') {
       return (
         <RoleLoginPage
@@ -1321,6 +1380,7 @@ function AppContent() {
               r === 'WAITER' ? '/waiter' :
               r === 'CHEF' || r === 'KITCHEN' ? '/kitchen' :
               r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+              r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
               r === 'INVENTORY' ? '/inventory' : '/billing'
             );
             navigateTo(target);
@@ -1485,6 +1545,10 @@ function AppContent() {
       cleanPath.startsWith('/waiter/') ||
       cleanPath === '/bar' ||
       cleanPath.startsWith('/bar/') ||
+      cleanPath === '/hookah' ||
+      cleanPath.startsWith('/hookah/') ||
+      cleanPath === '/shisha' ||
+      cleanPath.startsWith('/shisha/') ||
       cleanPath === '/inventory' ||
       cleanPath.startsWith('/inventory/') ||
       cleanPath === '/billing' ||
@@ -1503,7 +1567,7 @@ function AppContent() {
       cleanPath.startsWith('/settings/')
     ) {
       const isStaffUser = (currentUser as any)?.scope === 'STAFF' ||
-        ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'INVENTORY', 'CASHIER'].includes((currentUser?.role || '') as string);
+        ['WAITER', 'KITCHEN', 'CHEF', 'COOK', 'BAR', 'BARTENDER', 'HOOKAH', 'SHISHA', 'INVENTORY', 'CASHIER'].includes((currentUser?.role || '') as string);
 
       if (isStaffUser) {
         const r = (currentUser?.role || '').toUpperCase();
@@ -1511,6 +1575,7 @@ function AppContent() {
           r === 'WAITER' ? '/waiter' :
           r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
           r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+          r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
           r === 'INVENTORY' ? '/inventory' : '/waiter'
         );
         const matchingRest = api.restaurants.find((res) => res.id === currentUser?.restaurantId);
@@ -1541,7 +1606,7 @@ function AppContent() {
                     onlyRest.lifecycleStatus !== 'PENDING_APPROVAL' &&
                     onlyRest.lifecycleStatus !== 'REJECTED';
                   if (isLive) {
-                    const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/inventory', '/billing'].some((r) => cleanPath.startsWith(r));
+                    const isStaffRoute = ['/waiter', '/kitchen', '/bar', '/hookah', '/shisha', '/inventory', '/billing'].some((r) => cleanPath.startsWith(r));
                     const finalTarget = cleanPath.startsWith('/restaurant') || isStaffRoute ? cleanPath : '/restaurant/dashboard';
                     window.location.href = getTenantUrl(onlyRest, finalTarget);
                   } else {

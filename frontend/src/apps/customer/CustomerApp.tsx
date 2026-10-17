@@ -46,7 +46,7 @@ import {
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CallWaiterModal } from './CallWaiterModal';
 import { api } from '../../packages/api/client';
-import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, TableSession, MenuCategory, getFulfillmentStation } from '../../packages/types';
+import { MenuItem, Order, OrderItem, OrderStatus, Table, Restaurant, TableSession, MenuCategory, getFulfillmentStation, isModuleEnabled } from '../../packages/types';
 import { CustomerLiveTracker } from './CustomerLiveTracker';
 import { CustomerBillModal } from './CustomerBillModal';
 import { realtimeBus } from '../../packages/api/realtime';
@@ -57,7 +57,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   tableNumber = 'Table 01',
 }) => {
   const { theme, formatPrice, setTheme } = useTheme();
-  const [currentMenuTab, setCurrentMenuTab] = useState<'FOOD' | 'BAR'>('FOOD');
+  const [currentMenuTab, setCurrentMenuTab] = useState<'FOOD' | 'BAR' | 'HOOKAH'>('FOOD');
+  const [pendingAgeTab, setPendingAgeTab] = useState<'BAR' | 'HOOKAH'>('BAR');
   const [isAgeConfirmed, setIsAgeConfirmed] = useState<boolean>(false);
   const [isAgeModalOpen, setIsAgeModalOpen] = useState<boolean>(false);
 
@@ -431,8 +432,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     await loadTableInfo();
   };
 
-  const handleSwitchMenuTab = (tab: 'FOOD' | 'BAR') => {
-    if (tab === 'BAR' && !isAgeConfirmed) {
+  const handleSwitchMenuTab = (tab: 'FOOD' | 'BAR' | 'HOOKAH') => {
+    if ((tab === 'BAR' || tab === 'HOOKAH') && !isAgeConfirmed) {
+      setPendingAgeTab(tab);
       setIsAgeModalOpen(true);
       return;
     }
@@ -443,12 +445,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const handleConfirmAge = () => {
     setIsAgeConfirmed(true);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('dinely_bar_age_verified', 'true');
+      sessionStorage.setItem('dinely_age_verified', 'true');
     }
     setIsAgeModalOpen(false);
-    setCurrentMenuTab('BAR');
+    setCurrentMenuTab(pendingAgeTab);
     setActiveCategory('all');
-    addToast('success', 'Age Verified', 'Welcome to the Bar Lounge Menu.');
+    addToast('success', 'Age Verified', `Welcome to the ${pendingAgeTab === 'HOOKAH' ? 'Hookah & Shisha' : 'Bar'} Menu.`);
   };
 
   const getTableStorageKey = (restId?: string, tableNum?: string) => {
@@ -569,7 +571,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     const hasBarItems = orderItems.some((i) => i.targetDestination === 'BAR');
     const hasKitchenItems = orderItems.some((i) => i.targetDestination === 'KITCHEN');
-    const targetDest = hasBarItems && hasKitchenItems ? 'MIXED' : hasBarItems ? 'BAR' : 'KITCHEN';
+    const hasHookahItems = orderItems.some((i) => i.targetDestination === 'HOOKAH');
+    const activeStations = [
+      hasKitchenItems && 'KITCHEN',
+      hasBarItems && 'BAR',
+      hasHookahItems && 'HOOKAH',
+    ].filter(Boolean);
+    const targetDest: 'KITCHEN' | 'BAR' | 'HOOKAH' | 'MIXED' =
+      activeStations.length > 1 ? 'MIXED' : (activeStations[0] as 'KITCHEN' | 'BAR' | 'HOOKAH') || 'KITCHEN';
 
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     const isNoTable = currentRestaurant?.hasTables === false;
@@ -597,10 +606,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setCart([]);
       setIsCartOpen(false);
       setIsOrderStatusModalOpen(true);
+
+      const routedTo = [
+        hasKitchenItems && 'Kitchen KDS',
+        hasBarItems && 'Bar Terminal',
+        hasHookahItems && 'Hookah Terminal',
+      ].filter(Boolean).join(' & ');
+
       addToast(
         'success',
         'Order Transmitted',
-        `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${hasBarItems ? 'Bar Terminal' : ''} ${hasKitchenItems ? 'Kitchen KDS' : ''}`.trim()
+        `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${routedTo || 'Kitchen'}`.trim()
       );
     } catch (err: any) {
       console.error('Order checkout failed:', err);
@@ -629,13 +645,19 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const totalCartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
 
   const hasBarDivision = Boolean(currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR');
+  const hasHookahDivision = Boolean(currentRestaurant?.hasHookah !== false && isModuleEnabled(currentRestaurant, 'hookah'));
 
   // Filter Items
   const filteredItems = menuItems.filter((item) => {
-    if (hasBarDivision) {
-      const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory !== undefined;
-      if (currentMenuTab === 'BAR' && !isBarItem) return false;
-      if (currentMenuTab === 'FOOD' && isBarItem) return false;
+    const isHookahItem = item.targetDestination === 'HOOKAH' || getFulfillmentStation(item) === 'HOOKAH';
+    const isBarItem = !isHookahItem && (item.targetDestination === 'BAR' || item.isAlcoholic || item.barCategory !== undefined);
+
+    if (currentMenuTab === 'HOOKAH') {
+      if (!isHookahItem) return false;
+    } else if (currentMenuTab === 'BAR') {
+      if (!isBarItem) return false;
+    } else {
+      if (isHookahItem || isBarItem) return false;
     }
 
     let matchesCat = activeCategory === 'all';
@@ -810,6 +832,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   }
 
   const isBarTheme = currentMenuTab === 'BAR';
+  const isHookahTheme = currentMenuTab === 'HOOKAH';
 
   return (
     <div className={`min-h-screen font-sans pb-44 sm:pb-48 max-w-md mx-auto relative border-x border-white/[0.08] bg-[#0b0d11] text-[#f0f2f5]`}>
@@ -818,7 +841,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Hero Banner Header */}
       <div className="relative h-48 w-full bg-[#12151b] overflow-hidden">
         <img
-          src={isBarTheme ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1200&auto=format&fit=crop&q=80' : theme.bannerUrl}
+          src={
+            isHookahTheme
+              ? 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=1200&auto=format&fit=crop&q=80'
+              : isBarTheme
+              ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1200&auto=format&fit=crop&q=80'
+              : theme.bannerUrl
+          }
           alt={theme.restaurantName}
           className="w-full h-full object-cover brightness-[0.7] transition-all duration-700"
         />
@@ -908,38 +937,59 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
-      {/* Food Menu ⇄ Bar Menu Switcher (If Bar Feature is Enabled) */}
-      {(currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR') && (
+      {/* Food Menu ⇄ Bar Menu ⇄ Hookah Menu Switcher */}
+      {(hasBarDivision || hasHookahDivision) && (
         <div className="px-4 pt-3 pb-1">
-          <div className="grid grid-cols-2 p-1 bg-[#12151b] rounded-xl border border-white/[0.08] text-xs font-medium">
+          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1 bg-[#12151b] rounded-xl border border-white/[0.08] text-xs font-medium`}>
             <button
               onClick={() => handleSwitchMenuTab('FOOD')}
-              className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+              className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
                 currentMenuTab === 'FOOD'
                   ? 'bg-white/[0.08] text-white font-semibold'
                   : 'text-white/40 hover:text-white'
               }`}
             >
               <Utensils className="w-3.5 h-3.5" />
-              <span>Food Menu</span>
+              <span>Food</span>
             </button>
 
-            <button
-              onClick={() => handleSwitchMenuTab('BAR')}
-              className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                currentMenuTab === 'BAR'
-                  ? 'bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/20'
-                  : 'text-white/40 hover:text-white'
-              }`}
-            >
-              <Wine className="w-3.5 h-3.5 text-amber-400" />
-              <span>Beverages & Bar</span>
-              {isAgeConfirmed && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  21+
-                </span>
-              )}
-            </button>
+            {hasBarDivision && (
+              <button
+                onClick={() => handleSwitchMenuTab('BAR')}
+                className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                  currentMenuTab === 'BAR'
+                    ? 'bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/20'
+                    : 'text-white/40 hover:text-white'
+                }`}
+              >
+                <Wine className="w-3.5 h-3.5 text-purple-400" />
+                <span>Bar</span>
+                {isAgeConfirmed && (
+                  <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    21+
+                  </span>
+                )}
+              </button>
+            )}
+
+            {hasHookahDivision && (
+              <button
+                onClick={() => handleSwitchMenuTab('HOOKAH')}
+                className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                  currentMenuTab === 'HOOKAH'
+                    ? 'bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/20'
+                    : 'text-white/40 hover:text-white'
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>Hookah</span>
+                {isAgeConfirmed && (
+                  <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    18+
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1006,9 +1056,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 : 'bg-[#12151b] text-white/60 hover:text-white border border-white/[0.08]'
             }`}
           >
-            All {isBarTheme ? 'Beverages' : 'Categories'}
+            All {isHookahTheme ? 'Flavours' : isBarTheme ? 'Beverages' : 'Categories'}
           </button>
-          {(isBarTheme
+          {(isHookahTheme
+            ? [
+                { id: 'Hookah & Shisha', name: 'All Shisha' },
+                { id: 'Classic Flavors', name: 'Classic' },
+                { id: 'Exotic Blends', name: 'Exotic Blends' },
+                { id: 'Herbal & Tobacco-Free', name: 'Herbal' },
+                { id: 'Ice Base & Addons', name: 'Ice Base' },
+                { id: 'Accessories', name: 'Accessories' },
+              ]
+            : isBarTheme
             ? [
                 { id: 'Cocktails', name: 'Cocktails' },
                 { id: 'Signature Drinks', name: 'Signature' },
@@ -1159,8 +1218,23 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             );
           })}
           {filteredItems.length === 0 && (
-            <div className="p-8 text-center bg-[#12151b] border border-dashed border-white/[0.08] rounded-xl text-white/40 text-xs">
-              No items found in this category.
+            <div className="p-8 text-center bg-[#12151b] border border-dashed border-white/[0.08] rounded-xl text-white/40 text-xs space-y-2">
+              {isHookahTheme ? (
+                <>
+                  <Flame className="w-8 h-8 text-amber-400 mx-auto opacity-70" />
+                  <p className="font-semibold text-white/80">No Hookah or Shisha products currently available.</p>
+                  <p className="text-[11px] text-white/50 max-w-xs mx-auto leading-relaxed">
+                    This venue has not activated any shisha blends yet. Restaurant owners can configure hookah flavors, coal options, and pricing under Owner OS &gt; Menu &amp; Pricing &gt; Hookah &amp; Shisha.
+                  </p>
+                </>
+              ) : isBarTheme ? (
+                <>
+                  <Wine className="w-8 h-8 text-purple-400 mx-auto opacity-70" />
+                  <p className="font-semibold text-white/80">No bar drinks currently available in this category.</p>
+                </>
+              ) : (
+                <p>No items found in this category.</p>
+              )}
             </div>
           )}
         </div>
@@ -1414,16 +1488,21 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       <Modal
         isOpen={isAgeModalOpen}
         onClose={() => setIsAgeModalOpen(false)}
-        title="Age Verification (21+)"
+        title={pendingAgeTab === 'HOOKAH' ? "Age Verification (Hookah & Shisha 18+)" : "Age Verification (Bar 21+)"}
       >
         <div className="space-y-4 text-xs font-sans">
           <div className="p-4 bg-[#12151b] border border-white/[0.08] rounded-xl space-y-2">
             <div className="flex items-center gap-2 font-semibold text-amber-400 text-xs">
-              <Wine className="w-4 h-4 text-amber-400" />
+              {pendingAgeTab === 'HOOKAH' ? <Flame className="w-4 h-4 text-amber-400" /> : <Wine className="w-4 h-4 text-amber-400" />}
               <span>Age Verification Required</span>
             </div>
             <p className="text-xs text-white/60 leading-relaxed">
-              Before viewing or ordering from our craft beverage and cocktail menu, please confirm that you are of legal drinking age in your jurisdiction (21+).
+              {pendingAgeTab === 'HOOKAH'
+                ? "Before viewing or ordering from our Hookah & Shisha lounge catalog, please confirm that you meet the statutory age requirement (18+ / 21+ depending on regional law). Hookah products are served exclusively to eligible adults."
+                : "Before viewing or ordering from our craft beverage and cocktail menu, please confirm that you are of legal drinking age in your jurisdiction (21+)."}
+            </p>
+            <p className="text-[10px] text-amber-400/80 font-mono italic">
+              Notice: Lounge staff may verify official government photo identification upon table delivery.
             </p>
           </div>
 
@@ -1435,7 +1514,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               defaultChecked={true}
             />
             <label htmlFor="ageCheckbox" className="text-xs text-white/80 font-medium cursor-pointer">
-              I confirm I am of legal drinking age (21+).
+              {pendingAgeTab === 'HOOKAH'
+                ? "I confirm I am of legal age to purchase and consume hookah products."
+                : "I confirm I am of legal drinking age (21+)."}
             </label>
           </div>
 
@@ -1453,9 +1534,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               size="sm"
               onClick={handleConfirmAge}
               className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold"
-              icon={<Wine className="w-4 h-4" />}
+              icon={pendingAgeTab === 'HOOKAH' ? <Flame className="w-4 h-4" /> : <Wine className="w-4 h-4" />}
             >
-              Confirm & Enter Bar Menu
+              {pendingAgeTab === 'HOOKAH' ? "Confirm & Enter Hookah Lounge" : "Confirm & Enter Bar Menu"}
             </Button>
           </div>
         </div>

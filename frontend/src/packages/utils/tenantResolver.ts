@@ -18,6 +18,7 @@ export type TenantAppType =
   | 'KITCHEN'
   | 'WAITER'
   | 'BAR'
+  | 'HOOKAH'
   | 'INVENTORY'
   | 'BILLING'
   | 'SETTINGS'
@@ -139,6 +140,11 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
   // 4. Bar Terminal
   if (p === '/bar' || p.startsWith('/bar/') || p === '/bartender' || p.startsWith('/bartender/')) {
     return 'BAR';
+  }
+
+  // 4.5. Hookah & Shisha Terminal
+  if (p === '/hookah' || p.startsWith('/hookah/') || p === '/shisha' || p.startsWith('/shisha/')) {
+    return 'HOOKAH';
   }
 
   // 5. Inventory Terminal

@@ -85,6 +85,7 @@ import { Order, MenuItem, Table, Employee, InventoryItem, Supplier, OrderStatus,
 import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
 import { BarTerminal } from '../bar/BarTerminal';
+import { HookahTerminal } from '../hookah/HookahTerminal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
 import { TaxManagement } from './TaxManagement';
@@ -110,7 +111,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   onNavigate,
 }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings' | 'weddings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'hookah' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings' | 'weddings'>(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab')?.toLowerCase();
@@ -120,6 +121,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (tabParam === 'orders') return 'orders';
       if (tabParam === 'kitchen') return 'kitchen';
       if (tabParam === 'bar') return 'bar';
+      if (tabParam === 'hookah' || tabParam === 'shisha') return 'hookah';
       if (tabParam === 'waiter') return 'waiter';
       if (tabParam === 'inventory') return 'inventory';
       if (tabParam === 'billing') return 'billing';
@@ -140,6 +142,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (p.includes('/waiter')) return 'waiter';
       if (p.includes('/kitchen')) return 'kitchen';
       if (p.includes('/bar')) return 'bar';
+      if (p.includes('/hookah') || p.includes('/shisha')) return 'hookah';
       if (p.includes('/day-management') || p.includes('/daily-closing') || p.includes('/day') || p.includes('/closing')) return 'day_management';
       if (p.includes('/workspace_settings') || p.includes('/settings')) return 'workspace_settings';
     }
@@ -215,7 +218,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   });
 
   // Menu Search, Filter, Edit & Delete State
-  const [menuCatalogMode, setMenuCatalogMode] = useState<'FOOD' | 'BAR'>('FOOD');
+  const [menuCatalogMode, setMenuCatalogMode] = useState<'FOOD' | 'BAR' | 'HOOKAH'>('FOOD');
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('ALL');
   const [dietaryFilter, setDietaryFilter] = useState<'ALL' | 'VEG' | 'NON_VEG'>('ALL');
@@ -401,12 +404,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   });
 
   const isBarEnabled = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
-  const activeCatalogMode = isBarEnabled ? menuCatalogMode : 'FOOD';
+  const isHookahEnabled = currentRestaurant?.hasHookah !== false && isModuleEnabled(currentRestaurant, 'hookah');
+  const activeCatalogMode = (menuCatalogMode === 'HOOKAH' && isHookahEnabled) ? 'HOOKAH' : (menuCatalogMode === 'BAR' && isBarEnabled) ? 'BAR' : 'FOOD';
 
   const filteredMenuItems = menuItems.filter((item) => {
-    const isBarItem = item.targetDestination === 'BAR' || item.isAlcoholic || (item.barCategory !== undefined && item.barCategory !== null);
+    const isHookahItem = item.targetDestination === 'HOOKAH' || getFulfillmentStation(item) === 'HOOKAH';
+    const isBarItem = !isHookahItem && (item.targetDestination === 'BAR' || item.isAlcoholic || (item.barCategory !== undefined && item.barCategory !== null));
+    if (activeCatalogMode === 'HOOKAH' && !isHookahItem) return false;
     if (activeCatalogMode === 'BAR' && !isBarItem) return false;
-    if (activeCatalogMode === 'FOOD' && isBarItem) return false;
+    if (activeCatalogMode === 'FOOD' && (isBarItem || isHookahItem)) return false;
 
     const foodCatObj = foodCategories.find((c) => c.id === item.categoryId || c.name === item.categoryId);
     const matchesCategory =
@@ -1013,18 +1019,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       }
 
       const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+      const isHookah = isHookahEnabled && activeCatalogMode === 'HOOKAH';
       const isBar = isBarEnabled && activeCatalogMode === 'BAR';
-      const isVeg = isBar ? false : newItem.isVegetarian !== false;
+      const isVeg = isHookah || isBar ? false : newItem.isVegetarian !== false;
 
       const defaultFoodCat = foodCategories[0]?.id || foodCategories[0]?.name || 'cat-starters';
       const defaultBarCat = barCategories[0]?.name || barCategories[0]?.id || 'Cocktails';
+      const defaultHookahCat = 'Hookah & Shisha';
 
       let finalCat = newItem.categoryId;
       if (!finalCat || finalCat === 'cat-1') {
-        finalCat = isBar ? defaultBarCat : defaultFoodCat;
+        finalCat = isHookah ? defaultHookahCat : isBar ? defaultBarCat : defaultFoodCat;
       }
 
       const cleanPrice = parseFloat(newItem.price.toString().replace(/[^0-9.]/g, '')) || 0;
+
+      const defaultImage = isHookah
+        ? 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600'
+        : isBar
+        ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600'
+        : 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600';
 
       const added = await api.addMenuItem({
         restaurantId: restId,
@@ -1033,26 +1047,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         name: newItem.name.trim(),
         description: (newItem.description || '').trim(),
         price: cleanPrice,
-        image: newItem.image || (isBar ? 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600' : 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600'),
+        image: newItem.image || defaultImage,
         isAvailable: true,
         isVegetarian: isVeg,
         dietaryType: isVeg ? 'VEG' : 'NON_VEG',
-        targetDestination: isBar ? 'BAR' : 'KITCHEN',
+        targetDestination: isHookah ? 'HOOKAH' : isBar ? 'BAR' : 'KITCHEN',
         isAlcoholic: isBar,
         alcoholPercentage: isBar ? 40 : 0,
-        glassSize: isBar ? '60ml Peg' : undefined,
+        glassSize: isBar ? '60ml Peg' : isHookah ? 'Standard Pot' : undefined,
       });
 
       if (added) {
         setMenuItems((prev) => [...prev, added]);
       }
 
-      addToast('success', `${isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `"${newItem.name.trim()}" added to catalog`);
+      addToast('success', `${isHookah ? 'Hookah Product' : isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `"${newItem.name.trim()}" added to catalog`);
       setIsAddItemModalOpen(false);
       setSelectedMenuCategory('ALL');
       setMenuSearchQuery('');
       setDietaryFilter('ALL');
-      setNewItem({ name: '', description: '', price: '', categoryId: isBar ? defaultBarCat : defaultFoodCat, isVegetarian: true, image: '' });
+      setNewItem({ name: '', description: '', price: '', categoryId: isHookah ? defaultHookahCat : isBar ? defaultBarCat : defaultFoodCat, isVegetarian: true, image: '' });
     } catch (err: any) {
       addToast('error', 'Failed to Add Item', err.message || 'An error occurred while adding the dish.');
     }
@@ -1607,6 +1621,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               const hasKitchenModule = isModuleEnabled(currentRestaurant, 'kitchen');
               const hasWaiterModule = isModuleEnabled(currentRestaurant, 'waiter');
               const hasBarModule = isModuleEnabled(currentRestaurant, 'bar');
+              const hasHookahModule = isModuleEnabled(currentRestaurant, 'hookah');
               const hasInventoryModule = isModuleEnabled(currentRestaurant, 'inventory');
               const hasBillingModule = isModuleEnabled(currentRestaurant, 'billing');
               const hasTablesModule = isModuleEnabled(currentRestaurant, 'tables');
@@ -1653,6 +1668,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       : []),
                     ...(hasBarModule
                       ? [{ id: 'bar', label: 'Bar Terminal', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
+                      : []),
+                    ...(hasHookahModule
+                      ? [{ id: 'hookah', label: 'Hookah Terminal', icon: <Flame className="w-4 h-4 text-amber-400" />, badge: 'HOOKAH' }]
                       : []),
                     ...(hasInventoryModule
                       ? [{ id: 'inventory', label: 'Inventory Stock', icon: <Package className="w-4 h-4" /> }]
@@ -1855,6 +1873,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'orders' && 'POS & QR Orders Stream'}
               {activeTab === 'kitchen' && 'Kitchen Display System (KDS)'}
               {activeTab === 'bar' && 'Bar Terminal (KDS)'}
+              {activeTab === 'hookah' && 'Hookah & Shisha Terminal'}
               {activeTab === 'tables' && 'Table Floorplan & QR Codes'}
               {activeTab === 'menu' && 'Menu Engineering & Pricing'}
               {activeTab === 'staff' && 'Employee Clock-In & Shifts'}
@@ -1870,6 +1889,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'orders' && 'Live chronological order stream from table QR codes, POS, and counter pickups.'}
               {activeTab === 'kitchen' && 'Real-time kitchen order bump board, active cooking timers, and runner pass.'}
               {activeTab === 'bar' && 'Craft beverage dispensing queue, mixology timers, and floor pass dispatch.'}
+              {activeTab === 'hookah' && 'Hookah queue, coal heating, tobacco blend customization, and lounge service.'}
               {activeTab === 'tables' && 'Interactive dining area floorplan, live table states, and printable QR standee cards.'}
               {activeTab === 'menu' && 'Food & beverage catalog, category classifications, variants, and live availability toggles.'}
               {activeTab === 'staff' && 'Employee profiles, shift schedules, username & password credentials, and assigned terminal stations.'}
@@ -2424,6 +2444,32 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           )
         )}
 
+        {/* Tab 3.55: Hookah & Shisha Terminal */}
+        {activeTab === 'hookah' && (
+          isModuleEnabled(currentRestaurant, 'hookah') ? (
+            <HookahTerminal restaurant={currentRestaurant} />
+          ) : (
+            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                <Flame className="w-8 h-8" />
+              </div>
+              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+              <h3 className="text-xl font-bold text-white">Hookah & Shisha Terminal is currently disabled for this venue.</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                The Hookah & Shisha station has been deactivated in Terminals & Setup.
+              </p>
+              <div className="pt-2 flex justify-center gap-3">
+                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                  Open Terminals & Setup
+                </Button>
+                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                  Return to Dashboard
+                </Button>
+              </div>
+            </Card>
+          )
+        )}
+
         {/* Tab 3.6: Counter / Pickup QR Entry Point */}
         {activeTab === 'qr_pickup' && (
           <div className="space-y-6">
@@ -2818,8 +2864,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   </p>
                 </div>
 
-                {/* Sub-Tab Switcher: Food Menu vs Bar Menu (Only rendered if Bar is enabled for venue) */}
-                {isBarEnabled && (
+                {/* Sub-Tab Switcher: Food Menu vs Bar Menu vs Hookah (Rendered if Bar or Hookah is enabled for venue) */}
+                {(isBarEnabled || isHookahEnabled) && (
                   <div className="flex items-center gap-1.5 p-1 bg-[#0e1117] rounded-xl border border-[#1e232e]">
                     <button
                       onClick={() => {
@@ -2836,20 +2882,39 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       <span>Food Menu</span>
                     </button>
 
-                    <button
-                      onClick={() => {
-                        setMenuCatalogMode('BAR');
-                        setSelectedMenuCategory('ALL');
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
-                        activeCatalogMode === 'BAR'
-                          ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                          : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
-                      }`}
-                    >
-                      <Wine className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Bar Menu</span>
-                    </button>
+                    {isBarEnabled && (
+                      <button
+                        onClick={() => {
+                          setMenuCatalogMode('BAR');
+                          setSelectedMenuCategory('ALL');
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
+                          activeCatalogMode === 'BAR'
+                            ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                            : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
+                        }`}
+                      >
+                        <Wine className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Bar Menu</span>
+                      </button>
+                    )}
+
+                    {isHookahEnabled && (
+                      <button
+                        onClick={() => {
+                          setMenuCatalogMode('HOOKAH');
+                          setSelectedMenuCategory('ALL');
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
+                          activeCatalogMode === 'HOOKAH'
+                            ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                            : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
+                        }`}
+                      >
+                        <Flame className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Hookah & Shisha</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -2883,7 +2948,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     variant="brand"
                     size="sm"
                     onClick={() => {
-                      const firstCat = (isBarEnabled && activeCatalogMode === 'BAR')
+                      const firstCat = activeCatalogMode === 'HOOKAH'
+                        ? 'Hookah & Shisha'
+                        : (isBarEnabled && activeCatalogMode === 'BAR')
                         ? (barCategories[0]?.name || 'Cocktails')
                         : (foodCategories[0]?.id || foodCategories[0]?.name || 'cat-starters');
                       setNewItem({ name: '', description: '', price: '', categoryId: firstCat, isVegetarian: true, image: '' });
@@ -2892,7 +2959,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     icon={<Plus className="w-3.5 h-3.5" />}
                     className="text-xs"
                   >
-                    {(isBarEnabled && activeCatalogMode === 'BAR') ? 'Add Bar Drink' : 'Add Food Item'}
+                    {activeCatalogMode === 'HOOKAH' ? 'Add Hookah Product' : (isBarEnabled && activeCatalogMode === 'BAR') ? 'Add Bar Drink' : 'Add Food Item'}
                   </Button>
                 </div>
               </div>
@@ -2904,7 +2971,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   <SearchInput
                     value={menuSearchQuery}
                     onChange={setMenuSearchQuery}
-                    placeholder={menuCatalogMode === 'BAR' ? "Search cocktails, wine, brand..." : "Search dish, description, price..."}
+                    placeholder={
+                      menuCatalogMode === 'HOOKAH'
+                        ? "Search hookah, blend, flavor, accessory..."
+                        : menuCatalogMode === 'BAR'
+                        ? "Search cocktails, wine, brand..."
+                        : "Search dish, description, price..."
+                    }
                   />
                 </div>
 
@@ -2950,9 +3023,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       : 'bg-[#12151b] border border-[#1e232e] text-slate-300 hover:text-white hover:bg-[#181d27]'
                   }`}
                 >
-                  All {menuCatalogMode === 'BAR' ? 'Drinks' : 'Items'} ({filteredMenuItems.length})
+                  All {menuCatalogMode === 'HOOKAH' ? 'Hookah Flavors' : menuCatalogMode === 'BAR' ? 'Drinks' : 'Items'} ({filteredMenuItems.length})
                 </button>
-                {(menuCatalogMode === 'BAR'
+                {(menuCatalogMode === 'HOOKAH'
+                  ? ['Hookah & Shisha', 'Classic Flavors', 'Exotic Blends', 'Herbal & Tobacco-Free', 'Ice Base & Addons', 'Accessories']
+                  : menuCatalogMode === 'BAR'
                   ? (barCategories.length > 0
                       ? barCategories.map((c) => c.name)
                       : ['Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Gin', 'Cocktails', 'Mocktails', 'Champagne', 'Tequila', 'Shots', 'Signature Drinks'])
@@ -4368,8 +4443,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       >
         <div className="space-y-4">
           <Input
-            label="Dish Name *"
-            placeholder="e.g. Artisanal Burrata & Fig"
+            label={menuCatalogMode === 'HOOKAH' ? "Product / Flavor Name *" : menuCatalogMode === 'BAR' ? "Drink Name *" : "Dish Name *"}
+            placeholder={menuCatalogMode === 'HOOKAH' ? "e.g. Russian Double Apple Special" : menuCatalogMode === 'BAR' ? "e.g. Smoked Old Fashioned" : "e.g. Artisanal Burrata & Fig"}
             value={newItem.name}
             onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
           />
@@ -4382,7 +4457,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 onChange={(e) => setNewItem({ ...newItem, categoryId: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
               >
-                {menuCatalogMode === 'BAR'
+                {menuCatalogMode === 'HOOKAH'
+                  ? [
+                      { id: 'Hookah & Shisha', name: 'Hookah & Shisha' },
+                      { id: 'Classic Flavors', name: 'Classic Flavors' },
+                      { id: 'Exotic Blends', name: 'Exotic Blends' },
+                      { id: 'Herbal & Tobacco-Free', name: 'Herbal & Tobacco-Free' },
+                      { id: 'Ice Base & Addons', name: 'Ice Base & Addons' },
+                      { id: 'Accessories', name: 'Accessories' },
+                    ].map((c: any) => (
+                      <option key={c.id || c.name} value={c.name || c.id}>
+                        {c.name}
+                      </option>
+                    ))
+                  : menuCatalogMode === 'BAR'
                   ? (barCategories.length > 0 ? barCategories : [
                       { id: 'Beer', name: 'Beer' },
                       { id: 'Wine', name: 'Wine' },
@@ -4494,7 +4582,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   onChange={(e) => setEditingItem({ ...editingItem, categoryId: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
                 >
-                  {editingItem.targetDestination === 'BAR' || editingItem.isAlcoholic
+                  {editingItem.targetDestination === 'HOOKAH'
+                    ? [
+                        { id: 'Hookah & Shisha', name: 'Hookah & Shisha' },
+                        { id: 'Classic Flavors', name: 'Classic Flavors' },
+                        { id: 'Exotic Blends', name: 'Exotic Blends' },
+                        { id: 'Herbal & Tobacco-Free', name: 'Herbal & Tobacco-Free' },
+                        { id: 'Ice Base & Addons', name: 'Ice Base & Addons' },
+                        { id: 'Accessories', name: 'Accessories' },
+                      ].map((c: any) => (
+                        <option key={c.id || c.name} value={c.name || c.id}>
+                          {c.name}
+                        </option>
+                      ))
+                    : editingItem.targetDestination === 'BAR' || editingItem.isAlcoholic
                     ? (barCategories.length > 0 ? barCategories : [
                         { id: 'Beer', name: 'Beer' },
                         { id: 'Wine', name: 'Wine' },
@@ -4528,7 +4629,27 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               />
             </div>
 
-            {!editingItem.isAlcoholic && editingItem.targetDestination !== 'BAR' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Station Destination (Routing) *</label>
+              <select
+                value={editingItem.targetDestination || (editingItem.isAlcoholic ? 'BAR' : 'KITCHEN')}
+                onChange={(e) => {
+                  const dest = e.target.value as 'KITCHEN' | 'BAR' | 'HOOKAH';
+                  setEditingItem({
+                    ...editingItem,
+                    targetDestination: dest,
+                    isAlcoholic: dest === 'BAR',
+                  });
+                }}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500 font-mono"
+              >
+                <option value="KITCHEN">🍳 Kitchen KDS (Food Items)</option>
+                <option value="BAR">🍸 Bar Terminal (Drinks & Mixology)</option>
+                <option value="HOOKAH">💨 Hookah & Shisha Terminal (Lounge)</option>
+              </select>
+            </div>
+
+            {!editingItem.isAlcoholic && editingItem.targetDestination !== 'BAR' && editingItem.targetDestination !== 'HOOKAH' && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-300">Food Type (Dietary) *</label>
                 <div className="flex items-center gap-3 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">

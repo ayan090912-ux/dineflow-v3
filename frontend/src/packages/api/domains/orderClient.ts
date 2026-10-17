@@ -221,6 +221,7 @@ export class OrderClient {
     ordersForRest.forEach((o) => {
       const kitchenItems = o.items.filter((i) => getFulfillmentStation(i) === 'KITCHEN');
       const barItems = o.items.filter((i) => getFulfillmentStation(i) === 'BAR');
+      const hookahItems = o.items.filter((i) => getFulfillmentStation(i) === 'HOOKAH');
 
       if (kitchenItems.length > 0) {
         const existingK = this.base.fulfillmentTickets.find(
@@ -265,6 +266,28 @@ export class OrderClient {
           });
         }
       }
+
+      if (hookahItems.length > 0) {
+        const existingH = this.base.fulfillmentTickets.find(
+          (t) => t.parentOrderId === o.id && t.station === 'HOOKAH'
+        );
+        if (!existingH) {
+          this.base.fulfillmentTickets.push({
+            id: `H-TICKET-${o.id}`,
+            parentOrderId: o.id,
+            restaurantId: o.restaurantId,
+            tableNumber: o.tableNumber,
+            tableSessionId: o.tableSessionId,
+            station: 'HOOKAH',
+            status: (o.hookahStatus as any) || (o.status === 'READY' ? 'READY' : o.status === 'PREPARING' ? 'PREPARING' : 'PENDING'),
+            items: hookahItems,
+            createdAt: o.createdAt,
+            updatedAt: o.updatedAt,
+            customerName: o.customerName,
+            orderType: o.orderType,
+          });
+        }
+      }
     });
     this.base.saveDatabase();
   }
@@ -300,6 +323,9 @@ export class OrderClient {
       } else if (ticket.station === 'BAR') {
         parentOrder.barStatus = status;
         if (status === 'COMPLETED') parentOrder.barCompletedAt = new Date().toISOString();
+      } else if (ticket.station === 'HOOKAH') {
+        parentOrder.hookahStatus = status;
+        if (status === 'COMPLETED') parentOrder.hookahCompletedAt = new Date().toISOString();
       }
 
       const orderTickets = this.base.fulfillmentTickets.filter((t) => t.parentOrderId === parentOrder.id);
@@ -332,6 +358,10 @@ export class OrderClient {
           if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
         } else if (ticket.station === 'BAR') {
           updateBody.barStatus = status;
+          if (status === 'READY') updateBody.status = 'READY';
+          if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
+        } else if (ticket.station === 'HOOKAH') {
+          updateBody.hookahStatus = status;
           if (status === 'READY') updateBody.status = 'READY';
           if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
         } else {
@@ -729,6 +759,66 @@ export class OrderClient {
         restaurantId: order.restaurantId,
         tableNumber: order.tableNumber,
         barStatus: status,
+        data: order,
+      });
+
+      if (order.status === 'READY') {
+        realtimeBus.emit('OrderReady' as any, {
+          orderId: order.id,
+          restaurantId: order.restaurantId,
+          tableNumber: order.tableNumber,
+          data: order,
+        });
+      }
+    }
+    return order;
+  }
+
+  async updateHookahStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
+    const order = this.base.orders.find((o) => o.id === orderId);
+    const orderStatus = status === 'READY' ? 'READY' : (order?.status || 'PREPARING');
+
+    try {
+      await this.base.executeProtectedRequest<any>(
+        `/orders/${encodeURIComponent(orderId)}/status`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+            hookahStatus: status,
+          }),
+        },
+        'HOOKAH'
+      );
+    } catch (e) {
+      console.warn('API PUT for updateHookahStatus failed:', e);
+    }
+
+    if (order) {
+      order.hookahStatus = status;
+      if (status === 'COMPLETED') {
+        order.hookahCompletedAt = new Date().toISOString();
+      }
+
+      const kitchenReady = !order.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
+      const barReady = !order.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
+      if (status === 'READY' && kitchenReady && barReady) {
+        order.status = 'READY';
+        order.readyAt = new Date().toISOString();
+      } else if (status === 'PREPARING' || status === 'ACCEPTED') {
+        if (order.status !== 'READY' && order.status !== 'DELIVERED' && order.status !== 'COMPLETED') {
+          order.status = 'PREPARING';
+        }
+      }
+
+      order.updatedAt = new Date().toISOString();
+      this.base.saveDatabase();
+
+      realtimeBus.emit('HookahStatusUpdated' as any, {
+        orderId: order.id,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        hookahStatus: status,
         data: order,
       });
 

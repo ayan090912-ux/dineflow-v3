@@ -17,6 +17,7 @@ class Restaurant(Base, TimestampMixin, SoftDeleteMixin):
     cuisine: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     business_type: Mapped[str] = mapped_column(String(50), default="RESTAURANT", nullable=False)
     has_bar: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    has_hookah: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     has_tables: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     has_kitchen: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     has_waiter: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

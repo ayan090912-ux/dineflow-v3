@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Wine,
+  Flame,
   Package,
   ArrowLeft,
   Loader2,
@@ -21,7 +22,7 @@ import { signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { AuthPage } from './AuthPage';
 
-export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'admin' | 'staff';
+export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'hookah' | 'inventory' | 'admin' | 'staff';
 
 interface RoleLoginPageProps {
   portal: PortalType;
@@ -93,6 +94,15 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     targetDashboard: '/bar/dashboard',
     identifierLabel: 'Staff Username',
     identifierPlaceholder: 'e.g. bartender_sam or username',
+  },
+  hookah: {
+    title: 'Hookah & Shisha Terminal',
+    subtitle: 'Hookah queue, charcoal preparation, flavors & lounge dispatch',
+    roleBadge: 'HOOKAH_TERMINAL',
+    icon: <Flame className="w-5 h-5 text-amber-300" />,
+    targetDashboard: '/hookah',
+    identifierLabel: 'Staff Username',
+    identifierPlaceholder: 'e.g. hookah_lead or username',
   },
   inventory: {
     title: 'Inventory OS Terminal',

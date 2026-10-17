@@ -25,6 +25,8 @@ def get_portal_for_role(role: str) -> str:
         return "kitchen"
     if r in ["BAR", "BARTENDER"]:
         return "bar"
+    if r in ["HOOKAH", "HOOKAH_STAFF", "SHISHA", "SHISHA_STAFF"]:
+        return "hookah"
     if r in ["INVENTORY", "STOCK_MANAGER", "INVENTORY_MANAGER"]:
         return "inventory"
     if r in ["CASHIER", "BILLING"]:
@@ -39,6 +41,7 @@ def get_target_route_for_role(role: str) -> str:
         "waiter": "/waiter",
         "kitchen": "/kitchen",
         "bar": "/bar",
+        "hookah": "/hookah",
         "inventory": "/inventory",
         "billing": "/billing",
         "restaurant": "/restaurant/dashboard",
@@ -53,6 +56,8 @@ def get_permissions_for_role(role: str) -> List[str]:
         "CHEF": ["orders:read", "orders:update_prep_status", "kds:access"],
         "BAR": ["orders:read", "orders:update_bar_status", "bar:access"],
         "BARTENDER": ["orders:read", "orders:update_bar_status", "bar:access"],
+        "HOOKAH": ["orders:read", "orders:update_hookah_status", "hookah:access"],
+        "SHISHA": ["orders:read", "orders:update_hookah_status", "hookah:access"],
         "INVENTORY": ["inventory:read", "inventory:update", "suppliers:read"],
         "CASHIER": ["billing:read", "billing:settle", "tables:read"],
         "MANAGER": ["orders:read", "orders:manage", "tables:manage", "staff:read", "billing:manage", "kds:access"],

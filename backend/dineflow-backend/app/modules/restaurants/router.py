@@ -1296,7 +1296,7 @@ async def create_restaurant_staff(
             raw_username = re.sub(r"[^a-z0-9_-]", "", clean_name.lower().replace(" ", "_"))
     clean_username = raw_username.strip().lower()
     clean_role = payload.role.strip().upper()
-    valid_roles = {"OWNER", "MANAGER", "WAITER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF"}
+    valid_roles = {"OWNER", "MANAGER", "WAITER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "CASHIER", "STAFF"}
     if clean_role not in valid_roles:
         clean_role = "WAITER"
 
@@ -1367,7 +1367,7 @@ async def create_restaurant_staff(
                     restaurant_id=canonical_id,
                     name=f"{clean_name}'s Device",
                     terminal_code=clean_terminal,
-                    terminal_type=clean_role if clean_role in ["WAITER", "KITCHEN", "BAR", "CASHIER"] else "WAITER",
+                    terminal_type=clean_role if clean_role in ["WAITER", "KITCHEN", "BAR", "HOOKAH", "SHISHA", "CASHIER"] else "WAITER",
                     pairing_code=uuid.uuid4().hex[:6].upper(),
                     status="ACTIVE",
                     is_active=True,

@@ -567,20 +567,20 @@ export class AuthClient {
       this.base.currentRestaurantIdsByScope[scope] = null;
     } else {
       this.base.currentUsersByScope = {
-        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
+        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, HOOKAH: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
       };
       this.base.currentTokensByScope = {
-        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
+        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, HOOKAH: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
       };
       this.base.currentRestaurantIdsByScope = {
-        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
+        ADMIN: null, OWNER: null, KITCHEN: null, WAITER: null, BAR: null, HOOKAH: null, INVENTORY: null, STAFF: null, CUSTOMER: null,
       };
     }
     this.base._currentRestaurantId = null;
     this.base.restaurants = [];
 
     if (typeof window !== 'undefined') {
-      const allScopes: PortalScope[] = ['OWNER', 'WAITER', 'KITCHEN', 'BAR', 'INVENTORY', 'ADMIN', 'CUSTOMER'];
+      const allScopes: PortalScope[] = ['OWNER', 'WAITER', 'KITCHEN', 'BAR', 'HOOKAH', 'INVENTORY', 'ADMIN', 'CUSTOMER'];
       const scopesToClear = scope ? [scope] : allScopes;
       scopesToClear.forEach((s) => {
         const storageKey = `dinely_user_${s.toLowerCase()}`;

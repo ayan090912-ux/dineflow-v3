@@ -161,7 +161,7 @@ async def get_caller_context(
     # (waiter, kitchen, bar, host, server, cashier, chef, cook).
     # Owner and Admin roles MUST authenticate via Bearer token; header spoofing of owner/admin returns 401.
     ALLOWED_STAFF_HEADER_ROLES = {
-        "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF"
+        "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "CASHIER", "STAFF"
     }
     if x_staff_role and x_staff_restaurant_id:
         norm_role = x_staff_role.strip().upper()
@@ -319,7 +319,7 @@ async def require_tenant_staff_or_owner(
         allowed_roles=[
             "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
             "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN",
-            "BAR", "BARTENDER", "MANAGER", "INVENTORY_MANAGER", "CASHIER"
+            "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER"
         ],
         caller=caller,
         db=db

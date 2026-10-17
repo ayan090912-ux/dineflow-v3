@@ -3,6 +3,7 @@ import {
   ChefHat,
   PhoneCall,
   Wine,
+  Flame,
   Package,
   Receipt,
   LayoutDashboard,
@@ -311,6 +312,17 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
       color: 'text-purple-400',
       badgeVariant: 'brand' as const,
       isOffered: bType !== 'FOOD_CART',
+    },
+    {
+      key: 'hookah',
+      name: 'Hookah & Shisha Terminal',
+      desc: 'Dedicated lounge workstation for hookah prep, charcoal heating, custom flavors, and table delivery.',
+      roles: 'Hookah Masters, Lounge Staff, Managers, Owner',
+      icon: Flame,
+      badge: 'Lounge Ops',
+      color: 'text-amber-400',
+      badgeVariant: 'warning' as const,
+      isOffered: true,
     },
     {
       key: 'inventory',
@@ -808,6 +820,7 @@ export const WorkspaceSettingsTab: React.FC<WorkspaceSettingsTabProps> = ({
                   <option value="WAITER">Waiter Handheld (Floor Service)</option>
                   <option value="KITCHEN">Kitchen Display Station (KDS)</option>
                   <option value="BAR">Bar Display Station (BDS)</option>
+                  <option value="HOOKAH">Hookah & Shisha Station</option>
                   <option value="POS">Cashier / Central POS Register</option>
                 </select>
               </div>

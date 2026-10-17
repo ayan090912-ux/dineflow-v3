@@ -266,6 +266,9 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS event_id VARCHAR(255);",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS event_name VARCHAR(255);",
         "CREATE INDEX IF NOT EXISTS ix_orders_event_id ON orders (event_id);",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS hookah_status VARCHAR(30);",
+        "CREATE INDEX IF NOT EXISTS ix_orders_hookah_status ON orders (hookah_status);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS has_hookah BOOLEAN DEFAULT TRUE;",
     ]
     for stmt in schema_patch_statements:
         try:

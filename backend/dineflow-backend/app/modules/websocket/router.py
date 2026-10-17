@@ -46,7 +46,7 @@ async def websocket_endpoint(
             role = ch_role
 
     raw_role = (role or "CUSTOMER").strip().upper()
-    privileged_roles = {"PLATFORM_ADMIN", "PLATFORM", "OWNER", "RESTAURANT_OWNER", "WAITER", "KITCHEN", "BAR", "MANAGER", "INVENTORY"}
+    privileged_roles = {"PLATFORM_ADMIN", "PLATFORM", "OWNER", "RESTAURANT_OWNER", "WAITER", "KITCHEN", "BAR", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY"}
 
     verified_role = raw_role
     effective_rest_id = (restaurant_id or "global").strip()
@@ -132,10 +132,11 @@ async def websocket_endpoint(
                     return
 
                 # Role-scoped operational terminal enforcement
-                if token_scope == "STAFF" and raw_role in ("WAITER", "KITCHEN", "BAR", "INVENTORY"):
+                if token_scope == "STAFF" and raw_role in ("WAITER", "KITCHEN", "BAR", "HOOKAH", "SHISHA", "INVENTORY"):
                     role_alias_matches = (
                         (raw_role == "KITCHEN" and token_role in ("KITCHEN", "CHEF", "COOK")) or
                         (raw_role == "BAR" and token_role in ("BAR", "BARTENDER")) or
+                        (raw_role in ("HOOKAH", "SHISHA") and token_role in ("HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF")) or
                         (raw_role == "WAITER" and token_role in ("WAITER", "SERVER", "HOST")) or
                         (raw_role == "INVENTORY" and token_role in ("INVENTORY", "STOCK_MANAGER"))
                     )
@@ -154,7 +155,7 @@ async def websocket_endpoint(
             if not is_verified and token.startswith("df_") and "_jwt_" in token:
                 parts = token.split("_")
                 token_role = parts[1].upper() if len(parts) > 1 else raw_role
-                if token_role in ("WAITER", "KITCHEN", "BAR", "MANAGER", "INVENTORY", "STAFF", "OWNER"):
+                if token_role in ("WAITER", "KITCHEN", "BAR", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY", "STAFF", "OWNER"):
                     is_verified = True
                     verified_role = token_role
 

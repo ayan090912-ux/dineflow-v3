@@ -243,7 +243,7 @@ async def create_menu_item(
 
     # Strict explicit routing only: item destination is NOT decided by arbitrary name substrings
     dest = (payload.targetDestination or "KITCHEN").upper()
-    if dest not in ["KITCHEN", "BAR"]:
+    if dest not in ["KITCHEN", "BAR", "HOOKAH"]:
         dest = "KITCHEN"
 
     is_veg = payload.isVegetarian if payload.isVegetarian is not None else True
@@ -284,7 +284,7 @@ async def create_menu_item(
                 "price": new_item.price,
                 "targetDestination": new_item.target_destination,
             },
-            target_audience=["WAITER", "KITCHEN", "BAR", "CUSTOMER", "OWNER"],
+            target_audience=["WAITER", "KITCHEN", "BAR", "HOOKAH", "CUSTOMER", "OWNER"],
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] menu_item_created:", ws_err)
@@ -326,7 +326,9 @@ async def update_menu_item(
     if payload.dietaryType is not None:
         item.dietary_type = payload.dietaryType
     if payload.targetDestination is not None:
-        item.target_destination = payload.targetDestination
+        dest_val = payload.targetDestination.upper()
+        if dest_val in ["KITCHEN", "BAR", "HOOKAH"]:
+            item.target_destination = dest_val
     if payload.isAlcoholic is not None:
         item.is_alcoholic = payload.isAlcoholic
     if payload.preparationTimeMinutes is not None:
@@ -352,7 +354,7 @@ async def update_menu_item(
                 "isAvailable": item.is_available,
                 "targetDestination": item.target_destination,
             },
-            target_audience=["WAITER", "KITCHEN", "BAR", "CUSTOMER", "OWNER"],
+            target_audience=["WAITER", "KITCHEN", "BAR", "HOOKAH", "CUSTOMER", "OWNER"],
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] menu_item_updated:", ws_err)
@@ -384,7 +386,7 @@ async def delete_menu_item(
             restaurant_id=target_rest_id,
             event_type="menu_item_deleted",
             payload={"menuItemId": item_id, "restaurantId": target_rest_id},
-            target_audience=["WAITER", "KITCHEN", "BAR", "CUSTOMER", "OWNER"],
+            target_audience=["WAITER", "KITCHEN", "BAR", "HOOKAH", "CUSTOMER", "OWNER"],
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] menu_item_deleted:", ws_err)

@@ -768,6 +768,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.orderClient.updateBarStatus(orderId, status);
   }
 
+  async updateHookahStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
+    return this.orderClient.updateHookahStatus(orderId, status);
+  }
+
   async getKitchenAnalytics(restaurantId?: string) {
     return this.orderClient.getKitchenAnalytics(restaurantId);
   }

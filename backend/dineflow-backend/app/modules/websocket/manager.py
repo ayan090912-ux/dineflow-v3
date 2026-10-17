@@ -18,6 +18,8 @@ def normalize_role(role: Optional[str]) -> str:
         return "WAITER"
     if r in ["BAR", "BAR_STAFF", "BARTENDER"]:
         return "BAR"
+    if r in ["HOOKAH", "HOOKAH_STAFF", "SHISHA", "SHISHA_STAFF"]:
+        return "HOOKAH"
     if r in ["INVENTORY", "INVENTORY_STAFF", "STOCK_MANAGER"]:
         return "INVENTORY"
     if r in ["BILLING", "CASHIER", "BILLING_STAFF"]:

@@ -34,7 +34,7 @@ export function getProductionOrigin(): string {
   return window.location.origin.replace(/^http:\/\//, 'https://');
 }
 
-export type PortalScope = 'ADMIN' | 'OWNER' | 'KITCHEN' | 'WAITER' | 'BAR' | 'INVENTORY' | 'STAFF' | 'CUSTOMER';
+export type PortalScope = 'ADMIN' | 'OWNER' | 'KITCHEN' | 'WAITER' | 'BAR' | 'HOOKAH' | 'INVENTORY' | 'STAFF' | 'CUSTOMER';
 
 export const SESSION_KEYS: Record<PortalScope, string> = {
   ADMIN: 'dinely_session_admin',
@@ -42,6 +42,7 @@ export const SESSION_KEYS: Record<PortalScope, string> = {
   KITCHEN: 'dinely_session_kitchen',
   WAITER: 'dinely_session_waiter',
   BAR: 'dinely_session_bar',
+  HOOKAH: 'dinely_session_hookah',
   INVENTORY: 'dinely_session_inventory',
   STAFF: 'dinely_session_staff',
   CUSTOMER: 'dinely_session_customer',
@@ -53,6 +54,7 @@ export const TOKEN_KEYS: Record<PortalScope, string> = {
   KITCHEN: 'dinely_tokens_kitchen',
   WAITER: 'dinely_tokens_waiter',
   BAR: 'dinely_tokens_bar',
+  HOOKAH: 'dinely_tokens_hookah',
   INVENTORY: 'dinely_tokens_inventory',
   STAFF: 'dinely_tokens_staff',
   CUSTOMER: 'dinely_tokens_customer',
@@ -71,6 +73,9 @@ export function getPortalScopeFromPath(pathname?: string): PortalScope {
   }
   if (p.startsWith('/bar')) {
     return 'BAR';
+  }
+  if (p.startsWith('/hookah') || p.startsWith('/shisha')) {
+    return 'HOOKAH';
   }
   if (p.startsWith('/inventory')) {
     return 'INVENTORY';

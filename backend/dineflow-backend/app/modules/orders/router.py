@@ -51,6 +51,7 @@ class UpdateOrderStatusSchema(BaseModel):
     status: Optional[str] = None
     kitchenStatus: Optional[str] = None
     barStatus: Optional[str] = None
+    hookahStatus: Optional[str] = None
     estimatedPrepTimeMinutes: Optional[int] = None
     etaTargetTimestamp: Optional[str] = None
 
@@ -91,10 +92,15 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
             if (it.get("targetDestination") or it.get("target_destination") or "").upper() == "BAR"
             or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True
         ]
+    elif eff_st == "HOOKAH":
+        filtered_items = [
+            it for it in raw_items
+            if (it.get("targetDestination") or it.get("target_destination") or "").upper() == "HOOKAH"
+        ]
     elif eff_st == "KITCHEN":
         filtered_items = [
             it for it in raw_items
-            if (it.get("targetDestination") or it.get("target_destination") or "").upper() != "BAR"
+            if (it.get("targetDestination") or it.get("target_destination") or "").upper() not in ["BAR", "HOOKAH"]
             and not (it.get("isAlcoholic") is True or it.get("is_alcoholic") is True)
         ]
     else:
@@ -115,6 +121,8 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
         "kitchenStatus": getattr(order, "kitchen_status", None),
         "bar_status": getattr(order, "bar_status", None),
         "barStatus": getattr(order, "bar_status", None),
+        "hookah_status": getattr(order, "hookah_status", None),
+        "hookahStatus": getattr(order, "hookah_status", None),
         "customer_name": cust_name,
         "customerName": cust_name,
         "notes": getattr(order, "notes", ""),
@@ -263,7 +271,7 @@ async def create_order(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Forbidden: You do not have permission to order or mutate into another tenant's restaurant."
                     )
-            elif caller.role in ["WAITER", "CHEF", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+            elif caller.role in ["WAITER", "CHEF", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER"]:
                 if caller.restaurant_id and caller.restaurant_id != restaurant.id:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
@@ -391,7 +399,7 @@ async def create_order(
         menu_by_id = {m.id: m for m in db_menu_items}
         menu_by_name = {m.name.lower().strip(): m for m in db_menu_items}
 
-        is_staff_caller = caller.is_authenticated and (caller.role in ["OWNER", "RESTAURANT_OWNER", "WAITER", "CHEF", "BAR", "MANAGER", "ADMIN"])
+        is_staff_caller = caller.is_authenticated and (caller.role in ["OWNER", "RESTAURANT_OWNER", "WAITER", "CHEF", "BAR", "HOOKAH", "SHISHA", "MANAGER", "ADMIN"])
 
         resolved_items_list = []
         for i in payload.items:
@@ -407,7 +415,12 @@ async def create_order(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Item '{m_rec.name}' is currently unavailable or sold out."
                     )
-                station = "BAR" if (m_rec.target_destination == "BAR" or m_rec.is_alcoholic) else "KITCHEN"
+                if m_rec.target_destination == "HOOKAH":
+                    station = "HOOKAH"
+                elif m_rec.target_destination == "BAR" or m_rec.is_alcoholic:
+                    station = "BAR"
+                else:
+                    station = "KITCHEN"
                 is_alc = bool(m_rec.is_alcoholic)
                 auth_price = float(m_rec.price)
                 auth_name = m_rec.name
@@ -438,9 +451,11 @@ async def create_order(
         items_list_dict = resolved_items_list
         has_kitchen = any(it["targetDestination"] == "KITCHEN" for it in items_list_dict)
         has_bar = any(it["targetDestination"] == "BAR" for it in items_list_dict)
+        has_hookah = any(it["targetDestination"] == "HOOKAH" for it in items_list_dict)
 
         kitchen_status = "PENDING" if has_kitchen else None
         bar_status = "PENDING" if has_bar else None
+        hookah_status = "PENDING" if has_hookah else None
 
         subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
         tax_amount = 0.0
@@ -585,6 +600,7 @@ async def create_order(
             status="PENDING",
             kitchen_status=kitchen_status,
             bar_status=bar_status,
+            hookah_status=hookah_status,
             customer_name=payload.customerName or "Guest",
             notes=payload.notes or "",
             subtotal=subtotal,
@@ -669,6 +685,8 @@ async def create_order(
                 order_target_aud.append("KITCHEN")
             if has_bar and restaurant.has_bar is not False and (not restaurant.enabled_modules or "bar" in restaurant.enabled_modules):
                 order_target_aud.append("BAR")
+            if has_hookah and (not restaurant.enabled_modules or "hookah" in restaurant.enabled_modules):
+                order_target_aud.append("HOOKAH")
             if restaurant.has_waiter is not False and (not restaurant.enabled_modules or "waiter" in restaurant.enabled_modules):
                 order_target_aud.append("WAITER")
 
@@ -799,6 +817,8 @@ async def get_restaurant_orders(
                 effective_station = "BAR"
             elif caller.role in ["CHEF", "KITCHEN"]:
                 effective_station = "KITCHEN"
+            elif caller.role in ["HOOKAH", "SHISHA"]:
+                effective_station = "HOOKAH"
 
         query = select(Order).where(Order.restaurant_id == target_rest_id)
 
@@ -857,6 +877,17 @@ async def get_restaurant_orders(
             if active_only:
                 query = query.where(
                     Order.bar_status.in_(["PENDING", "PREPARING", "READY"]),
+                    Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+                )
+
+        elif effective_station == "HOOKAH":
+            hookah_subq = select(OrderItem.order_id).where(
+                (OrderItem.target_destination == "HOOKAH")
+            ).scalar_subquery()
+            query = query.where(Order.id.in_(hookah_subq))
+            if active_only:
+                query = query.where(
+                    Order.hookah_status.in_(["PENDING", "PREPARING", "READY"]),
                     Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
                 )
 
@@ -929,7 +960,7 @@ async def update_order_status(
             is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
             if not is_owner:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         else:
@@ -940,33 +971,41 @@ async def update_order_status(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kitchen terminal is disabled for this restaurant.")
     if payload.barStatus and (r_obj.has_bar is False or (r_obj.enabled_modules and "bar" not in r_obj.enabled_modules)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bar terminal is disabled for this restaurant.")
+    if payload.hookahStatus and (getattr(r_obj, "has_hookah", True) is False or (r_obj.enabled_modules and "hookah" not in r_obj.enabled_modules)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hookah terminal is disabled for this restaurant.")
 
     target_status = (payload.status or "").upper()
     target_kitchen = (payload.kitchenStatus or "").upper()
     target_bar = (payload.barStatus or "").upper()
+    target_hookah = (payload.hookahStatus or "").upper()
     caller_role = (caller.role or "").upper()
 
-    # Kitchen and Bar cannot deliver overall orders to tables (waiter responsibility)
-    is_delivery_attempt = target_status in ["DELIVERED", "COMPLETED"] or target_kitchen in ["DELIVERED", "COMPLETED"]
-    if is_delivery_attempt and not target_bar:
+    # Kitchen, Bar, and Hookah cannot deliver overall orders to tables (waiter responsibility)
+    is_delivery_attempt = target_status in ["DELIVERED", "COMPLETED"] or target_kitchen in ["DELIVERED", "COMPLETED"] or target_hookah in ["DELIVERED", "COMPLETED"]
+    if is_delivery_attempt and not target_bar and not target_hookah:
         allowed_delivery_roles = ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER"]
         if not caller.is_admin and caller_role not in allowed_delivery_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Forbidden: Kitchen staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
+                detail=f"Forbidden: Station staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
             )
 
     if payload.kitchenStatus:
         order.kitchen_status = payload.kitchenStatus
     if payload.barStatus:
         order.bar_status = payload.barStatus
+    if payload.hookahStatus:
+        order.hookah_status = payload.hookahStatus
 
     # Determine station items in order
     has_k_items = False
     has_b_items = False
+    has_h_items = False
     for it in (order.items_json or []):
         dest = (it.get("targetDestination") or it.get("target_destination") or "").upper()
-        if dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True:
+        if dest == "HOOKAH":
+            has_h_items = True
+        elif dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True:
             has_b_items = True
         else:
             has_k_items = True
@@ -977,17 +1016,19 @@ async def update_order_status(
         if payload.status == "DELIVERED":
             order.delivered_at = datetime.now(timezone.utc)
     else:
-        k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED"])
-        b_comp = (not has_b_items) or (order.bar_status in ["COMPLETED", "DELIVERED"])
+        k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"])
+        b_comp = (not has_b_items) or (order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"])
+        h_comp = (not has_h_items) or (order.hookah_status in ["COMPLETED", "DELIVERED", "SERVED"])
 
-        k_ready = (not has_k_items) or (order.kitchen_status in ["READY", "COMPLETED", "DELIVERED"])
-        b_ready = (not has_b_items) or (order.bar_status in ["READY", "COMPLETED", "DELIVERED"])
+        k_ready = (not has_k_items) or (order.kitchen_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"])
+        b_ready = (not has_b_items) or (order.bar_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"])
+        h_ready = (not has_h_items) or (order.hookah_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"])
 
-        if k_comp and b_comp:
+        if k_comp and b_comp and h_comp:
             order.status = "COMPLETED"
-        elif k_ready and b_ready:
+        elif k_ready and b_ready and h_ready:
             order.status = "READY"
-        elif (has_k_items and order.kitchen_status == "PREPARING") or (has_b_items and order.bar_status == "PREPARING"):
+        elif (has_k_items and order.kitchen_status == "PREPARING") or (has_b_items and order.bar_status == "PREPARING") or (has_h_items and order.hookah_status == "PREPARING"):
             order.status = "PREPARING"
         elif payload.status:
             order.status = payload.status
@@ -1009,7 +1050,7 @@ async def update_order_status(
             pass
 
     await db.commit()
-    print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status} bar_status={order.bar_status}")
+    print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status} bar_status={order.bar_status} hookah_status={order.hookah_status}")
     await db.refresh(order)
     resp_data = format_order_response(order)
 
@@ -1027,6 +1068,19 @@ async def update_order_status(
                     "data": resp_data
                 },
                 target_audience=["BAR", "WAITER", "OWNER", "CUSTOMER"]
+            )
+        if payload.hookahStatus:
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="HookahStatusUpdated",
+                payload={
+                    **resp_data,
+                    "orderId": order.id,
+                    "order_id": order.id,
+                    "hookahStatus": order.hookah_status,
+                    "data": resp_data
+                },
+                target_audience=["HOOKAH", "WAITER", "OWNER", "CUSTOMER"]
             )
         if payload.kitchenStatus:
             await ws_manager.broadcast_event(
@@ -1101,7 +1155,7 @@ async def update_order_status(
             restaurant_id=order.restaurant_id,
             event_type="order_status_updated",
             payload=resp_data,
-            target_audience=["KITCHEN", "BAR", "WAITER", "CUSTOMER", "OWNER"]
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] order_status_updated:", ws_err)
@@ -1129,7 +1183,7 @@ async def update_order_eta(
         )
 
     if not caller.is_admin:
-        if caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+        if caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         elif caller.role in ["OWNER", "RESTAURANT_OWNER"]:

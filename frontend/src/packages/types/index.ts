@@ -1,4 +1,4 @@
-export type UserRole = 'SUPER_ADMIN' | 'PLATFORM_ADMIN' | 'RESTAURANT_OWNER' | 'MANAGER' | 'CHEF' | 'WAITER' | 'CUSTOMER' | 'BAR_STAFF' | 'BARTENDER' | 'INVENTORY_MANAGER';
+export type UserRole = 'SUPER_ADMIN' | 'PLATFORM_ADMIN' | 'RESTAURANT_OWNER' | 'MANAGER' | 'CHEF' | 'WAITER' | 'CUSTOMER' | 'BAR_STAFF' | 'BARTENDER' | 'HOOKAH' | 'HOOKAH_STAFF' | 'SHISHA' | 'SHISHA_STAFF' | 'INVENTORY_MANAGER';
 
 export interface AuthTokens {
   accessToken: string;
@@ -26,9 +26,9 @@ export interface User {
   tokens?: AuthTokens;
 }
 
-export type WorkspaceType = 'admin' | 'restaurant' | 'operations' | 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'customer';
+export type WorkspaceType = 'admin' | 'restaurant' | 'operations' | 'kitchen' | 'waiter' | 'bar' | 'hookah' | 'inventory' | 'customer';
 
-export type TerminalModule = 'kitchen' | 'waiter' | 'bar' | 'inventory' | 'billing' | 'dashboard';
+export type TerminalModule = 'kitchen' | 'waiter' | 'bar' | 'hookah' | 'inventory' | 'billing' | 'dashboard' | 'tables' | 'weddings';
 
 export function canAccessWorkspace(
   user: User | null | undefined,
@@ -62,6 +62,9 @@ export function canAccessWorkspace(
   }
   if (role === 'BARTENDER' || role === 'BAR_STAFF') {
     return workspace === 'bar';
+  }
+  if (role === 'HOOKAH' || role === 'HOOKAH_STAFF' || (role as string) === 'SHISHA' || (role as string) === 'SHISHA_STAFF') {
+    return workspace === 'hookah';
   }
   if (role === 'INVENTORY_MANAGER') {
     return workspace === 'inventory';
@@ -106,6 +109,7 @@ export function isModuleEnabled(
   if (module === 'kitchen') return restaurant.hasKitchen !== false;
   if (module === 'waiter') return restaurant.hasWaiter !== false && restaurant.hasTables !== false;
   if (module === 'bar') return restaurant.hasBar === true || bType === 'BAR';
+  if (module === 'hookah' || modLower === 'hookah') return (restaurant as any).hasHookah === true || (Array.isArray(restaurant.enabledModules) && restaurant.enabledModules.includes('hookah'));
   if (module === 'inventory') return restaurant.hasInventory !== false;
   if (module === 'billing') return restaurant.hasBilling !== false;
   if (module === 'tables') return restaurant.hasTables !== false;
@@ -306,7 +310,7 @@ export interface MenuItem {
   calories?: number;
   prepTimeMinutes?: number;
   preparationTimeMinutes?: number;
-  targetDestination?: 'KITCHEN' | 'BAR';
+  targetDestination?: 'KITCHEN' | 'BAR' | 'HOOKAH';
   isAlcoholic?: boolean;
   alcoholPercentage?: number;
   bottleSize?: string;
@@ -386,7 +390,7 @@ export interface BillItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  station?: 'KITCHEN' | 'BAR';
+  station?: 'KITCHEN' | 'BAR' | 'HOOKAH';
 }
 
 export type TaxType = 'PERCENTAGE' | 'FIXED';
@@ -667,7 +671,7 @@ export interface OrderItem {
   category?: string;
   selectedOptions?: string[];
   notes?: string;
-  targetDestination?: 'KITCHEN' | 'BAR';
+  targetDestination?: 'KITCHEN' | 'BAR' | 'HOOKAH';
   isAlcoholic?: boolean;
   alcoholPercentage?: number;
   glassSize?: string;
@@ -694,11 +698,13 @@ export interface Order {
   taxBreakdown?: TaxSnapshot[];
   tipAmount: number;
   status: OrderStatus;
-  targetDestination?: 'KITCHEN' | 'BAR' | 'MIXED';
+  targetDestination?: 'KITCHEN' | 'BAR' | 'HOOKAH' | 'MIXED';
   kitchenStatus?: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED';
   barStatus?: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED';
+  hookahStatus?: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED';
   kitchenCompletedAt?: string;
   barCompletedAt?: string;
+  hookahCompletedAt?: string;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED';
   paymentMethod?: 'CASH' | 'CARD' | 'APPLE_PAY' | 'QR_CODE' | 'UPI';
   createdAt: string;
@@ -737,7 +743,7 @@ export interface FulfillmentTicket {
   restaurantId: string;
   tableNumber: string;
   tableSessionId?: string;
-  station: 'KITCHEN' | 'BAR';
+  station: 'KITCHEN' | 'BAR' | 'HOOKAH';
   status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
   items: OrderItem[];
   createdAt: string;
@@ -747,16 +753,26 @@ export interface FulfillmentTicket {
   orderType?: 'DINE_IN' | 'PICKUP' | 'WEDDING_EVENT' | string;
 }
 
+export type FulfillmentStation = 'KITCHEN' | 'BAR' | 'HOOKAH';
+
 export function getFulfillmentStation(item: {
   targetDestination?: string;
   isAlcoholic?: boolean;
   category?: string;
   barCategory?: string;
   name?: string;
-}): 'KITCHEN' | 'BAR' {
+}): 'KITCHEN' | 'BAR' | 'HOOKAH' {
   const dest = (item.targetDestination || '').toUpperCase();
+  if (dest === 'HOOKAH') {
+    return 'HOOKAH';
+  }
   if (dest === 'BAR' || item.isAlcoholic === true) {
     return 'BAR';
+  }
+  const cat = (item.category || '').toLowerCase();
+  const name = (item.name || '').toLowerCase();
+  if (cat.includes('hookah') || cat.includes('shisha') || name.includes('hookah') || name.includes('shisha')) {
+    return 'HOOKAH';
   }
   return 'KITCHEN';
 }
@@ -765,7 +781,7 @@ export interface Employee {
   id: string;
   restaurantId: string;
   name: string;
-  role: 'MANAGER' | 'CHEF' | 'WAITER' | 'HOST' | 'CASHIER' | 'BARTENDER' | 'BAR_STAFF' | 'INVENTORY_MANAGER';
+  role: 'MANAGER' | 'CHEF' | 'WAITER' | 'HOST' | 'CASHIER' | 'BARTENDER' | 'BAR_STAFF' | 'HOOKAH' | 'HOOKAH_STAFF' | 'SHISHA' | 'SHISHA_STAFF' | 'INVENTORY_MANAGER';
   email: string;
   phone: string;
   status: 'ON_CLOCK' | 'OFF_CLOCK' | 'ON_BREAK';

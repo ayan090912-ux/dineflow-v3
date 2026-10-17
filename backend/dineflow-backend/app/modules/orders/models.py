@@ -19,6 +19,7 @@ class Order(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False, index=True)  # PENDING | ACCEPTED | PREPARING | READY | COMPLETED | CANCELLED
     kitchen_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True)
     bar_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True)
+    hookah_status: Mapped[Optional[str]] = mapped_column(String(30), default=None, nullable=True, index=True)
     customer_name: Mapped[Optional[str]] = mapped_column(String(255), default="Guest", nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     subtotal: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
