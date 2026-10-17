@@ -34,6 +34,9 @@ class Order(Base, TimestampMixin):
     event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     event_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    claimed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    delivery_status: Mapped[Optional[str]] = mapped_column(String(50), default="PENDING", nullable=True)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class OrderItem(Base, TimestampMixin):

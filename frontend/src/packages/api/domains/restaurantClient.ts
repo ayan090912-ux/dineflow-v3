@@ -2851,6 +2851,21 @@ export class RestaurantClient {
     }
   }
 
+  async getEventReadiness(eventId: string, restaurantId?: string): Promise<any> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) return null;
+
+    try {
+      return await this.base.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/readiness`,
+        { method: 'GET' }
+      );
+    } catch (e) {
+      console.warn('API fetch for event readiness failed:', e);
+      return null;
+    }
+  }
+
   async getPublicEvent(eventId: string, table?: string): Promise<PublicWeddingEventResponse> {
     const apiBase = getApiBaseUrl();
     const tableQuery = table ? `?table=${encodeURIComponent(table)}` : '';

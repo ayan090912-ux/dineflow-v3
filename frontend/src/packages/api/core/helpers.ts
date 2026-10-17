@@ -147,7 +147,7 @@ export function normalizeOrder(raw: any): Order {
   const normalizedItems: OrderItem[] = Array.isArray(rawItems)
     ? rawItems.map((i: any, idx: number) => {
         const dest = (i.targetDestination || i.target_destination || i.station || '').toUpperCase();
-        const targetDestination: 'KITCHEN' | 'BAR' = dest === 'BAR' ? 'BAR' : 'KITCHEN';
+        const targetDestination: 'KITCHEN' | 'BAR' | 'HOOKAH' = dest === 'HOOKAH' ? 'HOOKAH' : dest === 'BAR' ? 'BAR' : 'KITCHEN';
 
         return {
           id: i.id || `oi-${raw.id || 'ord'}-${idx}`,
@@ -172,6 +172,10 @@ export function normalizeOrder(raw: any): Order {
     status: (raw.status || 'PENDING').toUpperCase() as OrderStatus,
     kitchenStatus: (raw.kitchen_status || raw.kitchenStatus || raw.status || 'PENDING').toUpperCase(),
     barStatus: (raw.bar_status || raw.barStatus || raw.status || 'PENDING').toUpperCase(),
+    hookahStatus: (raw.hookah_status || raw.hookahStatus || '').toUpperCase() || undefined,
+    claimedBy: raw.claimed_by || raw.claimedBy || undefined,
+    deliveryStatus: raw.delivery_status || raw.deliveryStatus || undefined,
+    deliveredAt: raw.delivered_at || raw.deliveredAt || undefined,
     customerName: raw.customer_name || raw.customerName || 'Guest',
     notes: raw.notes || '',
     items: normalizedItems,

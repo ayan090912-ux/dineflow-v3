@@ -171,6 +171,18 @@ async def list_restaurant_events(
     except Exception:
         canonical_id = restaurant_id
 
+    r_stmt = select(Restaurant).where(Restaurant.id == canonical_id)
+    r_res = await db.execute(r_stmt)
+    rest = r_res.scalar_one_or_none()
+    if not rest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
+    if rest.enabled_modules and "weddings" not in rest.enabled_modules:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Wedding & Event Ordering module is not enabled for this business",
+        )
+
     stmt = select(WeddingEvent).where(WeddingEvent.restaurant_id == canonical_id).order_by(WeddingEvent.event_date.desc(), WeddingEvent.created_at.desc())
     res = await db.execute(stmt)
     events = res.scalars().all()
@@ -211,6 +223,17 @@ async def create_wedding_event(
     rest = r_res.scalar_one_or_none()
     if not rest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
+    if rest.enabled_modules and "weddings" not in rest.enabled_modules:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Wedding & Event Ordering module is not enabled for this business",
+        )
+    if rest.is_approved is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Restaurant is pending platform approval",
+        )
 
     slug = rest.public_slug or rest.slug or rest.id
     now_utc = datetime.now(timezone.utc)
@@ -545,10 +568,170 @@ async def toggle_event_ordering(
     if not ev:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
+    # Authoritative verification before opening ordering
+    if not ev.is_ordering_open:
+        t_cnt_res = await db.execute(
+            select(func.count(EventTable.id)).where(EventTable.event_id == ev.id, EventTable.is_active.is_(True))
+        )
+        t_count = t_cnt_res.scalar() or 0
+        if t_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot open event ordering: 0 banquet tables are configured. Add at least one table before opening service."
+            )
+
     ev.is_ordering_open = not ev.is_ordering_open
     ev.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return {"status": "success", "isOrderingOpen": ev.is_ordering_open}
+
+@router.get("/{restaurant_id}/events/{event_id}/readiness")
+async def get_event_readiness(
+    restaurant_id: str,
+    event_id: str,
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(WeddingEvent).where(WeddingEvent.id == event_id, WeddingEvent.restaurant_id == canonical_id)
+    res = await db.execute(stmt)
+    ev = res.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    r_stmt = select(Restaurant).where(Restaurant.id == canonical_id)
+    r_res = await db.execute(r_stmt)
+    rest = r_res.scalar_one_or_none()
+
+    # 1. Tables count & QR codes
+    t_stmt = select(EventTable).where(EventTable.event_id == ev.id, EventTable.is_active.is_(True))
+    t_res = await db.execute(t_stmt)
+    tables = t_res.scalars().all()
+    table_count = len(tables)
+    qr_count = len([t for t in tables if t.qr_code_url])
+
+    # 2. Available menu items
+    m_stmt = select(func.count(MenuItem.id)).where(
+        MenuItem.restaurant_id == canonical_id,
+        MenuItem.is_available.is_(True),
+        MenuItem.deleted_at.is_(None)
+    )
+    m_res = await db.execute(m_stmt)
+    menu_item_count = m_res.scalar() or 0
+
+    # 3. Stations enabled
+    stations = []
+    if getattr(rest, "has_kitchen", True):
+        stations.append("KITCHEN")
+    if getattr(rest, "has_bar", True):
+        stations.append("BAR")
+    if getattr(rest, "has_hookah", True):
+        stations.append("HOOKAH")
+
+    # 4. Service window & status
+    now_utc = datetime.now(timezone.utc)
+    auth_status = get_authoritative_event_status(ev, now_utc)
+    duration_fmt = format_service_duration(ev.start_datetime_utc, ev.end_datetime_utc) if (ev.start_datetime_utc and ev.end_datetime_utc) else None
+    is_active_window = (auth_status == "ACTIVE")
+
+    # 8-point checklist
+    details_ready = bool(ev.title and ev.event_date)
+    kitchen_ready = bool(rest and rest.lifecycle_status not in ["SUSPENDED", "ARCHIVED"])
+    menu_ready = menu_item_count > 0
+    tables_ready = table_count > 0
+    qrs_ready = qr_count > 0 and qr_count == table_count
+    stations_ready = len(stations) > 0
+    window_ready = bool(ev.start_time and ev.end_time and ev.timezone)
+    publication_ready = bool(ev.is_ordering_open and auth_status in ["ACTIVE", "SCHEDULED"])
+
+    is_fully_ready = all([
+        details_ready,
+        kitchen_ready,
+        menu_ready,
+        tables_ready,
+        qrs_ready,
+        stations_ready,
+        window_ready
+    ])
+
+    return {
+        "eventId": ev.id,
+        "restaurantId": canonical_id,
+        "isFullyReady": is_fully_ready,
+        "checklist": {
+            "eventDetails": {
+                "isReady": details_ready,
+                "title": ev.title,
+                "venueName": ev.venue_name or (rest.name if rest else ""),
+                "eventType": ev.event_type or "WEDDING",
+            },
+            "cateringKitchen": {
+                "isReady": kitchen_ready,
+                "restaurantId": rest.id if rest else canonical_id,
+                "restaurantName": rest.name if rest else "Catering Kitchen",
+            },
+            "availableMenu": {
+                "isReady": menu_ready,
+                "itemCount": menu_item_count,
+            },
+            "eventTables": {
+                "isReady": tables_ready,
+                "tableCount": table_count,
+            },
+            "qrCodes": {
+                "isReady": qrs_ready,
+                "qrCount": qr_count,
+            },
+            "enabledStations": {
+                "isReady": stations_ready,
+                "stations": stations,
+            },
+            "serviceWindow": {
+                "isReady": window_ready,
+                "startDate": ev.event_date,
+                "endDate": ev.end_date or ev.event_date,
+                "startTime": ev.start_time,
+                "endTime": ev.end_time,
+                "timezone": ev.timezone,
+                "durationFormatted": duration_fmt,
+                "isServiceActive": is_active_window,
+            },
+            "eventPublication": {
+                "isReady": publication_ready,
+                "status": auth_status,
+                "isOrderingOpen": ev.is_ordering_open,
+            }
+        }
+    }
+
+@router.get("/{restaurant_id}/events/{event_id}/tables")
+async def list_event_tables(
+    restaurant_id: str,
+    event_id: str,
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(WeddingEvent).where(WeddingEvent.id == event_id, WeddingEvent.restaurant_id == canonical_id)
+    res = await db.execute(stmt)
+    ev = res.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    t_stmt = select(EventTable).where(EventTable.event_id == ev.id, EventTable.is_active.is_(True)).order_by(EventTable.table_number.asc())
+    t_res = await db.execute(t_stmt)
+    tables = t_res.scalars().all()
+    return [_format_table(t) for t in tables]
 
 @router.post("/{restaurant_id}/events/{event_id}/tables", status_code=status.HTTP_201_CREATED)
 async def add_event_table(

@@ -513,6 +513,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.getEventOrders(eventId, restaurantId);
   }
 
+  async getEventReadiness(eventId: string, restaurantId?: string): Promise<any> {
+    return this.restaurant.getEventReadiness(eventId, restaurantId);
+  }
+
   async getPublicEvent(eventId: string, table?: string): Promise<PublicWeddingEventResponse> {
     return this.restaurant.getPublicEvent(eventId, table);
   }

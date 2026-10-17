@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
-import { WeddingEvent, EventTable, Restaurant, Order, MenuCategory, MenuItem, isModuleEnabled } from '../../packages/types';
+import {
+  WeddingEvent,
+  EventTable,
+  Restaurant,
+  Order,
+  MenuCategory,
+  MenuItem,
+  isModuleEnabled,
+} from '../../packages/types';
 import { Modal } from '../../packages/ui/Modal';
 import { Button } from '../../packages/ui/Button';
 import { Badge } from '../../packages/ui/Badge';
@@ -38,6 +46,13 @@ import {
   Send,
   RefreshCw,
   TableProperties,
+  Flame,
+  Truck,
+  Check,
+  Radio,
+  Layers,
+  ChevronDown,
+  Info,
 } from 'lucide-react';
 
 export const cleanTableBadge = (tbl?: string): string => {
@@ -91,6 +106,25 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'SCHEDULED' | 'CLOSED' | 'PAUSED' | 'DRAFT' | 'COMPLETED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Primary Operating Mode: 'terminal' (Event Operations Terminal) vs 'catalog' (All Events List)
+  const [viewMode, setViewMode] = useState<'terminal' | 'catalog'>('terminal');
+  const [selectedEventId, setSelectedEventId] = useState<string>('');
+
+  // Terminal Sub-Views: 'orders' | 'tables' | 'delivery'
+  const [terminalView, setTerminalView] = useState<'orders' | 'tables' | 'delivery'>('orders');
+  const [orderSubFilter, setOrderSubFilter] = useState<'ALL' | 'NEW' | 'PREPARING' | 'READY' | 'DELIVERED'>('ALL');
+
+  // Terminal Active Event Data
+  const [terminalOrders, setTerminalOrders] = useState<Order[]>([]);
+  const [terminalTables, setTerminalTables] = useState<EventTable[]>([]);
+  const [loadingTerminalData, setLoadingTerminalData] = useState(false);
+  const [isReadinessOpen, setIsReadinessOpen] = useState(false);
+  const [readinessData, setReadinessData] = useState<any>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<Record<string, boolean>>({});
+
+  // Selected Table Drawer / Detail Modal
+  const [selectedTableDetail, setSelectedTableDetail] = useState<EventTable | null>(null);
 
   // Creation/Edit Wizard Modal State
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -149,7 +183,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
-  // Tables & QR Studio Modal State
+  // Tables & QR Studio Modal State (for Catalog View)
   const [selectedEventForTables, setSelectedEventForTables] = useState<WeddingEvent | null>(null);
   const [eventTables, setEventTables] = useState<EventTable[]>([]);
   const [newTableNumber, setNewTableNumber] = useState('');
@@ -158,50 +192,24 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [isAddingTable, setIsAddingTable] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  // Live Orders Modal State
-  const [selectedEventForOrders, setSelectedEventForOrders] = useState<WeddingEvent | null>(null);
-  const [eventOrders, setEventOrders] = useState<Order[]>([]);
-  const [loadingOrders, setLoadingOrders] = useState(false);
-
-  // Calculated Service Window (for Wizard live preview)
-  const calculatedServiceWindow = useMemo(() => {
-    if (!formEventDate || !formStartTime || !formEndTime) {
-      return null;
+  // Selected event object
+  const currentEvent = useMemo(() => {
+    if (!events || events.length === 0) return null;
+    if (selectedEventId) {
+      const match = events.find((e) => e.id === selectedEventId);
+      if (match) return match;
     }
-    const isCrossMidnight = !formIsMultiDay && formEndTime <= formStartTime;
-    let resolvedEndDate = formEventDate;
+    // Default to first active event, or first available event
+    const activeEvt = events.find((e) => e.status === 'ACTIVE');
+    return activeEvt || events[0];
+  }, [events, selectedEventId]);
 
-    if (formIsMultiDay && formEndDate) {
-      resolvedEndDate = formEndDate;
-    } else if (isCrossMidnight) {
-      const d = new Date(formEventDate);
-      d.setDate(d.getDate() + 1);
-      resolvedEndDate = d.toISOString().split('T')[0];
+  // Keep selectedEventId synced with currentEvent
+  useEffect(() => {
+    if (currentEvent && currentEvent.id !== selectedEventId) {
+      setSelectedEventId(currentEvent.id);
     }
-
-    let durationHours = 0;
-    try {
-      const startLocal = new Date(`${formEventDate}T${formStartTime}:00`);
-      const endLocal = new Date(`${resolvedEndDate}T${formEndTime}:00`);
-      const diffMs = endLocal.getTime() - startLocal.getTime();
-      if (diffMs > 0) {
-        durationHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(1));
-      }
-    } catch (e) {
-      durationHours = 0;
-    }
-
-    return {
-      startDate: formEventDate,
-      startTime: formStartTime,
-      endDate: resolvedEndDate,
-      endTime: formEndTime,
-      timezone: formTimezone,
-      durationHours,
-      isCrossMidnight,
-      isMultiDay: formIsMultiDay || formServiceDays > 1,
-    };
-  }, [formEventDate, formStartTime, formEndTime, formEndDate, formIsMultiDay, formServiceDays, formTimezone]);
+  }, [currentEvent?.id]);
 
   // Load applicant status from Platform Admin approval queue
   const loadApplicantStatus = async () => {
@@ -234,6 +242,31 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     }
   };
 
+  // Load Terminal Active Event Data (Orders, Tables, Readiness)
+  const loadTerminalData = async (silent = false) => {
+    if (!currentRestaurant?.id || !currentEvent?.id) return;
+    if (!silent) setLoadingTerminalData(true);
+    try {
+      const [ords, evDetail, readiness] = await Promise.all([
+        api.getEventOrders(currentEvent.id, currentRestaurant.id),
+        api.getEvent(currentRestaurant.id, currentEvent.id).catch(() => null),
+        api.getEventReadiness(currentEvent.id, currentRestaurant.id).catch(() => null),
+      ]);
+
+      setTerminalOrders(ords || []);
+      if (evDetail?.tables) {
+        setTerminalTables(evDetail.tables);
+      }
+      if (readiness) {
+        setReadinessData(readiness);
+      }
+    } catch (err: any) {
+      console.warn('Failed to refresh terminal event data:', err);
+    } finally {
+      if (!silent) setLoadingTerminalData(false);
+    }
+  };
+
   useEffect(() => {
     loadEvents();
     loadApplicantStatus();
@@ -242,6 +275,21 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     }
   }, [currentRestaurant?.id, currentUser?.email]);
 
+  useEffect(() => {
+    if (currentEvent?.id) {
+      loadTerminalData();
+    }
+  }, [currentEvent?.id]);
+
+  // Periodic polling for live event operations (every 7 seconds)
+  useEffect(() => {
+    if (!currentEvent?.id) return;
+    const interval = setInterval(() => {
+      loadTerminalData(true);
+    }, 7000);
+    return () => clearInterval(interval);
+  }, [currentEvent?.id, currentRestaurant?.id]);
+
   // Load Menu items & categories when wizard opens
   useEffect(() => {
     if (isWizardOpen && currentRestaurant?.id) {
@@ -249,6 +297,155 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
       api.getMenuItems(currentRestaurant.id).then(setMenuItems).catch(() => {});
     }
   }, [isWizardOpen, currentRestaurant?.id]);
+
+  // Station Progress Derivation
+  const getStationProgress = (order: Order) => {
+    const rawItems = order.items || [];
+    let hasKitchen = false;
+    let hasBar = false;
+    let hasHookah = false;
+
+    rawItems.forEach((it) => {
+      const dest = (it.targetDestination || (it as any).target_destination || '').toUpperCase();
+      if (dest === 'HOOKAH') hasHookah = true;
+      else if (dest === 'BAR' || it.isAlcoholic) hasBar = true;
+      else hasKitchen = true;
+    });
+
+    const kStatus = order.kitchenStatus || 'PENDING';
+    const bStatus = order.barStatus || 'PENDING';
+    const hStatus = order.hookahStatus || 'PENDING';
+
+    const kReady = !hasKitchen || ['READY', 'COMPLETED', 'DELIVERED', 'SERVED'].includes(kStatus);
+    const bReady = !hasBar || ['READY', 'COMPLETED', 'DELIVERED', 'SERVED'].includes(bStatus);
+    const hReady = !hasHookah || ['READY', 'COMPLETED', 'DELIVERED', 'SERVED'].includes(hStatus);
+
+    const isFullyReady = kReady && bReady && hReady;
+
+    return {
+      hasKitchen,
+      kitchenStatus: hasKitchen ? kStatus : 'NOT_REQUIRED',
+      hasBar,
+      barStatus: hasBar ? bStatus : 'NOT_REQUIRED',
+      hasHookah,
+      hookahStatus: hasHookah ? hStatus : 'NOT_REQUIRED',
+      isFullyReady,
+    };
+  };
+
+  // Helper to construct guest link
+  const getEventGuestUrl = (eventId: string, tableNumber: string) => {
+    const slug = currentRestaurant?.publicSlug || currentRestaurant?.slug || currentRestaurant?.id || 'event';
+    const isLocalhost = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+    const port = window.location.port ? `:${window.location.port}` : '';
+    if (isLocalhost) {
+      return `${window.location.protocol}//${window.location.hostname}${port}/event/${eventId}?table=${encodeURIComponent(tableNumber)}`;
+    }
+    return `https://${slug}.dinely.food/event/${eventId}?table=${encodeURIComponent(tableNumber)}`;
+  };
+
+  // Download QR as PNG
+  const handleDownloadQR = (tableNumber: string, canvasId: string) => {
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Wedding_Table_${tableNumber}_QR.png`;
+    a.click();
+  };
+
+  // Copy link to clipboard
+  const handleCopyLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    if (addToast) addToast({ type: 'success', title: 'Link copied to clipboard' });
+  };
+
+  // Order Delivery Actions
+  const handleClaimOrder = async (order: Order) => {
+    if (!order.id || isUpdatingStatus[order.id]) return;
+    setIsUpdatingStatus((prev) => ({ ...prev, [order.id]: true }));
+    try {
+      const staffName = currentUser?.name || currentUser?.firstName || currentUser?.email?.split('@')[0] || 'Banquet Server';
+      await api.updateOrderStatus(order.id, {
+        claimedBy: staffName,
+        deliveryStatus: 'CLAIMED',
+      });
+      if (addToast) {
+        addToast({ type: 'success', title: 'Order Claimed', message: `Order #${cleanTableBadge(order.tableNumber)} claimed by ${staffName}` });
+      }
+      await loadTerminalData(true);
+    } catch (err: any) {
+      console.error('Failed to claim order:', err);
+      if (addToast) addToast({ type: 'error', title: 'Claim Failed', message: err.message });
+    } finally {
+      setIsUpdatingStatus((prev) => ({ ...prev, [order.id]: false }));
+    }
+  };
+
+  const handleOutForDelivery = async (order: Order) => {
+    if (!order.id || isUpdatingStatus[order.id]) return;
+    setIsUpdatingStatus((prev) => ({ ...prev, [order.id]: true }));
+    try {
+      const staffName = order.claimedBy || currentUser?.name || currentUser?.email?.split('@')[0] || 'Banquet Server';
+      await api.updateOrderStatus(order.id, {
+        status: 'OUT_FOR_DELIVERY',
+        deliveryStatus: 'OUT_FOR_DELIVERY',
+        claimedBy: staffName,
+      });
+      if (addToast) {
+        addToast({ type: 'info', title: 'Out for Delivery', message: `Order for Table ${cleanTableBadge(order.tableNumber)} is on the way` });
+      }
+      await loadTerminalData(true);
+    } catch (err: any) {
+      console.error('Failed to mark out for delivery:', err);
+      if (addToast) addToast({ type: 'error', title: 'Update Failed', message: err.message });
+    } finally {
+      setIsUpdatingStatus((prev) => ({ ...prev, [order.id]: false }));
+    }
+  };
+
+  const handleConfirmDelivered = async (order: Order) => {
+    if (!order.id || isUpdatingStatus[order.id]) return;
+    setIsUpdatingStatus((prev) => ({ ...prev, [order.id]: true }));
+    try {
+      await api.updateOrderStatus(order.id, {
+        status: 'DELIVERED',
+        deliveryStatus: 'DELIVERED',
+      });
+      if (addToast) {
+        addToast({ type: 'success', title: 'Delivered Successfully', message: `Table ${cleanTableBadge(order.tableNumber)} order marked delivered.` });
+      }
+      await loadTerminalData(true);
+    } catch (err: any) {
+      console.error('Failed to confirm delivery:', err);
+      if (addToast) addToast({ type: 'error', title: 'Delivery Failed', message: err.message });
+    } finally {
+      setIsUpdatingStatus((prev) => ({ ...prev, [order.id]: false }));
+    }
+  };
+
+  // Toggle Live Ordering
+  const handleToggleOrdering = async (ev: WeddingEvent) => {
+    if (!currentRestaurant?.id) return;
+    try {
+      const res = await api.toggleEventOrdering(ev.id, currentRestaurant.id);
+      setEvents((prev) =>
+        prev.map((item) => (item.id === ev.id ? { ...item, isOrderingOpen: res.isOrderingOpen } : item))
+      );
+      if (addToast) {
+        addToast({
+          type: res.isOrderingOpen ? 'success' : 'info',
+          title: res.isOrderingOpen ? 'Ordering Opened' : 'Ordering Paused',
+          message: `Guest orders are now ${res.isOrderingOpen ? 'actively accepted' : 'temporarily paused'}.`,
+        });
+      }
+      await loadTerminalData(true);
+    } catch (err: any) {
+      console.error('Failed to toggle event ordering:', err);
+      if (addToast) addToast({ type: 'error', title: 'Update Failed', message: err.message });
+    }
+  };
 
   // Open Wizard for new event
   const handleOpenNewWizard = () => {
@@ -300,294 +497,59 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     setFormVenueName(ev.venueName || '');
     setFormWelcomeMessage(ev.welcomeMessage || '');
     setFormThemeColor(ev.themeColor || 'champagne');
-    setFormStatus(ev.status === 'DRAFT' ? 'DRAFT' : 'ACTIVE');
+    setFormStatus((ev.status === 'DRAFT' ? 'DRAFT' : 'ACTIVE') as any);
     setFormMenuSelectionType(ev.menuSelectionType || 'FULL_MENU');
     setFormAllowedCategoryIds(ev.allowedCategoryIds || []);
     setFormAllowedItemIds(ev.allowedItemIds || []);
     setFormEstimatedGuestCount(ev.estimatedGuestCount || 100);
-    setFormTableCount(ev.tableCount || 5);
+    setFormTableCount(ev.tableCount || 10);
     setFormNotes(ev.notes || '');
-    setIsWizardOpen(true);
 
     if (currentRestaurant?.id) {
+      setLoadingWizardTables(true);
       try {
-        const fullEv = await api.getEvent(ev.id, currentRestaurant.id);
-        setWizardTables(fullEv.tables || []);
+        const fullEvt = await api.getEvent(currentRestaurant.id, ev.id);
+        setWizardTables(fullEvt.tables || []);
       } catch (e) {
-        console.warn('Could not pre-fetch tables for wizard edit:', e);
+        console.warn('Failed to load event tables for editing:', e);
+      } finally {
+        setLoadingWizardTables(false);
       }
     }
+
+    setIsWizardOpen(true);
   };
 
-  // Resume an existing draft
-  const handleResumeDraft = async (ev: WeddingEvent) => {
-    await handleOpenEditWizard(ev);
-    if (ev.tableCount && ev.tableCount > 0 && ev.menuSelectionType) {
-      setWizardStep(3);
-    } else if (ev.title && ev.eventDate) {
-      setWizardStep(2);
-    } else {
-      setWizardStep(1);
-    }
+  // Resume Draft
+  const handleResumeDraft = (draft: WeddingEvent) => {
+    handleOpenEditWizard(draft);
   };
 
-  // Step-by-Step Backend Persistence: saves draft or active status at every step
-  const persistStepToBackend = async (targetStatus: 'DRAFT' | 'ACTIVE' = 'DRAFT'): Promise<WeddingEvent | null> => {
-    if (!currentRestaurant?.id) return null;
-    if (!formTitle.trim()) {
-      if (addToast) addToast({ type: 'error', title: 'Title Required', message: 'Please enter an event title before continuing.' });
-      return null;
-    }
-    if (!formEventDate) {
-      if (addToast) addToast({ type: 'error', title: 'Start Date Required', message: 'Please select an event start date before continuing.' });
-      return null;
-    }
-
-    setIsSaving(true);
-    try {
-      const payload: any = {
-        title: formTitle.trim(),
-        coupleNames: formCoupleNames.trim(),
-        eventType: formEventType,
-        eventDate: formEventDate,
-        endDate: formIsMultiDay && formEndDate ? formEndDate : (calculatedServiceWindow?.endDate || formEventDate),
-        startTime: formStartTime,
-        endTime: formEndTime,
-        timezone: formTimezone,
-        serviceDays: formIsMultiDay ? Math.max(1, formServiceDays) : 1,
-        autoActivate: formAutoActivate,
-        venueName: formVenueName.trim() || currentRestaurant.name || '',
-        welcomeMessage: formWelcomeMessage.trim(),
-        themeColor: formThemeColor,
-        status: targetStatus,
-        isOrderingOpen: targetStatus === 'ACTIVE',
-        menuSelectionType: formMenuSelectionType,
-        allowedCategoryIds: formAllowedCategoryIds,
-        allowedItemIds: formAllowedItemIds,
-        estimatedGuestCount: Number(formEstimatedGuestCount) || 100,
-        notes: formNotes.trim(),
-      };
-
-      let saved: WeddingEvent;
-      if (editingEventId) {
-        saved = await api.updateEvent(editingEventId, payload, currentRestaurant.id);
-      } else {
-        payload.tableCount = Number(formTableCount) || 10;
-        saved = await api.createEvent(payload, currentRestaurant.id);
-        setEditingEventId(saved.id);
-      }
-
-      await loadEvents();
-      return saved;
-    } catch (err: any) {
-      console.error('Failed to persist step to backend:', err);
-      if (addToast) addToast({ type: 'error', title: 'Save Step Failed', message: err.message });
-      return null;
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Move forward in wizard with automatic backend save
-  const handleWizardStepAdvance = async (nextStep: number) => {
-    if (wizardStep === 1) {
-      if (!formTitle.trim() || !formEventDate) {
-        if (addToast) addToast({ type: 'error', title: 'Incomplete Details', message: 'Please provide event title and start date.' });
-        return;
-      }
-      const saved = await persistStepToBackend('DRAFT');
-      if (!saved) return;
-    } else if (wizardStep === 2) {
-      const saved = await persistStepToBackend('DRAFT');
-      if (!saved) return;
-      if (editingEventId || saved?.id) {
-        setLoadingWizardTables(true);
-        try {
-          const fullEv = await api.getEvent(editingEventId || saved.id, currentRestaurant?.id);
-          setWizardTables(fullEv.tables || []);
-        } catch (e) {
-          console.warn('Failed to load wizard tables:', e);
-        } finally {
-          setLoadingWizardTables(false);
-        }
-      }
-    } else if (wizardStep === 3) {
-      const saved = await persistStepToBackend('DRAFT');
-      if (!saved) return;
-    }
-    setWizardStep(nextStep);
-  };
-
-  // Final Action 1: Save progress as Draft
-  const handleSaveDraftAndClose = async () => {
-    const saved = await persistStepToBackend('DRAFT');
-    if (saved) {
-      if (addToast) {
-        addToast({
-          type: 'success',
-          title: 'Banquet Setup Saved as Draft 💾',
-          message: `Your setup progress for "${saved.title}" is saved in the database. You can resume anytime from the dashboard.`,
-        });
-      }
-      setIsWizardOpen(false);
-    }
-  };
-
-  // Final Action 2: Activate Event Ordering
-  const handleActivateEventOrdering = async () => {
-    const saved = await persistStepToBackend('ACTIVE');
-    if (saved) {
-      if (addToast) {
-        addToast({
-          type: 'success',
-          title: 'Event Ordering is LIVE! 🎉',
-          message: `"${saved.title}" is published and accepting guest dining orders via table QR codes.`,
-        });
-      }
-      setIsWizardOpen(false);
-    }
-  };
-
-  // Quick Seed Sample Catering Menu if 0 dishes
+  // Seed sample menu
   const handleSeedSampleMenu = async () => {
-    if (!currentRestaurant?.id) return;
+    if (!currentRestaurant?.id || isSeedingMenu) return;
     setIsSeedingMenu(true);
     try {
-      let cats = menuCategories;
-      if (cats.length === 0) {
-        cats = await api.getCategories(currentRestaurant.id);
-      }
-      const catStarters = cats.find((c) => c.name.toLowerCase().includes('starter')) || cats[0];
-      const catMains = cats.find((c) => c.name.toLowerCase().includes('main')) || cats[1] || catStarters;
-      const catDesserts = cats.find((c) => c.name.toLowerCase().includes('dessert')) || cats[2] || catStarters;
-      const catBeverages = cats.find((c) => c.name.toLowerCase().includes('beverage') || c.name.toLowerCase().includes('drink')) || cats[3] || catStarters;
-
-      const sampleItems: Partial<MenuItem>[] = [
-        {
-          name: 'Royal Paneer Tikka & Herb Chutney',
-          description: 'Chargrilled cottage cheese infused with saffron spices and fresh mint chutney.',
-          price: 320.0,
-          categoryId: catStarters?.id,
-          targetDestination: 'KITCHEN',
-          isVegetarian: true,
-          dietaryType: 'VEG',
-          isAvailable: true,
-        },
-        {
-          name: 'Butter Chicken Grand Banquet Platter',
-          description: 'Slow-simmered tender chicken in rich aromatic tomato butter gravy.',
-          price: 480.0,
-          categoryId: catMains?.id,
-          targetDestination: 'KITCHEN',
-          isVegetarian: false,
-          dietaryType: 'NON_VEG',
-          isAvailable: true,
-        },
-        {
-          name: 'Kesari Mango Kulfi Royale',
-          description: 'Traditional slow-reduced milk kulfi topped with crushed pistachios.',
-          price: 180.0,
-          categoryId: catDesserts?.id,
-          targetDestination: 'KITCHEN',
-          isVegetarian: true,
-          dietaryType: 'VEG',
-          isAvailable: true,
-        },
-        {
-          name: 'Sparkling Berry Banquet Mocktail',
-          description: 'Chilled wild berries, lime cordial, and sparkling fizz with fresh rosemary.',
-          price: 160.0,
-          categoryId: catBeverages?.id,
-          targetDestination: 'BAR',
-          isVegetarian: true,
-          isAlcoholic: false,
-          isAvailable: true,
-        },
-      ];
-
-      for (const item of sampleItems) {
-        await api.createMenuItem({ ...item, restaurantId: currentRestaurant.id });
-      }
-
-      const updated = await api.getMenuItems(currentRestaurant.id);
-      setMenuItems(updated);
+      const items = await api.seedSampleMenu(currentRestaurant.id);
+      setMenuItems(items);
       if (addToast) {
         addToast({
           type: 'success',
-          title: 'Sample Catering Menu Added 🍽️',
-          message: 'Added 4 gourmet dishes to your catering catalog. Guests can now order from their banquet table QR codes.',
+          title: 'Catering Menu Initialized',
+          message: `Created 9 chef-curated banquet dishes across Appetizers, Entrees, Bread, and Desserts.`,
         });
       }
-    } catch (err: any) {
-      if (addToast) {
-        addToast({ type: 'error', title: 'Menu seed failed', message: err.message });
-      }
+      await loadTerminalData(true);
+    } catch (e: any) {
+      if (addToast) addToast({ type: 'error', title: 'Menu Seed Failed', message: e.message });
     } finally {
       setIsSeedingMenu(false);
     }
   };
 
-  // Submit Application to Platform Admin
-  const handleSubmitApplication = async () => {
-    if (!currentRestaurant?.id || !applyWeddingName.trim() || !applyDate) {
-      if (addToast) addToast({ type: 'error', title: 'Incomplete Request', message: 'Please provide event name and date.' });
-      return;
-    }
-    setIsSubmittingApplication(true);
-    try {
-      const res = await api.submitWeddingRequest({
-        applicantName: currentUser?.name || currentUser?.email || 'Restaurant Owner',
-        applicantEmail: currentUser?.email || 'owner@dinely.food',
-        applicantPhone: applyPhone.trim() || '+91 98765 43210',
-        weddingName: applyWeddingName.trim(),
-        eventType: applyEventType,
-        eventDate: applyDate,
-        venueName: currentRestaurant.name || 'Grand Ballroom',
-        venueCity: currentRestaurant.address || 'Mumbai',
-        cateringRestaurantId: currentRestaurant.id,
-        notes: applyNotes.trim() || 'Submitted via Owner OS dashboard',
-      });
-
-      if (addToast) {
-        addToast({
-          type: 'success',
-          title: 'Application Submitted to Platform Admin 📨',
-          message: `Request ${res.requestId} submitted for verification by ayan090912@gmail.com.`,
-        });
-      }
-      setIsApplyingModalOpen(false);
-      setApplyWeddingName('');
-      await loadApplicantStatus();
-    } catch (err: any) {
-      if (addToast) addToast({ type: 'error', title: 'Submission Failed', message: err.message });
-    } finally {
-      setIsSubmittingApplication(false);
-    }
-  };
-
-  // Quick toggle ordering
-  const handleToggleOrdering = async (ev: WeddingEvent) => {
-    if (!currentRestaurant?.id) return;
-    try {
-      const res = await api.toggleEventOrdering(ev.id, currentRestaurant.id);
-      setEvents((prev) =>
-        prev.map((e) => (e.id === ev.id ? { ...e, isOrderingOpen: res.isOrderingOpen } : e))
-      );
-      if (addToast) {
-        addToast({
-          type: res.isOrderingOpen ? 'success' : 'info',
-          title: res.isOrderingOpen ? 'Ordering is now LIVE' : 'Ordering PAUSED',
-          message: `Guest dining for "${ev.title}" is now ${res.isOrderingOpen ? 'OPEN' : 'PAUSED'}.`,
-        });
-      }
-    } catch (err: any) {
-      if (addToast) addToast({ type: 'error', title: 'Failed to toggle ordering', message: err.message });
-    }
-  };
-
-  // Extend event service period
+  // Extend Service Period
   const handleExtendServicePeriod = async () => {
-    if (!currentRestaurant?.id || !extendingEvent) return;
+    if (!extendingEvent || !currentRestaurant?.id) return;
     setIsExtending(true);
     try {
       const payload: any = {
@@ -597,26 +559,22 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
         payload.newEndDate = customExtensionDate;
         payload.newEndTime = customExtensionTime;
       } else {
-        payload.extensionMinutes = extensionMinutes;
+        payload.extensionMinutes = Number(extensionMinutes) || 60;
       }
 
-      const updated = await api.extendEventServicePeriod(extendingEvent.id, payload, currentRestaurant.id);
-      setEvents((prev) =>
-        prev.map((e) => (e.id === extendingEvent.id ? { ...e, ...updated, status: updated.status || 'ACTIVE', isOrderingOpen: true } : e))
-      );
+      await api.extendEventServicePeriod(extendingEvent.id, payload, currentRestaurant.id);
       if (addToast) {
         addToast({
           type: 'success',
-          title: 'Service Window Extended',
-          message: `Event dining extended until ${updated.endTime || ''} ${updated.endDate || ''}. Kitchen ordering is active.`,
+          title: 'Dining Period Extended',
+          message: `Event window lengthened. Live guest ordering restored.`,
         });
       }
       setExtendingEvent(null);
+      await loadEvents();
+      await loadTerminalData(true);
     } catch (err: any) {
-      console.error('Failed to extend event:', err);
-      if (addToast) {
-        addToast({ type: 'error', title: 'Extension Failed', message: err.message });
-      }
+      if (addToast) addToast({ type: 'error', title: 'Extension Failed', message: err.message });
     } finally {
       setIsExtending(false);
     }
@@ -625,560 +583,1390 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   // Delete event
   const handleDeleteEvent = async (ev: WeddingEvent) => {
     if (!currentRestaurant?.id) return;
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete "${ev.title}"? All event tables and guest QR codes will be permanently removed.`
-    );
-    if (!confirmDelete) return;
+    const confirmDel = window.confirm(`Are you sure you want to delete event "${ev.title}"? All event tables and order records will be cleared.`);
+    if (!confirmDel) return;
 
     try {
       await api.deleteEvent(ev.id, currentRestaurant.id);
-      setEvents((prev) => prev.filter((e) => e.id !== ev.id));
-      if (addToast) addToast({ type: 'success', title: 'Event deleted' });
+      setEvents((prev) => prev.filter((item) => item.id !== ev.id));
+      if (addToast) addToast({ type: 'info', title: 'Event Deleted', message: `Event "${ev.title}" removed.` });
     } catch (err: any) {
-      if (addToast) addToast({ type: 'error', title: 'Delete failed', message: err.message });
+      if (addToast) addToast({ type: 'error', title: 'Delete Failed', message: err.message });
     }
   };
 
-  // Open Tables Modal
-  const handleOpenTablesModal = async (ev: WeddingEvent) => {
-    if (!currentRestaurant?.id) return;
-    setSelectedEventForTables(ev);
+  // Save wizard event
+  const handleSaveWizardEvent = async (isDraft = false) => {
+    if (!currentRestaurant?.id || isSaving) return;
+    if (!formTitle.trim()) {
+      if (addToast) addToast({ type: 'error', title: 'Title Required', message: 'Please provide an event title.' });
+      return;
+    }
+    if (!formEventDate) {
+      if (addToast) addToast({ type: 'error', title: 'Start Date Required', message: 'Please select an event date.' });
+      return;
+    }
+
+    setIsSaving(true);
     try {
-      const fullEv = await api.getEvent(ev.id, currentRestaurant.id);
-      setEventTables(fullEv.tables || []);
-    } catch (e) {
-      console.error('Failed to load event tables:', e);
+      const payload: any = {
+        title: formTitle.trim(),
+        coupleNames: formCoupleNames.trim(),
+        eventType: formEventType,
+        eventDate: formEventDate,
+        endDate: formIsMultiDay && formEndDate ? formEndDate : formEventDate,
+        startTime: formStartTime || '18:00',
+        endTime: formEndTime || '23:30',
+        timezone: formTimezone || 'Asia/Kolkata',
+        serviceDays: formIsMultiDay ? formServiceDays : 1,
+        autoActivate: formAutoActivate,
+        venueName: formVenueName.trim(),
+        welcomeMessage: formWelcomeMessage.trim(),
+        themeColor: formThemeColor,
+        status: isDraft ? 'DRAFT' : 'ACTIVE',
+        isOrderingOpen: !isDraft,
+        menuSelectionType: formMenuSelectionType,
+        allowedCategoryIds: formMenuSelectionType === 'RESTRICTED' ? formAllowedCategoryIds : [],
+        allowedItemIds: formMenuSelectionType === 'RESTRICTED' ? formAllowedItemIds : [],
+        estimatedGuestCount: Number(formEstimatedGuestCount) || 100,
+        tableCount: Math.max(1, Number(formTableCount) || 10),
+        notes: formNotes.trim(),
+      };
+
+      if (editingEventId) {
+        await api.updateEvent(editingEventId, payload, currentRestaurant.id);
+        if (addToast) addToast({ type: 'success', title: 'Event Updated', message: `Changes saved successfully.` });
+      } else {
+        await api.createEvent(payload, currentRestaurant.id);
+        if (addToast) {
+          addToast({
+            type: 'success',
+            title: isDraft ? 'Draft Saved' : 'Event Created & Activated 🎉',
+            message: `Banquet "${formTitle}" is configured with dedicated QR tables.`,
+          });
+        }
+      }
+
+      setIsWizardOpen(false);
+      await loadEvents();
+      await loadTerminalData(true);
+    } catch (err: any) {
+      if (addToast) addToast({ type: 'error', title: 'Save Failed', message: err.message });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Add Table to Event
-  const handleAddTable = async () => {
-    if (!currentRestaurant?.id || !selectedEventForTables || !newTableNumber.trim()) return;
+  // Add Table to Active Event
+  const handleAddTableToEvent = async () => {
+    if (!currentRestaurant?.id || !currentEvent?.id || !newTableNumber.trim() || isAddingTable) return;
     setIsAddingTable(true);
     try {
-      const created = await api.addEventTable(
-        selectedEventForTables.id,
+      const cleanNum = cleanTableBadge(newTableNumber);
+      const created = await api.createEventTable(
+        currentEvent.id,
         {
-          tableNumber: newTableNumber.trim(),
-          tableLabel: newTableLabel.trim() || undefined,
+          tableNumber: cleanNum,
+          tableLabel: newTableLabel.trim() || `Table ${cleanNum}`,
           capacity: Number(newTableCapacity) || 8,
         },
         currentRestaurant.id
       );
-      setEventTables((prev) => [...prev, created]);
+
+      setTerminalTables((prev) => [...prev, created]);
       setNewTableNumber('');
       setNewTableLabel('');
-      if (addToast) addToast({ type: 'success', title: `Table ${created.tableNumber} added` });
+      setNewTableCapacity(8);
+      if (addToast) addToast({ type: 'success', title: 'Table Added', message: `Table ${cleanNum} provisioned.` });
     } catch (err: any) {
-      if (addToast) addToast({ type: 'error', title: 'Failed to add table', message: err.message });
+      if (addToast) addToast({ type: 'error', title: 'Add Table Failed', message: err.message });
     } finally {
       setIsAddingTable(false);
     }
   };
 
-  // Delete Table from Event
-  const handleDeleteTable = async (tableId: string) => {
-    if (!currentRestaurant?.id || !selectedEventForTables) return;
+  // Delete Table from Active Event
+  const handleDeleteTableFromEvent = async (tableId: string) => {
+    if (!currentRestaurant?.id || !currentEvent?.id) return;
+    const confirmDel = window.confirm('Delete this event table? Printed QR codes for this table will no longer resolve.');
+    if (!confirmDel) return;
+
     try {
-      await api.deleteEventTable(selectedEventForTables.id, tableId, currentRestaurant.id);
-      setEventTables((prev) => prev.filter((t) => t.id !== tableId));
-      if (addToast) addToast({ type: 'success', title: 'Table deleted' });
+      await api.deleteEventTable(currentEvent.id, tableId, currentRestaurant.id);
+      setTerminalTables((prev) => prev.filter((t) => t.id !== tableId));
+      if (selectedTableDetail?.id === tableId) {
+        setSelectedTableDetail(null);
+      }
+      if (addToast) addToast({ type: 'info', title: 'Table Removed' });
     } catch (err: any) {
-      if (addToast) addToast({ type: 'error', title: 'Failed to delete table', message: err.message });
+      if (addToast) addToast({ type: 'error', title: 'Delete Failed', message: err.message });
     }
   };
 
-  // Open Live Orders Modal
-  const handleOpenOrdersModal = async (ev: WeddingEvent) => {
-    if (!currentRestaurant?.id) return;
-    setSelectedEventForOrders(ev);
-    setLoadingOrders(true);
-    try {
-      const orders = await api.getEventOrders(ev.id, currentRestaurant.id);
-      setEventOrders(orders);
-    } catch (err: any) {
-      console.error('Failed to load event orders:', err);
-    } finally {
-      setLoadingOrders(false);
+  // Compute Real Metric Counts from Persisted Orders
+  const liveMetrics = useMemo(() => {
+    const orders = terminalOrders || [];
+    let newCount = 0;
+    let prepCount = 0;
+    let readyCount = 0;
+    let delivCount = 0;
+
+    orders.forEach((o) => {
+      const st = (o.status || 'PENDING').toUpperCase();
+      const prog = getStationProgress(o);
+
+      if (st === 'DELIVERED' || st === 'COMPLETED') {
+        delivCount++;
+      } else if (st === 'READY' || st === 'OUT_FOR_DELIVERY' || prog.isFullyReady) {
+        readyCount++;
+      } else if (st === 'PREPARING' || o.kitchenStatus === 'PREPARING' || o.barStatus === 'PREPARING' || o.hookahStatus === 'PREPARING') {
+        prepCount++;
+      } else {
+        newCount++;
+      }
+    });
+
+    return {
+      newOrders: newCount,
+      preparing: prepCount,
+      readyToDeliver: readyCount,
+      delivered: delivCount,
+      totalOrders: orders.length,
+      totalRevenue: orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0),
+    };
+  }, [terminalOrders]);
+
+  // Filtered Orders for Terminal
+  const filteredTerminalOrders = useMemo(() => {
+    let list = terminalOrders || [];
+
+    if (orderSubFilter !== 'ALL') {
+      list = list.filter((o) => {
+        const st = (o.status || 'PENDING').toUpperCase();
+        const prog = getStationProgress(o);
+        if (orderSubFilter === 'NEW') return st === 'PENDING' || st === 'ACCEPTED';
+        if (orderSubFilter === 'PREPARING') return st === 'PREPARING' && !prog.isFullyReady;
+        if (orderSubFilter === 'READY') return st === 'READY' || st === 'OUT_FOR_DELIVERY' || (st !== 'DELIVERED' && st !== 'COMPLETED' && prog.isFullyReady);
+        if (orderSubFilter === 'DELIVERED') return st === 'DELIVERED' || st === 'COMPLETED';
+        return true;
+      });
     }
-  };
 
-  // Helper to construct guest link
-  const getEventGuestUrl = (eventId: string, tableNumber: string) => {
-    const slug = currentRestaurant?.publicSlug || currentRestaurant?.slug || currentRestaurant?.id || 'event';
-    const isLocalhost = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
-    const port = window.location.port ? `:${window.location.port}` : '';
-    if (isLocalhost) {
-      return `${window.location.protocol}//${window.location.hostname}${port}/event/${eventId}?table=${encodeURIComponent(tableNumber)}`;
-    }
-    return `https://${slug}.dinely.food/event/${eventId}?table=${encodeURIComponent(tableNumber)}`;
-  };
-
-  // Download QR as PNG
-  const handleDownloadQR = (tableNumber: string, canvasId: string) => {
-    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-    if (!canvas) return;
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Wedding_Table_${tableNumber}_QR.png`;
-    a.click();
-  };
-
-  // Copy link to clipboard
-  const handleCopyLink = (url: string) => {
-    navigator.clipboard.writeText(url);
-    if (addToast) addToast({ type: 'success', title: 'Link copied to clipboard' });
-  };
-
-  // Filtered Events
-  const filteredEvents = events.filter((ev) => {
-    if (statusFilter !== 'ALL' && ev.status !== statusFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchTitle = (ev.title || '').toLowerCase().includes(q);
-      const matchCouple = (ev.coupleNames || '').toLowerCase().includes(q);
-      const matchVenue = (ev.venueName || '').toLowerCase().includes(q);
-      if (!matchTitle && !matchCouple && !matchVenue) return false;
+      list = list.filter((o) => {
+        const ordNum = (o.displayOrderNumber || '').toLowerCase();
+        const tblNum = (o.tableNumber || '').toLowerCase();
+        const cust = (o.customerName || '').toLowerCase();
+        return ordNum.includes(q) || tblNum.includes(q) || cust.includes(q);
+      });
     }
-    return true;
-  });
 
-  // Calculate High-Level Metrics
-  const totalEventsCount = events.length;
-  const activeEventsCount = events.filter((e) => e.status === 'ACTIVE').length;
-  const totalTablesCount = events.reduce((acc, e) => acc + (e.tableCount || 0), 0);
-  const totalOrdersCount = events.reduce((acc, e) => acc + (e.orderCount || 0), 0);
-  const totalRevenueSum = events.reduce((acc, e) => acc + (e.totalRevenue || 0), 0);
-  const draftEvent = useMemo(() => events.find((e) => e.status === 'DRAFT'), [events]);
+    return list;
+  }, [terminalOrders, orderSubFilter, searchQuery]);
+
+  // Delivery Orders (Ready to Deliver or Out for Delivery)
+  const deliveryOrders = useMemo(() => {
+    return (terminalOrders || []).filter((o) => {
+      const st = (o.status || 'PENDING').toUpperCase();
+      const prog = getStationProgress(o);
+      return st === 'READY' || st === 'OUT_FOR_DELIVERY' || (st !== 'DELIVERED' && st !== 'COMPLETED' && st !== 'CANCELLED' && prog.isFullyReady);
+    });
+  }, [terminalOrders]);
+
+  // Format timestamp helper (zero ETA, actual time received)
+  const formatReceivedTime = (iso?: string) => {
+    if (!iso) return 'Just now';
+    try {
+      const d = new Date(iso);
+      const diffMs = Date.now() - d.getTime();
+      const mins = Math.max(0, Math.floor(diffMs / 60000));
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (mins < 1) return `Just now (${timeStr})`;
+      if (mins === 1) return `1 min ago (${timeStr})`;
+      return `${mins} mins ago (${timeStr})`;
+    } catch (e) {
+      return 'Received recently';
+    }
+  };
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Top Banner / KPIs */}
+      {/* ========================================================================= */}
+      {/* PRIMARY EVENT OPERATIONS TERMINAL HEADER */}
+      {/* ========================================================================= */}
       <div className="bg-gradient-to-r from-[#181d28] via-[#1b2234] to-[#161a24] border border-[#2d3748] rounded-2xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div>
-            <div className="flex items-center gap-2.5 mb-2">
+            {/* Module Brand Badge & Event Switcher */}
+            <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
               <span className="p-2 rounded-xl bg-gradient-to-tr from-amber-500/20 to-yellow-500/10 text-amber-300 border border-amber-500/30">
                 <Sparkles className="w-5 h-5" />
               </span>
-              <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2 font-serif">
-                Weddings & Luxury Events
-                <span className="text-[11px] font-sans font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  ENTERPRISE MODULE
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                  Event Operations Terminal
                 </span>
-              </h2>
+                <span className="text-[10px] font-sans font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Live Sync
+                </span>
+              </div>
+
+              {/* Event Selector Dropdown (When multiple events exist) */}
+              {events.length > 1 && (
+                <div className="relative inline-block ml-1">
+                  <select
+                    value={selectedEventId}
+                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    className="bg-[#0f131d] border border-amber-500/40 text-amber-200 text-xs font-semibold rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                  >
+                    {events.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.title} ({ev.eventDate}) — {ev.status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
-              Curate bespoke luxury dining banquets, wedding receptions, and private galas. Auto-provision dedicated event tables, generate print-ready QR standees decoupled from daily dining, and deliver a seamless guest ordering experience.
-            </p>
+
+            {/* Selected Event Title & Details */}
+            {currentEvent ? (
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-2xl font-bold text-white tracking-tight font-serif">
+                    {currentEvent.title}
+                  </h1>
+                  <span
+                    className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold ${
+                      currentEvent.status === 'ACTIVE'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : currentEvent.status === 'SCHEDULED'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                        : currentEvent.status === 'PAUSED'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-slate-700/60 text-slate-300 border border-slate-600'
+                    }`}
+                  >
+                    {currentEvent.status === 'ACTIVE'
+                      ? '● ACTIVE'
+                      : currentEvent.status === 'SCHEDULED'
+                      ? '○ SCHEDULED'
+                      : currentEvent.status}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#161c27] text-slate-300 border border-[#273245]">
+                    {currentEvent.tableCount || terminalTables.length || 0} Tables
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 flex flex-wrap items-center gap-3 pt-0.5">
+                  <span className="flex items-center gap-1.5 text-amber-200/90 font-serif italic">
+                    <Heart className="w-3.5 h-3.5 text-amber-400" />
+                    {currentEvent.coupleNames || currentEvent.venueName || 'Banquet Dining'}
+                  </span>
+                  <span>·</span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    {currentEvent.eventDate} {currentEvent.endDate && currentEvent.endDate !== currentEvent.eventDate ? `→ ${currentEvent.endDate}` : ''} ({currentEvent.startTime} - {currentEvent.endTime})
+                  </span>
+                  <span>·</span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    {currentEvent.venueName || currentRestaurant?.name}
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <div>
+                <h1 className="text-xl font-bold text-white font-serif">Wedding & Event Operations</h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  No active events configured. Create your first banquet event to activate live ordering.
+                </p>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Prominent Header Action Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {currentEvent && (
+              <>
+                {/* Live Ordering Pause / Open Button */}
+                <button
+                  onClick={() => handleToggleOrdering(currentEvent)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-lg flex items-center gap-2 ${
+                    currentEvent.isOrderingOpen
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-emerald-500/20'
+                      : 'bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/20'
+                  }`}
+                  title="Toggle guest ordering on/off"
+                >
+                  <span className={`w-2 h-2 rounded-full ${currentEvent.isOrderingOpen ? 'bg-slate-950 animate-pulse' : 'bg-white'}`} />
+                  <span>{currentEvent.isOrderingOpen ? 'Live Ordering Open' : 'Ordering Paused'}</span>
+                </button>
+
+                {/* Manual Refresh */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadTerminalData()}
+                  disabled={loadingTerminalData}
+                  className="bg-[#121620] border-[#252f42] text-slate-300 hover:text-white text-xs h-9 px-3 flex items-center gap-1.5"
+                  title="Refresh order and table status"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingTerminalData ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>Refresh</span>
+                </Button>
+
+                {/* Setup Readiness Toggle */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsReadinessOpen(!isReadinessOpen)}
+                  className={`text-xs h-9 px-3 flex items-center gap-1.5 border transition-colors ${
+                    isReadinessOpen
+                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                      : 'bg-[#121620] border-[#252f42] text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Readiness {readinessData?.isFullyReady ? '(Ready ✓)' : '(Review)'}</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${isReadinessOpen ? 'rotate-180' : ''}`} />
+                </Button>
+
+                {/* Extend Duration */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setExtendingEvent(currentEvent);
+                    setExtensionMinutes(60);
+                    setExtensionReason('Host requested dining extension');
+                    setCustomExtensionDate(currentEvent.endDate || currentEvent.eventDate);
+                    setCustomExtensionTime(currentEvent.endTime || '23:30');
+                  }}
+                  className="bg-[#121620] border-[#252f42] text-amber-300 hover:text-amber-200 text-xs h-9 px-3 flex items-center gap-1.5"
+                >
+                  <Timer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Extend</span>
+                </Button>
+              </>
+            )}
+
+            {/* Create New Event */}
             <Button
               variant="brand"
               onClick={handleOpenNewWizard}
-              className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-semibold shadow-lg shadow-amber-500/20 px-4 py-2.5 text-xs flex items-center gap-2"
+              className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-bold shadow-lg shadow-amber-500/20 px-3.5 py-2 text-xs flex items-center gap-1.5 h-9"
             >
               <Plus className="w-4 h-4" />
-              <span>Create New Event</span>
+              <span>New Event</span>
             </Button>
           </div>
         </div>
 
-        {/* 5 KPI Stat Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 pt-6 border-t border-[#262f40]">
-          <div className="bg-[#10141d]/80 border border-[#202838] rounded-xl p-3.5">
-            <p className="text-[11px] font-mono text-slate-400 uppercase">Total Banquets</p>
-            <p className="text-xl font-bold text-white mt-1">{totalEventsCount}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Recorded in database</p>
+        {/* ======================================================================= */}
+        {/* COMPACT SETUP & READINESS CHECKLIST PANEL (EXPANDABLE) */}
+        {/* ======================================================================= */}
+        {isReadinessOpen && currentEvent && (
+          <div className="mt-5 pt-5 border-t border-[#262f40] animate-fadeIn">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  8-Point Event Setup & Station Readiness
+                </span>
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                    readinessData?.isFullyReady
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}
+                >
+                  {readinessData?.isFullyReady ? 'ALL CHECKS PASSED · READY TO SERVE' : 'SETUP ACTION REQUIRED'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Authoritative verification verified by backend before opening dining.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {/* 1. Event Details */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">1. Details</span>
+                    <span className="text-emerald-400">✓ Ready</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate">{currentEvent.title}</p>
+                </div>
+                <button
+                  onClick={() => handleOpenEditWizard(currentEvent)}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 text-left mt-2 font-medium"
+                >
+                  Edit Details →
+                </button>
+              </div>
+
+              {/* 2. Catering Kitchen */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">2. Caterer</span>
+                    <span className="text-emerald-400">✓ Ready</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate">{currentRestaurant?.name || 'Assigned Kitchen'}</p>
+                </div>
+                <span className="text-[10px] text-slate-500 mt-2 font-mono">ID: {currentRestaurant?.id.slice(-6)}</span>
+              </div>
+
+              {/* 3. Available Menu */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">3. Menu</span>
+                    <span className={menuItems.length > 0 ? 'text-emerald-400' : 'text-amber-400'}>
+                      {menuItems.length > 0 ? '✓ Ready' : '⚠ 0 Dishes'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{menuItems.length} dishes available</p>
+                </div>
+                {menuItems.length === 0 ? (
+                  <button
+                    onClick={handleSeedSampleMenu}
+                    disabled={isSeedingMenu}
+                    className="text-[10px] text-sky-400 hover:text-sky-300 text-left mt-2 font-bold"
+                  >
+                    {isSeedingMenu ? 'Seeding...' : '+ Seed 9 Dishes →'}
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-slate-500 mt-2">Active catalog</span>
+                )}
+              </div>
+
+              {/* 4. Event Tables */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">4. Tables</span>
+                    <span className={terminalTables.length > 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                      {terminalTables.length > 0 ? '✓ Ready' : '✕ None'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{terminalTables.length} dedicated tables</p>
+                </div>
+                <button
+                  onClick={() => setTerminalView('tables')}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 text-left mt-2 font-medium"
+                >
+                  Manage Tables →
+                </button>
+              </div>
+
+              {/* 5. Table QR Codes */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">5. QRs</span>
+                    <span className="text-emerald-400">✓ Ready</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{terminalTables.length} QR Standees</p>
+                </div>
+                <button
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 text-left mt-2 font-medium"
+                >
+                  Print Standees →
+                </button>
+              </div>
+
+              {/* 6. Stations Enabled */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">6. Stations</span>
+                    <span className="text-emerald-400">✓ Ready</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">Kitchen · Bar · Hookah</p>
+                </div>
+                <span className="text-[10px] text-slate-500 mt-2">Auto-routed</span>
+              </div>
+
+              {/* 7. Service Window */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">7. Window</span>
+                    <span className="text-emerald-400">✓ Configured</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate">{currentEvent.startTime} - {currentEvent.endTime}</p>
+                </div>
+                <span className="text-[10px] text-slate-500 mt-2 font-mono">{currentEvent.timezone || 'IST'}</span>
+              </div>
+
+              {/* 8. Publication */}
+              <div className="bg-[#10141d] border border-[#202838] rounded-xl p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-slate-200">8. Status</span>
+                    <span className={currentEvent.isOrderingOpen ? 'text-emerald-400' : 'text-amber-400'}>
+                      {currentEvent.isOrderingOpen ? '✓ Open' : 'Paused'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{currentEvent.status}</p>
+                </div>
+                <button
+                  onClick={() => handleToggleOrdering(currentEvent)}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 text-left mt-2 font-medium"
+                >
+                  {currentEvent.isOrderingOpen ? 'Pause Orders' : 'Open Orders'} →
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="bg-[#10141d]/80 border border-emerald-500/20 rounded-xl p-3.5">
-            <p className="text-[11px] font-mono text-emerald-400 uppercase flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              Live & Active
+        )}
+
+        {/* ======================================================================= */}
+        {/* LIVE SUMMARY KPI METRICS (CALCULATED FROM PERSISTED ORDERS) */}
+        {/* ======================================================================= */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-[#262f40]">
+          {/* New Orders */}
+          <div
+            onClick={() => {
+              setTerminalView('orders');
+              setOrderSubFilter('NEW');
+            }}
+            className={`cursor-pointer rounded-xl p-3.5 transition-all border ${
+              terminalView === 'orders' && orderSubFilter === 'NEW'
+                ? 'bg-sky-500/15 border-sky-500/50'
+                : 'bg-[#10141d]/80 border-[#202838] hover:border-sky-500/30'
+            }`}
+          >
+            <p className="text-[11px] font-mono text-sky-400 uppercase font-semibold flex items-center justify-between">
+              <span>New Orders</span>
+              <span className="w-2 h-2 rounded-full bg-sky-400" />
             </p>
-            <p className="text-xl font-bold text-emerald-400 mt-1">{activeEventsCount}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Accepting guest orders</p>
+            <p className="text-2xl font-bold text-white mt-1">{liveMetrics.newOrders}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Awaiting station start</p>
           </div>
-          <div className="bg-[#10141d]/80 border border-[#202838] rounded-xl p-3.5">
-            <p className="text-[11px] font-mono text-slate-400 uppercase">Dedicated Tables</p>
-            <p className="text-xl font-bold text-sky-400 mt-1">{totalTablesCount}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Decoupled QR tables</p>
+
+          {/* Preparing */}
+          <div
+            onClick={() => {
+              setTerminalView('orders');
+              setOrderSubFilter('PREPARING');
+            }}
+            className={`cursor-pointer rounded-xl p-3.5 transition-all border ${
+              terminalView === 'orders' && orderSubFilter === 'PREPARING'
+                ? 'bg-amber-500/15 border-amber-500/50'
+                : 'bg-[#10141d]/80 border-[#202838] hover:border-amber-500/30'
+            }`}
+          >
+            <p className="text-[11px] font-mono text-amber-400 uppercase font-semibold flex items-center justify-between">
+              <span>Preparing</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            </p>
+            <p className="text-2xl font-bold text-white mt-1">{liveMetrics.preparing}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Cooking / In production</p>
           </div>
-          <div className="bg-[#10141d]/80 border border-[#202838] rounded-xl p-3.5">
-            <p className="text-[11px] font-mono text-purple-400 uppercase">Event Orders</p>
-            <p className="text-xl font-bold text-purple-400 mt-1">{totalOrdersCount}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Processed by KDS</p>
+
+          {/* Ready to Deliver */}
+          <div
+            onClick={() => {
+              setTerminalView('delivery');
+            }}
+            className={`cursor-pointer rounded-xl p-3.5 transition-all border ${
+              terminalView === 'delivery'
+                ? 'bg-emerald-500/20 border-emerald-500/60 shadow-lg shadow-emerald-500/10'
+                : 'bg-[#10141d]/80 border-emerald-500/30 hover:border-emerald-500/50'
+            }`}
+          >
+            <p className="text-[11px] font-mono text-emerald-400 uppercase font-bold flex items-center justify-between">
+              <span>Ready to Deliver</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+            </p>
+            <p className="text-2xl font-bold text-emerald-400 mt-1">{liveMetrics.readyToDeliver}</p>
+            <p className="text-[10px] text-slate-300 mt-0.5">All required stations ready</p>
           </div>
-          <div className="bg-[#10141d]/80 border border-amber-500/20 rounded-xl p-3.5">
-            <p className="text-[11px] font-mono text-amber-400 uppercase">Event Revenue</p>
-            <p className="text-xl font-bold text-amber-400 mt-1">₹{totalRevenueSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">All wedding orders</p>
+
+          {/* Delivered */}
+          <div
+            onClick={() => {
+              setTerminalView('orders');
+              setOrderSubFilter('DELIVERED');
+            }}
+            className={`cursor-pointer rounded-xl p-3.5 transition-all border ${
+              terminalView === 'orders' && orderSubFilter === 'DELIVERED'
+                ? 'bg-purple-500/15 border-purple-500/50'
+                : 'bg-[#10141d]/80 border-[#202838] hover:border-purple-500/30'
+            }`}
+          >
+            <p className="text-[11px] font-mono text-purple-400 uppercase font-semibold flex items-center justify-between">
+              <span>Delivered</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />
+            </p>
+            <p className="text-2xl font-bold text-white mt-1">{liveMetrics.delivered}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Served to guest tables</p>
           </div>
         </div>
       </div>
 
-      {/* Platform Admin Approval Status Card */}
-      <div className="bg-[#121622] border border-[#232c3e] rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
-        <div className="flex items-start gap-3">
-          <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-white">Platform Admin Capability & Module Status:</span>
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                  isModuleEnabled(currentRestaurant, 'weddings')
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : applicantStatus?.status === 'APPROVED'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : applicantStatus?.status === 'REJECTED'
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                }`}
-              >
-                {isModuleEnabled(currentRestaurant, 'weddings')
-                  ? 'MODULE ENABLED · ACTIVE'
-                  : applicantStatus?.status || 'PENDING SUBMISSION'}
-              </span>
-            </div>
-            {applicantStatus ? (
-              <p className="text-slate-400 text-[11px]">
-                Request ID: <span className="font-mono text-amber-300 font-semibold">{applicantStatus.requestId}</span> · Applicant: <span className="text-slate-300">{applicantStatus.applicantEmail}</span> · Event: <span className="text-slate-200">{applicantStatus.weddingName}</span>
-                {applicantStatus.status === 'SUBMITTED' && (
-                  <span className="text-amber-400 ml-1">(Awaiting review by Platform Admin ayan090912@gmail.com)</span>
-                )}
-              </p>
-            ) : (
-              <p className="text-slate-400 text-[11px]">
-                Event ordering enables guest mobile orders with zero payments, live duration tracking, and dedicated banquet table QR codes.
-              </p>
+      {/* ========================================================================= */}
+      {/* 3 PRIMARY OPERATIONAL VIEW TABS & TOOLBAR */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#11151e] border border-[#1e2533] p-2.5 rounded-xl">
+        {/* Navigation View Switcher */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          <button
+            onClick={() => setTerminalView('orders')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              terminalView === 'orders'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#161c27]'
+            }`}
+          >
+            <UtensilsCrossed className="w-3.5 h-3.5" />
+            <span>Live Orders ({terminalOrders.length})</span>
+          </button>
+
+          <button
+            onClick={() => setTerminalView('tables')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              terminalView === 'tables'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#161c27]'
+            }`}
+          >
+            <TableProperties className="w-3.5 h-3.5" />
+            <span>Tables & Floorplan ({terminalTables.length})</span>
+          </button>
+
+          <button
+            onClick={() => setTerminalView('delivery')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              terminalView === 'delivery'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#161c27]'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Delivery Dispatch ({deliveryOrders.length})</span>
+            {deliveryOrders.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             )}
-          </div>
+          </button>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Search & Actions */}
+        <div className="flex items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search table, order #..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
           <Button
             variant="outline"
             size="sm"
-            onClick={loadApplicantStatus}
-            disabled={isApplicantStatusLoading}
-            className="text-xs bg-[#161c28] border-[#252f42] text-slate-300 hover:text-white flex items-center gap-1.5"
+            onClick={() => setIsPrintModalOpen(true)}
+            className="text-xs bg-[#151a25] border-[#252f40] text-slate-300 hover:text-white h-8 px-2.5 flex items-center gap-1.5"
+            title="Print Standees"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isApplicantStatusLoading ? 'animate-spin' : ''}`} />
-            <span>Check Status & Sync</span>
+            <Printer className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Print QRs</span>
           </Button>
-          {!applicantStatus && !isModuleEnabled(currentRestaurant, 'weddings') && (
-            <Button
-              variant="brand"
-              size="sm"
-              onClick={() => setIsApplyingModalOpen(true)}
-              className="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold"
-            >
-              Request Event Ordering
-            </Button>
-          )}
         </div>
       </div>
 
-      {/* Resume Setup Draft Banner */}
-      {draftEvent && (
-        <div className="bg-gradient-to-r from-amber-500/15 via-[#1b2234] to-[#121622] border border-amber-500/40 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              <CalendarClock className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white">Unfinished Banquet Setup Draft</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-semibold">DRAFT</span>
-              </div>
-              <p className="text-sm font-semibold text-amber-200 mt-0.5">{draftEvent.title || 'Untitled Event'}</p>
-              <p className="text-[11px] text-slate-400">
-                Scheduled for {draftEvent.eventDate} · {draftEvent.venueName || currentRestaurant?.name} · Step-by-step progress persisted in database
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={() => handleResumeDraft(draftEvent)}
-            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shadow-md"
-          >
-            <span>Resume 4-Step Setup</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      )}
-
-      {/* Catering Menu 0-Dishes Notice & Seeder */}
-      {!loading && menuItems.length === 0 && (
-        <div className="bg-sky-500/10 border border-sky-500/25 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-sky-200">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-sky-300">Catering Menu Notice: 0 Dishes Configured</p>
-              <p className="text-slate-400 text-[11px] mt-0.5">
-                Your restaurant menu currently has 0 items. Wedding and event guests scanning their table QR codes won't see dishes to order until items are added to your catalog.
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={handleSeedSampleMenu}
-            disabled={isSeedingMenu}
-            className="bg-sky-500 hover:bg-sky-600 text-slate-950 font-semibold text-xs flex items-center gap-1.5 whitespace-nowrap shadow-md shrink-0"
-          >
-            <ChefHat className={`w-3.5 h-3.5 ${isSeedingMenu ? 'animate-spin' : ''}`} />
-            <span>{isSeedingMenu ? 'Seeding Dishes...' : 'Seed Sample Catering Menu'}</span>
-          </Button>
-        </div>
-      )}
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#11151e] border border-[#1e2533] p-3 rounded-xl">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {(['ALL', 'ACTIVE', 'SCHEDULED', 'CLOSED', 'PAUSED', 'DRAFT', 'COMPLETED'] as const).map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                statusFilter === st
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#161c27]'
-              }`}
-            >
-              {st === 'ALL' ? 'All Events' : st}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative w-full sm:w-64">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search couple, title, venue..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-          />
-        </div>
-      </div>
-
-      {/* Events List */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
-          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-mono">Loading event banquets...</p>
-        </div>
-      ) : filteredEvents.length === 0 ? (
-        <div className="bg-[#121620] border border-[#1e2533] rounded-2xl p-12 text-center space-y-4">
-          <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 flex items-center justify-center mx-auto">
-            <Heart className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-white">No Events Found</h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-              {searchQuery
-                ? 'No events match your current search query. Try searching for a different host or title.'
-                : 'Host elegant wedding banquets, corporate conferences, birthdays, and private galas with dedicated tables and personalized menus.'}
-            </p>
-          </div>
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={handleOpenNewWizard}
-            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs"
-          >
-            Create Your First Event
-          </Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filteredEvents.map((ev) => {
-            const themeConfig = THEME_OPTIONS.find((t) => t.id === ev.themeColor) || THEME_OPTIONS[0];
-            const typeMeta = EVENT_TYPES[ev.eventType] || { label: ev.eventType, icon: '🍽️', prefix: 'In honor of' };
-            const isLive = ev.status === 'ACTIVE' && ev.isOrderingOpen;
-
-            return (
-              <div
-                key={ev.id}
-                className="bg-[#131722] border border-[#212a3a] hover:border-amber-500/40 rounded-2xl p-5 shadow-lg transition-all flex flex-col justify-between space-y-4"
+      {/* ========================================================================= */}
+      {/* OPERATIONAL VIEW 1: LIVE ORDERS STREAM */}
+      {/* ========================================================================= */}
+      {terminalView === 'orders' && (
+        <div className="space-y-4">
+          {/* Sub-Filters: All, New, Preparing, Ready, Delivered */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            {(['ALL', 'NEW', 'PREPARING', 'READY', 'DELIVERED'] as const).map((filterKey) => (
+              <button
+                key={filterKey}
+                onClick={() => setOrderSubFilter(filterKey)}
+                className={`px-3 py-1 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                  orderSubFilter === filterKey
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#151922]'
+                }`}
               >
-                <div>
-                  {/* Card Header: Type, Status, Ordering Toggle */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                        <span>{typeMeta.icon}</span>
-                        <span>{ev.eventType}</span>
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
-                          ev.status === 'ACTIVE'
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                            : ev.status === 'SCHEDULED'
-                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                            : ev.status === 'CLOSED'
-                            ? 'bg-slate-700/60 text-slate-300 border border-slate-600'
-                            : ev.status === 'DRAFT'
-                            ? 'bg-slate-700/40 text-slate-400 border border-slate-600'
-                            : ev.status === 'PAUSED'
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                            : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                        }`}
-                      >
-                        {ev.status === 'ACTIVE'
-                          ? 'ACTIVE · LIVE'
-                          : ev.status === 'SCHEDULED'
-                          ? 'SCHEDULED · UPCOMING'
-                          : ev.status === 'CLOSED'
-                          ? 'CLOSED · EXPIRED'
-                          : ev.status}
-                      </span>
-                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] bg-[#1a202d] text-slate-300 border border-[#2a3447]">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: themeConfig.accent }} />
-                        <span>{themeConfig.name}</span>
+                {filterKey === 'ALL' && 'All Orders'}
+                {filterKey === 'NEW' && `New (${liveMetrics.newOrders})`}
+                {filterKey === 'PREPARING' && `Preparing (${liveMetrics.preparing})`}
+                {filterKey === 'READY' && `Ready to Deliver (${liveMetrics.readyToDeliver})`}
+                {filterKey === 'DELIVERED' && `Delivered (${liveMetrics.delivered})`}
+              </button>
+            ))}
+          </div>
+
+          {filteredTerminalOrders.length === 0 ? (
+            <div className="bg-[#121620] border border-[#1e2533] rounded-2xl p-12 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-[#18202d] text-slate-400 flex items-center justify-center mx-auto">
+                <UtensilsCrossed className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-semibold text-white">No Orders Found</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                {orderSubFilter !== 'ALL'
+                  ? `There are currently no orders in the '${orderSubFilter}' queue for this event.`
+                  : 'Guests scanning table QR standees will submit orders here. All orders flow directly into Kitchen, Bar, and Hookah queues.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {filteredTerminalOrders.map((ord) => {
+                const prog = getStationProgress(ord);
+                const isReady = prog.isFullyReady || ord.status === 'READY';
+                const isDelivered = ord.status === 'DELIVERED' || ord.status === 'COMPLETED';
+
+                return (
+                  <div
+                    key={ord.id}
+                    className={`bg-[#131722] border rounded-2xl p-5 shadow-lg transition-all flex flex-col justify-between space-y-4 ${
+                      isDelivered
+                        ? 'border-[#1f2838] opacity-80'
+                        : isReady
+                        ? 'border-emerald-500/50 shadow-emerald-500/5'
+                        : 'border-[#232c3d]'
+                    }`}
+                  >
+                    <div>
+                      {/* Card Header: Table Badge, Order #, Time Received */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 font-mono font-bold text-sm border border-amber-500/40">
+                            Table {cleanTableBadge(ord.tableNumber)}
+                          </span>
+                          <div>
+                            <span className="text-xs font-bold text-white font-mono">
+                              {ord.displayOrderNumber || ord.id.slice(-6)}
+                            </span>
+                            <p className="text-[10px] text-slate-400">
+                              {formatReceivedTime(ord.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Overall Status Badge */}
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold ${
+                            isDelivered
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                              : isReady
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse'
+                              : ord.status === 'PREPARING'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                          }`}
+                        >
+                          {isDelivered
+                            ? 'DELIVERED ✓'
+                            : isReady
+                            ? 'READY FOR DELIVERY'
+                            : ord.status}
+                        </span>
+                      </div>
+
+                      {/* Guest Notes */}
+                      {ord.notes && (
+                        <div className="mt-2.5 bg-[#0d1017] p-2 rounded-lg border border-[#1b2230] text-[11px] text-amber-200/90 italic flex items-start gap-1.5">
+                          <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <span>{ord.notes}</span>
+                        </div>
+                      )}
+
+                      {/* ========================================================= */}
+                      {/* STATION COORDINATION BOX (Kitchen, Bar, Hookah) */}
+                      {/* ========================================================= */}
+                      <div className="mt-3 bg-[#0c0f16] p-3 rounded-xl border border-[#1c2434] space-y-2">
+                        <div className="flex items-center justify-between text-[11px] border-b border-[#18202d] pb-1.5">
+                          <span className="font-semibold text-slate-300 flex items-center gap-1.5 font-mono uppercase text-[10px]">
+                            <Layers className="w-3 h-3 text-amber-400" />
+                            Station Coordination
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono font-semibold ${
+                              isReady ? 'text-emerald-400' : 'text-amber-400'
+                            }`}
+                          >
+                            {isReady
+                              ? 'All Stations Ready ✓'
+                              : 'In Production'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                          {/* Kitchen */}
+                          <div className="p-1.5 rounded-lg bg-[#111622] border border-[#20293b]">
+                            <div className="text-slate-400 font-semibold mb-0.5">Kitchen</div>
+                            <span
+                              className={`font-mono font-bold ${
+                                prog.kitchenStatus === 'NOT_REQUIRED'
+                                  ? 'text-slate-600'
+                                  : ['READY', 'COMPLETED', 'DELIVERED'].includes(prog.kitchenStatus)
+                                  ? 'text-emerald-400'
+                                  : prog.kitchenStatus === 'PREPARING'
+                                  ? 'text-amber-400'
+                                  : 'text-sky-400'
+                              }`}
+                            >
+                              {prog.kitchenStatus === 'NOT_REQUIRED' ? 'Not Required' : prog.kitchenStatus}
+                            </span>
+                          </div>
+
+                          {/* Bar */}
+                          <div className="p-1.5 rounded-lg bg-[#111622] border border-[#20293b]">
+                            <div className="text-slate-400 font-semibold mb-0.5">Bar</div>
+                            <span
+                              className={`font-mono font-bold ${
+                                prog.barStatus === 'NOT_REQUIRED'
+                                  ? 'text-slate-600'
+                                  : ['READY', 'COMPLETED', 'DELIVERED'].includes(prog.barStatus)
+                                  ? 'text-emerald-400'
+                                  : prog.barStatus === 'PREPARING'
+                                  ? 'text-amber-400'
+                                  : 'text-sky-400'
+                              }`}
+                            >
+                              {prog.barStatus === 'NOT_REQUIRED' ? 'Not Required' : prog.barStatus}
+                            </span>
+                          </div>
+
+                          {/* Hookah */}
+                          <div className="p-1.5 rounded-lg bg-[#111622] border border-[#20293b]">
+                            <div className="text-slate-400 font-semibold mb-0.5">Hookah</div>
+                            <span
+                              className={`font-mono font-bold ${
+                                prog.hookahStatus === 'NOT_REQUIRED'
+                                  ? 'text-slate-600'
+                                  : ['READY', 'COMPLETED', 'DELIVERED'].includes(prog.hookahStatus)
+                                  ? 'text-emerald-400'
+                                  : prog.hookahStatus === 'PREPARING'
+                                  ? 'text-amber-400'
+                                  : 'text-sky-400'
+                              }`}
+                            >
+                              {prog.hookahStatus === 'NOT_REQUIRED' ? 'Not Required' : prog.hookahStatus}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Items List */}
+                      <div className="mt-3 space-y-1.5">
+                        {(ord.items || []).map((it, idx) => {
+                          const itDest = (it.targetDestination || (it as any).target_destination || 'KITCHEN').toUpperCase();
+                          return (
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-[#0e121a] border border-[#1b2230]"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-amber-300 w-5">
+                                  {it.quantity}x
+                                </span>
+                                <span className="text-slate-200 font-medium">{it.name}</span>
+                                {it.notes && (
+                                  <span className="text-[10px] text-amber-200/80 italic">({it.notes})</span>
+                                )}
+                              </div>
+
+                              <span
+                                className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                                  itDest === 'HOOKAH'
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    : itDest === 'BAR'
+                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                }`}
+                              >
+                                {itDest}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    {/* Quick Ordering Toggle Button */}
-                    <button
-                      onClick={() => handleToggleOrdering(ev)}
-                      title="Toggle Live Ordering"
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                        ev.isOrderingOpen
-                          ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${ev.isOrderingOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                      <span>{ev.isOrderingOpen ? 'Ordering Open' : 'Ordering Paused'}</span>
-                    </button>
-                  </div>
-
-                  {/* Title & Couple / Host */}
-                  <div className="mt-3">
-                    <h3 className="text-base font-bold text-white font-serif tracking-tight">{ev.title}</h3>
-                    {ev.coupleNames && (
-                      <p className="text-xs text-amber-200/90 font-serif italic mt-0.5">
-                        {typeMeta.prefix} {ev.coupleNames}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Service Period & Venue Meta */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-[11px] text-slate-300 bg-[#0c0e14] p-2.5 rounded-xl border border-[#1b2230]">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      <span>{ev.eventDate} {ev.endDate && ev.endDate !== ev.eventDate ? `→ ${ev.endDate}` : ''}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      <span>{ev.startTime} - {ev.endTime} ({ev.timezone || 'IST'})</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 sm:col-span-2">
-                      <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      <span className="truncate">{ev.venueName || currentRestaurant?.name || 'Grand Ballroom'}</span>
-                    </div>
-                    {ev.durationFormatted && (
-                      <div className="flex items-center gap-1.5 sm:col-span-2 pt-1 border-t border-[#1a202c] text-[10px] text-slate-400">
-                        <Timer className="w-3 h-3 text-emerald-400" />
-                        <span>Service Duration: <strong className="text-slate-200">{ev.durationFormatted}</strong></span>
-                        {ev.extendedAt && (
-                          <span className="ml-auto px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px]">
-                            Extended: {ev.extendedReason || 'Host request'}
+                    {/* Order Action Buttons */}
+                    <div className="pt-3 border-t border-[#1e2533] flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[11px] text-slate-400">
+                        {ord.claimedBy && (
+                          <span>
+                            Claimed by <strong className="text-slate-200">{ord.claimedBy}</strong>
+                          </span>
+                        )}
+                        {ord.deliveredAt && (
+                          <span className="text-purple-300 font-medium ml-1">
+                            · Delivered at {new Date(ord.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Metrics Row */}
-                  <div className="grid grid-cols-3 gap-2 mt-3 bg-[#0d1017] p-2.5 rounded-xl border border-[#1b2230] text-center">
-                    <div>
-                      <p className="text-[10px] font-mono text-slate-400 uppercase">Tables</p>
-                      <p className="text-sm font-bold text-white mt-0.5">{ev.tableCount || 0}</p>
+                      <div className="flex items-center gap-2">
+                        {!isDelivered && (
+                          <>
+                            {!ord.claimedBy && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleClaimOrder(ord)}
+                                disabled={isUpdatingStatus[ord.id]}
+                                className="text-xs bg-[#171c26] border-[#293244] text-slate-200 hover:text-white h-8 px-3"
+                              >
+                                {isUpdatingStatus[ord.id] ? 'Claiming...' : 'Claim Order'}
+                              </Button>
+                            )}
+
+                            {isReady && (
+                              <Button
+                                variant="brand"
+                                size="sm"
+                                onClick={() => handleConfirmDelivered(ord)}
+                                disabled={isUpdatingStatus[ord.id]}
+                                className="text-xs bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold h-8 px-3.5 shadow-md flex items-center gap-1.5"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{isUpdatingStatus[ord.id] ? 'Saving...' : 'Confirm Delivered'}</span>
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-mono text-slate-400 uppercase">Orders</p>
-                      <p className="text-sm font-bold text-purple-300 mt-0.5">{ev.orderCount || 0}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-mono text-slate-400 uppercase">Total Revenue</p>
-                      <p className="text-sm font-bold text-emerald-400 mt-0.5">₹{(ev.totalRevenue || 0).toFixed(2)}</p>
-                    </div>
                   </div>
-                </div>
-
-                {/* Card Actions */}
-                <div className="pt-3 border-t border-[#1e2533] flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenTablesModal(ev)}
-                      className="text-xs bg-[#171c26] hover:bg-[#1f2635] border-[#293244] text-slate-200 flex items-center gap-1.5 h-8 px-2.5"
-                    >
-                      <QrCode className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Tables & QR Studio</span>
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenOrdersModal(ev)}
-                      className="text-xs bg-[#171c26] hover:bg-[#1f2635] border-[#293244] text-slate-200 flex items-center gap-1.5 h-8 px-2.5"
-                    >
-                      <UtensilsCrossed className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Orders ({ev.orderCount || 0})</span>
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setExtendingEvent(ev);
-                        setExtensionMinutes(60);
-                        setExtensionReason('Host requested dining extension');
-                        setCustomExtensionDate(ev.endDate || ev.eventDate);
-                        setCustomExtensionTime(ev.endTime || '23:30');
-                      }}
-                      className="text-xs bg-[#171c26] hover:bg-[#1f2635] border-[#293244] text-amber-300 hover:text-amber-200 flex items-center gap-1.5 h-8 px-2.5"
-                      title="Extend ordering window"
-                    >
-                      <Timer className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Extend</span>
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleOpenEditWizard(ev)}
-                      title="Edit Event"
-                      className="p-1.5 text-slate-400 hover:text-white hover:bg-[#1c2230] rounded-lg transition-colors"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteEvent(ev)}
-                      title="Delete Event"
-                      className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* 4-STEP EVENT CREATION & EDITING WIZARD MODAL */}
+      {/* OPERATIONAL VIEW 2: TABLES & FLOORPLAN GRID */}
+      {/* ========================================================================= */}
+      {terminalView === 'tables' && (
+        <div className="space-y-4">
+          {/* Studio Actions Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#10141d] p-3.5 rounded-xl border border-[#1e2535]">
+            <div>
+              <p className="text-xs font-semibold text-white">Event Table Grid ({terminalTables.length} Tables)</p>
+              <p className="text-[10px] text-slate-400">
+                Persistent banquet table tokens decoupled from daily restaurant dining. Click any table to inspect orders and view its QR standee.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => setIsPrintModalOpen(true)}
+                className="bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-semibold text-xs flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Standee Sheet</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Add Table Form */}
+          <div className="bg-[#121622] border border-[#232c3d] p-3 rounded-xl flex flex-wrap items-center gap-2.5">
+            <span className="text-xs font-medium text-slate-300">Add Banquet Table:</span>
+            <input
+              type="text"
+              placeholder="Number (e.g. 16 or VIP-2)"
+              value={newTableNumber}
+              onChange={(e) => setNewTableNumber(e.target.value)}
+              className="bg-[#0c0e15] border border-[#273245] rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 w-36"
+            />
+            <input
+              type="text"
+              placeholder="Label (e.g. Groom Family)"
+              value={newTableLabel}
+              onChange={(e) => setNewTableLabel(e.target.value)}
+              className="bg-[#0c0e15] border border-[#273245] rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 w-44"
+            />
+            <input
+              type="number"
+              min={1}
+              value={newTableCapacity}
+              onChange={(e) => setNewTableCapacity(parseInt(e.target.value) || 8)}
+              className="bg-[#0c0e15] border border-[#273245] rounded-lg px-2 py-1 text-xs text-white w-16"
+              title="Seats"
+            />
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={handleAddTableToEvent}
+              disabled={isAddingTable || !newTableNumber.trim()}
+              className="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold h-7 px-3"
+            >
+              {isAddingTable ? 'Adding...' : 'Add Table'}
+            </Button>
+          </div>
+
+          {/* Tables Visual Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+            {terminalTables.map((tbl) => {
+              const cleanNum = cleanTableBadge(tbl.tableNumber);
+              const tblOrders = terminalOrders.filter((o) => cleanTableBadge(o.tableNumber) === cleanNum);
+              const activeTblOrders = tblOrders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED');
+              const hasReady = activeTblOrders.some((o) => getStationProgress(o).isFullyReady || o.status === 'READY');
+              const hasPrep = activeTblOrders.some((o) => o.status === 'PREPARING');
+
+              return (
+                <div
+                  key={tbl.id}
+                  onClick={() => setSelectedTableDetail(tbl)}
+                  className={`cursor-pointer rounded-2xl p-4 border transition-all flex flex-col justify-between space-y-3 relative overflow-hidden ${
+                    hasReady
+                      ? 'bg-emerald-500/10 border-emerald-500/60 shadow-lg shadow-emerald-500/10'
+                      : hasPrep
+                      ? 'bg-amber-500/10 border-amber-500/50'
+                      : activeTblOrders.length > 0
+                      ? 'bg-sky-500/10 border-sky-500/40'
+                      : tblOrders.length > 0
+                      ? 'bg-[#121622] border-[#222b3b]'
+                      : 'bg-[#0f131c] border-[#1d2433] hover:border-slate-500'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-lg font-bold text-white font-mono">
+                        Table {cleanNum}
+                      </p>
+                      {tbl.tableLabel && tbl.tableLabel !== `Table ${cleanNum}` && (
+                        <p className="text-[11px] text-amber-200/90 font-serif italic truncate max-w-[130px]">
+                          {tbl.tableLabel}
+                        </p>
+                      )}
+                    </div>
+
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {tbl.capacity || 8} seats
+                    </span>
+                  </div>
+
+                  <div>
+                    {/* Status Indicator */}
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span
+                        className={`font-mono font-bold ${
+                          hasReady
+                            ? 'text-emerald-400 animate-pulse'
+                            : hasPrep
+                            ? 'text-amber-400'
+                            : activeTblOrders.length > 0
+                            ? 'text-sky-400'
+                            : tblOrders.length > 0
+                            ? 'text-purple-300'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {hasReady
+                          ? '● Ready to Deliver'
+                          : hasPrep
+                          ? '● Preparing'
+                          : activeTblOrders.length > 0
+                          ? '● Orders Placed'
+                          : tblOrders.length > 0
+                          ? 'Delivered'
+                          : 'Available'}
+                      </span>
+
+                      <span className="font-mono text-slate-300 text-[10px]">
+                        {activeTblOrders.length} active
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] text-slate-400 mt-2 flex items-center justify-between border-t border-white/5 pt-1.5">
+                      <span>Inspect table →</span>
+                      <QrCode className="w-3.5 h-3.5 text-amber-400" />
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* OPERATIONAL VIEW 3: DELIVERY DISPATCH TERMINAL */}
+      {/* ========================================================================= */}
+      {terminalView === 'delivery' && (
+        <div className="space-y-4">
+          <div className="bg-[#10141d] border border-emerald-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-white font-mono uppercase tracking-wide">
+                  Banquet Delivery Dispatch
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Orders with all required kitchen and bar stations ready. Claim order, mark out for delivery, and confirm table delivery.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                {deliveryOrders.length} Orders Ready
+              </span>
+            </div>
+          </div>
+
+          {deliveryOrders.length === 0 ? (
+            <div className="bg-[#121620] border border-[#1e2533] rounded-2xl p-16 text-center space-y-3">
+              <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-white">All Orders Dispatched</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                No orders are currently waiting for table delivery. As kitchen chefs and bartenders complete prep, ready orders will immediately alert here.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {deliveryOrders.map((ord) => {
+                const prog = getStationProgress(ord);
+                const isOut = ord.status === 'OUT_FOR_DELIVERY' || ord.deliveryStatus === 'OUT_FOR_DELIVERY';
+
+                return (
+                  <div
+                    key={ord.id}
+                    className="bg-gradient-to-br from-[#121824] to-[#0f131c] border-2 border-emerald-500/60 rounded-2xl p-6 shadow-xl space-y-4 flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Giant Table Label */}
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="text-2xl font-black text-white font-mono tracking-tight flex items-center gap-2">
+                            <span>TABLE {cleanTableBadge(ord.tableNumber)}</span>
+                            <span className="text-xs font-sans px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-extrabold uppercase">
+                              READY
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 font-mono mt-0.5">
+                            Order {ord.displayOrderNumber} · {formatReceivedTime(ord.createdAt)}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-xs font-mono text-emerald-400 font-bold block">
+                            ₹{(ord.totalAmount || 0).toFixed(2)}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{ord.customerName}</span>
+                        </div>
+                      </div>
+
+                      {/* Items to Deliver */}
+                      <div className="mt-4 bg-[#090c12] p-3 rounded-xl border border-[#1a2333] space-y-2">
+                        <div className="text-[11px] font-mono text-slate-400 uppercase font-semibold">
+                          Items to Deliver:
+                        </div>
+                        {(ord.items || []).map((it, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs text-slate-200">
+                            <span className="font-semibold text-white">
+                              {it.quantity}x {it.name}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {it.targetDestination || 'KITCHEN'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Station Readiness Status */}
+                      <div className="mt-3 flex items-center gap-2 text-xs text-emerald-300 font-mono">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>All station items prepared and verified</span>
+                      </div>
+                    </div>
+
+                    {/* Big Touch-Friendly Action Buttons */}
+                    <div className="space-y-2 pt-2 border-t border-[#1c2434]">
+                      {!isOut ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => handleOutForDelivery(ord)}
+                            disabled={isUpdatingStatus[ord.id]}
+                            className="bg-[#171e2c] border-emerald-500/40 text-emerald-300 font-bold text-xs h-12 rounded-xl hover:bg-emerald-500/10"
+                          >
+                            Mark Out for Delivery
+                          </Button>
+                          <Button
+                            variant="brand"
+                            onClick={() => handleConfirmDelivered(ord)}
+                            disabled={isUpdatingStatus[ord.id]}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs h-12 rounded-xl shadow-lg shadow-emerald-500/20"
+                          >
+                            Confirm Delivered ✓
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="brand"
+                          onClick={() => handleConfirmDelivered(ord)}
+                          disabled={isUpdatingStatus[ord.id]}
+                          className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm h-14 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
+                        >
+                          <Check className="w-5 h-5 stroke-[3]" />
+                          <span>Delivered to Table {cleanTableBadge(ord.tableNumber)} ✓</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TABLE DETAIL & QR DRAWER / MODAL */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={!!selectedTableDetail}
+        onClose={() => setSelectedTableDetail(null)}
+        title={`Table ${cleanTableBadge(selectedTableDetail?.tableNumber)} — Banquet Table Detail`}
+        maxWidth="2xl"
+      >
+        {selectedTableDetail && currentEvent && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#10141d] p-4 rounded-xl border border-[#1e2535]">
+              <div>
+                <h3 className="text-lg font-bold text-white font-mono">
+                  Table {cleanTableBadge(selectedTableDetail.tableNumber)}
+                </h3>
+                <p className="text-xs text-amber-200/90 font-serif italic">
+                  {selectedTableDetail.tableLabel || `Table ${selectedTableDetail.tableNumber}`} · {selectedTableDetail.capacity || 8} Seats
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopyLink(getEventGuestUrl(currentEvent.id, selectedTableDetail.tableNumber))}
+                  className="bg-[#151a24] text-slate-300 text-xs h-8 px-2.5 flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Link</span>
+                </Button>
+
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => handleDownloadQR(selectedTableDetail.tableNumber, `detail-qr-canvas-${selectedTableDetail.id}`)}
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs h-8 px-3 flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Standee</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* QR Canvas */}
+            <div className="flex flex-col items-center justify-center p-6 bg-[#0a0d14] rounded-2xl border border-[#1c2333] space-y-3">
+              <div className="bg-white p-3 rounded-xl shadow-lg border border-amber-300/40">
+                <QRCodeCanvas
+                  id={`detail-qr-canvas-${selectedTableDetail.id}`}
+                  value={getEventGuestUrl(currentEvent.id, selectedTableDetail.tableNumber)}
+                  size={180}
+                  level="H"
+                  marginSize={1}
+                />
+              </div>
+              <p className="text-xs text-slate-300 font-mono">
+                {getEventGuestUrl(currentEvent.id, selectedTableDetail.tableNumber)}
+              </p>
+              <a
+                href={getEventGuestUrl(currentEvent.id, selectedTableDetail.tableNumber)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 font-medium"
+              >
+                <span>Open guest mobile ordering screen</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            {/* Table Orders */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-white font-mono uppercase tracking-wider">
+                Orders for Table {cleanTableBadge(selectedTableDetail.tableNumber)} (
+                {terminalOrders.filter((o) => cleanTableBadge(o.tableNumber) === cleanTableBadge(selectedTableDetail.tableNumber)).length}
+                )
+              </h4>
+
+              {terminalOrders.filter((o) => cleanTableBadge(o.tableNumber) === cleanTableBadge(selectedTableDetail.tableNumber)).length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No orders received from this table yet.</p>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {terminalOrders
+                    .filter((o) => cleanTableBadge(o.tableNumber) === cleanTableBadge(selectedTableDetail.tableNumber))
+                    .map((o) => (
+                      <div
+                        key={o.id}
+                        className="bg-[#0e121a] p-3 rounded-xl border border-[#1b2230] flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <span className="font-mono font-bold text-white">{o.displayOrderNumber}</span>
+                          <span className="text-slate-400 ml-2">({(o.items || []).length} items)</span>
+                          <div className="text-[11px] text-slate-400">{formatReceivedTime(o.createdAt)}</div>
+                        </div>
+
+                        <span
+                          className={`font-mono font-bold text-[10px] px-2 py-0.5 rounded ${
+                            o.status === 'DELIVERED'
+                              ? 'bg-purple-500/20 text-purple-300'
+                              : o.status === 'READY'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-amber-500/20 text-amber-300'
+                          }`}
+                        >
+                          {o.status}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-[#1e2533] flex justify-between items-center">
+              <button
+                onClick={() => handleDeleteTableFromEvent(selectedTableDetail.id)}
+                className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 font-medium"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove Table</span>
+              </button>
+
+              <Button variant="outline" size="sm" onClick={() => setSelectedTableDetail(null)} className="text-xs">
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* 4-STEP GUIDED EVENT SETUP & EDITING WIZARD MODAL */}
       {/* ========================================================================= */}
       <Modal
         isOpen={isWizardOpen}
@@ -1212,7 +2000,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             ))}
           </div>
 
-          {/* STEP 1: EVENT DETAILS & STYLING */}
+          {/* STEP 1: EVENT DETAILS */}
           {wizardStep === 1 && (
             <div className="space-y-4">
               <div>
@@ -1221,7 +2009,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Acme Tech Annual Dinner Gala, or Aria & Julian's Wedding Banquet"
+                  placeholder="e.g. Aria & Julian's Wedding Banquet, or Tech Gala 2026"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
@@ -1250,7 +2038,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Aria Montgomery & Julian Vance, or Acme Leadership"
+                    placeholder="e.g. Aria Montgomery & Julian Vance"
                     value={formCoupleNames}
                     onChange={(e) => setFormCoupleNames(e.target.value)}
                     className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
@@ -1258,52 +2046,13 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 </div>
               </div>
 
-              {/* Service Duration Mode Selector & Dates */}
+              {/* Service Dates and Timings */}
               <div className="bg-[#0b0e14] border border-[#1e2535] rounded-xl p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-200">Service Duration & Timings</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormIsMultiDay(false);
-                        setFormServiceDays(1);
-                        setFormEndDate(formEventDate);
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                        !formIsMultiDay
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Single Day / Evening
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormIsMultiDay(true);
-                        setFormServiceDays(3);
-                        if (formEventDate) {
-                          const d = new Date(formEventDate);
-                          d.setDate(d.getDate() + 2);
-                          setFormEndDate(d.toISOString().split('T')[0]);
-                        }
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                        formIsMultiDay
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Multi-Day Banquet
-                    </button>
-                  </div>
-                </div>
-
+                <span className="text-xs font-semibold text-slate-200">Service Timings & Date</span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Start Date <span className="text-rose-400">*</span>
+                      Event Date <span className="text-rose-400">*</span>
                     </label>
                     <input
                       type="date"
@@ -1334,114 +2083,21 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                     />
                   </div>
                 </div>
-
-                {formIsMultiDay && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#18202d]">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">Number of Service Days</label>
-                      <input
-                        type="number"
-                        min={2}
-                        max={14}
-                        value={formServiceDays}
-                        onChange={(e) => {
-                          const days = Math.max(2, parseInt(e.target.value) || 2);
-                          setFormServiceDays(days);
-                          if (formEventDate) {
-                            const d = new Date(formEventDate);
-                            d.setDate(d.getDate() + (days - 1));
-                            setFormEndDate(d.toISOString().split('T')[0]);
-                          }
-                        }}
-                        className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">Calculated End Date</label>
-                      <input
-                        type="date"
-                        value={formEndDate}
-                        onChange={(e) => setFormEndDate(e.target.value)}
-                        className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#18202d]">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">Timezone</label>
-                    <select
-                      value={formTimezone}
-                      onChange={(e) => setFormTimezone(e.target.value)}
-                      className="w-full bg-[#121620] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                    >
-                      {COMMON_TIMEZONES.map((tz) => (
-                        <option key={tz.value} value={tz.value}>
-                          {tz.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center pt-5">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={formAutoActivate}
-                        onChange={(e) => setFormAutoActivate(e.target.checked)}
-                        className="rounded text-amber-500 focus:ring-0"
-                      />
-                      <span>Auto-activate ordering when start time arrives</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Live Service Duration Preview */}
-                {calculatedServiceWindow && (
-                  <div className="bg-[#121927] border border-amber-500/30 rounded-xl p-3 text-xs flex items-center justify-between text-slate-200">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300">
-                        <CalendarClock className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-white flex items-center gap-1.5 flex-wrap">
-                          <span>Service Window:</span>
-                          <span className="text-amber-300 font-mono">
-                            {calculatedServiceWindow.startDate} {calculatedServiceWindow.startTime} → {calculatedServiceWindow.endDate} {calculatedServiceWindow.endTime}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                            {calculatedServiceWindow.timezone}
-                          </span>
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Calculated Duration: <strong className="text-emerald-400">{calculatedServiceWindow.durationHours} hours</strong>
-                          {calculatedServiceWindow.isCrossMidnight && ' · Spans past midnight'}
-                          {calculatedServiceWindow.isMultiDay && ' · Multi-day service'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-1 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
-                      AUTO-EXPIRY
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Venue / Hall / Room Name</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Venue Name</label>
                   <input
                     type="text"
-                    placeholder="e.g. The Grand Ballroom, or Terrace Pavilion"
                     value={formVenueName}
                     onChange={(e) => setFormVenueName(e.target.value)}
+                    placeholder={currentRestaurant?.name || 'Grand Ballroom'}
                     className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Estimated Attendance (Guests)</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Estimated Guests</label>
                   <input
                     type="number"
                     min={1}
@@ -1452,195 +2108,91 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 </div>
               </div>
 
-              {/* Theme Styling & Notes */}
-              <div className="pt-2 border-t border-[#1e2535] space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-2">Luxury Color Palette</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {THEME_OPTIONS.map((theme) => {
-                      const isSelected = formThemeColor === theme.id;
-                      return (
-                        <button
-                          key={theme.id}
-                          type="button"
-                          onClick={() => setFormThemeColor(theme.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-all ${
-                            isSelected
-                              ? 'bg-[#1a2130] border-amber-400 shadow-md shadow-amber-500/10'
-                              : 'bg-[#0f131a] border-[#222b3b] hover:border-slate-500'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="w-3.5 h-3.5 rounded-full border border-white/20" style={{ backgroundColor: theme.accent }} />
-                            <span className="text-xs font-semibold text-white">{theme.name}</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400">Atmospheric wedding styling</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Welcome Message to Guests</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Message displayed prominently on the wedding guest mobile ordering portal..."
-                    value={formWelcomeMessage}
-                    onChange={(e) => setFormWelcomeMessage(e.target.value)}
-                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Special Banquet Notes (Internal / Staff)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. VIP table 01 reserved for couple; Champagne toast at 19:30"
-                    value={formNotes}
-                    onChange={(e) => setFormNotes(e.target.value)}
-                    className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-                  />
+              {/* Theme Selector */}
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-2">Visual Palette & Styling</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {THEME_OPTIONS.map((th) => (
+                    <button
+                      key={th.id}
+                      type="button"
+                      onClick={() => setFormThemeColor(th.id)}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                        formThemeColor === th.id
+                          ? 'border-amber-400 bg-amber-500/15'
+                          : 'border-[#222b3b] bg-[#0f131c] hover:border-slate-500'
+                      }`}
+                    >
+                      <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: th.accent }} />
+                      <span className="text-xs text-white truncate font-medium">{th.name}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 2: MENU & KITCHEN */}
+          {/* STEP 2: MENU SELECTION & KITCHEN */}
           {wizardStep === 2 && (
             <div className="space-y-4">
-              {/* Assigned Catering Restaurant Banner */}
-              <div className="bg-[#10141e] border border-[#20293a] rounded-xl p-3.5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-slate-400">Assigned Catering Restaurant</p>
-                  <p className="text-sm font-bold text-white mt-0.5">{currentRestaurant?.name || 'Current Restaurant'}</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    {menuItems.length} Dishes Configured
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-2">Guest Menu Scope</label>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#10141d] p-3.5 rounded-xl border border-[#20293b] space-y-2">
+                <span className="text-xs font-semibold text-white">Guest Menu Availability</span>
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setFormMenuSelectionType('FULL_MENU')}
-                    className={`p-3.5 rounded-xl border text-left transition-all ${
+                    className={`p-3 rounded-xl border text-left transition-all ${
                       formMenuSelectionType === 'FULL_MENU'
-                        ? 'bg-[#1b2230] border-amber-400 shadow-md'
-                        : 'bg-[#0f131a] border-[#222b3b] text-slate-400'
+                        ? 'border-amber-500 bg-amber-500/15 text-white'
+                        : 'border-[#20293b] bg-[#0c1017] text-slate-400'
                     }`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <UtensilsCrossed className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-semibold text-white">Full Restaurant Menu</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400">All available food and beverages are visible to guests.</p>
+                    <div className="font-bold text-xs">Full Catering Menu</div>
+                    <div className="text-[10px] mt-0.5">All dishes in catalog available to guests</div>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setFormMenuSelectionType('RESTRICTED')}
-                    className={`p-3.5 rounded-xl border text-left transition-all ${
+                    className={`p-3 rounded-xl border text-left transition-all ${
                       formMenuSelectionType === 'RESTRICTED'
-                        ? 'bg-[#1b2230] border-amber-400 shadow-md'
-                        : 'bg-[#0f131a] border-[#222b3b] text-slate-400'
+                        ? 'border-amber-500 bg-amber-500/15 text-white'
+                        : 'border-[#20293b] bg-[#0c1017] text-slate-400'
                     }`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-semibold text-white">Curated Banquet Menu</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400">Restrict guest ordering to selected banquet categories.</p>
+                    <div className="font-bold text-xs">Custom Curated Selection</div>
+                    <div className="text-[10px] mt-0.5">Limit dining to specific dishes</div>
                   </button>
                 </div>
               </div>
 
-              {formMenuSelectionType === 'RESTRICTED' && (
-                <div className="bg-[#0c0f16] border border-[#1e2535] rounded-xl p-3.5 space-y-3">
-                  <p className="text-xs font-semibold text-slate-200">Select Allowed Categories for this Event:</p>
-                  {menuCategories.length === 0 ? (
-                    <p className="text-xs text-slate-400">No menu categories available.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {menuCategories.map((cat) => {
-                        const isChecked = formAllowedCategoryIds.includes(cat.id);
-                        return (
-                          <label
-                            key={cat.id}
-                            className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
-                              isChecked
-                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-200'
-                                : 'bg-[#121620] border-[#222a3a] text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setFormAllowedCategoryIds([...formAllowedCategoryIds, cat.id]);
-                                } else {
-                                  setFormAllowedCategoryIds(formAllowedCategoryIds.filter((id) => id !== cat.id));
-                                }
-                              }}
-                              className="rounded text-amber-500 focus:ring-0"
-                            />
-                            <span className="truncate">{cat.name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Station Routing Preview */}
               <div className="bg-[#0f141f] border border-[#20293b] rounded-xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-200">Station Routing Preview</span>
-                  <span className="text-[10px] text-slate-400">Kitchen KDS vs Bar Terminals</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                <span className="text-xs font-semibold text-slate-200">Catalog Station Routing</span>
+                <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="p-3 bg-[#131926] border border-[#243044] rounded-lg">
-                    <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs mb-1">
-                      <ChefHat className="w-4 h-4" />
-                      <span>Kitchen Station (KDS)</span>
-                    </div>
-                    <p className="text-lg font-bold text-white">
-                      {menuItems.filter((i) => (i.targetDestination || (i.isAlcoholic ? 'BAR' : 'KITCHEN')) !== 'BAR').length}
+                    <span className="text-amber-400 font-semibold">Kitchen KDS</span>
+                    <p className="text-base font-bold text-white mt-1">
+                      {menuItems.filter((i) => (i.targetDestination || (i.isAlcoholic ? 'BAR' : 'KITCHEN')) !== 'BAR').length} Dishes
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Appetizers, mains, bread, desserts</p>
                   </div>
                   <div className="p-3 bg-[#131926] border border-[#243044] rounded-lg">
-                    <div className="flex items-center gap-2 text-sky-400 font-semibold text-xs mb-1">
-                      <Sparkles className="w-4 h-4" />
-                      <span>Bar Station</span>
-                    </div>
-                    <p className="text-lg font-bold text-white">
-                      {menuItems.filter((i) => (i.targetDestination || (i.isAlcoholic ? 'BAR' : 'KITCHEN')) === 'BAR').length}
+                    <span className="text-purple-400 font-semibold">Bar Station</span>
+                    <p className="text-base font-bold text-white mt-1">
+                      {menuItems.filter((i) => (i.targetDestination || (i.isAlcoholic ? 'BAR' : 'KITCHEN')) === 'BAR').length} Beverages
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Mocktails, wine, cocktails, sodas</p>
                   </div>
                 </div>
 
                 {menuItems.length === 0 && (
-                  <div className="pt-2 border-t border-[#1c2433] flex items-center justify-between gap-3">
-                    <p className="text-xs text-amber-300">Catalog is empty. Seed sample banquet dishes?</p>
-                    <Button
-                      variant="brand"
-                      size="sm"
-                      onClick={handleSeedSampleMenu}
-                      disabled={isSeedingMenu}
-                      className="bg-sky-500 hover:bg-sky-600 text-slate-950 font-semibold text-xs flex items-center gap-1.5"
-                    >
-                      <ChefHat className={`w-3.5 h-3.5 ${isSeedingMenu ? 'animate-spin' : ''}`} />
-                      <span>{isSeedingMenu ? 'Seeding Dishes...' : 'Seed Sample Menu'}</span>
-                    </Button>
-                  </div>
+                  <Button
+                    variant="brand"
+                    size="sm"
+                    onClick={handleSeedSampleMenu}
+                    disabled={isSeedingMenu}
+                    className="w-full bg-sky-500 hover:bg-sky-600 text-slate-950 font-semibold text-xs"
+                  >
+                    {isSeedingMenu ? 'Seeding...' : 'Seed Sample Banquet Dishes'}
+                  </Button>
                 )}
               </div>
             </div>
@@ -1649,98 +2201,21 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
           {/* STEP 3: TABLES & QR CODE PROVISIONING */}
           {wizardStep === 3 && (
             <div className="space-y-4">
-              <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-transparent border border-amber-500/20 p-3.5 rounded-xl text-xs text-amber-200 leading-relaxed">
-                <strong>Decoupled Event Tables:</strong> Event tables are isolated from your everyday dining room floorplan. Provisioning tables automatically generates dedicated table numbers (Table 01 through Table {formTableCount}) with unique QR code tokens that never overwrite regular restaurant tables.
-              </div>
-
-              {!editingEventId && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Number of Banquet Tables to Provision
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={formTableCount}
-                      onChange={(e) => setFormTableCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">Generates Table 01 to Table {String(formTableCount).padStart(2, '0')}</p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">Seats per Table (Estimate)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      defaultValue={8}
-                      className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">Standard round banquet table seating</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Live QR Standees Preview */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-200">Table QR Standees Preview</span>
-                  <span className="text-[10px] text-slate-400">
-                    {wizardTables.length > 0 ? `${wizardTables.length} Active Provisioned Tables` : `Preview of ${formTableCount} Tables to be provisioned`}
-                  </span>
-                </div>
-
-                {loadingWizardTables ? (
-                  <div className="py-8 text-center text-xs text-slate-400">Loading provisioned event tables...</div>
-                ) : wizardTables.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[300px] overflow-y-auto pr-1">
-                    {wizardTables.map((tbl) => {
-                      const guestUrl = editingEventId ? getEventGuestUrl(editingEventId, tbl.tableNumber) : '';
-                      return (
-                        <div key={tbl.id} className="p-2.5 rounded-lg bg-[#111622] border border-[#20293c] flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <span className="font-mono font-bold text-amber-300 text-xs">
-                                TABLE {cleanTableBadge(tbl.tableNumber)}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">{tbl.capacity} seats</span>
-                            </div>
-                            <p className="text-[10px] text-emerald-400 mt-0.5">Isolated Event Table</p>
-                          </div>
-                          {guestUrl && (
-                            <div className="mt-2 pt-2 border-t border-[#1d2537] flex items-center justify-between">
-                              <button
-                                type="button"
-                                onClick={() => handleCopyLink(guestUrl)}
-                                className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-1 font-mono"
-                              >
-                                <Copy className="w-3 h-3" />
-                                <span>Copy Link</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {Array.from({ length: Math.min(8, formTableCount) }).map((_, idx) => (
-                      <div key={idx} className="p-2.5 rounded-lg bg-[#111622] border border-[#20293c] text-center">
-                        <span className="font-mono font-bold text-amber-300 text-xs">
-                          TABLE {String(idx + 1).padStart(2, '0')}
-                        </span>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Auto-generated QR</p>
-                      </div>
-                    ))}
-                    {formTableCount > 8 && (
-                      <div className="p-2.5 rounded-lg bg-[#0e121a] border border-[#1b2230] text-center flex items-center justify-center">
-                        <span className="text-[11px] text-slate-400 font-mono">+{formTableCount - 8} more tables</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+              <div className="bg-[#0d1017] p-3.5 rounded-xl border border-[#222b3b] space-y-2">
+                <label className="block text-xs font-semibold text-slate-200">
+                  Initial Dedicated Table Count
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Each banquet table receives a dedicated token decoupled from ordinary restaurant seating.
+                </p>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={formTableCount}
+                  onChange={(e) => setFormTableCount(Math.max(1, parseInt(e.target.value) || 10))}
+                  className="bg-[#131926] border border-[#28354a] rounded-lg px-3 py-1.5 text-sm text-white w-28 font-mono font-bold"
+                />
               </div>
             </div>
           )}
@@ -1748,118 +2223,63 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
           {/* STEP 4: REVIEW & ACTIVATE */}
           {wizardStep === 4 && (
             <div className="space-y-4">
-              <div className="bg-[#0e121a] border border-[#232c3d] rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Event Title</span>
-                  <span className="text-xs font-bold text-white">{formTitle || 'Untitled Event'}</span>
+              <div className="bg-[#0e121a] p-4 rounded-xl border border-[#222c3e] space-y-3 text-xs">
+                <span className="font-bold text-white uppercase font-mono">Banquet Configuration Summary</span>
+                <div className="grid grid-cols-2 gap-2 text-slate-300">
+                  <div>Title: <strong className="text-white">{formTitle}</strong></div>
+                  <div>Event Type: <strong className="text-white">{formEventType}</strong></div>
+                  <div>Date: <strong className="text-white">{formEventDate}</strong></div>
+                  <div>Timings: <strong className="text-white">{formStartTime} - {formEndTime}</strong></div>
+                  <div>Tables: <strong className="text-white">{formTableCount}</strong></div>
+                  <div>Caterer: <strong className="text-white">{currentRestaurant?.name}</strong></div>
                 </div>
-                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Event Type</span>
-                  <span className="text-xs font-mono font-bold text-amber-300">
-                    {EVENT_TYPES[formEventType]?.icon} {EVENT_TYPES[formEventType]?.label || formEventType}
-                  </span>
-                </div>
-                {formCoupleNames && (
-                  <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                    <span className="text-xs text-slate-400">
-                      {EVENT_TYPES[formEventType]?.honoreeLabel || 'Honoree / Host'}
-                    </span>
-                    <span className="text-xs font-serif text-amber-200">{formCoupleNames}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Calculated Service Window</span>
-                  <div className="text-right">
-                    <p className="text-xs text-white font-mono font-semibold">
-                      {formEventDate} {formStartTime} → {calculatedServiceWindow?.endDate || formEndDate || formEventDate} {formEndTime}
-                    </p>
-                    <p className="text-[10px] text-emerald-400 mt-0.5">
-                      {calculatedServiceWindow?.durationHours} hrs · {formTimezone}
-                      {calculatedServiceWindow?.isCrossMidnight ? ' · Crosses midnight' : ''}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Venue</span>
-                  <span className="text-xs text-white">{formVenueName || currentRestaurant?.name}</span>
-                </div>
-                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Catering Restaurant</span>
-                  <span className="text-xs text-slate-200">{currentRestaurant?.name}</span>
-                </div>
-                <div className="flex items-center justify-between border-b border-[#1f2736] pb-2.5">
-                  <span className="text-xs text-slate-400">Menu Scope</span>
-                  <span className="text-xs font-mono text-emerald-400">{formMenuSelectionType}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Tables Provisioned</span>
-                  <span className="text-xs font-mono text-amber-300">{formTableCount} Dedicated Event Tables</span>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-emerald-500/10 to-transparent border border-emerald-500/20 rounded-xl p-3 text-xs text-emerald-200">
-                <p className="font-semibold text-emerald-300">Ready to Publish</p>
-                <p className="text-[11px] text-slate-300 mt-0.5">
-                  Clicking <strong>Publish & Activate Event Ordering</strong> will open guest orders for table QR codes during your scheduled service window. You can also save progress as draft and return later.
-                </p>
               </div>
             </div>
           )}
 
           {/* Wizard Footer Controls */}
           <div className="flex items-center justify-between pt-4 border-t border-[#1e2533]">
-            {wizardStep > 1 ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setWizardStep(wizardStep - 1)}
-                className="text-xs bg-[#161c28] border-[#252f42] text-slate-300 hover:text-white"
-              >
-                <ChevronLeft className="w-3.5 h-3.5 mr-1" />
-                Back
-              </Button>
-            ) : <div />}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (wizardStep > 1) setWizardStep(wizardStep - 1);
+                else setIsWizardOpen(false);
+              }}
+              className="text-xs bg-[#161c28] border-[#252f42] text-slate-300"
+            >
+              {wizardStep > 1 ? 'Back' : 'Cancel'}
+            </Button>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsWizardOpen(false)}
-                className="text-xs bg-[#161c28] border-[#252f42] text-slate-400 hover:text-white"
-              >
-                Cancel
-              </Button>
-
               {wizardStep < 4 ? (
                 <Button
                   variant="brand"
                   size="sm"
-                  onClick={() => handleWizardStepAdvance(wizardStep + 1)}
-                  disabled={isSaving || (wizardStep === 1 && (!formTitle || !formEventDate))}
-                  className="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold"
+                  onClick={() => setWizardStep(wizardStep + 1)}
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-4"
                 >
-                  {isSaving ? 'Saving...' : 'Save & Continue'}
-                  <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  Continue →
                 </Button>
               ) : (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleSaveDraftAndClose}
-                    disabled={isSaving || !formTitle || !formEventDate}
-                    className="text-xs bg-[#161c28] border-amber-500/40 text-amber-300 hover:bg-amber-500/10 font-semibold"
+                    onClick={() => handleSaveWizardEvent(true)}
+                    disabled={isSaving}
+                    className="text-xs bg-[#161c28] border-amber-500/40 text-amber-300"
                   >
-                    {isSaving ? 'Saving...' : 'Save as Draft 💾'}
+                    Save Draft
                   </Button>
                   <Button
                     variant="brand"
                     size="sm"
-                    onClick={handleActivateEventOrdering}
-                    disabled={isSaving || !formTitle || !formEventDate}
-                    className="text-xs bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-bold px-4 shadow-lg shadow-amber-500/20"
+                    onClick={() => handleSaveWizardEvent(false)}
+                    disabled={isSaving}
+                    className="text-xs bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold px-4"
                   >
-                    {isSaving ? 'Saving...' : editingEventId ? 'Update & Save' : 'Publish & Activate Event Ordering 🎉'}
+                    {isSaving ? 'Saving...' : editingEventId ? 'Save & Update' : 'Publish & Activate Event Ordering 🎉'}
                   </Button>
                 </div>
               )}
@@ -1869,153 +2289,67 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
       </Modal>
 
       {/* ========================================================================= */}
-      {/* TABLES & DEDICATED QR CODE STUDIO MODAL */}
+      {/* EXTEND SERVICE PERIOD MODAL */}
       {/* ========================================================================= */}
       <Modal
-        isOpen={!!selectedEventForTables}
-        onClose={() => setSelectedEventForTables(null)}
-        title={`Tables & QR Studio — ${selectedEventForTables?.title || ''}`}
-        maxWidth="3xl"
+        isOpen={!!extendingEvent}
+        onClose={() => setExtendingEvent(null)}
+        title="Extend Event Service Period"
+        maxWidth="md"
       >
-        {selectedEventForTables && (
-          <div className="space-y-6">
-            {/* Studio Actions Bar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#10141d] p-3.5 rounded-xl border border-[#1e2535]">
-              <div>
-                <p className="text-xs font-semibold text-white">Event Table Tokens ({eventTables.length})</p>
-                <p className="text-[10px] text-slate-400">Strictly decoupled from daily dining floorplan.</p>
-              </div>
+        {extendingEvent && (
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Lengthen service duration for <strong>{extendingEvent.title}</strong> without losing active table associations or orders.
+            </p>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={() => setIsPrintModalOpen(true)}
-                  className="bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-semibold text-xs flex items-center gap-1.5"
+            <div className="grid grid-cols-3 gap-2">
+              {[30, 60, 120].map((mins) => (
+                <button
+                  key={mins}
+                  type="button"
+                  onClick={() => setExtensionMinutes(mins)}
+                  className={`py-2 rounded-xl text-xs font-semibold border transition-all ${
+                    extensionMinutes === mins
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-[#121620] text-slate-400 border-[#222b3b]'
+                  }`}
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Standee Sheet</span>
-                </Button>
-              </div>
+                  +{mins >= 60 ? `${mins / 60}h` : `${mins}m`}
+                </button>
+              ))}
             </div>
 
-            {/* Add Extra Table Inline Form */}
-            <div className="bg-[#121622] border border-[#232c3d] p-3 rounded-xl flex flex-wrap items-center gap-2.5">
-              <span className="text-xs font-medium text-slate-300">Add Table:</span>
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Reason (Audited)</label>
               <input
                 type="text"
-                placeholder="Number (e.g. 11 or VIP-Head)"
-                value={newTableNumber}
-                onChange={(e) => setNewTableNumber(e.target.value)}
-                className="bg-[#0c0e15] border border-[#273245] rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 w-36"
+                value={extensionReason}
+                onChange={(e) => setExtensionReason(e.target.value)}
+                className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white"
               />
-              <input
-                type="text"
-                placeholder="Label (e.g. Groom Family)"
-                value={newTableLabel}
-                onChange={(e) => setNewTableLabel(e.target.value)}
-                className="bg-[#0c0e15] border border-[#273245] rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 w-44"
-              />
-              <input
-                type="number"
-                min={1}
-                value={newTableCapacity}
-                onChange={(e) => setNewTableCapacity(parseInt(e.target.value) || 8)}
-                className="bg-[#0c0e15] border border-[#273245] rounded-lg px-2 py-1 text-xs text-white w-16"
-                title="Seats"
-              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#1e2533]">
+              <Button variant="outline" size="sm" onClick={() => setExtendingEvent(null)} className="text-xs">
+                Cancel
+              </Button>
               <Button
                 variant="brand"
                 size="sm"
-                onClick={handleAddTable}
-                disabled={isAddingTable || !newTableNumber.trim()}
-                className="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold h-7 px-3"
+                onClick={handleExtendServicePeriod}
+                disabled={isExtending}
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs"
               >
-                {isAddingTable ? 'Adding...' : 'Add Table'}
+                {isExtending ? 'Extending...' : 'Confirm Extension'}
               </Button>
-            </div>
-
-            {/* Tables Grid with Direct QR */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 max-h-[480px] overflow-y-auto pr-1">
-              {eventTables.map((tbl) => {
-                const guestUrl = getEventGuestUrl(selectedEventForTables.id, tbl.tableNumber);
-                const canvasId = `qr-canvas-${tbl.id}`;
-
-                return (
-                  <div
-                    key={tbl.id}
-                    className="bg-[#121622] border border-[#222b3b] hover:border-amber-500/50 rounded-xl p-3.5 space-y-3 transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono font-bold text-amber-300 text-sm">
-                          Table {tbl.tableNumber}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {tbl.capacity} seats
-                        </span>
-                      </div>
-                      {tbl.tableLabel && (
-                        <p className="text-[11px] text-slate-300 truncate mt-0.5">{tbl.tableLabel}</p>
-                      )}
-                    </div>
-
-                    {/* QR Code Canvas */}
-                    <div className="bg-white p-2.5 rounded-lg flex items-center justify-center shadow-inner">
-                      <QRCodeCanvas
-                        id={canvasId}
-                        value={guestUrl}
-                        size={110}
-                        level="H"
-                        marginSize={1}
-                      />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="space-y-1.5 pt-2 border-t border-[#1c2330]">
-                      <div className="flex items-center justify-between gap-1">
-                        <button
-                          onClick={() => handleDownloadQR(tbl.tableNumber, canvasId)}
-                          className="flex-1 py-1 rounded bg-[#1b2230] hover:bg-[#252f42] text-slate-200 text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
-                        >
-                          <Download className="w-3 h-3 text-amber-400" />
-                          <span>PNG</span>
-                        </button>
-                        <button
-                          onClick={() => handleCopyLink(guestUrl)}
-                          className="flex-1 py-1 rounded bg-[#1b2230] hover:bg-[#252f42] text-slate-200 text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
-                        >
-                          <Copy className="w-3 h-3 text-sky-400" />
-                          <span>Copy</span>
-                        </button>
-                        <a
-                          href={guestUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-1 rounded bg-[#1b2230] hover:bg-[#252f42] text-slate-200 text-[10px] flex items-center justify-center transition-colors"
-                          title="Open Guest View"
-                        >
-                          <ExternalLink className="w-3 h-3 text-emerald-400" />
-                        </a>
-                        <button
-                          onClick={() => handleDeleteTable(tbl.id)}
-                          className="p-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
-                          title="Delete Table"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}
       </Modal>
 
       {/* ========================================================================= */}
-      {/* PRINT-READY TABLE STANDEES MODAL / SHEET */}
+      {/* PRINT-READY STANDEE MODAL */}
       {/* ========================================================================= */}
       <Modal
         isOpen={isPrintModalOpen}
@@ -2026,7 +2360,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
         <div className="space-y-4">
           <div className="flex items-center justify-between bg-[#121622] p-3 rounded-xl border border-[#232c3d]">
             <p className="text-xs text-slate-300">
-              Formatted for standard A6 or cardstock standees. Click <strong>Print Standees</strong> to open your browser print preview.
+              Formatted for standard A6 or cardstock standees. Click <strong>Print Standees</strong> to open browser print preview.
             </p>
             <Button
               variant="brand"
@@ -2039,10 +2373,9 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             </Button>
           </div>
 
-          {/* Printable Standees Container */}
           <div className="grid grid-cols-2 gap-4 max-h-[500px] overflow-y-auto p-4 bg-slate-900 rounded-xl print:bg-white print:text-black print:overflow-visible print:max-h-none">
-            {eventTables.map((tbl) => {
-              const guestUrl = getEventGuestUrl(selectedEventForTables?.id || '', tbl.tableNumber);
+            {terminalTables.map((tbl) => {
+              const guestUrl = getEventGuestUrl(currentEvent?.id || '', tbl.tableNumber);
 
               return (
                 <div
@@ -2051,10 +2384,10 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 >
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase tracking-widest text-[#94762c] font-serif font-bold">
-                      {selectedEventForTables?.venueName || currentRestaurant?.name || 'Exclusive Banquet'}
+                      {currentEvent?.venueName || currentRestaurant?.name || 'Exclusive Banquet'}
                     </p>
                     <h3 className="text-base font-serif font-bold text-slate-900">
-                      {selectedEventForTables?.coupleNames || selectedEventForTables?.title}
+                      {currentEvent?.coupleNames || currentEvent?.title}
                     </h3>
                     <div className="w-12 h-0.5 bg-[#d4af37] mx-auto my-1" />
                   </div>
@@ -2078,194 +2411,8 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
           </div>
         </div>
       </Modal>
-
-      {/* ========================================================================= */}
-      {/* LIVE EVENT ORDERS MODAL */}
-      {/* ========================================================================= */}
-      <Modal
-        isOpen={!!selectedEventForOrders}
-        onClose={() => setSelectedEventForOrders(null)}
-        title={`Live Orders Stream — ${selectedEventForOrders?.title || ''}`}
-        maxWidth="2xl"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center justify-between bg-[#0e121a] p-3 rounded-xl border border-[#202737]">
-            <div>
-              <p className="text-xs font-bold text-white">Event Orders: {eventOrders.length}</p>
-              <p className="text-[10px] text-slate-400">Tagged with 💍 WEDDING EVENT and routed directly to Kitchen & Bar KDS</p>
-            </div>
-            <span className="font-mono text-emerald-400 font-bold text-sm">
-              Total: ₹{eventOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toFixed(2)}
-            </span>
-          </div>
-
-          {loadingOrders ? (
-            <div className="py-12 flex justify-center text-slate-400 text-xs font-mono">
-              Fetching event orders...
-            </div>
-          ) : eventOrders.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              No orders placed for this event yet. Orders placed via wedding guest table QR codes will appear here in real-time.
-            </div>
-          ) : (
-            <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
-              {eventOrders.map((ord) => (
-                <div
-                  key={ord.id}
-                  className="bg-[#121622] border border-[#232c3d] rounded-xl p-3.5 space-y-2 text-xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-amber-400">
-                        #{ord.id.slice(-4)}
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        TABLE {ord.tableNumber}
-                      </span>
-                      <span className="text-slate-300 font-medium">{ord.customerName || 'Guest'}</span>
-                    </div>
-                    <span className="font-mono font-bold text-emerald-400">
-                      ₹{(ord.totalAmount || 0).toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="text-[11px] text-slate-300 space-y-1 bg-[#0c0e16] p-2 rounded-lg border border-[#1b2232]">
-                    {(ord.items || []).map((it, idx) => (
-                      <div key={idx} className="flex justify-between">
-                        <span>• {it.quantity}x {it.name}</span>
-                        <span className="text-slate-400 font-mono">₹{((it.price || (it as any).unitPrice || 0) * it.quantity).toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span>Placed {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    <span className="font-mono font-semibold text-purple-400 uppercase">{ord.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      {/* ========================================================================= */}
-      {/* EXTEND SERVICE PERIOD MODAL */}
-      {/* ========================================================================= */}
-      <Modal
-        isOpen={!!extendingEvent}
-        onClose={() => setExtendingEvent(null)}
-        title={`Extend Service Period — ${extendingEvent?.title || ''}`}
-        maxWidth="lg"
-      >
-        {extendingEvent && (
-          <div className="space-y-4">
-            <div className="bg-[#10141d] border border-[#1e2535] rounded-xl p-3.5 space-y-2 text-xs">
-              <div className="flex items-center justify-between text-slate-300">
-                <span>Current Scheduled End:</span>
-                <span className="font-mono font-bold text-amber-300">
-                  {extendingEvent.endDate || extendingEvent.eventDate} at {extendingEvent.endTime || '23:30'} ({extendingEvent.timezone || 'Asia/Kolkata'})
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                <span>Current Status:</span>
-                <span className="font-mono uppercase font-semibold text-emerald-400">
-                  {extendingEvent.status}
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-2">
-                Quick Extend Ordering Window:
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { label: '+30 Mins', mins: 30 },
-                  { label: '+1 Hour', mins: 60 },
-                  { label: '+2 Hours', mins: 120 },
-                  { label: '+4 Hours', mins: 240 },
-                ].map((opt) => (
-                  <button
-                    key={opt.mins}
-                    type="button"
-                    onClick={() => {
-                      setExtensionMinutes(opt.mins);
-                      setCustomExtensionDate('');
-                      setCustomExtensionTime('');
-                    }}
-                    className={`py-2 px-1 rounded-lg text-xs font-semibold border transition-all ${
-                      extensionMinutes === opt.mins && !customExtensionDate
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md'
-                        : 'bg-[#121620] text-slate-300 border-[#222b3b] hover:border-slate-500'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-[#0e121a] border border-[#1e2535] rounded-xl p-3 space-y-2">
-              <span className="text-[11px] font-medium text-slate-400">Or Set Custom End Time:</span>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">New End Date</label>
-                  <input
-                    type="date"
-                    value={customExtensionDate}
-                    onChange={(e) => setCustomExtensionDate(e.target.value)}
-                    className="w-full bg-[#080a0f] border border-[#252f40] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">New End Time</label>
-                  <input
-                    type="time"
-                    value={customExtensionTime}
-                    onChange={(e) => setCustomExtensionTime(e.target.value)}
-                    className="w-full bg-[#080a0f] border border-[#252f40] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Extension Reason (Audited)
-              </label>
-              <input
-                type="text"
-                value={extensionReason}
-                onChange={(e) => setExtensionReason(e.target.value)}
-                placeholder="e.g. Host requested dining extension for celebration"
-                className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1e2533]">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setExtendingEvent(null)}
-                className="text-xs bg-[#161c28] border-[#252f42] text-slate-400 hover:text-white"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="brand"
-                size="sm"
-                disabled={isExtending}
-                onClick={handleExtendServicePeriod}
-                className="text-xs bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold px-4"
-              >
-                {isExtending ? 'Extending...' : 'Confirm Extension & Activate'}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };
+
 export default WeddingsTab;

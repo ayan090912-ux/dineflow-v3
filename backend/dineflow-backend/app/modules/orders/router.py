@@ -54,6 +54,8 @@ class UpdateOrderStatusSchema(BaseModel):
     hookahStatus: Optional[str] = None
     estimatedPrepTimeMinutes: Optional[int] = None
     etaTargetTimestamp: Optional[str] = None
+    claimedBy: Optional[str] = None
+    deliveryStatus: Optional[str] = None
 
 class UpdateOrderETASchema(BaseModel):
     deltaMinutes: Optional[int] = None
@@ -147,6 +149,12 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
         "eventId": getattr(order, "event_id", None),
         "event_name": getattr(order, "event_name", None),
         "eventName": getattr(order, "event_name", None),
+        "claimed_by": getattr(order, "claimed_by", None),
+        "claimedBy": getattr(order, "claimed_by", None),
+        "delivery_status": getattr(order, "delivery_status", None),
+        "deliveryStatus": getattr(order, "delivery_status", None),
+        "delivered_at": (order.delivered_at.isoformat() if getattr(order, "delivered_at", None) else None),
+        "deliveredAt": (order.delivered_at.isoformat() if getattr(order, "delivered_at", None) else None),
         "created_at": created_at_val,
         "createdAt": created_at_val,
     }
@@ -788,6 +796,7 @@ async def get_restaurant_orders(
     active_only: bool = Query(False),
     station: Optional[str] = Query(None),
     business_day_id: Optional[str] = Query(None),
+    event_id: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
@@ -837,6 +846,9 @@ async def get_restaurant_orders(
             effective_station = station.upper() if station else None
 
         query = select(Order).where(Order.restaurant_id == target_rest_id)
+
+        if event_id:
+            query = query.where(Order.event_id == event_id.strip())
 
         # 1. Explicit business day history filter
         if business_day_id:
@@ -976,7 +988,7 @@ async def update_order_status(
             is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
             if not is_owner:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER"]:
+        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         else:
@@ -996,15 +1008,28 @@ async def update_order_status(
     target_hookah = (payload.hookahStatus or "").upper()
     caller_role = (caller.role or "").upper()
 
-    # Kitchen, Bar, and Hookah cannot deliver overall orders to tables (waiter responsibility)
-    is_delivery_attempt = target_status in ["DELIVERED", "COMPLETED"] or target_kitchen in ["DELIVERED", "COMPLETED"] or target_hookah in ["DELIVERED", "COMPLETED"]
+    # Kitchen, Bar, and Hookah cannot deliver overall orders to tables (waiter / event delivery responsibility)
+    is_delivery_attempt = (
+        target_status in ["DELIVERED", "COMPLETED", "OUT_FOR_DELIVERY"]
+        or target_kitchen in ["DELIVERED", "COMPLETED"]
+        or target_hookah in ["DELIVERED", "COMPLETED"]
+        or (payload.deliveryStatus in ["DELIVERED", "OUT_FOR_DELIVERY", "CLAIMED"])
+    )
     if is_delivery_attempt and not target_bar and not target_hookah:
-        allowed_delivery_roles = ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER"]
+        allowed_delivery_roles = ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]
         if not caller.is_admin and caller_role not in allowed_delivery_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Forbidden: Station staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
             )
+
+    # Delivery claiming and dispatch
+    if payload.claimedBy is not None:
+        order.claimed_by = payload.claimedBy
+    if payload.deliveryStatus is not None:
+        order.delivery_status = payload.deliveryStatus
+        if payload.deliveryStatus in ["DELIVERED", "COMPLETED"]:
+            order.delivered_at = datetime.now(timezone.utc)
 
     # Station-specific mutation role authorization
     if payload.hookahStatus:
@@ -1048,10 +1073,13 @@ async def update_order_status(
             has_k_items = True
 
     # Reconcile overall status:
-    if payload.status and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER"]:
+    if payload.status and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]:
         order.status = payload.status
-        if payload.status == "DELIVERED":
+        if payload.status in ["DELIVERED", "COMPLETED"]:
             order.delivered_at = datetime.now(timezone.utc)
+            order.delivery_status = "DELIVERED"
+        elif payload.status == "OUT_FOR_DELIVERY":
+            order.delivery_status = "OUT_FOR_DELIVERY"
     else:
         k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"])
         b_comp = (not has_b_items) or (order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"])

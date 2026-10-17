@@ -721,6 +721,8 @@ export interface Order {
   cookingStartedAt?: string;
   readyAt?: string;
   deliveredAt?: string;
+  claimedBy?: string;
+  deliveryStatus?: 'PENDING' | 'CLAIMED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
   completedAt?: string;
   prepTimeMinutes?: number;
   deliveryTimeMinutes?: number;
