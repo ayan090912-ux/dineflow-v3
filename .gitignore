@@ -47,3 +47,5 @@ ssm_cmd.json
 !scripts/seed_dev_database.py
 !scripts/deploy_prod.py
 !scripts/deploy-prod.sh
+!scripts/verify_live_prod_terminal.py
+!scripts/verify_wedding_event_operations_live.py
