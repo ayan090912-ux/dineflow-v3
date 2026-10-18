@@ -1755,25 +1755,35 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                     className="bg-gradient-to-br from-[#121824] to-[#0f131c] border-2 border-emerald-500/60 rounded-2xl p-6 shadow-xl space-y-4 flex flex-col justify-between"
                   >
                     <div>
-                      {/* Giant Table Label */}
-                      <div className="flex items-start justify-between">
+                      {/* Event & Table Banner */}
+                      <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-2xl font-black text-white font-mono tracking-tight flex items-center gap-2">
-                            <span>TABLE {cleanTableBadge(ord.tableNumber)}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-2xl font-black text-white font-mono tracking-tight">
+                              TABLE {cleanTableBadge(ord.tableNumber)}
+                            </span>
                             <span className="text-xs font-sans px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-extrabold uppercase">
-                              READY
+                              READY FOR DELIVERY
                             </span>
                           </div>
-                          <p className="text-xs text-slate-400 font-mono mt-0.5">
-                            Order {ord.displayOrderNumber} · {formatReceivedTime(ord.createdAt)}
+                          <p className="text-xs text-amber-300 font-mono font-bold mt-0.5">
+                            {selectedEvent?.title || ord.eventName || 'Wedding & Banquet'}
+                          </p>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            Order #{ord.displayOrderNumber || ord.id.slice(-6)} · {formatReceivedTime(ord.createdAt)}
                           </p>
                         </div>
 
                         <div className="text-right">
                           <span className="text-xs font-mono text-emerald-400 font-bold block">
-                            {currencySymbol}{(ord.totalAmount || 0).toFixed(2)}
+                            {ord.items?.length || 0} Items
                           </span>
-                          <span className="text-[10px] text-slate-400">{ord.customerName}</span>
+                          <span className="text-[11px] text-slate-300">{ord.customerName}</span>
+                          {ord.claimedBy && (
+                            <span className="mt-1 inline-block text-[10px] font-mono font-bold text-amber-300 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30">
+                              Claimed by {ord.claimedBy}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -1803,6 +1813,17 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
 
                     {/* Big Touch-Friendly Action Buttons */}
                     <div className="space-y-2 pt-2 border-t border-[#1c2434]">
+                      {!ord.claimedBy && !isOut && (
+                        <Button
+                          variant="outline"
+                          onClick={() => handleClaimOrder(ord)}
+                          disabled={isUpdatingStatus[ord.id]}
+                          className="w-full bg-[#181d27] border-amber-500/40 text-amber-300 font-bold text-xs h-10 rounded-xl hover:bg-amber-500/10"
+                        >
+                          Claim Delivery Task
+                        </Button>
+                      )}
+
                       {!isOut ? (
                         <div className="grid grid-cols-2 gap-2">
                           <Button

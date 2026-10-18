@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Loader2,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
 import { DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -22,7 +23,7 @@ import { signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { AuthPage } from './AuthPage';
 
-export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'hookah' | 'inventory' | 'admin' | 'staff';
+export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'hookah' | 'inventory' | 'admin' | 'staff' | 'event';
 
 interface RoleLoginPageProps {
   portal: PortalType;
@@ -112,6 +113,15 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     targetDashboard: '/inventory/terminal',
     identifierLabel: 'Staff Username',
     identifierPlaceholder: 'e.g. stock_lead or username',
+  },
+  event: {
+    title: 'Wedding & Event Operations',
+    subtitle: 'Sign in with your organizer account or assigned staff credentials',
+    roleBadge: 'EVENT_OPERATIONS',
+    icon: <Sparkles className="w-5 h-5 text-amber-300" />,
+    targetDashboard: '/restaurant/dashboard?tab=weddings',
+    identifierLabel: 'Staff Username or Account Email',
+    identifierPlaceholder: 'e.g. runner01, chef_sam, or organizer@event.com',
   },
 };
 
@@ -216,12 +226,27 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       let result: any;
       if (portal === 'admin') {
         result = await api.loginPlatformAdmin(cleanIdentifier, password);
+      } else if (portal === 'event' && cleanIdentifier.includes('@')) {
+        try {
+          result = await api.loginOwner(cleanIdentifier, password);
+        } catch (_ownerErr) {
+          result = await api.loginStaff(cleanIdentifier, password);
+        }
       } else {
         // Real persisted staff username + password authentication
         result = await api.loginStaff(cleanIdentifier, password);
       }
 
-      const destination = result?.targetRoute || config.targetDashboard;
+      let destination = result?.targetRoute || config.targetDashboard;
+      if (portal === 'event') {
+        const r = (result?.user?.role || '').toUpperCase();
+        destination = (
+          r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
+          r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+          r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
+          '/restaurant/dashboard?tab=weddings'
+        );
+      }
       setSuccessMessage(`Authenticated successfully. Loading portal...`);
       setTimeout(() => {
         onLoginSuccess(result?.user?.role || portal, result?.user);

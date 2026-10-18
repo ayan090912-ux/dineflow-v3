@@ -669,11 +669,39 @@ function AppContent() {
       // Inside Resolved Tenant: Route by Path to the corresponding Tenant Application
       const tenantApp = resolveTenantAppFromPath(cleanPath);
 
-      // 0. Weddings & Events Luxury Guest Application
+      // 0. Dedicated Wedding & Events Operations Login
+      if (
+        cleanPath === '/weddings/login' ||
+        cleanPath === '/wedding/login' ||
+        cleanPath === '/events/login' ||
+        cleanPath === '/event/login'
+      ) {
+        return (
+          <RoleLoginPage
+            portal="event"
+            onNavigate={navigateTo}
+            onLoginSuccess={(_, user) => {
+              setCurrentUser(user);
+              const r = (user?.role || '').toUpperCase();
+              const target = (
+                r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
+                r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+                r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
+                '/restaurant/dashboard?tab=weddings'
+              );
+              navigateTo(target);
+            }}
+          />
+        );
+      }
+
+      // 0.1 Weddings & Events Luxury Guest Application
       if (
         tenantApp === 'WEDDING' ||
-        cleanPath.startsWith('/event') ||
-        cleanPath.startsWith('/events') ||
+        cleanPath.startsWith('/event/') ||
+        cleanPath.startsWith('/events/') ||
+        cleanPath === '/event' ||
+        cleanPath === '/events' ||
         cleanPath.startsWith('/wedding/guest')
       ) {
         return <WeddingGuestApp />;
@@ -1382,6 +1410,31 @@ function AppContent() {
               r === 'BAR' || r === 'BARTENDER' ? '/bar' :
               r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
               r === 'INVENTORY' ? '/inventory' : '/billing'
+            );
+            navigateTo(target);
+          }}
+        />
+      );
+    }
+
+    if (
+      cleanPath === '/weddings/login' ||
+      cleanPath === '/wedding/login' ||
+      cleanPath === '/events/login' ||
+      cleanPath === '/event/login'
+    ) {
+      return (
+        <RoleLoginPage
+          portal="event"
+          onNavigate={navigateTo}
+          onLoginSuccess={(_, user) => {
+            setCurrentUser(user);
+            const r = (user?.role || '').toUpperCase();
+            const target = (
+              r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
+              r === 'BAR' || r === 'BARTENDER' ? '/bar' :
+              r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
+              '/restaurant/dashboard?tab=weddings'
             );
             navigateTo(target);
           }}

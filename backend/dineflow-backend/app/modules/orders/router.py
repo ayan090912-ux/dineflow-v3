@@ -1000,7 +1000,7 @@ async def update_order_status(
             is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
             if not is_owner:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]:
+        elif caller.role in ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         else:
@@ -1028,11 +1028,19 @@ async def update_order_status(
         or (payload.deliveryStatus in ["DELIVERED", "OUT_FOR_DELIVERY", "CLAIMED"])
     )
     if is_delivery_attempt and not target_bar and not target_hookah:
-        allowed_delivery_roles = ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]
+        allowed_delivery_roles = ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]
         if not caller.is_admin and caller_role not in allowed_delivery_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Forbidden: Station staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Waiter and Manager roles own delivery."
+                detail=f"Forbidden: Station staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Runner, Waiter, and Manager roles own delivery."
+            )
+
+    # Safe duplicate/stale claim protection
+    if payload.deliveryStatus == "CLAIMED" and order.delivery_status in ["CLAIMED", "OUT_FOR_DELIVERY", "DELIVERED"]:
+        if order.claimed_by and payload.claimedBy and order.claimed_by.strip().lower() != payload.claimedBy.strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Order is already claimed by {order.claimed_by}."
             )
 
     # Delivery claiming and dispatch

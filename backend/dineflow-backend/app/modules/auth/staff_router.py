@@ -19,7 +19,7 @@ router = APIRouter()
 
 def get_portal_for_role(role: str) -> str:
     r = (role or "").strip().upper()
-    if r in ["WAITER", "SERVER", "HOST", "FLOOR_STAFF"]:
+    if r in ["WAITER", "SERVER", "HOST", "FLOOR_STAFF", "RUNNER", "EVENT_RUNNER", "EVENT_STAFF"]:
         return "waiter"
     if r in ["KITCHEN", "CHEF", "COOK", "KDS"]:
         return "kitchen"
@@ -31,7 +31,7 @@ def get_portal_for_role(role: str) -> str:
         return "inventory"
     if r in ["CASHIER", "BILLING"]:
         return "billing"
-    if r in ["MANAGER", "OWNER", "RESTAURANT_OWNER"]:
+    if r in ["MANAGER", "EVENT_MANAGER", "OWNER", "RESTAURANT_OWNER"]:
         return "restaurant"
     return "waiter"
 
@@ -52,6 +52,9 @@ def get_permissions_for_role(role: str) -> List[str]:
     r = (role or "").strip().upper()
     perms = {
         "WAITER": ["orders:read", "orders:create", "tables:read", "tables:manage", "customer_requests:handle"],
+        "RUNNER": ["orders:read", "orders:create", "tables:read", "tables:manage", "customer_requests:handle"],
+        "EVENT_RUNNER": ["orders:read", "orders:create", "tables:read", "tables:manage", "customer_requests:handle"],
+        "EVENT_STAFF": ["orders:read", "orders:create", "tables:read", "tables:manage", "customer_requests:handle"],
         "KITCHEN": ["orders:read", "orders:update_prep_status", "kds:access"],
         "CHEF": ["orders:read", "orders:update_prep_status", "kds:access"],
         "BAR": ["orders:read", "orders:update_bar_status", "bar:access"],
@@ -61,6 +64,7 @@ def get_permissions_for_role(role: str) -> List[str]:
         "INVENTORY": ["inventory:read", "inventory:update", "suppliers:read"],
         "CASHIER": ["billing:read", "billing:settle", "tables:read"],
         "MANAGER": ["orders:read", "orders:manage", "tables:manage", "staff:read", "billing:manage", "kds:access"],
+        "EVENT_MANAGER": ["orders:read", "orders:manage", "tables:manage", "staff:read", "kds:access"],
     }
     return perms.get(r, ["orders:read"])
 

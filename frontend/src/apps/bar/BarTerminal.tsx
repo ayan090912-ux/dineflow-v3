@@ -509,11 +509,16 @@ const BarOrderCard: React.FC<{
       <div className={`p-4 rounded-xl bg-[#12151b] border ${isCompleted ? 'border-[#1e232e]/60 opacity-60' : 'border-[#1e232e] hover:border-[#2d3545]'} transition-colors space-y-3 shadow-xs`}>
         {/* Header Info */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2 py-0.5 rounded bg-[#181d27] text-slate-200 border border-[#2d3545] text-xs font-mono font-medium">
               Table {order.tableNumber}
             </span>
             <span className="text-[11px] font-mono text-slate-400">#{order.id.slice(-4)}</span>
+            {Boolean((order as any).eventName || (order as any).metadata?.eventName) && (
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold uppercase tracking-wider">
+                BANQUET · {(order as any).eventName || (order as any).metadata?.eventName}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
             <Clock className="w-3 h-3 text-slate-500" />

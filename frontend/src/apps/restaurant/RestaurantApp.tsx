@@ -92,6 +92,7 @@ import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
+import { EventDayManagementView } from './EventDayManagementView';
 import { WeddingsTab } from './WeddingsTab';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
@@ -146,7 +147,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (p.includes('/day-management') || p.includes('/daily-closing') || p.includes('/day') || p.includes('/closing')) return 'day_management';
       if (p.includes('/workspace_settings') || p.includes('/settings')) return 'workspace_settings';
     }
-    return 'dashboard';
+    const isEvent = activeRestaurant?.businessType === 'WEDDING_ORDERING' || isModuleEnabled(activeRestaurant, 'weddings');
+    return isEvent ? 'weddings' : 'dashboard';
   });
 
   useEffect(() => {
@@ -1626,8 +1628,53 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               const hasBillingModule = isModuleEnabled(currentRestaurant, 'billing');
               const hasTablesModule = isModuleEnabled(currentRestaurant, 'tables');
               const isFoodCart = currentRestaurant?.businessType === 'FOOD_CART' || currentRestaurant?.businessType === 'FOOD_TRUCK';
+              const isEventBusiness = currentRestaurant?.businessType === 'WEDDING_ORDERING' || isModuleEnabled(currentRestaurant, 'weddings');
 
-              const sections = [
+              const sections = isEventBusiness ? [
+                {
+                  title: 'Event Operations',
+                  items: [
+                    {
+                      id: 'weddings',
+                      label: 'Event Command Center',
+                      icon: <Sparkles className="w-4 h-4 text-amber-400" />,
+                      badge: 'COMMAND',
+                    },
+                    {
+                      id: 'day_management',
+                      label: 'Event Day & Schedule',
+                      icon: <RotateCcw className="w-4 h-4 text-amber-400" />,
+                      badge: 'SCHEDULE',
+                    },
+                  ],
+                },
+                {
+                  title: 'Fulfillment Stations',
+                  items: [
+                    ...(hasKitchenModule
+                      ? [{ id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> }]
+                      : []),
+                    ...(hasBarModule
+                      ? [{ id: 'bar', label: 'Bar Terminal', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
+                      : []),
+                    ...(hasHookahModule
+                      ? [{ id: 'hookah', label: 'Hookah Terminal', icon: <Flame className="w-4 h-4 text-amber-400" />, badge: 'HOOKAH' }]
+                      : []),
+                    ...(hasInventoryModule
+                      ? [{ id: 'inventory', label: 'Inventory Stock', icon: <Package className="w-4 h-4" /> }]
+                      : []),
+                  ],
+                },
+                {
+                  title: 'Event Management',
+                  items: [
+                    { id: 'menu', label: 'Event Menu & Packages', icon: <UtensilsCrossed className="w-4 h-4 text-amber-400" /> },
+                    { id: 'staff', label: 'Event Staff & Roles', icon: <Users className="w-4 h-4 text-amber-400" /> },
+                    { id: 'theme', label: 'Event Branding & Theme', icon: <Palette className="w-4 h-4 text-amber-400" /> },
+                    { id: 'workspace_settings', label: 'Stations & Setup', icon: <Layers className="w-4 h-4 text-rose-400" /> },
+                  ],
+                },
+              ] : [
                 {
                   title: 'Operations',
                   items: [
@@ -4384,19 +4431,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab: Business Day & Day Management */}
         {(activeTab === 'business_day' || activeTab === 'day_management') && (
-          <DayManagementView
-            currentRestaurant={currentRestaurant}
-            currentBusinessDay={currentBusinessDay}
-            businessDayHistory={businessDayHistory}
-            orders={orders}
-            tables={tables}
-            bills={bills}
-            theme={theme}
-            currentUser={currentUser}
-            onNavigateTab={(tab) => setActiveTab(tab as any)}
-            onRefreshData={loadData}
-            addToast={addToast}
-          />
+          (currentRestaurant?.businessType === 'WEDDING_ORDERING' || isModuleEnabled(currentRestaurant, 'weddings')) ? (
+            <EventDayManagementView
+              currentRestaurant={currentRestaurant}
+              currentUser={currentUser}
+              onNavigateTab={(tab) => setActiveTab(tab as any)}
+              onRefreshData={loadData}
+              addToast={addToast}
+            />
+          ) : (
+            <DayManagementView
+              currentRestaurant={currentRestaurant}
+              currentBusinessDay={currentBusinessDay}
+              businessDayHistory={businessDayHistory}
+              orders={orders}
+              tables={tables}
+              bills={bills}
+              theme={theme}
+              currentUser={currentUser}
+              onNavigateTab={(tab) => setActiveTab(tab as any)}
+              onRefreshData={loadData}
+              addToast={addToast}
+            />
+          )
         )}
 
         {/* Tab: Wedding & Banquet Ordering */}
