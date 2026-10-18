@@ -21,6 +21,7 @@ import { Badge, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Order, OrderStatus, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
+import { getCurrencySymbol } from '../../packages/utils/currency';
 
 interface HookahTerminalProps {
   restaurant?: any;
@@ -28,6 +29,7 @@ interface HookahTerminalProps {
 }
 
 export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLogout }) => {
+  const currencySymbol = React.useMemo(() => getCurrencySymbol(restaurant?.currency || 'INR (₹)'), [restaurant?.currency]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [recentDispatches, setRecentDispatches] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -412,6 +414,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
                 <HookahOrderCard
                   key={ord.id}
                   order={ord}
+                  currencySymbol={currencySymbol}
                   actionLabel="Start Preparing"
                   actionVariant="primary"
                   onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
@@ -442,6 +445,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
                 <HookahOrderCard
                   key={ord.id}
                   order={ord}
+                  currencySymbol={currencySymbol}
                   actionLabel="Mark as Ready"
                   actionVariant="success"
                   onAction={() => handleUpdateStatus(ord.id, 'READY')}
@@ -472,6 +476,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
                 <HookahOrderCard
                   key={ord.id}
                   order={ord}
+                  currencySymbol={currencySymbol}
                   actionLabel="Served to Table"
                   actionVariant="neutral"
                   onAction={() => handleUpdateStatus(ord.id, 'COMPLETED')}
@@ -499,7 +504,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
 
             <div className="space-y-3">
               {completedOrders.slice(0, 8).map((ord) => (
-                <HookahOrderCard key={ord.id} order={ord} isCompleted />
+                <HookahOrderCard key={ord.id} order={ord} currencySymbol={currencySymbol} isCompleted />
               ))}
               {completedOrders.length === 0 && (
                 <div className="p-8 text-center bg-[#12151b]/40 border border-dashed border-[#1e232e] rounded-xl text-slate-500 text-xs">
@@ -521,7 +526,8 @@ const HookahOrderCard: React.FC<{
   actionVariant?: 'primary' | 'success' | 'neutral';
   onAction?: () => void;
   isCompleted?: boolean;
-}> = ({ order, actionLabel, actionVariant = 'primary', onAction, isCompleted }) => {
+  currencySymbol?: string;
+}> = ({ order, actionLabel, actionVariant = 'primary', onAction, isCompleted, currencySymbol = '₹' }) => {
   const hookahItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'HOOKAH');
   if (hookahItems.length === 0) {
     return null;
@@ -601,7 +607,7 @@ const HookahOrderCard: React.FC<{
                 )}
               </div>
               <span className="font-mono text-slate-400 text-[11px] shrink-0">
-                ₹{(item.price * item.quantity).toFixed(2)}
+                {currencySymbol}{(item.price * item.quantity).toFixed(2)}
               </span>
             </div>
           ))}

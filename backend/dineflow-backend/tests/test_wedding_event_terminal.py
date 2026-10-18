@@ -782,6 +782,9 @@ class TestWeddingEventTerminal:
             order = order_res.json()
             # No ETA is forced on event ordering
             assert order["orderType"] in ["EVENT_ORDER", "WEDDING_EVENT"]
+            assert order.get("estimatedPrepTimeMinutes") is None
+            assert order.get("estimated_prep_time_minutes") is None
+            assert order.get("etaTargetTimestamp") is None
             assert order.get("estimatedPrepTime") is None or order.get("estimatedTime") is None
             # Payment status is not blocking order creation
             assert order["status"] == "PENDING"

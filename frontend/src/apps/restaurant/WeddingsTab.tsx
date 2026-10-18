@@ -10,6 +10,7 @@ import {
   MenuItem,
   isModuleEnabled,
 } from '../../packages/types';
+import { getCurrencySymbol } from '../../packages/utils/currency';
 import { Modal } from '../../packages/ui/Modal';
 import { Button } from '../../packages/ui/Button';
 import { Badge } from '../../packages/ui/Badge';
@@ -102,6 +103,10 @@ export const COMMON_TIMEZONES = [
 ];
 
 export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, currentUser, addToast }) => {
+  const currencySymbol = useMemo(
+    () => getCurrencySymbol(currentRestaurant?.currency || 'INR (₹)'),
+    [currentRestaurant?.currency]
+  );
   const [events, setEvents] = useState<WeddingEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'SCHEDULED' | 'CLOSED' | 'PAUSED' | 'DRAFT' | 'COMPLETED'>('ALL');
@@ -1766,7 +1771,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
 
                         <div className="text-right">
                           <span className="text-xs font-mono text-emerald-400 font-bold block">
-                            ₹{(ord.totalAmount || 0).toFixed(2)}
+                            {currencySymbol}{(ord.totalAmount || 0).toFixed(2)}
                           </span>
                           <span className="text-[10px] text-slate-400">{ord.customerName}</span>
                         </div>

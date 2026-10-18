@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { api } from '../../packages/api/client';
 import { PublicWeddingEventResponse, Order } from '../../packages/types';
+import { getCurrencySymbol } from '../../packages/utils/currency';
 import {
   Heart,
   Sparkles,
@@ -86,6 +87,11 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
   const [data, setData] = useState<PublicWeddingEventResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const currencySymbol = useMemo(
+    () => getCurrencySymbol(data?.restaurant?.currency || 'INR (₹)'),
+    [data?.restaurant?.currency]
+  );
 
   // Dietary filter state
   const [dietaryFilter, setDietaryFilter] = useState<'ALL' | 'VEG' | 'NON_VEG' | 'DRINKS'>('ALL');
@@ -457,7 +463,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
 
                         <div className="pt-1 flex items-center gap-3">
                           <span className="font-serif font-bold text-[#91752b] text-sm">
-                            ₹{item.price.toFixed(2)}
+                            {currencySymbol}{item.price.toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -504,7 +510,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
               <div>
                 <h3 className="text-lg font-serif font-bold text-[#1e1912]">{customizingItem.name}</h3>
                 <p className="text-xs font-serif font-bold text-[#91752b] mt-0.5">
-                  ₹{customizingItem.price.toFixed(2)}
+                  {currencySymbol}{customizingItem.price.toFixed(2)}
                 </p>
               </div>
               <button
@@ -559,7 +565,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
             >
               <span>Add to Dining Order</span>
               <span>•</span>
-              <span>₹{(customizingItem.price * itemQuantity).toFixed(2)}</span>
+              <span>{currencySymbol}{(customizingItem.price * itemQuantity).toFixed(2)}</span>
             </button>
           </div>
         </div>
@@ -585,7 +591,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
             </div>
 
             <div className="flex items-center gap-2 font-serif font-bold text-sm text-[#e6c86a]">
-              <span>₹{cartSubtotal.toFixed(2)}</span>
+              <span>{currencySymbol}{cartSubtotal.toFixed(2)}</span>
               <ChevronRight className="w-4 h-4 text-[#d4af37]" />
             </div>
           </button>
@@ -637,7 +643,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
                         <p className="text-[10px] text-[#877864] italic">Note: {item.notes}</p>
                       )}
                       <p className="text-xs font-serif font-bold text-[#91752b] mt-0.5">
-                        ₹{(item.price * item.quantity).toFixed(2)}
+                        {currencySymbol}{(item.price * item.quantity).toFixed(2)}
                       </p>
                     </div>
 
@@ -692,7 +698,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
               {/* Total Calculation */}
               <div className="border-t border-[#e5dcce] pt-3 flex items-center justify-between">
                 <span className="text-xs font-serif font-bold text-[#5e5140]">Total Course Price</span>
-                <span className="text-base font-serif font-bold text-[#91752b]">₹{cartSubtotal.toFixed(2)}</span>
+                <span className="text-base font-serif font-bold text-[#91752b]">{currencySymbol}{cartSubtotal.toFixed(2)}</span>
               </div>
             </div>
 

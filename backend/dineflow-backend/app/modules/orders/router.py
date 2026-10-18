@@ -108,6 +108,18 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
     else:
         filtered_items = raw_items
 
+    is_event_order = (
+        getattr(order, "order_type", "") in ["EVENT_ORDER", "WEDDING_EVENT"]
+        or getattr(order, "event_id", None) is not None
+    )
+    if is_event_order:
+        prep_time_val = None
+        eff_eta_val = None
+    else:
+        raw_prep = getattr(order, "estimated_prep_time_minutes", None)
+        prep_time_val = raw_prep if raw_prep is not None else 15
+        eff_eta_val = eta_val
+
     return {
         "id": getattr(order, "id", ""),
         "restaurant_id": rest_id,
@@ -134,10 +146,10 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
         "totalAmount": tot_amt,
         "order_number": ord_num or "#ORD-1",
         "orderNumber": ord_num or "#ORD-1",
-        "estimated_prep_time_minutes": getattr(order, "estimated_prep_time_minutes", 15) or 15,
-        "estimatedPrepTimeMinutes": getattr(order, "estimated_prep_time_minutes", 15) or 15,
-        "eta_target_timestamp": eta_val,
-        "etaTargetTimestamp": eta_val,
+        "estimated_prep_time_minutes": prep_time_val,
+        "estimatedPrepTimeMinutes": prep_time_val,
+        "eta_target_timestamp": eff_eta_val,
+        "etaTargetTimestamp": eff_eta_val,
         "items": filtered_items,
         "items_json": filtered_items,
         "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
@@ -1098,12 +1110,17 @@ async def update_order_status(
         elif payload.status:
             order.status = payload.status
 
-    if (payload.kitchenStatus == "PREPARING" or order.status == "PREPARING") and not order.eta_target_timestamp:
+    is_evt_order = (
+        getattr(order, "order_type", "") in ["EVENT_ORDER", "WEDDING_EVENT"]
+        or getattr(order, "event_id", None) is not None
+    )
+
+    if not is_evt_order and (payload.kitchenStatus == "PREPARING" or order.status == "PREPARING") and not order.eta_target_timestamp:
         prep_mins = payload.estimatedPrepTimeMinutes or order.estimated_prep_time_minutes or 15
         order.estimated_prep_time_minutes = prep_mins
         order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=prep_mins)
 
-    if payload.estimatedPrepTimeMinutes is not None:
+    if payload.estimatedPrepTimeMinutes is not None and not is_evt_order:
         order.estimated_prep_time_minutes = payload.estimatedPrepTimeMinutes
         if not order.eta_target_timestamp:
             order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=payload.estimatedPrepTimeMinutes)

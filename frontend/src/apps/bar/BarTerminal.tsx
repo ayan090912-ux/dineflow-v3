@@ -28,6 +28,7 @@ import { Badge, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { Order, OrderItem, OrderStatus, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
+import { getCurrencySymbol } from '../../packages/utils/currency';
 
 interface BarTerminalProps {
   restaurant?: any;
@@ -35,6 +36,7 @@ interface BarTerminalProps {
 }
 
 export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }) => {
+  const currencySymbol = React.useMemo(() => getCurrencySymbol(restaurant?.currency || 'INR (₹)'), [restaurant?.currency]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [recentDispatches, setRecentDispatches] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -377,6 +379,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                 <BarOrderCard
                   key={ord.id}
                   order={ord}
+                  currencySymbol={currencySymbol}
                   actionLabel="Start Prep"
                   actionVariant="primary"
                   onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
@@ -407,6 +410,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                 <BarOrderCard
                   key={ord.id}
                   order={ord}
+                  currencySymbol={currencySymbol}
                   actionLabel="Mark as Ready"
                   actionVariant="success"
                   onAction={() => handleUpdateStatus(ord.id, 'READY')}
@@ -437,6 +441,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                 <BarOrderCard
                   key={ord.id}
                   order={ord}
+                  currencySymbol={currencySymbol}
                   actionLabel="Hand Over to Floor"
                   actionVariant="neutral"
                   onAction={() => handleUpdateStatus(ord.id, 'DELIVERED')}
@@ -464,7 +469,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
 
             <div className="space-y-3">
               {completedOrders.slice(0, 5).map((ord) => (
-                <BarOrderCard key={ord.id} order={ord} isCompleted />
+                <BarOrderCard key={ord.id} order={ord} currencySymbol={currencySymbol} isCompleted />
               ))}
               {completedOrders.length === 0 && (
                 <div className="p-8 text-center bg-[#12151b]/40 border border-dashed border-[#1e232e] rounded-xl text-slate-500 text-xs">
@@ -486,7 +491,8 @@ const BarOrderCard: React.FC<{
   actionVariant?: 'primary' | 'success' | 'neutral';
   onAction?: () => void;
   isCompleted?: boolean;
-}> = ({ order, actionLabel, actionVariant = 'primary', onAction, isCompleted }) => {
+  currencySymbol?: string;
+}> = ({ order, actionLabel, actionVariant = 'primary', onAction, isCompleted, currencySymbol = '₹' }) => {
   const drinkItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
   if (drinkItems.length === 0) {
     return null;
@@ -543,7 +549,7 @@ const BarOrderCard: React.FC<{
                 )}
               </div>
               <span className="font-mono text-slate-400 text-[11px] shrink-0">
-                ₹{(item.price * item.quantity).toFixed(2)}
+                {currencySymbol}{(item.price * item.quantity).toFixed(2)}
               </span>
             </div>
           ))}
