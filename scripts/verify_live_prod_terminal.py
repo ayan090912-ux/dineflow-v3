@@ -4,6 +4,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 
+sys.path.insert(0, "/app")
 sys.path.insert(0, "/opt/dinely/backend/dineflow-backend")
 
 from sqlalchemy import select, func, and_
