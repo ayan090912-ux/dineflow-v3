@@ -140,6 +140,41 @@ async def run_live_verification():
 
     base_url = "http://localhost:8080/api/v1"
     async with httpx.AsyncClient(timeout=15.0) as client:
+        # [STEP 1b] Live Verification: Consecutive 5 Food Menu Items Creation (Part 3)
+        print("\n[STEP 1b] Testing Consecutive 5 Food Menu Items Creation & Persistence...")
+        five_items = [
+            {"name": "Chicken Biryani", "description": "Aromatic basmati rice cooked with chicken", "price": 320.0, "category": "Biryani & Rice", "targetDestination": "KITCHEN"},
+            {"name": "Paneer Butter Masala", "description": "Rich tomato gravy with paneer", "price": 280.0, "category": "Main Course", "targetDestination": "KITCHEN", "isVegetarian": True},
+            {"name": "Chicken Tikka", "description": "Clay oven roasted chicken", "price": 260.0, "category": "Starters & Appetizers", "targetDestination": "KITCHEN"},
+            {"name": "Butter Naan", "description": "Tandoor baked flatbread with butter", "price": 50.0, "category": "Breads & Naans", "targetDestination": "KITCHEN", "isVegetarian": True},
+            {"name": "Gulab Jamun", "description": "Sweet milk dumplings in rose syrup", "price": 95.0, "category": "Desserts & Sweets", "targetDestination": "KITCHEN", "isVegetarian": True},
+        ]
+        created_item_ids = []
+        for it in five_items:
+            m_res = await client.post(
+                f"{base_url}/restaurants/{rest_id}/menu",
+                json=it,
+                headers={"Authorization": f"Bearer {owner_token}"},
+            )
+            assert m_res.status_code == 201, f"Failed creating item {it['name']}: {m_res.text}"
+            item_obj = m_res.json()
+            assert item_obj["name"] == it["name"]
+            assert float(item_obj["price"]) == it["price"]
+            assert item_obj["id"] not in created_item_ids
+            created_item_ids.append(item_obj["id"])
+            print(f"  ✓ Created: {it['name']} -> ID: {item_obj['id']} | Category: {item_obj.get('categoryName', item_obj.get('category_name'))}")
+
+        assert len(set(created_item_ids)) == 5, "All 5 items must have distinct persistent IDs"
+
+        # Fresh reload verification
+        fresh_menu_res = await client.get(f"{base_url}/restaurants/{rest_id}/menu")
+        assert fresh_menu_res.status_code == 200
+        fresh_menu = fresh_menu_res.json()
+        saved_names = {i["name"]: i for i in fresh_menu.get("items", [])}
+        for it in five_items:
+            assert it["name"] in saved_names, f"Item {it['name']} missing on fresh reload!"
+        print("  ✓ All 5 food menu items verified on fresh reload.")
+
         # [STEP 2] Create Event with 4 banquet tables
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         print(f"\n[STEP 2] Creating test wedding event with 4 banquet tables...")
@@ -191,6 +226,37 @@ async def run_live_verification():
         target_table = tables[1] # Table 02
         print(f"  ✓ Target Table for QR Order: {target_table['tableNumber']} (ID: {target_table['id']})")
         print(f"    QR URL: {target_table['qrCodeUrl']}")
+
+        # [STEP 4c] Dedicated Event Floorplan & Table Management CRUD (Part 2)
+        print("\n[STEP 4c] Testing Dedicated Event Floorplan & Table Management CRUD...")
+        tbl1_res = await client.post(
+            f"{base_url}/restaurants/{rest_id}/events/{event_id}/tables",
+            json={"tableNumber": "T-01", "tableLabel": "VIP Head Table", "capacity": 10},
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+        assert tbl1_res.status_code == 201, f"Failed creating table T-01: {tbl1_res.text}"
+        tbl1 = tbl1_res.json()
+        print(f"  ✓ Created Event Table T-01: {tbl1['tableNumber']} (Capacity: {tbl1['capacity']}) QR: {tbl1['qrCodeUrl']}")
+        assert "/table/T-01" in tbl1["qrCodeUrl"] or "table=T-01" in tbl1["qrCodeUrl"]
+
+        # Duplicate table number rejected
+        tbl_dup = await client.post(
+            f"{base_url}/restaurants/{rest_id}/events/{event_id}/tables",
+            json={"tableNumber": "T-01", "capacity": 6},
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+        assert tbl_dup.status_code == 400, "Expected 400 on duplicate table number"
+        print("  ✓ Duplicate table number successfully rejected with 400.")
+
+        # Update Table T-01 -> change capacity to 12
+        tbl1_upd = await client.put(
+            f"{base_url}/restaurants/{rest_id}/events/{event_id}/tables/{tbl1['id']}",
+            json={"capacity": 12, "tableLabel": "Presidential VIP Table"},
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+        assert tbl1_upd.status_code == 200, f"Failed updating table T-01: {tbl1_upd.text}"
+        assert tbl1_upd.json()["capacity"] == 12
+        print("  ✓ Updated Event Table capacity and label successfully.")
 
         # [STEP 4b] Guest opens Table 02 QR URL: verify public event page and currency
         print("\n[STEP 4b] Simulating guest phone opening Table 02 QR guest link...")
