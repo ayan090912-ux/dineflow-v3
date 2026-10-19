@@ -17,6 +17,8 @@ router = APIRouter()
 class CreateMenuItemSchema(BaseModel):
     id: Optional[str] = None
     categoryId: Optional[str] = None
+    category: Optional[str] = None
+    categoryName: Optional[str] = None
     name: str
     description: Optional[str] = ""
     price: float
@@ -37,6 +39,8 @@ class UpdateMenuItemSchema(BaseModel):
     imageUrl: Optional[str] = None
     image: Optional[str] = None
     categoryId: Optional[str] = None
+    category: Optional[str] = None
+    categoryName: Optional[str] = None
     isAvailable: Optional[bool] = None
     isVegetarian: Optional[bool] = None
     targetDestination: Optional[str] = None
@@ -231,7 +235,7 @@ async def create_menu_item(
     db: AsyncSession = Depends(get_db)
 ):
     target_rest_id = caller.restaurant_id or restaurant_id
-    raw_cat_input = (payload.categoryId or "").strip()
+    raw_cat_input = (payload.categoryId or payload.category or payload.categoryName or "").strip()
 
     # Category Resolution: Support ID, Exact Name, Case-Insensitive Name, and Aliases
     cat_obj = None
@@ -373,8 +377,26 @@ async def update_menu_item(
         item.description = payload.description
     if payload.price is not None:
         item.price = payload.price
-    if payload.categoryId is not None:
-        item.category_id = payload.categoryId
+    raw_cat_upd = (payload.categoryId or payload.category or payload.categoryName or "").strip() if (payload.categoryId or payload.category or payload.categoryName) else None
+    if raw_cat_upd:
+        query_cat_upd = select(MenuCategory).where(
+            (MenuCategory.restaurant_id == target_rest_id) &
+            ((MenuCategory.id == raw_cat_upd) | (func.lower(MenuCategory.name) == raw_cat_upd.lower()))
+        )
+        res_cat_upd = await db.execute(query_cat_upd)
+        upd_cat_obj = res_cat_upd.scalars().first()
+        if not upd_cat_obj and raw_cat_upd.lower() in KNOWN_CATEGORY_MAP:
+            m_name = KNOWN_CATEGORY_MAP[raw_cat_upd.lower()]
+            q_m = select(MenuCategory).where(
+                (MenuCategory.restaurant_id == target_rest_id) &
+                (func.lower(MenuCategory.name) == m_name.lower())
+            )
+            res_m = await db.execute(q_m)
+            upd_cat_obj = res_m.scalars().first()
+        if upd_cat_obj:
+            item.category_id = upd_cat_obj.id
+        else:
+            item.category_id = raw_cat_upd
     if payload.imageUrl or payload.image:
         item.image_url = payload.imageUrl or payload.image
     if payload.isAvailable is not None:
