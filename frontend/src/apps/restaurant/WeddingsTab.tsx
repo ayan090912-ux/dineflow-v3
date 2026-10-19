@@ -1767,7 +1767,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                             </span>
                           </div>
                           <p className="text-xs text-amber-300 font-mono font-bold mt-0.5">
-                            {selectedEvent?.title || ord.eventName || 'Wedding & Banquet'}
+                            {currentEvent?.title || ord.eventName || 'Wedding & Banquet'}
                           </p>
                           <p className="text-[11px] text-slate-400 font-mono">
                             Order #{ord.displayOrderNumber || ord.id.slice(-6)} · {formatReceivedTime(ord.createdAt)}

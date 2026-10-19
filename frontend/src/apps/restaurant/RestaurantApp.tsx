@@ -148,7 +148,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (p.includes('/day-management') || p.includes('/daily-closing') || p.includes('/day') || p.includes('/closing')) return 'day_management';
       if (p.includes('/workspace_settings') || p.includes('/settings')) return 'workspace_settings';
     }
-    const isEvent = activeRestaurant?.businessType === 'WEDDING_ORDERING' || isModuleEnabled(activeRestaurant, 'weddings');
+    const isEvent = Boolean(
+      (activeRestaurant && (activeRestaurant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(activeRestaurant, 'weddings')))
+    );
     return isEvent ? 'weddings' : 'dashboard';
   });
 
@@ -408,6 +410,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   const isBarEnabled = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
   const isHookahEnabled = currentRestaurant?.hasHookah !== false && isModuleEnabled(currentRestaurant, 'hookah');
+  const isEventBusiness = Boolean(
+    (currentRestaurant && (currentRestaurant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(currentRestaurant, 'weddings'))) ||
+    (activeRestaurant && (activeRestaurant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(activeRestaurant, 'weddings')))
+  );
   const activeCatalogMode = (menuCatalogMode === 'HOOKAH' && isHookahEnabled) ? 'HOOKAH' : (menuCatalogMode === 'BAR' && isBarEnabled) ? 'BAR' : 'FOOD';
 
   const filteredMenuItems = menuItems.filter((item) => {
@@ -1642,7 +1648,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               const hasBillingModule = isModuleEnabled(currentRestaurant, 'billing');
               const hasTablesModule = isModuleEnabled(currentRestaurant, 'tables');
               const isFoodCart = currentRestaurant?.businessType === 'FOOD_CART' || currentRestaurant?.businessType === 'FOOD_TRUCK';
-              const isEventBusiness = currentRestaurant?.businessType === 'WEDDING_ORDERING' || isModuleEnabled(currentRestaurant, 'weddings');
 
               const sections = isEventBusiness ? [
                 {
@@ -2442,7 +2447,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab: Waiter Terminal Operating System */}
         {activeTab === 'waiter' && (
           isModuleEnabled(currentRestaurant, 'waiter') || isEventBusiness ? (
-            <WaiterTerminalOS />
+            <WaiterTerminalOS restaurant={currentRestaurant || activeRestaurant} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">

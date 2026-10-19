@@ -1510,6 +1510,38 @@ export class RestaurantClient {
     return newItem;
   }
 
+  async seedSampleMenu(restaurantId?: string): Promise<MenuItem[]> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
+    if (!restId) throw new Error("No active restaurant selected");
+
+    const sampleDishes = [
+      { name: 'Paneer Tikka', categoryId: 'Starters & Appetizers', price: 280, isVegetarian: true, targetDestination: 'KITCHEN' as const },
+      { name: 'Chicken Malai Tikka', categoryId: 'Starters & Appetizers', price: 340, isVegetarian: false, targetDestination: 'KITCHEN' as const },
+      { name: 'Crispy Corn', categoryId: 'Starters & Appetizers', price: 220, isVegetarian: true, targetDestination: 'KITCHEN' as const },
+      { name: 'Dal Makhani', categoryId: 'Main Course', price: 260, isVegetarian: true, targetDestination: 'KITCHEN' as const },
+      { name: 'Paneer Butter Masala', categoryId: 'Main Course', price: 310, isVegetarian: true, targetDestination: 'KITCHEN' as const },
+      { name: 'Butter Chicken', categoryId: 'Main Course', price: 380, isVegetarian: false, targetDestination: 'KITCHEN' as const },
+      { name: 'Butter Naan', categoryId: 'Breads & Naans', price: 60, isVegetarian: true, targetDestination: 'KITCHEN' as const },
+      { name: 'Garlic Naan', categoryId: 'Breads & Naans', price: 75, isVegetarian: true, targetDestination: 'KITCHEN' as const },
+      { name: 'Gulab Jamun', categoryId: 'Desserts & Sweets', price: 120, isVegetarian: true, targetDestination: 'KITCHEN' as const },
+    ];
+
+    const created: MenuItem[] = [];
+    for (const dish of sampleDishes) {
+      try {
+        const item = await this.createMenuItem({
+          ...dish,
+          restaurantId: restId,
+          isAvailable: true,
+        });
+        created.push(item);
+      } catch (err) {
+        console.warn(`[seedSampleMenu] Failed to seed ${dish.name}:`, err);
+      }
+    }
+    return created;
+  }
+
   async updateMenuItem(itemId: string, updates: Partial<MenuItem>) {
     const restId = this.base.resolveTenantRestaurantId(updates.restaurantId) || updates.restaurantId || this.base.getCurrentRestaurantId() || '';
     if (!restId) throw new Error("No active restaurant selected");

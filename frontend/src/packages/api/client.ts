@@ -542,6 +542,26 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.getPublicEvent(eventId, table);
   }
 
+  async getWeddingEvents(restaurantId?: string): Promise<WeddingEvent[]> {
+    return this.getEvents(restaurantId);
+  }
+
+  async getWeddingTables(restaurantId: string, eventId: string): Promise<EventTable[]> {
+    return this.getEventTables(eventId, restaurantId);
+  }
+
+  async updateWeddingEvent(
+    eventId: string,
+    updates: Partial<WeddingEvent>,
+    restaurantId?: string
+  ): Promise<WeddingEvent> {
+    return this.updateEvent(eventId, updates, restaurantId);
+  }
+
+  async seedSampleMenu(restaurantId?: string): Promise<MenuItem[]> {
+    return this.restaurant.seedSampleMenu(restaurantId);
+  }
+
   async getCategories(restaurantId?: string): Promise<MenuCategory[]> {
     return this.restaurant.getCategories(restaurantId);
   }
