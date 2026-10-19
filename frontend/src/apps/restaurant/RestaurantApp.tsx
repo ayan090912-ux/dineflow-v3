@@ -94,6 +94,7 @@ import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
 import { EventDayManagementView } from './EventDayManagementView';
 import { WeddingsTab } from './WeddingsTab';
+import { EventFloorplanTablesView } from './EventFloorplanTablesView';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
 import { sendAppNotification, registerServiceWorker } from '../../packages/utils/notifications';
@@ -1061,6 +1062,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
       if (added) {
         setMenuItems((prev) => [...prev, added]);
+        // Refresh categories so newly auto-created categories appear immediately in state & filter pills
+        api.getCategories(restId).then((cats) => {
+          if (cats && cats.length > 0) {
+            setFoodCategories(cats);
+          }
+        }).catch(() => {});
       }
 
       addToast('success', `${isHookah ? 'Hookah Product' : isBar ? 'Bar Drink' : 'Food Item'} Added ✨`, `"${newItem.name.trim()}" added to catalog`);
@@ -1068,7 +1075,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       setSelectedMenuCategory('ALL');
       setMenuSearchQuery('');
       setDietaryFilter('ALL');
-      setNewItem({ name: '', description: '', price: '', categoryId: isHookah ? defaultHookahCat : isBar ? defaultBarCat : defaultFoodCat, isVegetarian: true, image: '' });
+      setNewItem({
+        name: '',
+        description: '',
+        price: '',
+        categoryId: finalCat || (foodCategories[0]?.name || foodCategories[0]?.id || 'Main Course'),
+        isVegetarian: true,
+        image: ''
+      });
     } catch (err: any) {
       addToast('error', 'Failed to Add Item', err.message || 'An error occurred while adding the dish.');
     }
@@ -1646,6 +1660,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       icon: <RotateCcw className="w-4 h-4 text-amber-400" />,
                       badge: 'SCHEDULE',
                     },
+                    {
+                      id: 'tables',
+                      label: 'Floorplan & Tables',
+                      icon: <Grid className="w-4 h-4 text-emerald-400" />,
+                    },
                   ],
                 },
                 {
@@ -1654,6 +1673,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     ...(hasKitchenModule
                       ? [{ id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> }]
                       : []),
+                    {
+                      id: 'waiter',
+                      label: 'Runner & Delivery',
+                      icon: <Truck className="w-4 h-4 text-emerald-400" />,
+                    },
                     ...(hasBarModule
                       ? [{ id: 'bar', label: 'Bar Terminal', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
                       : []),
@@ -1919,17 +1943,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'dashboard' && 'Executive Overview'}
               {activeTab === 'orders' && 'POS & QR Orders Stream'}
               {activeTab === 'kitchen' && 'Kitchen Display System (KDS)'}
-              {activeTab === 'bar' && 'Bar Terminal (KDS)'}
-              {activeTab === 'hookah' && 'Hookah & Shisha Terminal'}
-              {activeTab === 'tables' && 'Table Floorplan & QR Codes'}
-              {activeTab === 'menu' && 'Menu Engineering & Pricing'}
-              {activeTab === 'staff' && 'Employee Clock-In & Shifts'}
+              {activeTab === 'bar' && (isEventBusiness ? 'Event Bar Terminal' : 'Bar Terminal (KDS)')}
+              {activeTab === 'hookah' && (isEventBusiness ? 'Event Hookah & Shisha Lounge' : 'Hookah & Shisha Terminal')}
+              {activeTab === 'tables' && (isEventBusiness ? 'Event Floorplan & Tables' : 'Table Floorplan & QR Codes')}
+              {activeTab === 'menu' && (isEventBusiness ? 'Event Menu & Packages' : 'Menu Engineering & Pricing')}
+              {activeTab === 'staff' && (isEventBusiness ? 'Event Staff & Roles' : 'Employee Clock-In & Shifts')}
               {activeTab === 'inventory' && 'Raw Material Inventory'}
               {activeTab === 'billing' && 'Billing, Taxes & Invoices'}
-              {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management'}
-              {activeTab === 'theme' && 'Brand Identity & Styling'}
-              {activeTab === 'workspace_settings' && 'Terminals & Settings'}
-              {activeTab === 'weddings' && 'Weddings & Banquet Ordering'}
+              {(activeTab === 'business_day' || activeTab === 'day_management') && (isEventBusiness ? 'Event Day & Schedule' : 'Day Management')}
+              {activeTab === 'theme' && (isEventBusiness ? 'Event Branding & Theme' : 'Brand Identity & Styling')}
+              {activeTab === 'workspace_settings' && (isEventBusiness ? 'Stations & Setup' : 'Terminals & Settings')}
+              {activeTab === 'weddings' && 'Event Command Center'}
+              {activeTab === 'waiter' && (isEventBusiness ? 'Runner & Delivery Dispatch' : 'Waiter Terminal OS')}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               {activeTab === 'dashboard' && 'Live performance metrics, revenue analytics, and station status across your restaurant.'}
@@ -1937,8 +1962,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'kitchen' && 'Real-time kitchen order bump board, active cooking timers, and runner pass.'}
               {activeTab === 'bar' && 'Craft beverage dispensing queue, mixology timers, and floor pass dispatch.'}
               {activeTab === 'hookah' && 'Hookah queue, coal heating, tobacco blend customization, and lounge service.'}
-              {activeTab === 'tables' && 'Interactive dining area floorplan, live table states, and printable QR standee cards.'}
-              {activeTab === 'menu' && 'Food & beverage catalog, category classifications, variants, and live availability toggles.'}
+              {activeTab === 'tables' && (isEventBusiness ? 'Manage banquet tables, assign seating capacities, and generate decoupled event QR standees.' : 'Interactive dining area floorplan, live table states, and printable QR standee cards.')}
+              {activeTab === 'menu' && (isEventBusiness ? 'Food & beverage catalog, banquet classifications, dish specifications, and live guest availability.' : 'Food & beverage catalog, category classifications, variants, and live availability toggles.')}
+              {activeTab === 'waiter' && (isEventBusiness ? 'Live runner and delivery dispatch for event banquet tables.' : 'Table servicing, mobile ordering pass, and runner alerts.')}
               {activeTab === 'staff' && 'Employee profiles, shift schedules, username & password credentials, and assigned terminal stations.'}
               {activeTab === 'inventory' && 'Track kitchen and bar stock levels, minimum reorder thresholds, and suppliers.'}
               {activeTab === 'billing' && 'Table checkouts, split bills, GST/tax management, and payment receipts.'}
@@ -2415,7 +2441,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab: Waiter Terminal Operating System */}
         {activeTab === 'waiter' && (
-          isModuleEnabled(currentRestaurant, 'waiter') ? (
+          isModuleEnabled(currentRestaurant, 'waiter') || isEventBusiness ? (
             <WaiterTerminalOS />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
@@ -2574,7 +2600,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab 4: Table Floorplan, Merging & Reservations */}
         {activeTab === 'tables' && (
-          isModuleEnabled(currentRestaurant, 'tables') ? (
+          isEventBusiness ? (
+            <EventFloorplanTablesView
+              currentRestaurant={currentRestaurant}
+              activeRestaurant={activeRestaurant}
+              currentUser={currentUser}
+              addToast={addToast}
+              onNavigateToTab={(t) => setActiveTab(t as any)}
+            />
+          ) : isModuleEnabled(currentRestaurant, 'tables') ? (
             <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -4539,17 +4573,28 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         {c.name}
                       </option>
                     ))
-                  : (foodCategories.length > 0 ? foodCategories : [
-                      { id: 'cat-starters', name: 'Starters & Appetizers' },
-                      { id: 'cat-mains', name: 'Main Course' },
-                      { id: 'cat-burgers', name: 'Gourmet Burgers' },
-                      { id: 'cat-pizza', name: 'Wood-Fired Pizza' },
-                      { id: 'cat-desserts', name: 'Desserts & Sweets' },
-                    ]).map((cat: any) => (
-                      <option key={cat.id || cat.name} value={cat.id || cat.name}>
-                        {cat.name}
-                      </option>
-                    ))}
+                  : (() => {
+                      const baseCategories = [
+                        'Starters & Appetizers',
+                        'Main Course',
+                        'Biryani & Rice',
+                        'Breads & Naans',
+                        'Desserts & Sweets',
+                        'Beverages & Drinks',
+                      ];
+                      const existingNames = new Set(foodCategories.map((c: any) => c.name));
+                      const combined = [
+                        ...foodCategories.map((c: any) => ({ id: c.id, name: c.name })),
+                        ...baseCategories
+                          .filter((name) => !existingNames.has(name))
+                          .map((name) => ({ id: name, name })),
+                      ];
+                      return combined.map((cat: any) => (
+                        <option key={cat.id || cat.name} value={cat.name || cat.id}>
+                          {cat.name}
+                        </option>
+                      ));
+                    })()}
               </select>
             </div>
 
@@ -4608,9 +4653,31 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             onChange={(url) => setNewItem({ ...newItem, image: url })}
           />
 
-          <Button variant="brand" className="w-full mt-2" onClick={handleAddItem}>
-            Save to Restaurant Menu
-          </Button>
+          <div className="flex items-center gap-2 mt-2">
+            <Button
+              variant="outline"
+              type="button"
+              className="flex-1"
+              onClick={async () => {
+                const prevCat = newItem.categoryId;
+                await handleAddItem();
+                setNewItem({
+                  name: '',
+                  description: '',
+                  price: '',
+                  categoryId: prevCat,
+                  isVegetarian: true,
+                  image: ''
+                });
+                setIsAddItemModalOpen(true);
+              }}
+            >
+              Save & Add Another
+            </Button>
+            <Button variant="brand" className="flex-1" onClick={handleAddItem}>
+              Save Item
+            </Button>
+          </div>
         </div>
       </Modal>
 
@@ -4664,17 +4731,28 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           {c.name}
                         </option>
                       ))
-                    : (foodCategories.length > 0 ? foodCategories : [
-                        { id: 'cat-starters', name: 'Starters & Appetizers' },
-                        { id: 'cat-mains', name: 'Main Course' },
-                        { id: 'cat-burgers', name: 'Gourmet Burgers' },
-                        { id: 'cat-pizza', name: 'Wood-Fired Pizza' },
-                        { id: 'cat-desserts', name: 'Desserts & Sweets' },
-                      ]).map((cat: any) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
+                    : (() => {
+                        const baseCategories = [
+                          'Starters & Appetizers',
+                          'Main Course',
+                          'Biryani & Rice',
+                          'Breads & Naans',
+                          'Desserts & Sweets',
+                          'Beverages & Drinks',
+                        ];
+                        const existingNames = new Set(foodCategories.map((c: any) => c.name));
+                        const combined = [
+                          ...foodCategories.map((c: any) => ({ id: c.id, name: c.name })),
+                          ...baseCategories
+                            .filter((name) => !existingNames.has(name))
+                            .map((name) => ({ id: name, name })),
+                        ];
+                        return combined.map((cat: any) => (
+                          <option key={cat.id || cat.name} value={cat.name || cat.id}>
+                            {cat.name}
+                          </option>
+                        ));
+                      })()}
                 </select>
               </div>
 

@@ -493,12 +493,33 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.extendEventServicePeriod(eventId, extensionData, restaurantId);
   }
 
+  async getEventTables(eventId: string, restaurantId?: string): Promise<EventTable[]> {
+    return this.restaurant.getEventTables(eventId, restaurantId);
+  }
+
   async addEventTable(
     eventId: string,
     tableData: { tableNumber: string; tableLabel?: string; capacity?: number },
     restaurantId?: string
   ): Promise<EventTable> {
     return this.restaurant.addEventTable(eventId, tableData, restaurantId);
+  }
+
+  async createEventTable(
+    eventId: string,
+    tableData: { tableNumber: string; tableLabel?: string; capacity?: number },
+    restaurantId?: string
+  ): Promise<EventTable> {
+    return this.restaurant.addEventTable(eventId, tableData, restaurantId);
+  }
+
+  async updateEventTable(
+    eventId: string,
+    tableId: string,
+    updates: { tableNumber?: string; tableLabel?: string; capacity?: number; isActive?: boolean },
+    restaurantId?: string
+  ): Promise<EventTable> {
+    return this.restaurant.updateEventTable(eventId, tableId, updates, restaurantId);
   }
 
   async deleteEventTable(

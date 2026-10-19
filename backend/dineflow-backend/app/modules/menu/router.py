@@ -1,10 +1,11 @@
+import uuid
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import require_tenant_owner_or_admin, CallerContext
@@ -197,6 +198,31 @@ async def get_menu(restaurant_id: str, db: AsyncSession = Depends(get_db)):
         _MENU_CACHE[restaurant_id] = (now_t, resp_data)
     return JSONResponse(content=resp_data, headers=cache_headers)
 
+KNOWN_CATEGORY_MAP = {
+    "cat-starters": "Starters & Appetizers",
+    "cat-mains": "Main Course",
+    "cat-burgers": "Gourmet Burgers",
+    "cat-pizza": "Wood-Fired Pizza",
+    "cat-desserts": "Desserts & Sweets",
+    "starters": "Starters & Appetizers",
+    "starters & appetizers": "Starters & Appetizers",
+    "appetizers": "Starters & Appetizers",
+    "main course": "Main Course",
+    "mains": "Main Course",
+    "biryani": "Biryani & Rice",
+    "biryani & rice": "Biryani & Rice",
+    "rice": "Biryani & Rice",
+    "breads": "Breads & Naans",
+    "breads & naans": "Breads & Naans",
+    "naans": "Breads & Naans",
+    "desserts": "Desserts & Sweets",
+    "desserts & sweets": "Desserts & Sweets",
+    "sweets": "Desserts & Sweets",
+    "beverages": "Beverages & Drinks",
+    "beverages & drinks": "Beverages & Drinks",
+    "drinks": "Beverages & Drinks",
+}
+
 @router.post("/{restaurant_id}/menu", status_code=status.HTTP_201_CREATED)
 async def create_menu_item(
     restaurant_id: str,
@@ -205,40 +231,71 @@ async def create_menu_item(
     db: AsyncSession = Depends(get_db)
 ):
     target_rest_id = caller.restaurant_id or restaurant_id
-    target_category_id = payload.categoryId
+    raw_cat_input = (payload.categoryId or "").strip()
 
-    # Category Auto-Resolution (search by ID or Name)
+    # Category Resolution: Support ID, Exact Name, Case-Insensitive Name, and Aliases
     cat_obj = None
-    if target_category_id:
+    if raw_cat_input:
+        # 1. Direct ID or exact / case-insensitive name match
         query_cat = select(MenuCategory).where(
             (MenuCategory.restaurant_id == target_rest_id) &
-            ((MenuCategory.id == target_category_id) | (MenuCategory.name == target_category_id))
+            ((MenuCategory.id == raw_cat_input) | (func.lower(MenuCategory.name) == raw_cat_input.lower()))
         )
         res_cat = await db.execute(query_cat)
-        cat_obj = res_cat.scalar_one_or_none()
+        cat_obj = res_cat.scalars().first()
 
+        # 2. Known category alias mapping match
+        if not cat_obj and raw_cat_input.lower() in KNOWN_CATEGORY_MAP:
+            mapped_name = KNOWN_CATEGORY_MAP[raw_cat_input.lower()]
+            query_mapped = select(MenuCategory).where(
+                (MenuCategory.restaurant_id == target_rest_id) &
+                (func.lower(MenuCategory.name) == mapped_name.lower())
+            )
+            res_mapped = await db.execute(query_mapped)
+            cat_obj = res_mapped.scalars().first()
+
+    # 3. If category still doesn't exist, auto-create it with requested or mapped title
     if not cat_obj:
-        # Fallback to existing first category or create explicit Main Course
-        query_first = select(MenuCategory).where(MenuCategory.restaurant_id == target_rest_id).order_by(MenuCategory.sort_order)
-        res_first = await db.execute(query_first)
-        cat_obj = res_first.scalars().first()
-        if cat_obj:
-            target_category_id = cat_obj.id
-        else:
-            new_cat_id = f"cat-{target_rest_id}-1"
+        if raw_cat_input:
+            category_title = KNOWN_CATEGORY_MAP.get(raw_cat_input.lower(), raw_cat_input)
+            sanitized_suffix = category_title.lower().replace(" ", "_").replace("&", "and").replace("/", "_")
+            new_cat_id = f"cat-{target_rest_id}-{sanitized_suffix}"
+            id_chk = await db.execute(select(MenuCategory).where(MenuCategory.id == new_cat_id))
+            if id_chk.scalars().first():
+                new_cat_id = f"{new_cat_id}-{uuid.uuid4().hex[:4]}"
+
+            sort_res = await db.execute(select(func.max(MenuCategory.sort_order)).where(MenuCategory.restaurant_id == target_rest_id))
+            cur_max = sort_res.scalar() or 0
+
             cat_obj = MenuCategory(
                 id=new_cat_id,
                 restaurant_id=target_rest_id,
-                name="Main Course",
-                sort_order=1,
+                name=category_title,
+                sort_order=cur_max + 1,
                 is_enabled=True,
             )
             db.add(cat_obj)
             await db.flush()
-            target_category_id = cat_obj.id
+        else:
+            query_first = select(MenuCategory).where(MenuCategory.restaurant_id == target_rest_id).order_by(MenuCategory.sort_order)
+            res_first = await db.execute(query_first)
+            cat_obj = res_first.scalars().first()
+            if not cat_obj:
+                new_cat_id = f"cat-{target_rest_id}-main_course"
+                cat_obj = MenuCategory(
+                    id=new_cat_id,
+                    restaurant_id=target_rest_id,
+                    name="Main Course",
+                    sort_order=1,
+                    is_enabled=True,
+                )
+                db.add(cat_obj)
+                await db.flush()
+
+    target_category_id = cat_obj.id
 
     now_utc = datetime.now(timezone.utc)
-    item_id = payload.id or f"item-{target_rest_id}-{int(now_utc.timestamp() * 1000)}"
+    item_id = payload.id or f"item-{target_rest_id}-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
     img = payload.imageUrl or payload.image or "https://images.unsplash.com/photo-1544025162-d76694265947?w=600"
 
     # Strict explicit routing only: item destination is NOT decided by arbitrary name substrings
@@ -272,6 +329,8 @@ async def create_menu_item(
     invalidate_menu_cache(target_rest_id, restaurant_id)
 
     resp_dict = format_menu_item_response(new_item)
+    resp_dict["category_name"] = cat_obj.name
+    resp_dict["categoryName"] = cat_obj.name
 
     try:
         await ws_manager.broadcast_event(

@@ -1505,6 +1505,7 @@ export class RestaurantClient {
       prepTimeMinutes: m.preparation_time_minutes || m.prepTimeMinutes || payload.prepTimeMinutes,
     };
     this.base.invalidateQueryCache('menu:');
+    this.base.invalidateQueryCache('categories:');
     realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
     return newItem;
   }
@@ -2804,6 +2805,22 @@ export class RestaurantClient {
     );
   }
 
+  async getEventTables(eventId: string, restaurantId?: string): Promise<EventTable[]> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId || !eventId) return [];
+
+    try {
+      const res = await this.base.executeProtectedRequest<EventTable[]>(
+        `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/tables`,
+        { method: 'GET' }
+      );
+      return Array.isArray(res) ? res : [];
+    } catch (e) {
+      console.warn('[getEventTables] Failed:', e);
+      return [];
+    }
+  }
+
   async addEventTable(
     eventId: string,
     tableData: { tableNumber: string; tableLabel?: string; capacity?: number },
@@ -2817,6 +2834,24 @@ export class RestaurantClient {
       {
         method: 'POST',
         body: JSON.stringify(tableData),
+      }
+    );
+  }
+
+  async updateEventTable(
+    eventId: string,
+    tableId: string,
+    updates: { tableNumber?: string; tableLabel?: string; capacity?: number; isActive?: boolean },
+    restaurantId?: string
+  ): Promise<EventTable> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error("No active restaurant selected");
+
+    return await this.base.executeProtectedRequest<EventTable>(
+      `/restaurants/${encodeURIComponent(targetId)}/events/${encodeURIComponent(eventId)}/tables/${encodeURIComponent(tableId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(updates),
       }
     );
   }

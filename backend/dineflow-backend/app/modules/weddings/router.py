@@ -151,6 +151,7 @@ class CreateEventTableSchema(BaseModel):
     capacity: Optional[int] = 8
 
 class UpdateEventTableSchema(BaseModel):
+    tableNumber: Optional[str] = None
     tableLabel: Optional[str] = None
     capacity: Optional[int] = None
     isActive: Optional[bool] = None
@@ -783,6 +784,60 @@ async def add_event_table(
     await db.refresh(new_tbl)
     return _format_table(new_tbl)
 
+@router.put("/{restaurant_id}/events/{event_id}/tables/{table_id}")
+async def update_event_table(
+    restaurant_id: str,
+    event_id: str,
+    table_id: str,
+    payload: UpdateEventTableSchema,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(EventTable).where(
+        EventTable.event_id == event_id,
+        EventTable.restaurant_id == canonical_id,
+        (EventTable.id == table_id) | (EventTable.table_number == table_id)
+    )
+    res = await db.execute(stmt)
+    tbl = res.scalar_one_or_none()
+    if not tbl:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event table not found")
+
+    if payload.tableNumber is not None:
+        clean_num = payload.tableNumber.strip()
+        if clean_num and clean_num != tbl.table_number:
+            dup_stmt = select(EventTable).where(
+                EventTable.event_id == event_id,
+                EventTable.table_number == clean_num,
+                EventTable.id != tbl.id
+            )
+            dup_res = await db.execute(dup_stmt)
+            if dup_res.scalars().first():
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Table number '{clean_num}' already exists in this event")
+            tbl.table_number = clean_num
+            r_stmt = select(Restaurant).where(Restaurant.id == canonical_id)
+            r_res = await db.execute(r_stmt)
+            rest = r_res.scalar_one_or_none()
+            slug = rest.public_slug or rest.slug or rest.id if rest else ""
+            tbl.qr_code_url = _generate_event_qr_url(slug, event_id, clean_num)
+
+    if payload.tableLabel is not None:
+        tbl.table_label = payload.tableLabel.strip()
+    if payload.capacity is not None and payload.capacity > 0:
+        tbl.capacity = payload.capacity
+    if payload.isActive is not None:
+        tbl.is_active = payload.isActive
+
+    await db.commit()
+    await db.refresh(tbl)
+    return _format_table(tbl)
+
 @router.delete("/{restaurant_id}/events/{event_id}/tables/{table_id}")
 async def delete_event_table(
     restaurant_id: str,
@@ -806,6 +861,22 @@ async def delete_event_table(
     tbl = res.scalar_one_or_none()
     if not tbl:
         return {"status": "success", "message": "Table already removed"}
+
+    # Protection: check for active orders referencing this table
+    from app.modules.orders.models import Order
+    order_stmt = select(func.count(Order.id)).where(
+        Order.restaurant_id == canonical_id,
+        Order.event_id == event_id,
+        (Order.table_number == tbl.table_number) | (Order.table_id == tbl.id),
+        Order.status.in_(["PENDING", "CONFIRMED", "PREPARING", "READY", "SERVED"])
+    )
+    order_res = await db.execute(order_stmt)
+    active_count = order_res.scalar() or 0
+    if active_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete Table {tbl.table_number}: It has {active_count} active orders in progress."
+        )
 
     await db.delete(tbl)
     await db.commit()
