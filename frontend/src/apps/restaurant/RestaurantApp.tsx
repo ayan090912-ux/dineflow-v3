@@ -410,10 +410,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   const isBarEnabled = currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR';
   const isHookahEnabled = currentRestaurant?.hasHookah !== false && isModuleEnabled(currentRestaurant, 'hookah');
-  const isEventBusiness = Boolean(
-    (currentRestaurant && (currentRestaurant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(currentRestaurant, 'weddings'))) ||
-    (activeRestaurant && (activeRestaurant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(activeRestaurant, 'weddings')))
-  );
   const activeCatalogMode = (menuCatalogMode === 'HOOKAH' && isHookahEnabled) ? 'HOOKAH' : (menuCatalogMode === 'BAR' && isBarEnabled) ? 'BAR' : 'FOOD';
 
   const filteredMenuItems = menuItems.filter((item) => {
@@ -1022,7 +1018,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         addToast('error', 'Validation Failed', 'Dish/Item name is required.');
         return;
       }
-      if (!isEventBusiness && (!newItem.price || !newItem.price.toString().trim())) {
+      if (!newItem.price || !newItem.price.toString().trim()) {
         addToast('error', 'Validation Failed', 'Price is required.');
         return;
       }
@@ -1041,7 +1037,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         finalCat = isHookah ? defaultHookahCat : isBar ? defaultBarCat : defaultFoodCat;
       }
 
-      const cleanPrice = isEventBusiness ? 0 : (parseFloat(newItem.price?.toString().replace(/[^0-9.]/g, '') || '0') || 0);
+      const cleanPrice = parseFloat(newItem.price?.toString().replace(/[^0-9.]/g, '') || '0') || 0;
 
       const defaultImage = isHookah
         ? 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600'
@@ -1100,8 +1096,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   };
 
   const handleUpdateItem = async () => {
-    if (!editingItem || !editingItem.name || (!isEventBusiness && editingItem.price === undefined)) {
-      addToast('error', 'Validation Failed', isEventBusiness ? 'Item name is required' : 'Item name and price are required');
+    if (!editingItem || !editingItem.name || editingItem.price === undefined) {
+      addToast('error', 'Validation Failed', 'Item name and price are required');
       return;
     }
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
@@ -1110,7 +1106,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       restaurantId: restId,
       name: editingItem.name,
       description: editingItem.description,
-      price: isEventBusiness ? (editingItem.price ?? 0) : (typeof editingItem.price === 'string' ? parseFloat(editingItem.price) : editingItem.price),
+      price: typeof editingItem.price === 'string' ? parseFloat(editingItem.price) : editingItem.price,
       categoryId: editingItem.categoryId,
       barCategory: editingItem.barCategory,
       isVegetarian: isVeg,
@@ -1649,61 +1645,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               const hasTablesModule = isModuleEnabled(currentRestaurant, 'tables');
               const isFoodCart = currentRestaurant?.businessType === 'FOOD_CART' || currentRestaurant?.businessType === 'FOOD_TRUCK';
 
-              const sections = isEventBusiness ? [
-                {
-                  title: 'Event Operations',
-                  items: [
-                    {
-                      id: 'weddings',
-                      label: 'Event Command Center',
-                      icon: <Sparkles className="w-4 h-4 text-amber-400" />,
-                      badge: 'COMMAND',
-                    },
-                    {
-                      id: 'day_management',
-                      label: 'Event Day & Schedule',
-                      icon: <RotateCcw className="w-4 h-4 text-amber-400" />,
-                      badge: 'SCHEDULE',
-                    },
-                    {
-                      id: 'tables',
-                      label: 'Floorplan & Tables',
-                      icon: <Grid className="w-4 h-4 text-emerald-400" />,
-                    },
-                  ],
-                },
-                {
-                  title: 'Fulfillment Stations',
-                  items: [
-                    ...(hasKitchenModule
-                      ? [{ id: 'kitchen', label: 'Kitchen KDS', icon: <ChefHat className="w-4 h-4 text-emerald-400" /> }]
-                      : []),
-                    {
-                      id: 'waiter',
-                      label: 'Runner & Delivery',
-                      icon: <Truck className="w-4 h-4 text-emerald-400" />,
-                    },
-                    ...(hasBarModule
-                      ? [{ id: 'bar', label: 'Bar Terminal', icon: <Wine className="w-4 h-4 text-purple-400" />, badge: 'BAR' }]
-                      : []),
-                    ...(hasHookahModule
-                      ? [{ id: 'hookah', label: 'Hookah Terminal', icon: <Flame className="w-4 h-4 text-amber-400" />, badge: 'HOOKAH' }]
-                      : []),
-                    ...(hasInventoryModule
-                      ? [{ id: 'inventory', label: 'Inventory Stock', icon: <Package className="w-4 h-4" /> }]
-                      : []),
-                  ],
-                },
-                {
-                  title: 'Event Management',
-                  items: [
-                    { id: 'menu', label: 'Event Menu & Packages', icon: <UtensilsCrossed className="w-4 h-4 text-amber-400" /> },
-                    { id: 'staff', label: 'Event Staff & Roles', icon: <Users className="w-4 h-4 text-amber-400" /> },
-                    { id: 'theme', label: 'Event Branding & Theme', icon: <Palette className="w-4 h-4 text-amber-400" /> },
-                    { id: 'workspace_settings', label: 'Stations & Setup', icon: <Layers className="w-4 h-4 text-rose-400" /> },
-                  ],
-                },
-              ] : [
+              const sections = [
                 {
                   title: 'Operations',
                   items: [
@@ -1728,12 +1670,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     ...(isFoodCart && !hasTablesModule
                       ? [{ id: 'qr_pickup', label: 'Counter Pickup QR', icon: <QrCode className="w-4 h-4 text-sky-400" />, badge: 'PICKUP' }]
                       : []),
-                    {
-                      id: 'weddings',
-                      label: 'Wedding Ordering',
-                      icon: <Sparkles className="w-4 h-4 text-amber-400" />,
-                      badge: isModuleEnabled(currentRestaurant, 'weddings') ? 'BANQUET' : undefined,
-                    },
+                    ...(isModuleEnabled(currentRestaurant, 'weddings')
+                      ? [{
+                          id: 'weddings',
+                          label: 'Wedding & Events',
+                          icon: <Sparkles className="w-4 h-4 text-amber-400" />,
+                          badge: 'PORTAL',
+                        }]
+                      : []),
                   ],
                 },
                 {
@@ -1783,7 +1727,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       {validItems.map((item: any) => (
                         <button
                           key={item.id}
-                          onClick={() => setActiveTab(item.id as any)}
+                          onClick={() => {
+                            if (item.id === 'weddings' && onNavigate) {
+                              onNavigate('/events/portal');
+                              return;
+                            }
+                            setActiveTab(item.id as any);
+                          }}
                           className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                             activeTab === item.id
                               ? 'bg-[#181d27] text-white border border-[#2d3545]'
@@ -1948,18 +1898,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'dashboard' && 'Executive Overview'}
               {activeTab === 'orders' && 'POS & QR Orders Stream'}
               {activeTab === 'kitchen' && 'Kitchen Display System (KDS)'}
-              {activeTab === 'bar' && (isEventBusiness ? 'Event Bar Terminal' : 'Bar Terminal (KDS)')}
-              {activeTab === 'hookah' && (isEventBusiness ? 'Event Hookah & Shisha Lounge' : 'Hookah & Shisha Terminal')}
-              {activeTab === 'tables' && (isEventBusiness ? 'Event Floorplan & Tables' : 'Table Floorplan & QR Codes')}
-              {activeTab === 'menu' && (isEventBusiness ? 'Event Menu & Packages' : 'Menu Engineering & Pricing')}
-              {activeTab === 'staff' && (isEventBusiness ? 'Event Staff & Roles' : 'Employee Clock-In & Shifts')}
+              {activeTab === 'bar' && 'Bar Terminal (KDS)'}
+              {activeTab === 'hookah' && 'Hookah & Shisha Terminal'}
+              {activeTab === 'tables' && 'Table Floorplan & QR Codes'}
+              {activeTab === 'menu' && 'Menu Engineering & Pricing'}
+              {activeTab === 'staff' && 'Employee Clock-In & Shifts'}
               {activeTab === 'inventory' && 'Raw Material Inventory'}
               {activeTab === 'billing' && 'Billing, Taxes & Invoices'}
-              {(activeTab === 'business_day' || activeTab === 'day_management') && (isEventBusiness ? 'Event Day & Schedule' : 'Day Management')}
-              {activeTab === 'theme' && (isEventBusiness ? 'Event Branding & Theme' : 'Brand Identity & Styling')}
-              {activeTab === 'workspace_settings' && (isEventBusiness ? 'Stations & Setup' : 'Terminals & Settings')}
-              {activeTab === 'weddings' && 'Event Command Center'}
-              {activeTab === 'waiter' && (isEventBusiness ? 'Runner & Delivery Dispatch' : 'Waiter Terminal OS')}
+              {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management'}
+              {activeTab === 'theme' && 'Brand Identity & Styling'}
+              {activeTab === 'workspace_settings' && 'Terminals & Settings'}
+              {activeTab === 'weddings' && 'Wedding & Events Management'}
+              {activeTab === 'waiter' && 'Waiter Terminal OS'}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               {activeTab === 'dashboard' && 'Live performance metrics, revenue analytics, and station status across your restaurant.'}
@@ -1967,16 +1917,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'kitchen' && 'Real-time kitchen order bump board, active cooking timers, and runner pass.'}
               {activeTab === 'bar' && 'Craft beverage dispensing queue, mixology timers, and floor pass dispatch.'}
               {activeTab === 'hookah' && 'Hookah queue, coal heating, tobacco blend customization, and lounge service.'}
-              {activeTab === 'tables' && (isEventBusiness ? 'Manage banquet tables, assign seating capacities, and generate decoupled event QR standees.' : 'Interactive dining area floorplan, live table states, and printable QR standee cards.')}
-              {activeTab === 'menu' && (isEventBusiness ? 'Food & beverage catalog, banquet classifications, dish specifications, and live guest availability.' : 'Food & beverage catalog, category classifications, variants, and live availability toggles.')}
-              {activeTab === 'waiter' && (isEventBusiness ? 'Live runner and delivery dispatch for event banquet tables.' : 'Table servicing, mobile ordering pass, and runner alerts.')}
+              {activeTab === 'tables' && 'Interactive dining area floorplan, live table states, and printable QR standee cards.'}
+              {activeTab === 'menu' && 'Food & beverage catalog, category classifications, variants, and live availability toggles.'}
+              {activeTab === 'waiter' && 'Table servicing, mobile ordering pass, and runner alerts.'}
               {activeTab === 'staff' && 'Employee profiles, shift schedules, username & password credentials, and assigned terminal stations.'}
               {activeTab === 'inventory' && 'Track kitchen and bar stock levels, minimum reorder thresholds, and suppliers.'}
               {activeTab === 'billing' && 'Table checkouts, split bills, GST/tax management, and payment receipts.'}
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Authoritative operational business-day lifecycle, shift register reconciliation, station prechecks, and daily closing.'}
               {activeTab === 'theme' && "Customize your restaurant's digital storefront, logo, accent colors, and typography."}
               {activeTab === 'workspace_settings' && 'Manage active operational modules, terminal access URLs, and branch configuration.'}
-              {activeTab === 'weddings' && 'Curate bespoke banquet menus, provision decoupled table QR codes, and monitor live guest orders.'}
+              {activeTab === 'weddings' && 'Manage banquet events, dedicated event portal, decoupled table QR codes, and live guest catering.'}
             </p>
           </div>
 
@@ -2056,17 +2006,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab 1: Dashboard Overview */}
         {activeTab === 'dashboard' && (
-          isEventBusiness ? (
-            <WeddingsTab
-              currentRestaurant={currentRestaurant}
-              currentUser={currentUser}
-              addToast={(t: any) => {
-                if (t && typeof t === 'object') {
-                  addToast(t.type || 'info', t.title || '', t.message);
-                }
-              }}
-            />
-          ) : (
           <div className="space-y-6">
             {/* DOMINANT RESTAURANT BRANDING HERO */}
             <div className="relative rounded-2xl overflow-hidden border border-[#1e232e] bg-[#12151b]">
@@ -2383,7 +2322,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               )}
             </div>
           </div>
-          )
         )}
 
         {/* Tab 2: Orders Board */}
@@ -2417,9 +2355,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 {
                   key: 'totalAmount',
                   header: 'Total',
-                  render: (o) => (o.orderType === 'WEDDING_EVENT' || !!o.eventId || isEventBusiness) ? (
-                    <span className="font-mono text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">EVENT</span>
-                  ) : (
+                  render: (o) => (
                     <span className="font-mono font-bold text-emerald-400">₹{o.totalAmount.toFixed(2)}</span>
                   ),
                 },
@@ -2462,7 +2398,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab: Waiter Terminal Operating System */}
         {activeTab === 'waiter' && (
-          isModuleEnabled(currentRestaurant, 'waiter') || isEventBusiness ? (
+          isModuleEnabled(currentRestaurant, 'waiter') ? (
             <WaiterTerminalOS restaurant={currentRestaurant || activeRestaurant} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
@@ -2621,15 +2557,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab 4: Table Floorplan, Merging & Reservations */}
         {activeTab === 'tables' && (
-          isEventBusiness ? (
-            <EventFloorplanTablesView
-              currentRestaurant={currentRestaurant}
-              activeRestaurant={activeRestaurant}
-              currentUser={currentUser}
-              addToast={addToast}
-              onNavigateToTab={(t) => setActiveTab(t as any)}
-            />
-          ) : isModuleEnabled(currentRestaurant, 'tables') ? (
+          isModuleEnabled(currentRestaurant, 'tables') ? (
             <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -3200,9 +3128,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           </div>
                           {item.brand && <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>}
                         </div>
-                        {!isEventBusiness && (
-                          <span className="font-mono font-bold text-rose-400 text-base">{formatCurrency(item.price, theme.currency || 'INR (₹)')}</span>
-                        )}
+                        <span className="font-mono font-bold text-rose-400 text-base">{formatCurrency(item.price, theme.currency || 'INR (₹)')}</span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
                     </div>
@@ -4515,15 +4441,35 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab: Wedding & Banquet Ordering */}
         {activeTab === 'weddings' && (
-          <WeddingsTab
-            currentRestaurant={currentRestaurant}
-            currentUser={currentUser}
-            addToast={(t: any) => {
-              if (t && typeof t === 'object') {
-                addToast(t.type || 'info', t.title || '', t.message);
-              }
-            }}
-          />
+          <div className="space-y-6">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Dinely Wedding & Events Portal</h4>
+                  <p className="text-xs text-slate-400">Launch the dedicated operational portal for event catering, banquet QR codes, and real-time station execution.</p>
+                </div>
+              </div>
+              <Button
+                variant="brand"
+                onClick={() => onNavigate ? onNavigate('/events/portal') : (window.location.href = '/events/portal')}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shrink-0"
+              >
+                Open Event Portal →
+              </Button>
+            </div>
+            <WeddingsTab
+              currentRestaurant={currentRestaurant}
+              currentUser={currentUser}
+              addToast={(t: any) => {
+                if (t && typeof t === 'object') {
+                  addToast(t.type || 'info', t.title || '', t.message);
+                }
+              }}
+            />
+          </div>
         )}
 
       </main>
@@ -4563,7 +4509,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
           />
 
-          <div className={isEventBusiness ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">Category *</label>
               <select
@@ -4621,15 +4567,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </select>
             </div>
 
-            {!isEventBusiness && (
-              <Input
-                label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
-                type="number"
-                placeholder="250.00"
-                value={newItem.price}
-                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-              />
-            )}
+            <Input
+              label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
+              type="number"
+              placeholder="250.00"
+              value={newItem.price}
+              onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+            />
           </div>
 
           {menuCatalogMode === 'FOOD' && (
@@ -4781,14 +4725,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 </select>
               </div>
 
-              {!isEventBusiness && (
-                <Input
-                  label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
-                  type="number"
-                  value={editingItem.price !== undefined ? editingItem.price.toString() : ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) || 0 })}
-                />
-              )}
+              <Input
+                label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
+                type="number"
+                value={editingItem.price !== undefined ? editingItem.price.toString() : ''}
+                onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) || 0 })}
+              />
             </div>
 
             <div className="space-y-1.5">

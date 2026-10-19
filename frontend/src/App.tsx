@@ -30,6 +30,7 @@ const RestaurantSignupPage = lazy(() => import('./apps/onboarding/RestaurantSign
 const PendingApprovalPage = lazy(() => import('./apps/onboarding/PendingApprovalPage').then(m => ({ default: m.PendingApprovalPage })));
 const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector').then(m => ({ default: m.WorkspaceSelector })));
 const WeddingGuestApp = lazy(() => import('./apps/wedding/WeddingGuestApp').then(m => ({ default: m.WeddingGuestApp })));
+const WeddingEventPortal = lazy(() => import('./apps/wedding/WeddingEventPortal').then(m => ({ default: m.WeddingEventPortal })));
 
 function RouteLoadingFallback() {
   return (
@@ -684,10 +685,11 @@ function AppContent() {
               setCurrentUser(user);
               const r = (user?.role || '').toUpperCase();
               const target = (
-                r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
-                r === 'BAR' || r === 'BARTENDER' ? '/bar' :
-                r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
-                '/restaurant/dashboard?tab=weddings'
+                r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/events/portal?tab=kitchen' :
+                r === 'BAR' || r === 'BARTENDER' ? '/events/portal?tab=bar' :
+                r === 'HOOKAH' || r === 'SHISHA' ? '/events/portal?tab=hookah' :
+                r === 'WAITER' || r === 'RUNNER' ? '/events/portal?tab=runner' :
+                '/events/portal'
               );
               navigateTo(target);
             }}
@@ -695,15 +697,47 @@ function AppContent() {
         );
       }
 
+      // 0.05. Dedicated Wedding & Events Independent Operations Portal
+      if (
+        tenantApp === 'EVENT_PORTAL' ||
+        (resolvedTenant.businessType === 'WEDDING_ORDERING' && (tenantApp === 'SETTINGS' || cleanPath.startsWith('/restaurant') || cleanPath === '/dashboard'))
+      ) {
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="event"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                const r = (user?.role || '').toUpperCase();
+                const target = (
+                  r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/events/portal?tab=kitchen' :
+                  r === 'BAR' || r === 'BARTENDER' ? '/events/portal?tab=bar' :
+                  r === 'HOOKAH' || r === 'SHISHA' ? '/events/portal?tab=hookah' :
+                  r === 'WAITER' || r === 'RUNNER' ? '/events/portal?tab=runner' :
+                  '/events/portal'
+                );
+                navigateTo(target);
+              }}
+            />
+          );
+        }
+
+        return (
+          <WeddingEventPortal
+            activeRestaurant={resolvedTenant}
+            currentUser={currentUser}
+            onLogout={() => handleLogout('/weddings/login')}
+            onNavigate={navigateTo}
+          />
+        );
+      }
+
       // 0.1 Weddings & Events Luxury Guest Application
       if (
         tenantApp === 'WEDDING' ||
-        cleanPath.startsWith('/event/') ||
-        cleanPath.startsWith('/events/') ||
-        cleanPath === '/event' ||
-        cleanPath === '/events' ||
         cleanPath.startsWith('/wedding/guest') ||
-        ((resolvedTenant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(resolvedTenant, 'weddings')) && tenantApp === 'CUSTOMER')
+        (resolvedTenant.businessType === 'WEDDING_ORDERING' && tenantApp === 'CUSTOMER')
       ) {
         return <WeddingGuestApp />;
       }
@@ -1432,10 +1466,11 @@ function AppContent() {
             setCurrentUser(user);
             const r = (user?.role || '').toUpperCase();
             const target = (
-              r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
-              r === 'BAR' || r === 'BARTENDER' ? '/bar' :
-              r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
-              '/restaurant/dashboard?tab=weddings'
+              r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/events/portal?tab=kitchen' :
+              r === 'BAR' || r === 'BARTENDER' ? '/events/portal?tab=bar' :
+              r === 'HOOKAH' || r === 'SHISHA' ? '/events/portal?tab=hookah' :
+              r === 'WAITER' || r === 'RUNNER' ? '/events/portal?tab=runner' :
+              '/events/portal'
             );
             navigateTo(target);
           }}
@@ -1533,15 +1568,61 @@ function AppContent() {
 
     // 7.5. Weddings & Events Platform Product & Guest Application
     if (
-      cleanPath === '/weddings/login' ||
-      cleanPath === '/weddings/login/' ||
-      cleanPath === '/wedding/login' ||
-      cleanPath === '/wedding/login/' ||
-      cleanPath === '/weddings/signin' ||
-      cleanPath === '/wedding/signin'
+      cleanPath === '/events/portal' ||
+      cleanPath.startsWith('/events/portal/') ||
+      cleanPath === '/event/portal' ||
+      cleanPath.startsWith('/event/portal/') ||
+      cleanPath === '/weddings/portal' ||
+      cleanPath.startsWith('/weddings/portal/') ||
+      cleanPath === '/wedding/portal' ||
+      cleanPath.startsWith('/wedding/portal/') ||
+      cleanPath === '/events/dashboard' ||
+      cleanPath.startsWith('/events/dashboard/') ||
+      cleanPath === '/event/dashboard' ||
+      cleanPath.startsWith('/event/dashboard/') ||
+      cleanPath === '/weddings/dashboard' ||
+      cleanPath.startsWith('/weddings/dashboard/') ||
+      cleanPath === '/wedding/dashboard' ||
+      cleanPath.startsWith('/wedding/dashboard/') ||
+      cleanPath === '/events/command-center' ||
+      cleanPath.startsWith('/events/command-center/') ||
+      cleanPath === '/events/day-management' ||
+      cleanPath.startsWith('/events/day-management/') ||
+      cleanPath === '/events/tables' ||
+      cleanPath.startsWith('/events/tables/') ||
+      cleanPath === '/events/menu' ||
+      cleanPath.startsWith('/events/menu/') ||
+      cleanPath === '/events/kitchen' ||
+      cleanPath.startsWith('/events/kitchen/') ||
+      cleanPath === '/events/runner' ||
+      cleanPath.startsWith('/events/runner/') ||
+      cleanPath === '/events/bar' ||
+      cleanPath.startsWith('/events/bar/') ||
+      cleanPath === '/events/hookah' ||
+      cleanPath.startsWith('/events/hookah/') ||
+      cleanPath === '/events/staff' ||
+      cleanPath.startsWith('/events/staff/')
     ) {
-      navigateTo('/restaurant/login');
-      return null;
+      if (!currentUser) {
+        return (
+          <RoleLoginPage
+            portal="event"
+            onNavigate={navigateTo}
+            onLoginSuccess={(_, user) => {
+              setCurrentUser(user);
+              navigateTo(cleanPath.includes('tab=') ? cleanPath : '/events/portal');
+            }}
+          />
+        );
+      }
+      return (
+        <WeddingEventPortal
+          activeRestaurant={currentRestaurant}
+          currentUser={currentUser}
+          onLogout={() => handleLogout('/weddings/login')}
+          onNavigate={navigateTo}
+        />
+      );
     }
 
     if (
@@ -1552,23 +1633,10 @@ function AppContent() {
       cleanPath === '/weddings/apply'
     ) {
       if (currentUser) {
-        navigateTo('/restaurant/dashboard?tab=weddings');
+        navigateTo('/events/portal');
       } else {
         navigateTo('/wizard?mode=create&type=WEDDING_ORDERING');
       }
-      return null;
-    }
-
-    if (
-      cleanPath === '/weddings/dashboard' ||
-      cleanPath.startsWith('/weddings/dashboard/') ||
-      cleanPath === '/weddings/manage' ||
-      cleanPath.startsWith('/weddings/manage/') ||
-      cleanPath === '/wedding/dashboard' ||
-      cleanPath.startsWith('/wedding/dashboard/') ||
-      cleanPath.startsWith('/weddings/workspace')
-    ) {
-      navigateTo('/restaurant/dashboard?tab=weddings');
       return null;
     }
 

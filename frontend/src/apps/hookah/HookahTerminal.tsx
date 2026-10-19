@@ -159,6 +159,9 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
 
       const hookahOrders = allOrders
         .filter((o) => {
+          if (restaurant?.businessType !== 'WEDDING_ORDERING' && (o.orderType === 'WEDDING_EVENT' || Boolean((o as any).eventId))) {
+            return false;
+          }
           const hasHookahItems = o.items && o.items.some((i) => getFulfillmentStation(i) === 'HOOKAH');
           return hasHookahItems;
         })
@@ -606,11 +609,9 @@ const HookahOrderCard: React.FC<{
                   </span>
                 )}
               </div>
-              {!(order.orderType === 'WEDDING_EVENT' || !!(order as any).eventId || Boolean((order as any).eventName || (order as any).metadata?.eventName)) && (
-                <span className="font-mono text-slate-400 text-[11px] shrink-0">
-                  {currencySymbol}{(item.price * item.quantity).toFixed(2)}
-                </span>
-              )}
+              <span className="font-mono text-slate-400 text-[11px] shrink-0">
+                {currencySymbol}{(item.price * item.quantity).toFixed(2)}
+              </span>
             </div>
           ))}
         </div>

@@ -24,6 +24,7 @@ export type TenantAppType =
   | 'SETTINGS'
   | 'AUTH'
   | 'WEDDING'
+  | 'EVENT_PORTAL'
   | 'NOT_FOUND';
 
 const RESERVED_SUBDOMAINS = new Set([
@@ -179,6 +180,48 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p.startsWith('/reports/')
   ) {
     return 'SETTINGS';
+  }
+
+  // 7.4. Wedding & Events Independent Operations Portal
+  if (
+    p === '/events/portal' ||
+    p.startsWith('/events/portal/') ||
+    p === '/event/portal' ||
+    p.startsWith('/event/portal/') ||
+    p === '/weddings/portal' ||
+    p.startsWith('/weddings/portal/') ||
+    p === '/wedding/portal' ||
+    p.startsWith('/wedding/portal/') ||
+    p === '/events/dashboard' ||
+    p.startsWith('/events/dashboard/') ||
+    p === '/event/dashboard' ||
+    p.startsWith('/event/dashboard/') ||
+    p === '/weddings/dashboard' ||
+    p.startsWith('/weddings/dashboard/') ||
+    p === '/wedding/dashboard' ||
+    p.startsWith('/wedding/dashboard/') ||
+    p === '/events/command-center' ||
+    p.startsWith('/events/command-center/') ||
+    p === '/events/day-management' ||
+    p.startsWith('/events/day-management/') ||
+    p === '/events/tables' ||
+    p.startsWith('/events/tables/') ||
+    p === '/events/menu' ||
+    p.startsWith('/events/menu/') ||
+    p === '/events/kitchen' ||
+    p.startsWith('/events/kitchen/') ||
+    p === '/events/runner' ||
+    p.startsWith('/events/runner/') ||
+    p === '/events/bar' ||
+    p.startsWith('/events/bar/') ||
+    p === '/events/hookah' ||
+    p.startsWith('/events/hookah/') ||
+    p === '/events/staff' ||
+    p.startsWith('/events/staff/') ||
+    p === '/events/settings' ||
+    p.startsWith('/events/settings/')
+  ) {
+    return 'EVENT_PORTAL';
   }
 
   // 7.5. Wedding & Events Guest App

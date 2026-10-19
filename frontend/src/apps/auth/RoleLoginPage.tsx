@@ -119,7 +119,7 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     subtitle: 'Sign in with your organizer account or assigned staff credentials',
     roleBadge: 'EVENT_OPERATIONS',
     icon: <Sparkles className="w-5 h-5 text-amber-300" />,
-    targetDashboard: '/restaurant/dashboard?tab=weddings',
+    targetDashboard: '/events/portal',
     identifierLabel: 'Staff Username or Account Email',
     identifierPlaceholder: 'e.g. runner01, chef_sam, or organizer@event.com',
   },
@@ -241,10 +241,11 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
       if (portal === 'event') {
         const r = (result?.user?.role || '').toUpperCase();
         destination = (
-          r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/kitchen' :
-          r === 'BAR' || r === 'BARTENDER' ? '/bar' :
-          r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
-          '/restaurant/dashboard?tab=weddings'
+          r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/events/portal?tab=kitchen' :
+          r === 'BAR' || r === 'BARTENDER' ? '/events/portal?tab=bar' :
+          r === 'HOOKAH' || r === 'SHISHA' ? '/events/portal?tab=hookah' :
+          r === 'WAITER' || r === 'RUNNER' ? '/events/portal?tab=runner' :
+          '/events/portal'
         );
       }
       setSuccessMessage(`Authenticated successfully. Loading portal...`);

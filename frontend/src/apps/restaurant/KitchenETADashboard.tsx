@@ -315,17 +315,18 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       const restId = currentRestId || undefined;
       api.getOrders(restId, { station: 'KITCHEN' }).then((freshOrders) => {
         if (!freshOrders) return;
+        const validOrders = (freshOrders || []).filter((o) => (restaurant as any)?.businessType === 'WEDDING_ORDERING' || (o.orderType !== 'WEDDING_EVENT' && !o.eventId));
         setOrders((prevOrders) => {
           const currentList = Array.isArray(prevOrders) ? prevOrders : [];
-          if (!isMuted && freshOrders.length > currentList.length) {
-            const hasNewPending = freshOrders.some(
+          if (!isMuted && validOrders.length > currentList.length) {
+            const hasNewPending = validOrders.some(
               (fo) => fo.status === 'PENDING' && !currentList.some((po) => po.id === fo.id)
             );
             if (hasNewPending) {
               playKitchenChime('NEW_ORDER');
             }
           }
-          return freshOrders;
+          return validOrders;
         });
       }).catch(() => {});
     };
@@ -816,16 +817,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     key={order.id}
                     className="bg-[#12151b] border border-amber-500/40 hover:border-amber-400 p-4 space-y-3 shadow-md transition-all rounded-xl"
                   >
-                    {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
-                      <div className="mb-2">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
-                          <span>🎉</span>
-                          <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {cleanTableBadge(order.tableNumber)}
-                          </span>
-                        </span>
-                      </div>
-                    )}
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="flex items-center gap-2">
@@ -835,7 +826,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-300 mt-0.5">
-                          {order.customerName || 'Walk-in Guest'} • {order.orderType === 'WEDDING_EVENT' ? '🎉 Event Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
+                          {order.customerName || 'Walk-in Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
                         </p>
                       </div>
                       <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
@@ -845,9 +836,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                     <div className="text-xs text-slate-400 flex items-center justify-between bg-[#0c0e14] p-2 rounded-lg border border-[#1e232e]">
                       <span>Submitted: <strong className="text-slate-200">{getElapsedMinutes(order.createdAt)} mins ago</strong></span>
-                      {!(order.orderType === 'WEDDING_EVENT' || !!(order as any).eventId || restaurant?.businessType === 'WEDDING_ORDERING') && (
-                        <span className="font-mono text-emerald-400 font-medium">₹{order.totalAmount.toFixed(2)}</span>
-                      )}
+                      <span className="font-mono text-emerald-400 font-medium">₹{order.totalAmount.toFixed(2)}</span>
                     </div>
 
                     {/* Dish Items list with check toggles */}
@@ -936,16 +925,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           : 'border-[#1e232e] bg-[#12151b]'
                       }`}
                     >
-                      {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
-                        <div className="mb-2">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm animate-pulse">
-                            <span>🎉</span>
-                            <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                              EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {cleanTableBadge(order.tableNumber)}
-                            </span>
-                          </span>
-                        </div>
-                      )}
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center gap-2">
@@ -957,7 +936,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                             )}
                           </div>
                           <p className="text-xs text-slate-300 mt-0.5">
-                            {order.customerName || 'Guest'} • {order.orderType === 'WEDDING_EVENT' ? '🎉 Event Guest' : (order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in')}
+                            {order.customerName || 'Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
                           </p>
                         </div>
                         <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
@@ -1072,16 +1051,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     key={order.id}
                     className="bg-[#12151b] border border-emerald-500/40 p-4 space-y-3 shadow-md rounded-xl"
                   >
-                    {(order.orderType === 'WEDDING_EVENT' || order.eventId) && (
-                      <div className="mb-2">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 text-amber-200 border border-amber-400/40 shadow-sm">
-                          <span>🎉</span>
-                          <span className="font-serif tracking-wider uppercase font-bold text-amber-100">
-                            EVENT BANQUET · {order.eventName || 'Banquet'} · TABLE {cleanTableBadge(order.tableNumber)}
-                          </span>
-                        </span>
-                      </div>
-                    )}
                     <div className="flex justify-between items-start">
                       <div>
                         <span className="font-mono font-bold text-emerald-400 text-lg">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>

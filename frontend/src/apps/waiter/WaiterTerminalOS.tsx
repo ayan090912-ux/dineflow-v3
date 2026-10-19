@@ -89,10 +89,6 @@ interface WaiterTerminalOSProps {
 }
 
 export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, onLogout }) => {
-  const isEventBusiness = Boolean(
-    restaurant?.businessType === 'WEDDING_ORDERING' ||
-    (restaurant && isModuleEnabled(restaurant, 'weddings'))
-  );
   const { formatPrice } = useTheme();
 
   // Navigation tab state - ONLY the 4 required views allowed in Waiter Terminal MVP
@@ -1034,12 +1030,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                 <span>Item count:</span>
                                 <span className="font-mono text-slate-200">{itemCount} items</span>
                               </div>
-                              {!isEventBusiness && (
-                                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                                  <span>Session Total:</span>
-                                  <span className="font-mono font-semibold text-emerald-400">₹{sessionTotal.toFixed(2)}</span>
-                                </div>
-                              )}
+                              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                <span>Session Total:</span>
+                                <span className="font-mono font-semibold text-emerald-400">₹{sessionTotal.toFixed(2)}</span>
+                              </div>
                               <div className="flex items-center justify-between text-[11px] text-slate-400">
                                 <span>Assigned Waiter:</span>
                                 <span className="text-slate-200">{table.assignedWaiterName || waiterName}</span>
@@ -1121,7 +1115,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                             </span>
                           </div>
 
-                          {isBillReq && !isEventBusiness ? (
+                          {isBillReq ? (
                             <div className="bg-[#12151b] p-2 rounded-lg border border-[#1e232e] flex justify-between items-center text-xs font-mono">
                               <div>
                                 <span className="text-slate-400 block text-[10px]">BILL TOTAL</span>
@@ -1381,12 +1375,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                               <span className="text-slate-200">{itemCount}</span>
                             </div>
 
-                            {!isEventBusiness && (
                               <div className="flex justify-between items-center py-0.5">
                                 <span className="text-slate-400">Current Bill:</span>
                                 <span className="font-bold text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</span>
                               </div>
-                            )}
 
                             {latestOrder && (
                               <div className="flex flex-col gap-1 py-1.5 border-t border-b border-[#1e232e] text-[11px]">
@@ -1498,7 +1490,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                           </span>
                         </div>
 
-                        {isBillReq && !isEventBusiness ? (
+                        {isBillReq ? (
                           <div className="space-y-2 bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] text-xs font-mono">
                             <div className="flex justify-between items-center pb-1.5 border-b border-[#1e232e]">
                               <span className="text-slate-400">Total Bill Amount</span>
@@ -1791,11 +1783,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                           <span>
                             {it.quantity}x {it.name || it.itemName}
                           </span>
-                          {!isEventBusiness && (
-                            <span className="font-mono text-slate-300">
-                              ₹{((it.price || it.unitPrice || 0) * (it.quantity || 1)).toFixed(2)}
-                            </span>
-                          )}
+                          <span className="font-mono text-slate-300">
+                            ₹{((it.price || it.unitPrice || 0) * (it.quantity || 1)).toFixed(2)}
+                          </span>
                         </div>
                       ))
                     ) : sessionOrders.length > 0 ? (
@@ -1806,11 +1796,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                             <span>
                               {it.quantity}x {it.name}
                             </span>
-                            {!isEventBusiness && (
-                              <span className="font-mono text-slate-300">
-                                ₹{(it.price * it.quantity).toFixed(2)}
-                              </span>
-                            )}
+                            <span className="font-mono text-slate-300">
+                              ₹{(it.price * it.quantity).toFixed(2)}
+                            </span>
                           </div>
                         ))
                     ) : (
@@ -1821,77 +1809,51 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   </div>
 
                   {/* Summary Totals */}
-                  {!isEventBusiness && (
-                    <div className="border-t border-[#1e232e] pt-2 space-y-1 text-xs font-mono">
-                      <div className="flex justify-between text-slate-400">
-                        <span>Subtotal:</span>
-                        <span>₹{(bill?.subtotal !== undefined ? bill.subtotal : sessionOrders.reduce((sum, o) => sum + (o.subtotal || o.totalAmount), 0)).toFixed(2)}</span>
-                      </div>
-                      {bill && bill.discountAmount ? (
-                        <div className="flex justify-between text-emerald-400">
-                          <span>Discount {bill.discountPercentage ? `(${bill.discountPercentage}%)` : ''}:</span>
-                          <span>-₹{bill.discountAmount.toFixed(2)}</span>
-                        </div>
-                      ) : null}
-                      {(bill?.taxAmount || 0) > 0 ? (
-                        <div className="flex justify-between text-slate-400">
-                          <span>GST / Taxes:</span>
-                          <span>₹{(bill?.taxAmount || 0).toFixed(2)}</span>
-                        </div>
-                      ) : sessionOrders.some((o) => (o.taxAmount || 0) > 0) ? (
-                        <div className="flex justify-between text-slate-400">
-                          <span>GST / Taxes:</span>
-                          <span>₹{sessionOrders.reduce((sum, o) => sum + (o.taxAmount || 0), 0).toFixed(2)}</span>
-                        </div>
-                      ) : null}
-                      {bill && (bill.serviceChargeAmount || 0) > 0 ? (
-                        <div className="flex justify-between text-slate-400">
-                          <span>Service Charge ({bill.serviceChargePercentage || 0}%):</span>
-                          <span>₹{(bill.serviceChargeAmount || 0).toFixed(2)}</span>
-                        </div>
-                      ) : null}
-                      {bill && bill.roundOffAmount !== undefined && bill.roundOffAmount !== 0 ? (
-                        <div className="flex justify-between text-slate-400">
-                          <span>Round Off:</span>
-                          <span>{bill.roundOffAmount > 0 ? `+₹${bill.roundOffAmount.toFixed(2)}` : `-₹${Math.abs(bill.roundOffAmount).toFixed(2)}`}</span>
-                        </div>
-                      ) : null}
-                      <div className="flex justify-between items-center text-sm font-bold text-white pt-1.5 border-t border-[#1e232e]">
-                        <span>Grand Total:</span>
-                        <span className="text-emerald-400 font-mono text-base">
-                          ₹{calculatedTotal.toFixed(2)}
-                        </span>
-                      </div>
+                  <div className="border-t border-[#1e232e] pt-2 space-y-1 text-xs font-mono">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Subtotal:</span>
+                      <span>₹{(bill?.subtotal !== undefined ? bill.subtotal : sessionOrders.reduce((sum, o) => sum + (o.subtotal || o.totalAmount), 0)).toFixed(2)}</span>
                     </div>
-                  )}
+                    {bill && bill.discountAmount ? (
+                      <div className="flex justify-between text-emerald-400">
+                        <span>Discount {bill.discountPercentage ? `(${bill.discountPercentage}%)` : ''}:</span>
+                        <span>-₹{bill.discountAmount.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {(bill?.taxAmount || 0) > 0 ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>GST / Taxes:</span>
+                        <span>₹{(bill?.taxAmount || 0).toFixed(2)}</span>
+                      </div>
+                    ) : sessionOrders.some((o) => (o.taxAmount || 0) > 0) ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>GST / Taxes:</span>
+                        <span>₹{sessionOrders.reduce((sum, o) => sum + (o.taxAmount || 0), 0).toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {bill && (bill.serviceChargeAmount || 0) > 0 ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Service Charge ({bill.serviceChargePercentage || 0}%):</span>
+                        <span>₹{(bill.serviceChargeAmount || 0).toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {bill && bill.roundOffAmount !== undefined && bill.roundOffAmount !== 0 ? (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Round Off:</span>
+                        <span>{bill.roundOffAmount > 0 ? `+₹${bill.roundOffAmount.toFixed(2)}` : `-₹${Math.abs(bill.roundOffAmount).toFixed(2)}`}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between items-center text-sm font-bold text-white pt-1.5 border-t border-[#1e232e]">
+                      <span>Grand Total:</span>
+                      <span className="text-emerald-400 font-mono text-base">
+                        ₹{calculatedTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Payment Actions */}
-                {isEventBusiness ? (
-                  <div className="flex justify-end gap-2 pt-2 border-t border-[#1e232e]">
-                    {req && req.status !== 'COMPLETED' && (
-                      <Button
-                        variant="success"
-                        size="sm"
-                        onClick={() => {
-                          handleCompleteRequest(req.id);
-                          setSelectedBillForAction(null);
-                        }}
-                        className="text-xs"
-                      >
-                        Complete Request ✓
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedBillForAction(null)}
-                      className="text-xs border-[#1e232e] text-slate-300"
-                    >
-                      Close
-                    </Button>
-                  </div>
-                ) : currentPayStatus !== 'PAID' ? (
+                {currentPayStatus !== 'PAID' ? (
                   <div className="space-y-3 pt-2 border-t border-[#1e232e]">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-300">
@@ -2016,12 +1978,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     <span className="text-slate-400 block text-[10px]">Orders Count:</span>
                     <strong className="text-white">{sessionOrders.length} Orders</strong>
                   </div>
-                  {!isEventBusiness && (
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">Total Amount:</span>
-                      <strong className="text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</strong>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Total Amount:</span>
+                    <strong className="text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</strong>
+                  </div>
                 </div>
 
                 {/* Session Orders List */}
@@ -2040,11 +2000,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                           <div className="flex justify-between items-center">
                             <span className="font-bold font-mono text-white">Order #{ord.id}</span>
                             <div className="flex items-center gap-2">
-                              {!isEventBusiness && (
-                                <Badge variant={ord.paymentStatus === 'PAID' ? 'success' : 'warning'} className="text-[10px]">
-                                  {ord.paymentStatus || 'UNPAID'}
-                                </Badge>
-                              )}
+                              <Badge variant={ord.paymentStatus === 'PAID' ? 'success' : 'warning'} className="text-[10px]">
+                                {ord.paymentStatus || 'UNPAID'}
+                              </Badge>
                               <Badge variant="outline" className="text-[10px]">
                                 {ord.status}
                               </Badge>
@@ -2055,9 +2013,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                             {ord.items.map((it, idx) => (
                               <div key={idx} className="flex justify-between text-slate-300">
                                 <span>{it.quantity}x {it.name}</span>
-                                {!isEventBusiness && (
-                                  <span className="font-mono font-bold text-slate-200">₹{(it.price * it.quantity).toFixed(2)}</span>
-                                )}
+                                <span className="font-mono font-bold text-slate-200">₹{(it.price * it.quantity).toFixed(2)}</span>
                               </div>
                             ))}
                           </div>
@@ -2133,20 +2089,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     <span className="text-slate-400">Total Orders Placed:</span>
                     <span className="font-bold text-white">{sessionOrders.length} Orders</span>
                   </div>
-                  {!isEventBusiness && (
-                    <>
-                      <div className="flex justify-between items-center py-1">
-                        <span className="text-slate-400">Payment Status:</span>
-                        <Badge variant={allPaid ? 'success' : 'warning'} className="text-[10px]">
-                          {allPaid ? 'PAID' : 'PAYMENT PENDING / UNPAID'}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-sm">
-                        <span className="font-bold text-white">TOTAL BILL AMOUNT:</span>
-                        <span className="font-black text-emerald-400 text-base">₹{sessionTotal.toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-400">Payment Status:</span>
+                    <Badge variant={allPaid ? 'success' : 'warning'} className="text-[10px]">
+                      {allPaid ? 'PAID' : 'PAYMENT PENDING / UNPAID'}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-sm">
+                    <span className="font-bold text-white">TOTAL BILL AMOUNT:</span>
+                    <span className="font-black text-emerald-400 text-base">₹{sessionTotal.toFixed(2)}</span>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
