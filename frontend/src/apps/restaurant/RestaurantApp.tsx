@@ -1022,7 +1022,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         addToast('error', 'Validation Failed', 'Dish/Item name is required.');
         return;
       }
-      if (!newItem.price || !newItem.price.toString().trim()) {
+      if (!isEventBusiness && (!newItem.price || !newItem.price.toString().trim())) {
         addToast('error', 'Validation Failed', 'Price is required.');
         return;
       }
@@ -1041,7 +1041,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         finalCat = isHookah ? defaultHookahCat : isBar ? defaultBarCat : defaultFoodCat;
       }
 
-      const cleanPrice = parseFloat(newItem.price.toString().replace(/[^0-9.]/g, '')) || 0;
+      const cleanPrice = isEventBusiness ? 0 : (parseFloat(newItem.price?.toString().replace(/[^0-9.]/g, '') || '0') || 0);
 
       const defaultImage = isHookah
         ? 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600'
@@ -1100,8 +1100,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   };
 
   const handleUpdateItem = async () => {
-    if (!editingItem || !editingItem.name || editingItem.price === undefined) {
-      addToast('error', 'Validation Failed', 'Item name and price are required');
+    if (!editingItem || !editingItem.name || (!isEventBusiness && editingItem.price === undefined)) {
+      addToast('error', 'Validation Failed', isEventBusiness ? 'Item name is required' : 'Item name and price are required');
       return;
     }
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
@@ -1110,7 +1110,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       restaurantId: restId,
       name: editingItem.name,
       description: editingItem.description,
-      price: typeof editingItem.price === 'string' ? parseFloat(editingItem.price) : editingItem.price,
+      price: isEventBusiness ? (editingItem.price ?? 0) : (typeof editingItem.price === 'string' ? parseFloat(editingItem.price) : editingItem.price),
       categoryId: editingItem.categoryId,
       barCategory: editingItem.barCategory,
       isVegetarian: isVeg,
@@ -2056,6 +2056,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab 1: Dashboard Overview */}
         {activeTab === 'dashboard' && (
+          isEventBusiness ? (
+            <WeddingsTab
+              currentRestaurant={currentRestaurant}
+              currentUser={currentUser}
+              addToast={(t: any) => {
+                if (t && typeof t === 'object') {
+                  addToast(t.type || 'info', t.title || '', t.message);
+                }
+              }}
+            />
+          ) : (
           <div className="space-y-6">
             {/* DOMINANT RESTAURANT BRANDING HERO */}
             <div className="relative rounded-2xl overflow-hidden border border-[#1e232e] bg-[#12151b]">
@@ -2372,6 +2383,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               )}
             </div>
           </div>
+          )
         )}
 
         {/* Tab 2: Orders Board */}
@@ -2405,7 +2417,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 {
                   key: 'totalAmount',
                   header: 'Total',
-                  render: (o) => <span className="font-mono font-bold text-emerald-400">₹{o.totalAmount.toFixed(2)}</span>,
+                  render: (o) => (o.orderType === 'WEDDING_EVENT' || !!o.eventId || isEventBusiness) ? (
+                    <span className="font-mono text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">EVENT</span>
+                  ) : (
+                    <span className="font-mono font-bold text-emerald-400">₹{o.totalAmount.toFixed(2)}</span>
+                  ),
                 },
                 {
                   key: 'status',
@@ -2473,7 +2489,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 3: Kitchen Display System (KDS) & ETA Controls */}
         {activeTab === 'kitchen' && (
           isModuleEnabled(currentRestaurant, 'kitchen') ? (
-            <KitchenETADashboard orders={orders} onRefreshOrders={handleRefreshOrders} />
+            <KitchenETADashboard restaurant={currentRestaurant || activeRestaurant} orders={orders} onRefreshOrders={handleRefreshOrders} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
@@ -2499,7 +2515,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 3.5: Bar Terminal */}
         {activeTab === 'bar' && (
           isModuleEnabled(currentRestaurant, 'bar') ? (
-            <BarTerminal />
+            <BarTerminal restaurant={currentRestaurant || activeRestaurant} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-400 mx-auto flex items-center justify-center">
@@ -2525,7 +2541,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 3.55: Hookah & Shisha Terminal */}
         {activeTab === 'hookah' && (
           isModuleEnabled(currentRestaurant, 'hookah') ? (
-            <HookahTerminal restaurant={currentRestaurant} />
+            <HookahTerminal restaurant={currentRestaurant || activeRestaurant} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
@@ -3184,7 +3200,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           </div>
                           {item.brand && <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>}
                         </div>
-                        <span className="font-mono font-bold text-rose-400 text-base">{formatCurrency(item.price, theme.currency || 'INR (₹)')}</span>
+                        {!isEventBusiness && (
+                          <span className="font-mono font-bold text-rose-400 text-base">{formatCurrency(item.price, theme.currency || 'INR (₹)')}</span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
                     </div>
@@ -4545,7 +4563,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={isEventBusiness ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">Category *</label>
               <select
@@ -4603,13 +4621,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </select>
             </div>
 
-            <Input
-              label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
-              type="number"
-              placeholder="250.00"
-              value={newItem.price}
-              onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-            />
+            {!isEventBusiness && (
+              <Input
+                label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
+                type="number"
+                placeholder="250.00"
+                value={newItem.price}
+                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+              />
+            )}
           </div>
 
           {menuCatalogMode === 'FOOD' && (
@@ -4761,12 +4781,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 </select>
               </div>
 
-              <Input
-                label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
-                type="number"
-                value={editingItem.price.toString()}
-                onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) || 0 })}
-              />
+              {!isEventBusiness && (
+                <Input
+                  label={`Price (${getCurrencySymbol(theme.currency || 'INR (₹)')} ${getCurrencySymbol(theme.currency || 'INR (₹)') === '₹' ? 'INR' : ''}) *`}
+                  type="number"
+                  value={editingItem.price !== undefined ? editingItem.price.toString() : ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) || 0 })}
+                />
+              )}
             </div>
 
             <div className="space-y-1.5">

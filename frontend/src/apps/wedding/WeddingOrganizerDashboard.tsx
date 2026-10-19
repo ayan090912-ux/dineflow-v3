@@ -1419,9 +1419,6 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                                   {item.description || 'Banquet selection'}
                                 </p>
                               </div>
-                              <span className="text-xs font-mono text-amber-300 font-semibold shrink-0">
-                                ${Number(item.price || 0).toFixed(2)}
-                              </span>
                             </div>
                           ))}
                         </div>
@@ -1786,10 +1783,7 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
 
                         <div className="flex items-center gap-4 shrink-0 sm:self-center">
                           <div className="text-right">
-                            <p className="text-sm font-mono font-bold text-white">
-                              ${Number(order.totalAmount || 0).toFixed(2)}
-                            </p>
-                            <p className="text-[10px] text-white/40 font-mono">
+                            <p className="text-xs text-white/40 font-mono">
                               {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>
@@ -1840,9 +1834,9 @@ export const WeddingOrganizerDashboard: React.FC<WeddingOrganizerDashboardProps>
                       </p>
                     </div>
                     <div className="bg-[#12141d] border border-white/[0.08] rounded-2xl p-5">
-                      <p className="text-xs text-white/50">Total Bill Value</p>
+                      <p className="text-xs text-white/50">Total Courses Ordered</p>
                       <p className="text-2xl font-serif font-bold text-amber-300 mt-1 font-mono">
-                        ${Number(reports.totalAmount || 0).toFixed(2)}
+                        {reports.totalCourses || reports.totalOrders || 0}
                       </p>
                     </div>
                     <div className="bg-[#12141d] border border-white/[0.08] rounded-2xl p-5">

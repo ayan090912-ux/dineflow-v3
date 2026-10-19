@@ -702,7 +702,8 @@ function AppContent() {
         cleanPath.startsWith('/events/') ||
         cleanPath === '/event' ||
         cleanPath === '/events' ||
-        cleanPath.startsWith('/wedding/guest')
+        cleanPath.startsWith('/wedding/guest') ||
+        ((resolvedTenant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(resolvedTenant, 'weddings')) && tenantApp === 'CUSTOMER')
       ) {
         return <WeddingGuestApp />;
       }

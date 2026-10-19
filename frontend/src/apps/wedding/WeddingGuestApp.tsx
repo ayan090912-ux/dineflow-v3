@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { api } from '../../packages/api/client';
 import { PublicWeddingEventResponse, Order } from '../../packages/types';
-import { getCurrencySymbol } from '../../packages/utils/currency';
 import {
   Heart,
   Sparkles,
@@ -87,11 +86,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
   const [data, setData] = useState<PublicWeddingEventResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const currencySymbol = useMemo(
-    () => getCurrencySymbol(data?.restaurant?.currency || 'INR (₹)'),
-    [data?.restaurant?.currency]
-  );
 
   // Dietary filter state
   const [dietaryFilter, setDietaryFilter] = useState<'ALL' | 'VEG' | 'NON_VEG' | 'DRINKS'>('ALL');
@@ -460,12 +454,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
                             {item.description}
                           </p>
                         )}
-
-                        <div className="pt-1 flex items-center gap-3">
-                          <span className="font-serif font-bold text-[#91752b] text-sm">
-                            {currencySymbol}{item.price.toFixed(2)}
-                          </span>
-                        </div>
                       </div>
 
                       {/* Right Add Action / Thumbnail */}
@@ -509,9 +497,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-lg font-serif font-bold text-[#1e1912]">{customizingItem.name}</h3>
-                <p className="text-xs font-serif font-bold text-[#91752b] mt-0.5">
-                  {currencySymbol}{customizingItem.price.toFixed(2)}
-                </p>
               </div>
               <button
                 onClick={() => setCustomizingItem(null)}
@@ -565,7 +550,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
             >
               <span>Add to Dining Order</span>
               <span>•</span>
-              <span>{currencySymbol}{(customizingItem.price * itemQuantity).toFixed(2)}</span>
+              <span>Qty: {itemQuantity}</span>
             </button>
           </div>
         </div>
@@ -591,7 +576,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
             </div>
 
             <div className="flex items-center gap-2 font-serif font-bold text-sm text-[#e6c86a]">
-              <span>{currencySymbol}{cartSubtotal.toFixed(2)}</span>
+              <span>{totalCartCount} {totalCartCount === 1 ? 'Course' : 'Courses'}</span>
               <ChevronRight className="w-4 h-4 text-[#d4af37]" />
             </div>
           </button>
@@ -642,9 +627,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
                       {item.notes && (
                         <p className="text-[10px] text-[#877864] italic">Note: {item.notes}</p>
                       )}
-                      <p className="text-xs font-serif font-bold text-[#91752b] mt-0.5">
-                        {currencySymbol}{(item.price * item.quantity).toFixed(2)}
-                      </p>
                     </div>
 
                     <div className="flex items-center gap-2.5 bg-[#f5ede0] rounded-full px-2 py-0.5">
@@ -695,10 +677,10 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({ eventId: propE
                 </div>
               </div>
 
-              {/* Total Calculation */}
+              {/* Total Courses Selected */}
               <div className="border-t border-[#e5dcce] pt-3 flex items-center justify-between">
-                <span className="text-xs font-serif font-bold text-[#5e5140]">Total Course Price</span>
-                <span className="text-base font-serif font-bold text-[#91752b]">{currencySymbol}{cartSubtotal.toFixed(2)}</span>
+                <span className="text-xs font-serif font-bold text-[#5e5140]">Total Courses Selected</span>
+                <span className="text-sm font-serif font-bold text-[#91752b]">{totalCartCount} {totalCartCount === 1 ? 'course' : 'courses'}</span>
               </div>
             </div>
 

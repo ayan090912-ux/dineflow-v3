@@ -10,7 +10,6 @@ import {
   MenuItem,
   isModuleEnabled,
 } from '../../packages/types';
-import { getCurrencySymbol } from '../../packages/utils/currency';
 import { Modal } from '../../packages/ui/Modal';
 import { Button } from '../../packages/ui/Button';
 import { Badge } from '../../packages/ui/Badge';
@@ -103,10 +102,6 @@ export const COMMON_TIMEZONES = [
 ];
 
 export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, currentUser, addToast }) => {
-  const currencySymbol = useMemo(
-    () => getCurrencySymbol(currentRestaurant?.currency || 'INR (₹)'),
-    [currentRestaurant?.currency]
-  );
   const [events, setEvents] = useState<WeddingEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'SCHEDULED' | 'CLOSED' | 'PAUSED' | 'DRAFT' | 'COMPLETED'>('ALL');
@@ -737,7 +732,6 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
       readyToDeliver: readyCount,
       delivered: delivCount,
       totalOrders: orders.length,
-      totalRevenue: orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0),
     };
   }, [terminalOrders]);
 

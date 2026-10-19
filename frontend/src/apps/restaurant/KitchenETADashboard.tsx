@@ -845,7 +845,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
                     <div className="text-xs text-slate-400 flex items-center justify-between bg-[#0c0e14] p-2 rounded-lg border border-[#1e232e]">
                       <span>Submitted: <strong className="text-slate-200">{getElapsedMinutes(order.createdAt)} mins ago</strong></span>
-                      <span className="font-mono text-emerald-400 font-medium">₹{order.totalAmount.toFixed(2)}</span>
+                      {!(order.orderType === 'WEDDING_EVENT' || !!(order as any).eventId || restaurant?.businessType === 'WEDDING_ORDERING') && (
+                        <span className="font-mono text-emerald-400 font-medium">₹{order.totalAmount.toFixed(2)}</span>
+                      )}
                     </div>
 
                     {/* Dish Items list with check toggles */}
