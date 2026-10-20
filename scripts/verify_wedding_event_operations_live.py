@@ -20,7 +20,7 @@ import httpx
 from datetime import datetime, timezone, timedelta
 
 BASE_URL = "https://dinely.food"
-EXPECTED_COMMIT = "16410a2"
+EXPECTED_COMMIT = "1215e2c"
 
 def log_step(msg: str):
     print(f"\n[STEP] {msg}")

@@ -58,6 +58,7 @@ import {
   ChevronDown,
   Info,
 } from 'lucide-react';
+import { EventTableAssistanceTerminal } from '../wedding/EventTableAssistanceTerminal';
 
 export const cleanTableBadge = (tbl?: string): string => {
   if (!tbl) return '';
@@ -115,8 +116,8 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [viewMode, setViewMode] = useState<'terminal' | 'catalog'>('terminal');
   const [selectedEventId, setSelectedEventId] = useState<string>('');
 
-  // Terminal Sub-Views: 'orders' | 'tables' | 'delivery' | 'menu'
-  const [terminalView, setTerminalView] = useState<'orders' | 'tables' | 'delivery' | 'menu'>('orders');
+  // Terminal Sub-Views: 'orders' | 'tables' | 'delivery' | 'menu' | 'assistance'
+  const [terminalView, setTerminalView] = useState<'orders' | 'tables' | 'delivery' | 'menu' | 'assistance'>('orders');
   const [orderSubFilter, setOrderSubFilter] = useState<'ALL' | 'NEW' | 'PREPARING' | 'READY' | 'DELIVERED'>('ALL');
 
   // Terminal Active Event Data
@@ -1427,6 +1428,18 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             <Utensils className="w-3.5 h-3.5" />
             <span>Menu & Dishes ({menuItems.length})</span>
           </button>
+
+          <button
+            onClick={() => setTerminalView('assistance')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              terminalView === 'assistance'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#161c27]'
+            }`}
+          >
+            <Bell className="w-3.5 h-3.5 text-amber-400" />
+            <span>Table Assistance</span>
+          </button>
         </div>
 
         {/* Search & Actions */}
@@ -2174,6 +2187,21 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* OPERATIONAL VIEW 5: TABLE ASSISTANCE TERMINAL */}
+      {/* ========================================================================= */}
+      {terminalView === 'assistance' && currentEvent && (
+        <div className="space-y-4">
+          <EventTableAssistanceTerminal
+            restaurantId={currentRestaurant?.id || ''}
+            eventId={currentEvent.id}
+            event={currentEvent}
+            currentStaffName={currentUser?.name || 'Banquet Staff'}
+            onToast={(t, title, msg) => addToast?.({ type: t === 'warning' ? 'info' : t, title, message: msg })}
+          />
         </div>
       )}
 

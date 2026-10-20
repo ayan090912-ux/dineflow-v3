@@ -42,7 +42,7 @@ interface WeddingGuestAppProps {
 interface CartItem {
   itemId: string;
   name: string;
-  price: number;
+  price?: number;
   quantity: number;
   notes?: string;
   imageUrl?: string;
@@ -298,18 +298,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
-  const cartSubtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + (Number(item.price) || 0) * item.quantity, 0);
-  }, [cart]);
-
-  const cartTax = useMemo(() => {
-    return cartSubtotal * 0.05;
-  }, [cartSubtotal]);
-
-  const cartTotal = useMemo(() => {
-    return cartSubtotal + cartTax;
-  }, [cartSubtotal, cartTax]);
-
   // Open item customization dialog
   const handleOpenCustomize = (item: any) => {
     if (!item.isAvailable) return;
@@ -341,10 +329,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
   const handleConfirmAddToCart = () => {
     if (!customizingItem) return;
 
-    const effPrice = typeof customizingItem.price === 'number'
-      ? customizingItem.price
-      : parseFloat(customizingItem.price) || 0;
-
     setCart((prev) => {
       const existingIndex = prev.findIndex(
         (ci) => ci.itemId === customizingItem.id && (ci.notes || '') === (itemNote.trim() || '')
@@ -359,7 +343,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
         {
           itemId: customizingItem.id,
           name: customizingItem.name,
-          price: effPrice,
           quantity: itemQuantity,
           notes: itemNote.trim() || undefined,
           imageUrl: customizingItem.imageUrl,
@@ -418,7 +401,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
         items: cart.map((ci) => ({
           menuItemId: ci.itemId,
           name: ci.name,
-          price: typeof ci.price === 'number' ? ci.price : parseFloat(ci.price as any) || 0,
           quantity: ci.quantity,
           notes: ci.notes || '',
           targetDestination: ci.targetDestination || getFulfillmentStation(ci),
@@ -649,7 +631,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                 Active Order #{lastPersistedOrder.id.length > 10 ? lastPersistedOrder.id.slice(-6) : lastPersistedOrder.id}
               </p>
               <p className="text-[10px] text-amber-300 font-mono">
-                Table {cleanTableBadge(lastPersistedOrder.tableNumber)} • Total ₹{(lastPersistedOrder.totalAmount || 0).toFixed(2)}
+                Table {cleanTableBadge(lastPersistedOrder.tableNumber)} • Status: {lastPersistedOrder.kitchenStatus || lastPersistedOrder.status || 'PREPARING'}
               </p>
             </div>
           </div>
@@ -938,11 +920,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                             </p>
                           )}
 
-                          <div className="pt-1 flex items-center gap-2">
-                            <span className="font-mono font-bold text-xs text-[#9c7823]">
-                              ₹{typeof item.price === 'number' ? item.price.toFixed(2) : parseFloat(item.price || 0).toFixed(2)}
-                            </span>
-                          </div>
                         </div>
 
                         {/* Order / Add Action */}
@@ -1211,13 +1188,10 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
             <div className="p-4 border-b border-[#e5dcce] bg-[#f5efe4] flex items-center justify-between">
               <div>
                 <h3 className="font-serif font-bold text-sm text-[#1e1912]">{customizingItem.name}</h3>
-                <div className="flex items-center gap-2 mt-0.5">
+                <div className="mt-0.5">
                   <p className="text-[11px] text-[#786b59] font-serif italic">
                     {customizingItem.categoryName || 'Banquet Course'}
                   </p>
-                  <span className="text-[11px] font-mono font-bold text-[#b38b19]">
-                    ₹{(Number(customizingItem.price) || 0).toFixed(2)}
-                  </span>
                 </div>
               </div>
               <button
@@ -1328,9 +1302,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                       >
                         <div className="flex-1">
                           <h4 className="text-xs font-serif font-bold text-[#1e1912]">{item.name}</h4>
-                          <span className="text-[11px] font-mono font-bold text-[#9c7823]">
-                            ₹{((item.price || 0) * item.quantity).toFixed(2)}
-                          </span>
                           {item.notes && (
                             <p className="text-[10px] text-[#877864] italic">Note: {item.notes}</p>
                           )}
@@ -1353,22 +1324,6 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                         </div>
                       </div>
                     ))}
-                  </div>
-
-                  {/* Pricing Summary */}
-                  <div className="bg-[#f2ece2] rounded-2xl p-3.5 border border-[#e3d7c5] space-y-2">
-                    <div className="flex items-center justify-between text-xs text-[#6e604f] font-serif">
-                      <span>Subtotal</span>
-                      <span className="font-mono font-bold text-[#1e1912]">₹{cartSubtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-[#6e604f] font-serif">
-                      <span>Taxes & Service (GST 5%)</span>
-                      <span className="font-mono font-bold text-[#1e1912]">₹{cartTax.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm font-serif font-bold text-[#1e1912] border-t border-[#dfd2be] pt-2">
-                      <span>Estimated Total</span>
-                      <span className="font-mono font-black text-[#a17c24]">₹{cartTotal.toFixed(2)}</span>
-                    </div>
                   </div>
 
                   {/* Guest Name & Notes */}
@@ -1462,17 +1417,11 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                   TABLE {cleanTableBadge(placedOrder.tableNumber)}
                 </span>
               </div>
-              <div className="flex items-center justify-between border-b border-[#f0e8dc] pb-2.5">
+              <div className="flex items-center justify-between pt-0.5">
                 <span className="text-xs font-serif text-[#786956]">Preparation Status</span>
                 <span className="text-xs font-mono font-bold text-emerald-600 uppercase flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                   {placedOrder.kitchenStatus || placedOrder.status || 'PREPARING'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs font-serif text-[#786956]">Order Total</span>
-                <span className="font-mono font-bold text-sm text-[#9c7823]">
-                  ₹{(placedOrder.totalAmount || 0).toFixed(2)}
                 </span>
               </div>
             </div>

@@ -223,12 +223,13 @@ class TestWeddingE2ECompleteFlow:
             assert guest_data["event"]["hasBar"] is True
             assert guest_data["event"]["hasHookah"] is True
 
-            # Find items in guest menu
+            # Find items in guest menu - guests MUST NEVER see prices
             all_guest_items = []
             for c in guest_data["menu"]:
                 all_guest_items.extend(c["items"])
             guest_paneer = next(it for it in all_guest_items if it["id"] == new_item_id)
-            assert guest_paneer["price"] == 320.0
+            assert guest_paneer["price"] is None, "Guest menu items must never expose price"
+            assert all(it["price"] is None for it in all_guest_items), "All guest menu items must have price = None"
 
             # 4. Guest places order with Food + Bar + Hookah items
             order_id = f"ord-e2e-{uuid.uuid4().hex[:6]}"
@@ -246,21 +247,18 @@ class TestWeddingE2ECompleteFlow:
                     {
                         "menuItemId": new_item_id,
                         "name": "Truffle Paneer Tikka",
-                        "price": 320.0,
                         "quantity": 2,
                         "notes": "Extra spicy",
                     },
                     {
                         "menuItemId": env["item_cocktail"].id,
                         "name": "Signature Gold Cocktail",
-                        "price": 450.0,
                         "quantity": 1,
                         "isAlcoholic": True,
                     },
                     {
                         "menuItemId": env["item_shisha"].id,
                         "name": "Mint Double Apple Hookah",
-                        "price": 600.0,
                         "quantity": 1,
                     }
                 ],
@@ -270,17 +268,25 @@ class TestWeddingE2ECompleteFlow:
             assert place_order_resp.status_code in (200, 201), place_order_resp.text
             placed = place_order_resp.json()
 
-            # Accurate item and financial calculations
+            # Accurate item and financial calculations: Guest response hides financials
             expected_subtotal = (320.0 * 2) + 450.0 + 600.0  # 640 + 450 + 600 = 1690.0
             assert placed["id"] == order_id
             assert placed["eventId"] == event_id
             assert placed["tableNumber"] == "01"
-            assert placed["subtotal"] == expected_subtotal
-            assert placed["totalAmount"] >= expected_subtotal
+            assert placed["subtotal"] is None, "Guest order response must not expose subtotal"
+            assert placed["totalAmount"] is None, "Guest order response must not expose totalAmount"
+            assert all(it["price"] is None for it in placed["items"]), "Guest order items must not expose price"
             assert placed["kitchenStatus"] == "PENDING"
             assert placed["barStatus"] == "PENDING"
             assert placed["hookahStatus"] == "PENDING"
             assert placed["status"] == "PENDING"
+
+            # Internal accounting: Staff query retains legitimate catalog revenue and pricing
+            staff_ords_resp = await client.get(f"/api/v1/restaurants/{rest_id}/events/{event_id}/orders", headers=mgr_hdr)
+            assert staff_ords_resp.status_code == 200
+            staff_ord = next(o for o in staff_ords_resp.json() if o["id"] == order_id)
+            assert staff_ord["subtotal"] == expected_subtotal
+            assert staff_ord["totalAmount"] >= expected_subtotal
 
             # 5. Duplicate submission guard (rapid tap or retry with same key)
             dup_resp = await client.post("/api/v1/orders", json=order_payload)

@@ -525,6 +525,8 @@ async def update_wedding_event(
         ev.status = payload.status.strip().upper()
     if payload.isOrderingOpen is not None:
         ev.is_ordering_open = payload.isOrderingOpen
+        if payload.status is None:
+            ev.status = "ACTIVE" if payload.isOrderingOpen else "PAUSED"
     if payload.menuSelectionType is not None:
         ev.menu_selection_type = payload.menuSelectionType
     if payload.allowedCategoryIds is not None:
@@ -695,9 +697,14 @@ async def toggle_event_ordering(
             )
 
     ev.is_ordering_open = not ev.is_ordering_open
+    if ev.is_ordering_open:
+        ev.status = "ACTIVE"
+    else:
+        ev.status = "PAUSED"
     ev.updated_at = datetime.now(timezone.utc)
     await db.commit()
-    return {"status": "success", "isOrderingOpen": ev.is_ordering_open}
+    await db.refresh(ev)
+    return {"status": "success", "isOrderingOpen": ev.is_ordering_open, "status": ev.status}
 
 @router.get("/{restaurant_id}/events/{event_id}/readiness")
 async def get_event_readiness(
@@ -1129,7 +1136,7 @@ async def get_public_wedding_event(
                         "id": it.id,
                         "name": it.name,
                         "description": it.description or "",
-                        "price": float(it.price or 0.0),
+                        "price": None,
                         "imageUrl": it.image_url or "",
                         "isVegetarian": it.is_vegetarian,
                         "isAlcoholic": it.is_alcoholic,
@@ -1160,7 +1167,7 @@ async def get_public_wedding_event(
                         "id": it.id,
                         "name": it.name,
                         "description": it.description or "",
-                        "price": float(it.price or 0.0),
+                        "price": None,
                         "imageUrl": it.image_url or "",
                         "isVegetarian": it.is_vegetarian,
                         "isAlcoholic": it.is_alcoholic,

@@ -24,7 +24,7 @@ class OrderItemInputSchema(BaseModel):
     id: Optional[str] = None
     menuItemId: Optional[str] = None
     name: str
-    price: float
+    price: Optional[float] = None
     quantity: int = 1
     notes: Optional[str] = ""
     targetDestination: Optional[str] = "KITCHEN"
@@ -90,7 +90,7 @@ def resolve_item_station(it: Any) -> str:
 
     return "KITCHEN"
 
-def format_order_response(order: Order, station: Optional[str] = None) -> dict:
+def format_order_response(order: Order, station: Optional[str] = None, hide_financials: bool = False) -> dict:
     created_at_val = None
     if getattr(order, "created_at", None):
         try:
@@ -124,6 +124,23 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
     else:
         filtered_items = raw_items
 
+    if hide_financials:
+        subtotal_val = None
+        tax_amount_val = None
+        total_amount_val = None
+        tax_breakdown_val = None
+        sanitized_items = []
+        for it in filtered_items:
+            it_copy = dict(it) if isinstance(it, dict) else (it.copy() if hasattr(it, "copy") else dict(it))
+            it_copy["price"] = None
+            sanitized_items.append(it_copy)
+        filtered_items = sanitized_items
+    else:
+        subtotal_val = getattr(order, "subtotal", 0.0) or 0.0
+        tax_amount_val = getattr(order, "tax_amount", 0.0) or 0.0
+        total_amount_val = tot_amt
+        tax_breakdown_val = getattr(order, "tax_breakdown_json", []) or []
+
     is_event_order = (
         getattr(order, "order_type", "") in ["EVENT_ORDER", "WEDDING_EVENT"]
         or getattr(order, "event_id", None) is not None
@@ -156,10 +173,10 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
         "customer_name": cust_name,
         "customerName": cust_name,
         "notes": getattr(order, "notes", ""),
-        "subtotal": getattr(order, "subtotal", 0.0) or 0.0,
-        "tax_amount": getattr(order, "tax_amount", 0.0) or 0.0,
-        "total_amount": tot_amt,
-        "totalAmount": tot_amt,
+        "subtotal": subtotal_val,
+        "tax_amount": tax_amount_val,
+        "total_amount": total_amount_val,
+        "totalAmount": total_amount_val,
         "order_number": ord_num or "#ORD-1",
         "orderNumber": ord_num or "#ORD-1",
         "estimated_prep_time_minutes": prep_time_val,
@@ -168,7 +185,7 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
         "etaTargetTimestamp": eff_eta_val,
         "items": filtered_items,
         "items_json": filtered_items,
-        "tax_breakdown": getattr(order, "tax_breakdown_json", []) or [],
+        "tax_breakdown": tax_breakdown_val,
         "business_day_id": getattr(order, "business_day_id", None),
         "businessDayId": getattr(order, "business_day_id", None),
         "order_type": getattr(order, "order_type", "DINE_IN") or "DINE_IN",
@@ -595,7 +612,7 @@ async def create_order(
             existing_ord = res_existing.scalar_one_or_none()
             if existing_ord:
                 print(f"[ORDER_IDEMPOTENCY_HIT] Returning existing order {existing_ord.id} for key {candidate_order_id}")
-                return format_order_response(existing_ord)
+                return format_order_response(existing_ord, hide_financials=(is_wedding_event and not is_staff_caller))
             order_id = candidate_order_id
         else:
             order_id = f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
@@ -614,7 +631,7 @@ async def create_order(
             for cand in dup_res.scalars().all():
                 if cand.table_number == tbl_num or (tbl_id and cand.table_id == tbl_id):
                     print(f"[ORDER_RAPID_DUPLICATE_GUARD] Returning existing order {cand.id} to prevent double tap")
-                    return format_order_response(cand)
+                    return format_order_response(cand, hide_financials=(is_wedding_event and not is_staff_caller))
 
         # Query active OPEN business day for authoritative attribution
         query_bday = select(BusinessDay.id).where(
@@ -844,6 +861,8 @@ async def create_order(
         except Exception as ws_err:
             print("[WS_BROADCAST_NOTICE] order_created / table_updated:", ws_err)
 
+        if is_wedding_event and not is_staff_caller:
+            return format_order_response(new_order, hide_financials=True)
         return resp_data
     except HTTPException:
         raise
@@ -1468,12 +1487,19 @@ async def update_order_eta(
     return resp_data
 
 @router.get("/{order_id}")
-async def get_order_by_id(order_id: str, db: AsyncSession = Depends(get_db)):
+async def get_order_by_id(
+    order_id: str,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
     query = select(Order).where(Order.id == order_id)
     result = await db.execute(query)
     order = result.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    return format_order_response(order)
+    is_staff = caller.is_authenticated and (caller.role in ["OWNER", "RESTAURANT_OWNER", "WAITER", "CHEF", "BAR", "HOOKAH", "SHISHA", "MANAGER", "ADMIN"])
+    is_event = bool(order.event_id) or (order.order_type in ["EVENT_ORDER", "WEDDING_EVENT"])
+    hide_fin = is_event and not is_staff
+    return format_order_response(order, hide_financials=hide_fin)
 
 

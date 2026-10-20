@@ -283,7 +283,6 @@ class TestWeddingsPlatformLifecycle:
                     {
                         "menuItemId": order_item["id"],
                         "name": order_item["name"],
-                        "price": order_item["price"],
                         "quantity": 2,
                         "notes": "Extra spicy please",
                     }
@@ -299,7 +298,7 @@ class TestWeddingsPlatformLifecycle:
             assert created_order["orderType"] == "WEDDING_EVENT"
             assert created_order["eventId"] == event_id
             assert created_order["tableNumber"] == "VIP-1"
-            assert created_order["totalAmount"] > 0
+            assert created_order["totalAmount"] is None  # Guests must never see financial info
 
             # STEP 10: The order is committed and appears on the correct kitchen terminal
             caterer_kitchen_token = create_user_jwt(

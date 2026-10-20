@@ -220,16 +220,22 @@ def get_authoritative_event_status(
     if e_dt and eval_now > e_dt:
         return "CLOSED"
 
-    # If scheduled and start time hasn't arrived, status is SCHEDULED
-    if c_status == "SCHEDULED" and s_dt and eval_now < s_dt:
+    # If staff has explicitly opened live ordering, status is ACTIVE
+    if ordering_open and c_status == "ACTIVE":
+        return "ACTIVE"
+
+    # If staff has explicitly paused ordering, status is PAUSED
+    if not ordering_open and c_status == "PAUSED":
+        return "PAUSED"
+
+    # If start time hasn't arrived yet, status is SCHEDULED unless staff explicitly activated it
+    if s_dt and eval_now < s_dt:
+        if ordering_open and (c_status == "ACTIVE" or is_auto):
+            return "ACTIVE"
         return "SCHEDULED"
 
-    # If scheduled with auto-activation and start time has arrived, auto-activate to ACTIVE
-    if c_status == "SCHEDULED" and is_auto and s_dt and eval_now >= s_dt:
-        return "ACTIVE" if ordering_open else "PAUSED"
-
     # Within active service window
-    if not ordering_open or c_status == "PAUSED":
+    if not ordering_open:
         return "PAUSED"
 
     return "ACTIVE"

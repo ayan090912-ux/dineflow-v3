@@ -1214,8 +1214,12 @@ async def update_workspace_event(
         ev.status = payload.status.strip().upper()
     if payload.isOrderingOpen is not None:
         ev.is_ordering_open = payload.isOrderingOpen
+        if payload.status is None:
+            ev.status = "ACTIVE" if payload.isOrderingOpen else "PAUSED"
     elif payload.orderingEnabled is not None:
         ev.is_ordering_open = payload.orderingEnabled
+        if payload.status is None:
+            ev.status = "ACTIVE" if payload.orderingEnabled else "PAUSED"
     if payload.menuSelectionType is not None:
         ev.menu_selection_type = payload.menuSelectionType.strip().upper()
     if payload.allowedCategoryIds is not None:
@@ -1291,13 +1295,20 @@ async def toggle_workspace_ordering(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Primary event record not found.")
 
     ev.is_ordering_open = not ev.is_ordering_open
+    if ev.is_ordering_open:
+        ev.status = "ACTIVE"
+    else:
+        ev.status = "PAUSED"
     ev.updated_at = datetime.now(timezone.utc)
+    ws.updated_at = datetime.now(timezone.utc)
     await db.commit()
+    await db.refresh(ev)
 
     return {
         "status": "success",
         "isOrderingOpen": ev.is_ordering_open,
         "orderingEnabled": ev.is_ordering_open,
+        "eventStatus": ev.status,
         "message": f"Ordering {'opened' if ev.is_ordering_open else 'paused'} for this wedding."
     }
 
