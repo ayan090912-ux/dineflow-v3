@@ -14,7 +14,10 @@ import { realtimeBus } from '../realtime';
 export class OrderClient {
   constructor(private base: BaseApiClient) {}
 
-  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean; businessDayId?: string }): Promise<Order[]> {
+  async getOrders(
+    restaurantId?: string,
+    options?: { station?: 'KITCHEN' | 'BAR' | 'HOOKAH' | string; activeOnly?: boolean; businessDayId?: string; eventId?: string }
+  ): Promise<Order[]> {
     const targetId = this.base.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
@@ -30,6 +33,9 @@ export class OrderClient {
       if (options?.businessDayId) {
         params.append('business_day_id', options.businessDayId);
       }
+      if (options?.eventId) {
+        params.append('event_id', options.eventId);
+      }
       const qs = params.toString();
       if (qs) {
         endpoint += `?${qs}`;
@@ -41,7 +47,7 @@ export class OrderClient {
       );
       if (Array.isArray(rawOrds)) {
         const remoteOrds: Order[] = rawOrds.map((data: any) => normalizeOrder(data));
-        if (!options?.station) {
+        if (!options?.station && !options?.eventId) {
           this.base.orders = this.base.orders.filter((o) => o.restaurantId !== targetId).concat(remoteOrds);
           this.base.saveDatabase();
         }
@@ -52,7 +58,21 @@ export class OrderClient {
     }
 
     this.base.loadDatabase();
-    return this.base.orders.filter((o) => o.restaurantId === targetId).map(normalizeOrder);
+    return this.base.orders
+      .filter((o) => {
+        if (o.restaurantId !== targetId) return false;
+        if (options?.eventId && o.eventId !== options.eventId) return false;
+        return true;
+      })
+      .map(normalizeOrder);
+  }
+
+  async getEventOrders(
+    eventId: string,
+    restaurantId?: string,
+    options?: { station?: string; activeOnly?: boolean }
+  ): Promise<Order[]> {
+    return this.getOrders(restaurantId, { ...options, eventId });
   }
 
   async getCustomerOrders(restaurantId?: string, tableId?: string, tableSessionId?: string): Promise<Order[]> {
@@ -656,25 +676,21 @@ export class OrderClient {
     return order;
   }
 
-  async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
+  async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
     const order = this.base.orders.find((o) => o.id === orderId);
     const orderStatus = status === 'READY' ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : undefined);
 
-    try {
-      await this.base.executeProtectedRequest<any>(
-        `/orders/${encodeURIComponent(orderId)}/status`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({
-            status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
-            kitchenStatus: status,
-          }),
-        },
-        'KITCHEN'
-      );
-    } catch (e) {
-      console.warn('API PUT for updateKitchenStatus failed:', e);
-    }
+    await this.base.executeProtectedRequest<any>(
+      `/orders/${encodeURIComponent(orderId)}/status`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+          kitchenStatus: status,
+        }),
+      },
+      scope
+    );
 
     if (order) {
       order.kitchenStatus = status;
@@ -683,7 +699,8 @@ export class OrderClient {
       }
 
       const barReady = !order.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
-      if (status === 'READY' && barReady) {
+      const hookahReady = !order.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
+      if (status === 'READY' && barReady && hookahReady) {
         order.status = 'READY';
         order.readyAt = new Date().toISOString();
       } else if (status === 'PREPARING' || status === 'ACCEPTED') {
@@ -715,25 +732,21 @@ export class OrderClient {
     return order;
   }
 
-  async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
+  async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
     const order = this.base.orders.find((o) => o.id === orderId);
     const orderStatus = status === 'READY' ? 'READY' : (order?.status || 'PREPARING');
 
-    try {
-      await this.base.executeProtectedRequest<any>(
-        `/orders/${encodeURIComponent(orderId)}/status`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({
-            status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
-            barStatus: status,
-          }),
-        },
-        'BAR'
-      );
-    } catch (e) {
-      console.warn('API PUT for updateBarStatus failed:', e);
-    }
+    await this.base.executeProtectedRequest<any>(
+      `/orders/${encodeURIComponent(orderId)}/status`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+          barStatus: status,
+        }),
+      },
+      scope
+    );
 
     if (order) {
       order.barStatus = status;
@@ -742,7 +755,8 @@ export class OrderClient {
       }
 
       const kitchenReady = !order.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
-      if (status === 'READY' && kitchenReady) {
+      const hookahReady = !order.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
+      if (status === 'READY' && kitchenReady && hookahReady) {
         order.status = 'READY';
         order.readyAt = new Date().toISOString();
       } else if (status === 'PREPARING' || status === 'ACCEPTED') {
@@ -774,25 +788,21 @@ export class OrderClient {
     return order;
   }
 
-  async updateHookahStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
+  async updateHookahStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
     const order = this.base.orders.find((o) => o.id === orderId);
     const orderStatus = status === 'READY' ? 'READY' : (order?.status || 'PREPARING');
 
-    try {
-      await this.base.executeProtectedRequest<any>(
-        `/orders/${encodeURIComponent(orderId)}/status`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({
-            status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
-            hookahStatus: status,
-          }),
-        },
-        'HOOKAH'
-      );
-    } catch (e) {
-      console.warn('API PUT for updateHookahStatus failed:', e);
-    }
+    await this.base.executeProtectedRequest<any>(
+      `/orders/${encodeURIComponent(orderId)}/status`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+          hookahStatus: status,
+        }),
+      },
+      scope
+    );
 
     if (order) {
       order.hookahStatus = status;

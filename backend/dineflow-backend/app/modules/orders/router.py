@@ -437,9 +437,11 @@ async def create_order(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Item '{m_rec.name}' is currently unavailable or sold out."
                     )
-                if m_rec.target_destination == "HOOKAH":
+                m_dest = (getattr(m_rec, "target_destination", None) or "").upper()
+                m_name = (m_rec.name or "").lower()
+                if m_dest == "HOOKAH" or "hookah" in m_name or "shisha" in m_name:
                     station = "HOOKAH"
-                elif m_rec.target_destination == "BAR" or m_rec.is_alcoholic:
+                elif m_dest == "BAR" or m_rec.is_alcoholic or any(k in m_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda")):
                     station = "BAR"
                 else:
                     station = "KITCHEN"
@@ -453,7 +455,14 @@ async def create_order(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Item '{i.name or i.menuItemId or i.id}' is not found on the menu."
                     )
-                station = i.targetDestination or "KITCHEN"
+                p_dest = (i.targetDestination or "").upper()
+                p_name = (i.name or "").lower()
+                if p_dest == "HOOKAH" or "hookah" in p_name or "shisha" in p_name:
+                    station = "HOOKAH"
+                elif p_dest == "BAR" or i.isAlcoholic or any(k in p_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda")):
+                    station = "BAR"
+                else:
+                    station = p_dest or "KITCHEN"
                 is_alc = bool(i.isAlcoholic)
                 auth_price = float(i.price or 0.0)
                 auth_name = i.name
@@ -904,6 +913,9 @@ async def get_restaurant_orders(
         if business_day_id:
             clean_bday_id = business_day_id.strip()
             query = query.where(Order.business_day_id == clean_bday_id)
+        elif event_id:
+            # Events operate independently of restaurant POS business day shifts
+            pass
         else:
             # Check current open business day for active shift scoping
             open_bday_res = await db.execute(
@@ -951,7 +963,7 @@ async def get_restaurant_orders(
             bar_subq = select(OrderItem.order_id).where(
                 (OrderItem.target_destination == "BAR")
             ).scalar_subquery()
-            query = query.where(Order.id.in_(bar_subq))
+            query = query.where(or_(Order.id.in_(bar_subq), Order.bar_status.isnot(None)))
             if active_only:
                 query = query.where(
                     Order.bar_status.in_(["PENDING", "PREPARING", "READY"]),
@@ -962,7 +974,7 @@ async def get_restaurant_orders(
             hookah_subq = select(OrderItem.order_id).where(
                 (OrderItem.target_destination == "HOOKAH")
             ).scalar_subquery()
-            query = query.where(Order.id.in_(hookah_subq))
+            query = query.where(or_(Order.id.in_(hookah_subq), Order.hookah_status.isnot(None)))
             if active_only:
                 query = query.where(
                     Order.hookah_status.in_(["PENDING", "PREPARING", "READY"]),
@@ -1091,7 +1103,10 @@ async def update_order_status(
 
     # Station-specific mutation role authorization
     if payload.hookahStatus:
-        allowed_hookah_roles = ["HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN"]
+        allowed_hookah_roles = [
+            "HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
+            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
+        ]
         if not caller.is_admin and caller_role not in allowed_hookah_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1100,7 +1115,10 @@ async def update_order_status(
         order.hookah_status = payload.hookahStatus
 
     if payload.barStatus:
-        allowed_bar_roles = ["BAR", "BARTENDER", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN"]
+        allowed_bar_roles = [
+            "BAR", "BARTENDER", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
+            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
+        ]
         if not caller.is_admin and caller_role not in allowed_bar_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1109,7 +1127,10 @@ async def update_order_status(
         order.bar_status = payload.barStatus
 
     if payload.kitchenStatus:
-        allowed_kitchen_roles = ["KITCHEN", "CHEF", "COOK", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN"]
+        allowed_kitchen_roles = [
+            "KITCHEN", "CHEF", "COOK", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
+            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
+        ]
         if not caller.is_admin and caller_role not in allowed_kitchen_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1123,9 +1144,11 @@ async def update_order_status(
     has_h_items = False
     for it in (order.items_json or []):
         dest = (it.get("targetDestination") or it.get("target_destination") or "").upper()
-        if dest == "HOOKAH":
+        cat = (it.get("categoryName") or it.get("category") or "").lower()
+        it_name = (it.get("name") or "").lower()
+        if dest == "HOOKAH" or "hookah" in cat or "shisha" in cat or "hookah" in it_name or "shisha" in it_name:
             has_h_items = True
-        elif dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True:
+        elif dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True or any(k in cat for k in ("bar", "cocktail", "wine", "beer", "beverage", "drink")):
             has_b_items = True
         else:
             has_k_items = True

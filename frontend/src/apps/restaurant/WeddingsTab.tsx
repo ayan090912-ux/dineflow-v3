@@ -47,6 +47,9 @@ import {
   RefreshCw,
   TableProperties,
   Flame,
+  Wine,
+  Bell,
+  Utensils,
   Truck,
   Check,
   Radio,
@@ -153,6 +156,11 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [formEstimatedGuestCount, setFormEstimatedGuestCount] = useState(100);
   const [formTableCount, setFormTableCount] = useState(10);
   const [formNotes, setFormNotes] = useState('');
+  const [formHasFood, setFormHasFood] = useState(true);
+  const [formHasBar, setFormHasBar] = useState(false);
+  const [formHasHookah, setFormHasHookah] = useState(false);
+  const [formHasTableAssistance, setFormHasTableAssistance] = useState(true);
+  const [formAlcoholPolicyNotes, setFormAlcoholPolicyNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   // Wizard table live edit state for Step 3
@@ -476,6 +484,11 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     setFormEstimatedGuestCount(100);
     setFormTableCount(10);
     setFormNotes('');
+    setFormHasFood(true);
+    setFormHasBar(Boolean(currentRestaurant?.has_bar));
+    setFormHasHookah(Boolean(currentRestaurant?.has_hookah));
+    setFormHasTableAssistance(true);
+    setFormAlcoholPolicyNotes('');
     setIsWizardOpen(true);
   };
 
@@ -504,6 +517,11 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     setFormEstimatedGuestCount(ev.estimatedGuestCount || 100);
     setFormTableCount(ev.tableCount || 10);
     setFormNotes(ev.notes || '');
+    setFormHasFood(ev.hasFood !== false);
+    setFormHasBar(Boolean(ev.hasBar));
+    setFormHasHookah(Boolean(ev.hasHookah));
+    setFormHasTableAssistance(ev.hasTableAssistance !== false);
+    setFormAlcoholPolicyNotes(ev.alcoholPolicyNotes || '');
 
     if (currentRestaurant?.id) {
       setLoadingWizardTables(true);
@@ -631,6 +649,11 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
         estimatedGuestCount: Number(formEstimatedGuestCount) || 100,
         tableCount: Math.max(1, Number(formTableCount) || 10),
         notes: formNotes.trim(),
+        hasFood: formHasFood,
+        hasBar: formHasBar,
+        hasHookah: formHasHookah,
+        hasTableAssistance: formHasTableAssistance,
+        alcoholPolicyNotes: formAlcoholPolicyNotes.trim(),
       };
 
       if (editingEventId) {
@@ -2182,6 +2205,110 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                     <div className="font-bold text-xs">Custom Curated Selection</div>
                     <div className="text-[10px] mt-0.5">Limit dining to specific dishes</div>
                   </button>
+                </div>
+              </div>
+
+              {/* Event Service Stations Configuration */}
+              <div className="bg-[#10141d] p-3.5 rounded-xl border border-[#20293b] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white">Event Service Stations & Terminals</span>
+                  <span className="text-[10px] text-slate-400">Controls guest QR tabs & staff queues</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Food Station */}
+                  <div
+                    onClick={() => setFormHasFood(!formHasFood)}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      formHasFood
+                        ? 'border-amber-500 bg-amber-500/10 text-white'
+                        : 'border-[#20293b] bg-[#0c1017] text-slate-400'
+                    }`}
+                  >
+                    <Utensils className={`w-4 h-4 mt-0.5 ${formHasFood ? 'text-amber-400' : 'text-slate-500'}`} />
+                    <div className="flex-1">
+                      <div className="font-bold text-xs flex items-center justify-between">
+                        <span>Food Menu</span>
+                        <Badge variant={formHasFood ? 'success' : 'neutral'} className="text-[9px]">
+                          {formHasFood ? 'Enabled' : 'Disabled'}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Kitchen KDS orders & courses</p>
+                    </div>
+                  </div>
+
+                  {/* Bar Station */}
+                  <div
+                    onClick={() => {
+                      if (!currentRestaurant?.has_bar && !formHasBar) {
+                        if (addToast) addToast({ type: 'info', title: 'Bar License Notice', message: 'Enabling Bar service. Ensure venue holds appropriate liquor licensing.' });
+                      }
+                      setFormHasBar(!formHasBar);
+                    }}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      formHasBar
+                        ? 'border-purple-500 bg-purple-500/10 text-white'
+                        : 'border-[#20293b] bg-[#0c1017] text-slate-400'
+                    }`}
+                  >
+                    <Wine className={`w-4 h-4 mt-0.5 ${formHasBar ? 'text-purple-400' : 'text-slate-500'}`} />
+                    <div className="flex-1">
+                      <div className="font-bold text-xs flex items-center justify-between">
+                        <span>Bar & Drinks</span>
+                        <Badge variant={formHasBar ? 'brand' : 'neutral'} className="text-[9px]">
+                          {formHasBar ? 'Enabled' : 'Disabled'}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Cocktails, wine & Bar Terminal queue</p>
+                    </div>
+                  </div>
+
+                  {/* Hookah / Shisha Station */}
+                  <div
+                    onClick={() => {
+                      if (!currentRestaurant?.has_hookah && !formHasHookah) {
+                        if (addToast) addToast({ type: 'info', title: 'Hookah Lounge Notice', message: 'Enabling Hookah lounge station. Ensure venue outdoor lounge policies permit shisha service.' });
+                      }
+                      setFormHasHookah(!formHasHookah);
+                    }}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      formHasHookah
+                        ? 'border-orange-500 bg-orange-500/10 text-white'
+                        : 'border-[#20293b] bg-[#0c1017] text-slate-400'
+                    }`}
+                  >
+                    <Flame className={`w-4 h-4 mt-0.5 ${formHasHookah ? 'text-orange-400' : 'text-slate-500'}`} />
+                    <div className="flex-1">
+                      <div className="font-bold text-xs flex items-center justify-between">
+                        <span>Hookah & Shisha</span>
+                        <Badge variant={formHasHookah ? 'warning' : 'neutral'} className="text-[9px]">
+                          {formHasHookah ? 'Enabled' : 'Disabled'}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Shisha flavors & charcoal queue</p>
+                    </div>
+                  </div>
+
+                  {/* Table Assistance */}
+                  <div
+                    onClick={() => setFormHasTableAssistance(!formHasTableAssistance)}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      formHasTableAssistance
+                        ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                        : 'border-[#20293b] bg-[#0c1017] text-slate-400'
+                    }`}
+                  >
+                    <Bell className={`w-4 h-4 mt-0.5 ${formHasTableAssistance ? 'text-emerald-400' : 'text-slate-500'}`} />
+                    <div className="flex-1">
+                      <div className="font-bold text-xs flex items-center justify-between">
+                        <span>Table Assistance</span>
+                        <Badge variant={formHasTableAssistance ? 'success' : 'neutral'} className="text-[9px]">
+                          {formHasTableAssistance ? 'Enabled' : 'Disabled'}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Plates, cutlery, water & waiter call</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

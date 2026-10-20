@@ -40,6 +40,8 @@ import { Button, Card, Badge, Modal, Input, DinelyLogo } from '../../packages/ui
 import { api } from '../../packages/api/client';
 import { realtimeBus } from '../../packages/api/realtime';
 import { EventTableAssistanceTerminal } from './EventTableAssistanceTerminal';
+import { EventBarTerminal } from './EventBarTerminal';
+import { EventHookahTerminal } from './EventHookahTerminal';
 import {
   WeddingEvent,
   EventTable,
@@ -255,7 +257,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
       setLoadingData(true);
       const [fetchedTables, fetchedOrders, fetchedMenu] = await Promise.all([
         selectedEventId ? api.getEventTables(restaurantId, selectedEventId) : Promise.resolve([]),
-        api.getOrders(restaurantId),
+        selectedEventId ? api.getOrders(restaurantId, { eventId: selectedEventId }) : api.getOrders(restaurantId),
         api.getMenuItems(restaurantId),
       ]);
 
@@ -1269,102 +1271,32 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
 
           {/* TAB 7: EVENT BAR TERMINAL */}
           {activeTab === 'bar' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">
-                    <Wine className="w-5 h-5 text-purple-400" />
-                    Event Bar & Beverage Station
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Live drink preparation queue for banquet tables. Zero beverage prices.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {eventOrders
-                  .filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR') && o.status !== 'COMPLETED' && o.status !== 'DELIVERED')
-                  .map((order) => {
-                    const barItems = order.items.filter((i) => getFulfillmentStation(i) === 'BAR');
-                    return (
-                      <Card key={order.id} className="p-4 rounded-2xl bg-[#12151f] border border-purple-500/30 space-y-3">
-                        <div className="flex items-center justify-between border-b border-[#1f2536] pb-2">
-                          <span className="font-bold text-sm text-purple-300">Table {cleanTableBadge(order.tableNumber)}</span>
-                          <span className="text-xs font-mono text-slate-400">#{order.id.slice(-6)}</span>
-                        </div>
-                        <div className="space-y-1">
-                          {barItems.map((bi, idx) => (
-                            <div key={idx} className="text-xs text-white font-medium">
-                              • {bi.quantity}x {bi.name}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="pt-2 flex justify-end">
-                          <Button
-                            size="sm"
-                            variant="brand"
-                            onClick={() => handleAdvanceBarStatus(order.id, 'READY')}
-                            className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold"
-                          >
-                            Drinks Ready ✓
-                          </Button>
-                        </div>
-                      </Card>
-                    );
-                  })}
-              </div>
-            </div>
+            <EventBarTerminal
+              restaurantId={restaurantId}
+              eventId={selectedEventId}
+              event={currentEvent}
+              orders={eventOrders}
+              menuItems={menuItems}
+              currentStaffName={currentUser?.name || currentUser?.email || 'Bartender'}
+              onUpdateStatus={handleAdvanceBarStatus}
+              onRefresh={loadEventScopedData}
+              onToast={addToast}
+            />
           )}
 
           {/* TAB 8: EVENT HOOKAH TERMINAL */}
           {activeTab === 'hookah' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">
-                    <Flame className="w-5 h-5 text-amber-400" />
-                    Event Hookah & Shisha Lounge Station
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Live hookah and charcoal prep queue for event guests. Zero monetary totals.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {eventOrders
-                  .filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'HOOKAH') && o.status !== 'COMPLETED' && o.status !== 'DELIVERED')
-                  .map((order) => {
-                    const hookahItems = order.items.filter((i) => getFulfillmentStation(i) === 'HOOKAH');
-                    return (
-                      <Card key={order.id} className="p-4 rounded-2xl bg-[#12151f] border border-amber-500/30 space-y-3">
-                        <div className="flex items-center justify-between border-b border-[#1f2536] pb-2">
-                          <span className="font-bold text-sm text-amber-300">Table {cleanTableBadge(order.tableNumber)}</span>
-                          <span className="text-xs font-mono text-slate-400">#{order.id.slice(-6)}</span>
-                        </div>
-                        <div className="space-y-1">
-                          {hookahItems.map((hi, idx) => (
-                            <div key={idx} className="text-xs text-white font-medium">
-                              • {hi.quantity}x {hi.name}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="pt-2 flex justify-end">
-                          <Button
-                            size="sm"
-                            variant="brand"
-                            onClick={() => handleAdvanceHookahStatus(order.id, 'READY')}
-                            className="text-xs bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold"
-                          >
-                            Hookah Ready ✓
-                          </Button>
-                        </div>
-                      </Card>
-                    );
-                  })}
-              </div>
-            </div>
+            <EventHookahTerminal
+              restaurantId={restaurantId}
+              eventId={selectedEventId}
+              event={currentEvent}
+              orders={eventOrders}
+              menuItems={menuItems}
+              currentStaffName={currentUser?.name || currentUser?.email || 'Hookah Staff'}
+              onUpdateStatus={handleAdvanceHookahStatus}
+              onRefresh={loadEventScopedData}
+              onToast={addToast}
+            />
           )}
 
           {/* TAB 9: EVENT STAFF & ROLES */}

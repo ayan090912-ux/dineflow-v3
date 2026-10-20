@@ -771,10 +771,28 @@ export function getFulfillmentStation(item: {
   if (dest === 'BAR' || item.isAlcoholic === true) {
     return 'BAR';
   }
-  const cat = (item.category || '').toLowerCase();
+  const cat = (item.category || item.barCategory || '').toLowerCase();
   const name = (item.name || '').toLowerCase();
   if (cat.includes('hookah') || cat.includes('shisha') || name.includes('hookah') || name.includes('shisha')) {
     return 'HOOKAH';
+  }
+  if (
+    cat.includes('bar') ||
+    cat.includes('cocktail') ||
+    cat.includes('wine') ||
+    cat.includes('drink') ||
+    cat.includes('beverage') ||
+    cat.includes('beer') ||
+    cat.includes('liquor') ||
+    name.includes('cocktail') ||
+    name.includes('mocktail') ||
+    name.includes('wine') ||
+    name.includes('beer') ||
+    name.includes('whiskey') ||
+    name.includes('vodka') ||
+    name.includes('mojito')
+  ) {
+    return 'BAR';
   }
   return 'KITCHEN';
 }

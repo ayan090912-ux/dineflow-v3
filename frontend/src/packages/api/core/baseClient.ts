@@ -475,11 +475,13 @@ export class BaseApiClient {
       if (!token && typeof window !== 'undefined') {
         token = localStorage.getItem('dinely_auth_token') ||
                 localStorage.getItem(`dinely_staff_token_${targetScope.toLowerCase()}`) ||
+                localStorage.getItem('dinely_staff_token_staff') ||
                 this.currentTokensByScope[targetScope]?.accessToken ||
+                this.currentTokensByScope['STAFF']?.accessToken ||
                 this.currentTokensByScope['OWNER']?.accessToken || null;
       }
 
-      const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'].includes(targetScope);
+      const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope);
       if (!isStaffScope && token && (token.startsWith('df_jwt_') || token.startsWith('df_ref_'))) {
         token = null;
       }

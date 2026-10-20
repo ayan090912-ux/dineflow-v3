@@ -461,6 +461,10 @@ async def update_wedding_event(
     if not ev:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
+    r_stmt = select(Restaurant).where(Restaurant.id == canonical_id)
+    r_res = await db.execute(r_stmt)
+    rest = r_res.scalar_one_or_none()
+
     if payload.title is not None:
         ev.title = payload.title.strip()
     if payload.coupleNames is not None:
@@ -1065,9 +1069,25 @@ async def get_public_wedding_event(
     has_hookah = getattr(ev, "has_hookah", False) if getattr(ev, "has_hookah", None) is not None else False
     has_assistance = getattr(ev, "has_table_assistance", True) if getattr(ev, "has_table_assistance", None) is not None else True
 
+    cat_name_map = {c.id: (c.name or "").lower() for c in categories}
+
+    def _resolve_item_destination(it: MenuItem) -> str:
+        dest = (getattr(it, "target_destination", None) or "").upper()
+        if dest in ("BAR", "HOOKAH", "KITCHEN"):
+            return dest
+        c_name = cat_name_map.get(it.category_id, "")
+        it_name = (it.name or "").lower()
+        if "hookah" in c_name or "shisha" in c_name or "hookah" in it_name or "shisha" in it_name:
+            return "HOOKAH"
+        if bool(it.is_alcoholic) or any(k in c_name for k in ("bar", "cocktail", "wine", "beer", "beverage", "drink")):
+            return "BAR"
+        if any(k in it_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "soda")):
+            return "BAR"
+        return "KITCHEN"
+
     def _item_allowed_by_station(it: MenuItem) -> bool:
-        dest = getattr(it, "target_destination", None) or ("BAR" if it.is_alcoholic else "KITCHEN")
-        if dest == "BAR" or it.is_alcoholic:
+        dest = _resolve_item_destination(it)
+        if dest == "BAR":
             return has_bar
         if dest == "HOOKAH":
             return has_hookah
@@ -1102,7 +1122,7 @@ async def get_public_wedding_event(
                         "isVegetarian": it.is_vegetarian,
                         "isAlcoholic": it.is_alcoholic,
                         "isAvailable": it.is_available,
-                        "targetDestination": getattr(it, "target_destination", None) or ("BAR" if it.is_alcoholic else "KITCHEN"),
+                        "targetDestination": _resolve_item_destination(it),
                         "dietaryType": "NON_VEG" if not it.is_vegetarian else (getattr(it, "dietary_type", "VEG") or "VEG"),
                         "categoryName": c.name,
                         "categoryId": c.id,
@@ -1133,7 +1153,7 @@ async def get_public_wedding_event(
                         "isVegetarian": it.is_vegetarian,
                         "isAlcoholic": it.is_alcoholic,
                         "isAvailable": it.is_available,
-                        "targetDestination": getattr(it, "target_destination", None) or ("BAR" if it.is_alcoholic else "KITCHEN"),
+                        "targetDestination": _resolve_item_destination(it),
                         "dietaryType": "NON_VEG" if not it.is_vegetarian else (getattr(it, "dietary_type", "VEG") or "VEG"),
                         "categoryName": "Event Menu",
                         "categoryId": "event-specials",
@@ -1325,6 +1345,8 @@ async def list_public_event_assistance_by_table(
 # ==========================================
 
 @router.get("/{restaurant_id}/events/{event_id}/assistance")
+@public_router.get("/{restaurant_id}/events/{event_id}/assistance")
+@public_router.get("/restaurants/{restaurant_id}/events/{event_id}/assistance")
 async def list_event_assistance_requests(
     restaurant_id: str,
     event_id: str,
@@ -1384,6 +1406,8 @@ async def list_event_assistance_requests(
     }
 
 @router.patch("/{restaurant_id}/events/{event_id}/assistance/{request_id}/status")
+@public_router.patch("/{restaurant_id}/events/{event_id}/assistance/{request_id}/status")
+@public_router.patch("/restaurants/{restaurant_id}/events/{event_id}/assistance/{request_id}/status")
 async def update_event_assistance_request_status(
     restaurant_id: str,
     event_id: str,

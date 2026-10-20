@@ -322,7 +322,8 @@ async def require_tenant_staff_or_owner(
         allowed_roles=[
             "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
             "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN",
-            "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER"
+            "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER",
+            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
         ],
         caller=caller,
         db=db

@@ -6,6 +6,7 @@ import {
   Order,
   EventAssistanceRequest,
   EventAssistanceRequestItem,
+  getFulfillmentStation,
 } from '../../packages/types';
 import {
   Heart,
@@ -329,8 +330,8 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
           quantity: itemQuantity,
           notes: itemNote.trim() || undefined,
           imageUrl: customizingItem.imageUrl,
-          targetDestination: customizingItem.targetDestination || (customizingItem.isAlcoholic ? 'BAR' : 'KITCHEN'),
-          isAlcoholic: customizingItem.isAlcoholic,
+          targetDestination: customizingItem.targetDestination || getFulfillmentStation(customizingItem),
+          isAlcoholic: Boolean(customizingItem.isAlcoholic),
         },
       ];
     });
@@ -387,7 +388,8 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
           price: 0.0,
           quantity: ci.quantity,
           notes: ci.notes || '',
-          targetDestination: ci.targetDestination,
+          targetDestination: ci.targetDestination || getFulfillmentStation(ci),
+          isAlcoholic: Boolean(ci.isAlcoholic),
         })),
         notes: guestNotes.trim()
           ? `[${data.event.eventType || 'Event'} Banquet] ${guestNotes.trim()}`
@@ -777,18 +779,38 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
         {/* ========================================================================= */}
         {displayedCategories.length === 0 ? (
           <div className="py-14 text-center bg-white/70 rounded-2xl border border-[#ebe0cf] p-6 space-y-3">
-            <div className="w-10 h-10 rounded-full bg-amber-100/60 text-amber-700 flex items-center justify-center mx-auto">
-              <Utensils className="w-5 h-5" />
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto ${
+              activeSection === 'DRINKS'
+                ? 'bg-purple-100 text-purple-700'
+                : activeSection === 'HOOKAH'
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-amber-100/60 text-amber-700'
+            }`}>
+              {activeSection === 'DRINKS' ? (
+                <Wine className="w-5 h-5" />
+              ) : activeSection === 'HOOKAH' ? (
+                <Flame className="w-5 h-5" />
+              ) : (
+                <Utensils className="w-5 h-5" />
+              )}
             </div>
             <p className="text-sm font-serif font-bold text-[#2a2216]">
-              No dishes found matching this selection.
+              {activeSection === 'DRINKS'
+                ? 'Bar & Beverage Station Live'
+                : activeSection === 'HOOKAH'
+                ? 'Shisha & Hookah Lounge Live'
+                : 'No dishes found matching this selection.'}
             </p>
             <p className="text-xs text-[#7d705e] font-serif max-w-sm mx-auto">
-              {dietaryFilter !== 'ALL'
+              {activeSection === 'DRINKS'
+                ? 'Beverages and refreshments for this banquet are curated by banquet staff. Selections will appear here as they are added by the event host.'
+                : activeSection === 'HOOKAH'
+                ? 'Hookah flavors and lounge service are enabled for this banquet. Selections will appear here as they are added by the event host.'
+                : dietaryFilter !== 'ALL'
                 ? `There are no ${dietaryFilter === 'VEG' ? 'vegetarian' : 'non-vegetarian'} dishes in this category.`
                 : 'No items configured for this service section yet.'}
             </p>
-            {dietaryFilter !== 'ALL' && (
+            {activeSection === 'FOOD' && dietaryFilter !== 'ALL' && (
               <button
                 onClick={() => setDietaryFilter('ALL')}
                 className="px-4 py-1.5 rounded-full bg-[#1e1912] text-[#f7eed9] text-xs font-serif font-bold shadow hover:bg-black transition-colors"

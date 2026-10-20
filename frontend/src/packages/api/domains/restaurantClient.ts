@@ -3013,9 +3013,8 @@ export class RestaurantClient {
       summary: EventAssistanceSummary;
       requests: EventAssistanceRequest[];
     }>(
-      `/${encodeURIComponent(restaurantId)}/events/${encodeURIComponent(eventId)}/assistance${query}`,
-      { method: 'GET' },
-      'STAFF'
+      `/restaurants/${encodeURIComponent(restaurantId)}/events/${encodeURIComponent(eventId)}/assistance${query}`,
+      { method: 'GET' }
     );
   }
 
@@ -3030,13 +3029,12 @@ export class RestaurantClient {
     }
   ): Promise<EventAssistanceRequest> {
     return await this.base.executeProtectedRequest<EventAssistanceRequest>(
-      `/${encodeURIComponent(restaurantId)}/events/${encodeURIComponent(eventId)}/assistance/${encodeURIComponent(requestId)}/status`,
+      `/restaurants/${encodeURIComponent(restaurantId)}/events/${encodeURIComponent(eventId)}/assistance/${encodeURIComponent(requestId)}/status`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      },
-      'STAFF'
+      }
     );
   }
 }

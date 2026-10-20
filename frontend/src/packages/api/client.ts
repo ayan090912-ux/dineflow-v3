@@ -800,7 +800,10 @@ export class DinelyApiClient extends BaseApiClient {
   // ==========================================
   // ORDERS DOMAIN DELEGATES
   // ==========================================
-  async getOrders(restaurantId?: string, options?: { station?: 'KITCHEN' | 'BAR' | string; activeOnly?: boolean; businessDayId?: string }): Promise<Order[]> {
+  async getOrders(
+    restaurantId?: string,
+    options?: { station?: 'KITCHEN' | 'BAR' | 'HOOKAH' | string; activeOnly?: boolean; businessDayId?: string; eventId?: string }
+  ): Promise<Order[]> {
     return this.orderClient.getOrders(restaurantId, options);
   }
 
