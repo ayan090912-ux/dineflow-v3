@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 
 from app.core.database.connection import get_db
-from app.core.security.tenant_auth import get_caller_context, CallerContext, require_tenant_staff_or_owner, require_tenant_owner_or_admin
+from app.core.security.tenant_auth import (
+    get_caller_context,
+    CallerContext,
+    require_tenant_staff_or_owner,
+    require_tenant_owner_or_admin,
+    require_tenant_event_manager,
+)
 from app.modules.restaurants.models import Restaurant
 from app.modules.weddings.models import WeddingEvent, EventTable, EventAssistanceRequest
 from app.modules.orders.models import Order
@@ -274,7 +280,7 @@ async def list_restaurant_events(
 async def create_wedding_event(
     restaurant_id: str,
     payload: CreateWeddingEventSchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_event_manager),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -452,7 +458,7 @@ async def update_wedding_event(
     restaurant_id: str,
     event_id: str,
     payload: UpdateWeddingEventSchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_event_manager),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -565,7 +571,7 @@ async def extend_wedding_event(
     restaurant_id: str,
     event_id: str,
     payload: ExtendEventServicePeriodSchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_event_manager),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -638,7 +644,7 @@ async def extend_wedding_event(
 async def delete_wedding_event(
     restaurant_id: str,
     event_id: str,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_event_manager),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -846,7 +852,7 @@ async def add_event_table(
     restaurant_id: str,
     event_id: str,
     payload: CreateEventTableSchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_event_manager),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -896,7 +902,7 @@ async def update_event_table(
     event_id: str,
     table_id: str,
     payload: UpdateEventTableSchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_event_manager),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -949,7 +955,7 @@ async def delete_event_table(
     restaurant_id: str,
     event_id: str,
     table_id: str,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_event_manager),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id

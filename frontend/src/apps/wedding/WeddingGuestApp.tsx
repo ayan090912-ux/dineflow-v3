@@ -146,6 +146,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
 
   // Placed Order Confirmation
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
+  const [lastPersistedOrder, setLastPersistedOrder] = useState<Order | null>(null);
 
   // Item customization modal
   const [customizingItem, setCustomizingItem] = useState<any | null>(null);
@@ -201,6 +202,22 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
     const interval = setInterval(fetchTableAssistance, 6000);
     return () => clearInterval(interval);
   }, [fetchTableAssistance]);
+
+  // Load last persisted order for this event & table upon reload / mount
+  useEffect(() => {
+    if (eventId && tableNumber) {
+      try {
+        const key = `dinely_last_wedding_order_${eventId}_tbl_${tableNumber}`;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.id) {
+            setLastPersistedOrder(parsed);
+          }
+        }
+      } catch (e) {}
+    }
+  }, [eventId, tableNumber]);
 
   // Enabled Sections Configuration
   const isFoodEnabled = data?.event.hasFood !== false;
@@ -281,6 +298,18 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
+  const cartSubtotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (Number(item.price) || 0) * item.quantity, 0);
+  }, [cart]);
+
+  const cartTax = useMemo(() => {
+    return cartSubtotal * 0.05;
+  }, [cartSubtotal]);
+
+  const cartTotal = useMemo(() => {
+    return cartSubtotal + cartTax;
+  }, [cartSubtotal, cartTax]);
+
   // Open item customization dialog
   const handleOpenCustomize = (item: any) => {
     if (!item.isAvailable) return;
@@ -312,6 +341,10 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
   const handleConfirmAddToCart = () => {
     if (!customizingItem) return;
 
+    const effPrice = typeof customizingItem.price === 'number'
+      ? customizingItem.price
+      : parseFloat(customizingItem.price) || 0;
+
     setCart((prev) => {
       const existingIndex = prev.findIndex(
         (ci) => ci.itemId === customizingItem.id && (ci.notes || '') === (itemNote.trim() || '')
@@ -326,7 +359,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
         {
           itemId: customizingItem.id,
           name: customizingItem.name,
-          price: 0.0,
+          price: effPrice,
           quantity: itemQuantity,
           notes: itemNote.trim() || undefined,
           imageUrl: customizingItem.imageUrl,
@@ -385,7 +418,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
         items: cart.map((ci) => ({
           menuItemId: ci.itemId,
           name: ci.name,
-          price: 0.0,
+          price: typeof ci.price === 'number' ? ci.price : parseFloat(ci.price as any) || 0,
           quantity: ci.quantity,
           notes: ci.notes || '',
           targetDestination: ci.targetDestination || getFulfillmentStation(ci),
@@ -398,6 +431,11 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
 
       const res = await api.createOrder(orderPayload);
       setPlacedOrder(res);
+      setLastPersistedOrder(res);
+      try {
+        const key = `dinely_last_wedding_order_${data.event.id}_tbl_${tableNumber}`;
+        localStorage.setItem(key, JSON.stringify(res));
+      } catch (e) {}
       setCart([]);
       setIsCartOpen(false);
 
@@ -600,6 +638,29 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
           <strong>Banquet Dining Update:</strong> Online ordering is temporarily paused by dining staff. Please speak with your banquet attendant.
         </div>
       ) : null}
+
+      {/* Persisted Order Banner on Reload */}
+      {lastPersistedOrder && !placedOrder && (
+        <div className="bg-[#1e1912] text-[#f7eed9] px-4 py-3 border-b border-[#d4af37]/60 flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div>
+              <p className="text-xs font-serif font-bold text-white">
+                Active Order #{lastPersistedOrder.id.length > 10 ? lastPersistedOrder.id.slice(-6) : lastPersistedOrder.id}
+              </p>
+              <p className="text-[10px] text-amber-300 font-mono">
+                Table {cleanTableBadge(lastPersistedOrder.tableNumber)} • Total ₹{(lastPersistedOrder.totalAmount || 0).toFixed(2)}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setPlacedOrder(lastPersistedOrder)}
+            className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/40 hover:bg-amber-500/30 whitespace-nowrap"
+          >
+            View Ticket
+          </button>
+        </div>
+      )}
 
       {/* Active Table Assistance Status Tracker Banner (if guest has submitted request) */}
       {activeAssistancePoll && (
@@ -876,6 +937,12 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                               {item.description}
                             </p>
                           )}
+
+                          <div className="pt-1 flex items-center gap-2">
+                            <span className="font-mono font-bold text-xs text-[#9c7823]">
+                              ₹{typeof item.price === 'number' ? item.price.toFixed(2) : parseFloat(item.price || 0).toFixed(2)}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Order / Add Action */}
@@ -1144,9 +1211,14 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
             <div className="p-4 border-b border-[#e5dcce] bg-[#f5efe4] flex items-center justify-between">
               <div>
                 <h3 className="font-serif font-bold text-sm text-[#1e1912]">{customizingItem.name}</h3>
-                <p className="text-[11px] text-[#786b59] font-serif italic">
-                  {customizingItem.categoryName || 'Banquet Course'}
-                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-[11px] text-[#786b59] font-serif italic">
+                    {customizingItem.categoryName || 'Banquet Course'}
+                  </p>
+                  <span className="text-[11px] font-mono font-bold text-[#b38b19]">
+                    ₹{(Number(customizingItem.price) || 0).toFixed(2)}
+                  </span>
+                </div>
               </div>
               <button
                 onClick={() => setCustomizingItem(null)}
@@ -1256,6 +1328,9 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                       >
                         <div className="flex-1">
                           <h4 className="text-xs font-serif font-bold text-[#1e1912]">{item.name}</h4>
+                          <span className="text-[11px] font-mono font-bold text-[#9c7823]">
+                            ₹{((item.price || 0) * item.quantity).toFixed(2)}
+                          </span>
                           {item.notes && (
                             <p className="text-[10px] text-[#877864] italic">Note: {item.notes}</p>
                           )}
@@ -1278,6 +1353,22 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Pricing Summary */}
+                  <div className="bg-[#f2ece2] rounded-2xl p-3.5 border border-[#e3d7c5] space-y-2">
+                    <div className="flex items-center justify-between text-xs text-[#6e604f] font-serif">
+                      <span>Subtotal</span>
+                      <span className="font-mono font-bold text-[#1e1912]">₹{cartSubtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-[#6e604f] font-serif">
+                      <span>Taxes & Service (GST 5%)</span>
+                      <span className="font-mono font-bold text-[#1e1912]">₹{cartTax.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm font-serif font-bold text-[#1e1912] border-t border-[#dfd2be] pt-2">
+                      <span>Estimated Total</span>
+                      <span className="font-mono font-black text-[#a17c24]">₹{cartTotal.toFixed(2)}</span>
+                    </div>
                   </div>
 
                   {/* Guest Name & Notes */}
@@ -1372,10 +1463,16 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between border-b border-[#f0e8dc] pb-2.5">
-                <span className="text-xs font-serif text-[#786956]">Kitchen Status</span>
+                <span className="text-xs font-serif text-[#786956]">Preparation Status</span>
                 <span className="text-xs font-mono font-bold text-emerald-600 uppercase flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                  PREPARING
+                  {placedOrder.kitchenStatus || placedOrder.status || 'PREPARING'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs font-serif text-[#786956]">Order Total</span>
+                <span className="font-mono font-bold text-sm text-[#9c7823]">
+                  ₹{(placedOrder.totalAmount || 0).toFixed(2)}
                 </span>
               </div>
             </div>

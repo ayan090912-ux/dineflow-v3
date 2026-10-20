@@ -203,12 +203,13 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
   const [staffOrderCart, setStaffOrderCart] = useState<Array<{ menuItemId: string; name: string; quantity: number; notes?: string }>>([]);
   const [isSubmittingStaffOrder, setIsSubmittingStaffOrder] = useState<boolean>(false);
 
-  // Add / Edit Item Modal State (Event Menu - Zero Pricing)
+  // Add / Edit Item Modal State
   const [isItemModalOpen, setIsItemModalOpen] = useState<boolean>(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [itemFormData, setItemFormData] = useState({
     name: '',
     description: '',
+    price: '250',
     categoryId: '',
     dietaryType: 'VEG' as 'VEG' | 'NON_VEG',
     targetDestination: 'KITCHEN' as 'KITCHEN' | 'BAR' | 'HOOKAH',
@@ -396,6 +397,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
     setItemFormData({
       name: '',
       description: '',
+      price: '250',
       categoryId: categories[0]?.id || 'Starters & Appetizers',
       dietaryType: 'VEG',
       targetDestination: 'KITCHEN',
@@ -411,6 +413,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
     setItemFormData({
       name: item.name,
       description: item.description || '',
+      price: item.price ? String(item.price) : '250',
       categoryId: item.categoryId || 'Starters & Appetizers',
       dietaryType: item.dietaryType || (item.isVegetarian !== false ? 'VEG' : 'NON_VEG'),
       targetDestination: item.targetDestination || (item.isAlcoholic ? 'BAR' : 'KITCHEN'),
@@ -420,10 +423,15 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
     setIsItemModalOpen(true);
   };
 
-  // Save Event Menu Item (Zero Pricing Required)
+  // Save Event Menu Item
   const handleSaveMenuItem = async () => {
     if (!itemFormData.name.trim()) {
       addToast('error', 'Validation Error', 'Dish or beverage name is required.');
+      return;
+    }
+    const parsedPrice = parseFloat(String(itemFormData.price)) || 250;
+    if (parsedPrice <= 0) {
+      addToast('error', 'Validation Error', 'Item price must be greater than zero.');
       return;
     }
     setIsSavingItem(true);
@@ -439,7 +447,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
           isAlcoholic: itemFormData.targetDestination === 'BAR',
           image: itemFormData.imageUrl.trim() || undefined,
           isAvailable: itemFormData.isAvailable,
-          price: 0, // Clean zero price internally preserved for schema
+          price: parsedPrice,
         });
         addToast('success', 'Item Updated', `${itemFormData.name} has been updated.`);
       } else {
@@ -453,7 +461,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
           targetDestination: itemFormData.targetDestination,
           isAlcoholic: itemFormData.targetDestination === 'BAR',
           image: itemFormData.imageUrl.trim() || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
-          price: 0,
+          price: parsedPrice,
         });
         addToast('success', 'Item Added', `${itemFormData.name} added to banquet catalog.`);
       }
@@ -510,11 +518,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
   const handleAdvanceKitchenStatus = async (orderId: string, nextStatus: 'ACCEPTED' | 'PREPARING' | 'READY') => {
     if (!currentEvent || !restaurantId) return;
     try {
-      if (nextStatus === 'READY') {
-        await api.markOrderReady(orderId);
-      } else {
-        await api.updateKitchenStatus(orderId, nextStatus);
-      }
+      await api.updateKitchenStatus(orderId, nextStatus);
       addToast('success', 'Station Updated', `Kitchen status updated to ${nextStatus}.`);
       loadEventScopedData();
     } catch (err: any) {
@@ -1027,6 +1031,9 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             <Badge variant="outline" className="text-[10px] font-mono">
                               {item.categoryId || 'Banquet Course'}
+                            </Badge>
+                            <Badge variant="brand" className="text-[10px] font-mono bg-amber-500/10 text-amber-300 border-amber-500/30">
+                              ₹{typeof item.price === 'number' ? item.price.toFixed(2) : parseFloat(item.price as any || 250).toFixed(2)}
                             </Badge>
                             <span className="text-[10px] font-mono text-slate-400">
                               {station === 'BAR' ? '🍸 Bar Station' : station === 'HOOKAH' ? '💨 Hookah Station' : '🍳 Kitchen Station'}
@@ -1591,15 +1598,30 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
         title={editingItem ? 'Edit Banquet Item' : 'Add Banquet Course Item'}
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Course / Dish Name *
-            </label>
-            <Input
-              placeholder="e.g. Royal Chicken Biryani"
-              value={itemFormData.name}
-              onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Course / Dish Name *
+              </label>
+              <Input
+                placeholder="e.g. Royal Chicken Biryani"
+                value={itemFormData.name}
+                onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Unit Price (₹) *
+              </label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="e.g. 250"
+                value={itemFormData.price}
+                onChange={(e) => setItemFormData({ ...itemFormData, price: e.target.value })}
+              />
+            </div>
           </div>
 
           <div>

@@ -133,26 +133,31 @@ export class OrderClient {
 
     try {
       const apiBase = getApiBaseUrl();
+      const isEventOrder = Boolean(orderData.eventId) || orderData.orderType === 'WEDDING_EVENT';
       const payload = {
         id: orderData.id,
         restaurantId: restId,
-        tableId: orderData.tableId || `tbl-${restId}-${(orderData.tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '_')}`,
+        tableId: orderData.tableId || (isEventOrder ? undefined : `tbl-${restId}-${(orderData.tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '_')}`),
         tableNumber: orderData.tableNumber || 'Table 01',
-        tableSessionId: orderData.tableSessionId || `sess-${restId}-${Date.now()}`,
+        tableSessionId: orderData.tableSessionId || (isEventOrder ? undefined : `sess-${restId}-${Date.now()}`),
         customerName: orderData.customerName || 'Guest',
         notes: orderData.notes || '',
-        orderType: orderData.orderType || 'DINE_IN',
+        orderType: orderData.orderType || (isEventOrder ? 'WEDDING_EVENT' : 'DINE_IN'),
         eventId: orderData.eventId || undefined,
         eventName: orderData.eventName || undefined,
+        idempotencyKey: (orderData as any).idempotencyKey || undefined,
+        legalDrinkingAgeAffirmed: (orderData as any).legalDrinkingAgeAffirmed,
+        customerPhone: (orderData as any).customerPhone || undefined,
+        customerEmail: (orderData as any).customerEmail || undefined,
         items: (orderData.items || []).map((i) => ({
           id: i.id,
           menuItemId: i.menuItemId || i.id,
           name: i.name,
-          price: i.price,
+          price: typeof i.price === 'number' ? i.price : parseFloat(i.price as any) || 0,
           quantity: i.quantity,
           notes: i.notes || '',
           targetDestination: i.targetDestination || getFulfillmentStation(i),
-          isAlcoholic: i.isAlcoholic || false,
+          isAlcoholic: Boolean(i.isAlcoholic),
         })),
       };
 
@@ -213,8 +218,14 @@ export class OrderClient {
           return createdOrd;
         }
       } else {
-        const errorText = await res.text();
-        throw new Error(`Server returned status ${res.status}: ${errorText || 'Failed to insert order'}`);
+        let errorDetail = '';
+        try {
+          const errJson = await res.json();
+          errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
+        } catch (_) {
+          errorDetail = await res.text();
+        }
+        throw new Error(errorDetail || `Server returned status ${res.status}`);
       }
     } catch (e: any) {
       console.error('API POST for createOrder failed:', e);

@@ -353,71 +353,76 @@ async def create_order(
         else:
             tbl_id = None
 
-        session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id or 'tbl'}-{int(now_utc.timestamp() * 1000)}"
+        is_wedding_event = (payload.orderType == "WEDDING_EVENT") or bool(payload.eventId)
 
-        try:
-            from sqlalchemy import case
-            if payload.tableSessionId:
-                res_direct_sess = await db.execute(
-                    select(TableSession).where(
-                        (TableSession.restaurant_id == restaurant.id) &
-                        (TableSession.id == payload.tableSessionId) &
-                        (TableSession.status == "ACTIVE")
-                    )
-                )
-                direct_sess = res_direct_sess.scalar_one_or_none()
-                if direct_sess:
-                    actual_session_id = direct_sess.id
-                    if direct_sess.table_id and not tbl_id:
-                        tbl_id = direct_sess.table_id
-                    if direct_sess.table_number:
-                        tbl_num = direct_sess.table_number
+        if not is_wedding_event:
+            session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id or 'tbl'}-{int(now_utc.timestamp() * 1000)}"
 
-            if not actual_session_id:
-                query_sess = select(TableSession).where(
-                    (TableSession.restaurant_id == restaurant.id) &
-                    (
-                        (TableSession.id == session_id) |
-                        (
-                            ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
+            try:
+                from sqlalchemy import case
+                if payload.tableSessionId:
+                    res_direct_sess = await db.execute(
+                        select(TableSession).where(
+                            (TableSession.restaurant_id == restaurant.id) &
+                            (TableSession.id == payload.tableSessionId) &
                             (TableSession.status == "ACTIVE")
                         )
                     )
-                ).order_by(
-                    case((TableSession.id == session_id, 1), else_=0).desc(),
-                    TableSession.session_started_at.desc()
-                ).limit(1)
-                res_sess = await db.execute(query_sess)
-                matched_sess = res_sess.scalar_one_or_none()
+                    direct_sess = res_direct_sess.scalar_one_or_none()
+                    if direct_sess:
+                        actual_session_id = direct_sess.id
+                        if direct_sess.table_id and not tbl_id:
+                            tbl_id = direct_sess.table_id
+                        if direct_sess.table_number:
+                            tbl_num = direct_sess.table_number
 
-                if matched_sess and matched_sess.status == "ACTIVE":
-                    actual_session_id = matched_sess.id
-                else:
-                    try:
-                        async with db.begin_nested():
-                            new_sess = TableSession(
-                                id=session_id,
-                                restaurant_id=restaurant.id,
-                                table_id=tbl_id,
-                                table_number=tbl_num,
-                                status="ACTIVE",
-                                session_started_at=now_utc
+                if not actual_session_id:
+                    query_sess = select(TableSession).where(
+                        (TableSession.restaurant_id == restaurant.id) &
+                        (
+                            (TableSession.id == session_id) |
+                            (
+                                ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
+                                (TableSession.status == "ACTIVE")
                             )
-                            db.add(new_sess)
-                            await db.flush()
-                            actual_session_id = new_sess.id
-                    except Exception as flush_err:
-                        print("[SESSION_CREATION_RACE_HANDLED]:", flush_err)
-                        res_sess_race = await db.execute(select(TableSession).where(
-                            (TableSession.restaurant_id == restaurant.id) &
-                            ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
-                            (TableSession.status == "ACTIVE")
-                        ).order_by(TableSession.session_started_at.desc()).limit(1))
-                        race_sess = res_sess_race.scalar_one_or_none()
-                        if race_sess:
-                            actual_session_id = race_sess.id
-        except Exception as sess_err:
-            print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
+                        )
+                    ).order_by(
+                        case((TableSession.id == session_id, 1), else_=0).desc(),
+                        TableSession.session_started_at.desc()
+                    ).limit(1)
+                    res_sess = await db.execute(query_sess)
+                    matched_sess = res_sess.scalar_one_or_none()
+
+                    if matched_sess and matched_sess.status == "ACTIVE":
+                        actual_session_id = matched_sess.id
+                    else:
+                        try:
+                            async with db.begin_nested():
+                                new_sess = TableSession(
+                                    id=session_id,
+                                    restaurant_id=restaurant.id,
+                                    table_id=tbl_id,
+                                    table_number=tbl_num,
+                                    status="ACTIVE",
+                                    session_started_at=now_utc
+                                )
+                                db.add(new_sess)
+                                await db.flush()
+                                actual_session_id = new_sess.id
+                        except Exception as flush_err:
+                            print("[SESSION_CREATION_RACE_HANDLED]:", flush_err)
+                            res_sess_race = await db.execute(select(TableSession).where(
+                                (TableSession.restaurant_id == restaurant.id) &
+                                ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
+                                (TableSession.status == "ACTIVE")
+                            ).order_by(TableSession.session_started_at.desc()).limit(1))
+                            race_sess = res_sess_race.scalar_one_or_none()
+                            if race_sess:
+                                actual_session_id = race_sess.id
+            except Exception as sess_err:
+                print("[SESSION_CREATION_NOTICE] TableSession creation handled:", sess_err)
+        else:
+            actual_session_id = None
 
         # 1. Authoritative MenuItem resolution from database
         menu_item_ids = [i.menuItemId or i.id for i in payload.items if (i.menuItemId or i.id)]
@@ -436,8 +441,6 @@ async def create_order(
         menu_by_name = {m.name.lower().strip(): m for m in db_menu_items}
 
         is_staff_caller = caller.is_authenticated and (caller.role in ["OWNER", "RESTAURANT_OWNER", "WAITER", "CHEF", "BAR", "HOOKAH", "SHISHA", "MANAGER", "ADMIN"])
-
-        is_wedding_event = (payload.orderType == "WEDDING_EVENT") or bool(payload.eventId)
 
         resolved_items_list = []
         for i in payload.items:
@@ -463,22 +466,24 @@ async def create_order(
                     station = "KITCHEN"
                 is_alc = bool(m_rec.is_alcoholic)
 
-                if is_wedding_event:
-                    auth_price = 0.0
+                rec_price = float(m_rec.price or 0.0)
+                if not is_wedding_event and rec_price <= 0.0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Item '{m_rec.name}' has invalid zero pricing for standard dining. Please contact staff."
+                    )
+                # Enforce that customer price cannot be arbitrarily lower than catalog price,
+                # but allow legitimate modifiers/add-ons (price >= m_rec.price) and authorized staff discounts.
+                if i.price is not None and float(i.price) >= rec_price:
+                    auth_price = float(i.price)
+                elif is_staff_caller and i.price is not None and float(i.price) > 0.0:
+                    auth_price = float(i.price)
+                elif rec_price > 0.0:
+                    auth_price = rec_price
+                elif i.price is not None and float(i.price) > 0.0:
+                    auth_price = float(i.price)
                 else:
-                    if float(m_rec.price or 0.0) <= 0.0:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Item '{m_rec.name}' has invalid zero pricing for standard dining. Please contact staff."
-                        )
-                    # Enforce that customer price cannot be arbitrarily lower than catalog price,
-                    # but allow legitimate modifiers/add-ons (price >= m_rec.price) and authorized staff discounts.
-                    if i.price is not None and float(i.price) >= float(m_rec.price):
-                        auth_price = float(i.price)
-                    elif is_staff_caller and i.price is not None and float(i.price) > 0.0:
-                        auth_price = float(i.price)
-                    else:
-                        auth_price = float(m_rec.price)
+                    auth_price = rec_price
 
                 auth_name = m_rec.name
                 item_mid = m_rec.id
@@ -497,7 +502,7 @@ async def create_order(
                 else:
                     station = p_dest or "KITCHEN"
                 is_alc = bool(i.isAlcoholic)
-                auth_price = 0.0 if is_wedding_event else float(i.price or 0.0)
+                auth_price = float(i.price or 0.0)
                 if not is_wedding_event and auth_price <= 0.0:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -527,45 +532,39 @@ async def create_order(
         bar_status = "PENDING" if has_bar else None
         hookah_status = "PENDING" if has_hookah else None
 
-        if is_wedding_event:
-            subtotal = 0.0
-            tax_amount = 0.0
-            total = 0.0
-            tax_breakdown = []
-        else:
-            subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
-            tax_amount = 0.0
-            total = subtotal
-            tax_breakdown = []
+        subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
+        tax_amount = 0.0
+        total = subtotal
+        tax_breakdown = []
 
-            try:
-                cached_tax_entry = _ORDER_TAX_CACHE.get(restaurant.id)
-                if cached_tax_entry and (now_mono - cached_tax_entry[0] < _ORDER_TAX_CACHE_TTL):
-                    active_taxes, tax_cats_map, tax_items_map = cached_tax_entry[1]
-                else:
-                    # Resolve actual Restaurant DB model for tax configuration
-                    r_db_res = await db.execute(select(Restaurant).where(Restaurant.id == restaurant.id))
-                    rest_db_obj = r_db_res.scalar_one_or_none()
-                    if not rest_db_obj:
-                        rest_db_obj = restaurant
+        try:
+            cached_tax_entry = _ORDER_TAX_CACHE.get(restaurant.id)
+            if cached_tax_entry and (now_mono - cached_tax_entry[0] < _ORDER_TAX_CACHE_TTL):
+                active_taxes, tax_cats_map, tax_items_map = cached_tax_entry[1]
+            else:
+                # Resolve actual Restaurant DB model for tax configuration
+                r_db_res = await db.execute(select(Restaurant).where(Restaurant.id == restaurant.id))
+                rest_db_obj = r_db_res.scalar_one_or_none()
+                if not rest_db_obj:
+                    rest_db_obj = restaurant
 
-                    active_taxes, tax_cats_map, tax_items_map = await BillingService.get_effective_taxes(rest_db_obj, db)
-                    _ORDER_TAX_CACHE[restaurant.id] = (now_mono, (active_taxes, tax_cats_map, tax_items_map))
+                active_taxes, tax_cats_map, tax_items_map = await BillingService.get_effective_taxes(rest_db_obj, db)
+                _ORDER_TAX_CACHE[restaurant.id] = (now_mono, (active_taxes, tax_cats_map, tax_items_map))
 
-                calc = calculate_taxes(
-                    items=items_list_dict,
-                    active_taxes=active_taxes,
-                    tax_categories_map=tax_cats_map,
-                    tax_items_map=tax_items_map,
-                    order_type=payload.orderType or "DINE_IN"
-                )
+            calc = calculate_taxes(
+                items=items_list_dict,
+                active_taxes=active_taxes,
+                tax_categories_map=tax_cats_map,
+                tax_items_map=tax_items_map,
+                order_type=payload.orderType or "DINE_IN"
+            )
 
-                subtotal = calc["subtotal"]
-                tax_amount = calc["total_tax_amount"]
-                total = calc["grand_total"]
-                tax_breakdown = calc["tax_breakdown"]
-            except Exception as tax_err:
-                print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
+            subtotal = calc["subtotal"]
+            tax_amount = calc["total_tax_amount"]
+            total = calc["grand_total"]
+            tax_breakdown = calc["tax_breakdown"]
+        except Exception as tax_err:
+            print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
 
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if restaurant.id in _ORDER_DAILY_SEQ and _ORDER_DAILY_SEQ[restaurant.id][0] == today_str:

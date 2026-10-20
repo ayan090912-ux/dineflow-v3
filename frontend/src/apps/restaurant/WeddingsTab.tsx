@@ -9,6 +9,7 @@ import {
   MenuCategory,
   MenuItem,
   isModuleEnabled,
+  getFulfillmentStation,
 } from '../../packages/types';
 import { Modal } from '../../packages/ui/Modal';
 import { Button } from '../../packages/ui/Button';
@@ -114,8 +115,8 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [viewMode, setViewMode] = useState<'terminal' | 'catalog'>('terminal');
   const [selectedEventId, setSelectedEventId] = useState<string>('');
 
-  // Terminal Sub-Views: 'orders' | 'tables' | 'delivery'
-  const [terminalView, setTerminalView] = useState<'orders' | 'tables' | 'delivery'>('orders');
+  // Terminal Sub-Views: 'orders' | 'tables' | 'delivery' | 'menu'
+  const [terminalView, setTerminalView] = useState<'orders' | 'tables' | 'delivery' | 'menu'>('orders');
   const [orderSubFilter, setOrderSubFilter] = useState<'ALL' | 'NEW' | 'PREPARING' | 'READY' | 'DELIVERED'>('ALL');
 
   // Terminal Active Event Data
@@ -199,6 +200,23 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
   const [newTableCapacity, setNewTableCapacity] = useState(8);
   const [isAddingTable, setIsAddingTable] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+  // Terminal Menu Management State
+  const [terminalMenuStationFilter, setTerminalMenuStationFilter] = useState<'ALL' | 'KITCHEN' | 'BAR' | 'HOOKAH'>('ALL');
+  const [terminalMenuSearch, setTerminalMenuSearch] = useState('');
+  const [isTerminalMenuModalOpen, setIsTerminalMenuModalOpen] = useState(false);
+  const [editingTerminalItem, setEditingTerminalItem] = useState<MenuItem | null>(null);
+  const [terminalItemForm, setTerminalItemForm] = useState({
+    name: '',
+    description: '',
+    price: '250',
+    categoryId: '',
+    dietaryType: 'VEG' as 'VEG' | 'NON_VEG',
+    targetDestination: 'KITCHEN' as 'KITCHEN' | 'BAR' | 'HOOKAH',
+    imageUrl: '',
+    isAvailable: true,
+  });
+  const [isSavingTerminalItem, setIsSavingTerminalItem] = useState(false);
 
   // Selected event object
   const currentEvent = useMemo(() => {
@@ -812,6 +830,117 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     }
   };
 
+  const handleOpenAddTerminalItem = () => {
+    setEditingTerminalItem(null);
+    setTerminalItemForm({
+      name: '',
+      description: '',
+      price: '250',
+      categoryId: menuCategories[0]?.name || 'Starters & Appetizers',
+      dietaryType: 'VEG',
+      targetDestination: 'KITCHEN',
+      imageUrl: '',
+      isAvailable: true,
+    });
+    setIsTerminalMenuModalOpen(true);
+  };
+
+  const handleOpenEditTerminalItem = (item: MenuItem) => {
+    setEditingTerminalItem(item);
+    setTerminalItemForm({
+      name: item.name,
+      description: item.description || '',
+      price: item.price ? String(item.price) : '250',
+      categoryId: item.categoryId || 'Starters & Appetizers',
+      dietaryType: item.dietaryType || (item.isVegetarian !== false ? 'VEG' : 'NON_VEG'),
+      targetDestination: item.targetDestination || (item.isAlcoholic ? 'BAR' : 'KITCHEN'),
+      imageUrl: item.image || item.imageUrl || '',
+      isAvailable: item.isAvailable !== false,
+    });
+    setIsTerminalMenuModalOpen(true);
+  };
+
+  const handleSaveTerminalMenuItem = async () => {
+    if (!terminalItemForm.name.trim()) {
+      if (addToast) addToast({ type: 'error', title: 'Validation Error', message: 'Dish or beverage name is required.' });
+      return;
+    }
+    const parsedPrice = parseFloat(String(terminalItemForm.price)) || 250;
+    if (parsedPrice <= 0) {
+      if (addToast) addToast({ type: 'error', title: 'Validation Error', message: 'Price must be greater than zero.' });
+      return;
+    }
+    setIsSavingTerminalItem(true);
+    try {
+      if (editingTerminalItem) {
+        await api.updateMenuItem(editingTerminalItem.id, {
+          restaurantId: currentRestaurant?.id,
+          name: terminalItemForm.name.trim(),
+          description: terminalItemForm.description.trim(),
+          categoryId: terminalItemForm.categoryId,
+          dietaryType: terminalItemForm.dietaryType,
+          isVegetarian: terminalItemForm.dietaryType === 'VEG',
+          targetDestination: terminalItemForm.targetDestination,
+          isAlcoholic: terminalItemForm.targetDestination === 'BAR',
+          image: terminalItemForm.imageUrl.trim() || undefined,
+          isAvailable: terminalItemForm.isAvailable,
+          price: parsedPrice,
+        });
+        if (addToast) addToast({ type: 'success', title: 'Dish Updated', message: `${terminalItemForm.name} updated successfully.` });
+      } else {
+        await api.createMenuItem({
+          restaurantId: currentRestaurant?.id,
+          name: terminalItemForm.name.trim(),
+          description: terminalItemForm.description.trim(),
+          categoryId: terminalItemForm.categoryId || 'Starters & Appetizers',
+          dietaryType: terminalItemForm.dietaryType,
+          isVegetarian: terminalItemForm.dietaryType === 'VEG',
+          targetDestination: terminalItemForm.targetDestination,
+          isAlcoholic: terminalItemForm.targetDestination === 'BAR',
+          image: terminalItemForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600',
+          price: parsedPrice,
+        });
+        if (addToast) addToast({ type: 'success', title: 'Dish Added', message: `${terminalItemForm.name} added to catalog.` });
+      }
+      setIsTerminalMenuModalOpen(false);
+      if (currentRestaurant?.id) {
+        const freshItems = await api.getMenuItems(currentRestaurant.id);
+        setMenuItems(freshItems);
+      }
+      loadTerminalData(true);
+    } catch (err: any) {
+      if (addToast) addToast({ type: 'error', title: 'Save Failed', message: err.message || 'Could not save menu item.' });
+    } finally {
+      setIsSavingTerminalItem(false);
+    }
+  };
+
+  const handleToggleTerminalItemAvailability = async (item: MenuItem) => {
+    try {
+      const nextAvail = !item.isAvailable;
+      await api.updateMenuItem(item.id, { restaurantId: currentRestaurant?.id, isAvailable: nextAvail });
+      setMenuItems((prev) => prev.map((m) => (m.id === item.id ? { ...m, isAvailable: nextAvail } : m)));
+      if (addToast) addToast({ type: 'info', title: 'Availability Changed', message: `${item.name} is now ${nextAvail ? 'Available' : 'Unavailable'}.` });
+    } catch (err: any) {
+      if (addToast) addToast({ type: 'error', title: 'Update Failed', message: err.message || 'Could not toggle availability.' });
+    }
+  };
+
+  const filteredTerminalMenuItems = useMemo(() => {
+    return menuItems.filter((i) => {
+      const station = getFulfillmentStation(i);
+      if (terminalMenuStationFilter === 'KITCHEN' && station !== 'KITCHEN') return false;
+      if (terminalMenuStationFilter === 'BAR' && station !== 'BAR') return false;
+      if (terminalMenuStationFilter === 'HOOKAH' && station !== 'HOOKAH') return false;
+
+      if (terminalMenuSearch.trim()) {
+        const q = terminalMenuSearch.toLowerCase();
+        return i.name.toLowerCase().includes(q) || (i.description && i.description.toLowerCase().includes(q));
+      }
+      return true;
+    });
+  }, [menuItems, terminalMenuStationFilter, terminalMenuSearch]);
+
   return (
     <div className="space-y-6 pb-20">
       {/* ========================================================================= */}
@@ -1056,17 +1185,23 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                   </div>
                   <p className="text-[11px] text-slate-400">{menuItems.length} dishes available</p>
                 </div>
-                {menuItems.length === 0 ? (
+                <div className="flex items-center gap-2 mt-2">
                   <button
-                    onClick={handleSeedSampleMenu}
-                    disabled={isSeedingMenu}
-                    className="text-[10px] text-sky-400 hover:text-sky-300 text-left mt-2 font-bold"
+                    onClick={() => setTerminalView('menu')}
+                    className="text-[10px] text-amber-400 hover:text-amber-300 font-bold"
                   >
-                    {isSeedingMenu ? 'Seeding...' : '+ Seed 9 Dishes →'}
+                    Manage Menu →
                   </button>
-                ) : (
-                  <span className="text-[10px] text-slate-500 mt-2">Active catalog</span>
-                )}
+                  {menuItems.length === 0 && (
+                    <button
+                      onClick={handleSeedSampleMenu}
+                      disabled={isSeedingMenu}
+                      className="text-[10px] text-sky-400 hover:text-sky-300 font-bold"
+                    >
+                      {isSeedingMenu ? 'Seeding...' : 'Seed 9'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* 4. Event Tables */}
@@ -1279,6 +1414,18 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             {deliveryOrders.length > 0 && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             )}
+          </button>
+
+          <button
+            onClick={() => setTerminalView('menu')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              terminalView === 'menu'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#161c27]'
+            }`}
+          >
+            <Utensils className="w-3.5 h-3.5" />
+            <span>Menu & Dishes ({menuItems.length})</span>
           </button>
         </div>
 
@@ -1871,6 +2018,156 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                           <span>Delivered to Table {cleanTableBadge(ord.tableNumber)} ✓</span>
                         </Button>
                       )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* OPERATIONAL VIEW 4: MENU & CATALOG MANAGEMENT */}
+      {/* ========================================================================= */}
+      {terminalView === 'menu' && (
+        <div className="space-y-4">
+          <div className="bg-[#10141d] border border-[#202838] rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white font-mono uppercase tracking-wide">
+                  Event Banquet Menu & Dish Catalog
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Manage banquet courses, unit prices, station routing, dietary flags, and live guest availability.
+              </p>
+            </div>
+
+            <Button
+              variant="brand"
+              onClick={handleOpenAddTerminalItem}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 h-9"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Add Dish / Item</span>
+            </Button>
+          </div>
+
+          {/* Station Filters & Search */}
+          <div className="bg-[#11151e] p-3 rounded-xl border border-[#1e2533] flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 w-full sm:w-auto">
+              {(['ALL', 'KITCHEN', 'BAR', 'HOOKAH'] as const).map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setTerminalMenuStationFilter(st)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all whitespace-nowrap ${
+                    terminalMenuStationFilter === st
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'text-slate-400 hover:text-white bg-[#151a24] border border-[#222a3a]'
+                  }`}
+                >
+                  {st === 'ALL' ? `All Dishes (${menuItems.length})` : st === 'KITCHEN' ? '🍳 Kitchen' : st === 'BAR' ? '🍸 Bar' : '💨 Hookah'}
+                </button>
+              ))}
+            </div>
+
+            <div className="w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Search dish or category..."
+                value={terminalMenuSearch}
+                onChange={(e) => setTerminalMenuSearch(e.target.value)}
+                className="w-full bg-[#0d1017] border border-[#232b3b] rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* Dishes Grid */}
+          {filteredTerminalMenuItems.length === 0 ? (
+            <div className="bg-[#121620] border border-[#1e2533] rounded-2xl p-16 text-center space-y-3">
+              <UtensilsCrossed className="w-12 h-12 text-slate-600 mx-auto" />
+              <h3 className="text-base font-bold text-white">No Menu Items Found</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                No items match your filter. You can add food, bar cocktails, or hookah items directly to this venue.
+              </p>
+              <Button
+                variant="brand"
+                onClick={handleOpenAddTerminalItem}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs"
+              >
+                + Add First Dish
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredTerminalMenuItems.map((item) => {
+                const station = getFulfillmentStation(item);
+                const isVeg = item.isVegetarian || item.dietaryType === 'VEG';
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`bg-[#131722] border rounded-2xl p-4 shadow-md transition-all flex flex-col justify-between space-y-3 ${
+                      !item.isAvailable ? 'opacity-60 border-[#1e2533]' : 'border-[#222c3d] hover:border-amber-500/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`w-2.5 h-2.5 rounded-full ${isVeg ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                              title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+                            />
+                            <h4 className="font-bold text-sm text-white">{item.name}</h4>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#181f2c] border border-[#242f44] text-slate-300">
+                              {item.categoryId || 'Banquet Course'}
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold">
+                              ₹{typeof item.price === 'number' ? item.price.toFixed(2) : parseFloat(item.price as any || 250).toFixed(2)}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {station === 'BAR' ? '🍸 Bar' : station === 'HOOKAH' ? '💨 Hookah' : '🍳 Kitchen'}
+                            </span>
+                          </div>
+                          {item.description && (
+                            <p className="text-xs text-slate-400 mt-2 line-clamp-2 leading-relaxed">
+                              {item.description}
+                            </p>
+                          )}
+                        </div>
+                        {item.image && (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-14 h-14 rounded-xl object-cover border border-[#242b3d] shrink-0"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-[#1a202c] flex items-center justify-between gap-2">
+                      <Button
+                        size="sm"
+                        variant={item.isAvailable ? 'outline' : 'brand'}
+                        onClick={() => handleToggleTerminalItemAvailability(item)}
+                        className="text-xs h-8"
+                      >
+                        {item.isAvailable ? 'Mark Sold Out (86)' : 'Enable for Guests'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenEditTerminalItem(item)}
+                        className="text-xs h-8 text-slate-300 hover:text-white"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                        <span>Edit</span>
+                      </Button>
                     </div>
                   </div>
                 );
@@ -2555,6 +2852,172 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                 </div>
               );
             })}
+          </div>
+        </div>
+      </Modal>
+      {/* ========================================================================= */}
+      {/* TERMINAL ADD / EDIT MENU ITEM MODAL */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={isTerminalMenuModalOpen}
+        onClose={() => setIsTerminalMenuModalOpen(false)}
+        title={editingTerminalItem ? 'Edit Banquet Item' : 'Add Banquet Dish / Beverage'}
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Dish Name *
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Royal Mutton Biryani"
+                value={terminalItemForm.name}
+                onChange={(e) => setTerminalItemForm({ ...terminalItemForm, name: e.target.value })}
+                className="w-full bg-[#121622] border border-[#232b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Unit Price (₹) *
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="e.g. 250"
+                value={terminalItemForm.price}
+                onChange={(e) => setTerminalItemForm({ ...terminalItemForm, price: e.target.value })}
+                className="w-full bg-[#121622] border border-[#232b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Description / Ingredients
+            </label>
+            <textarea
+              placeholder="e.g. Traditional slow-cooked preparation with aromatic herbs..."
+              value={terminalItemForm.description}
+              onChange={(e) => setTerminalItemForm({ ...terminalItemForm, description: e.target.value })}
+              className="w-full bg-[#121622] border border-[#232b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 h-20 resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Category
+              </label>
+              <select
+                value={terminalItemForm.categoryId}
+                onChange={(e) => setTerminalItemForm({ ...terminalItemForm, categoryId: e.target.value })}
+                className="w-full bg-[#121622] border border-[#232b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                {[
+                  'Starters & Appetizers',
+                  'Main Course',
+                  'Biryani & Rice',
+                  'Breads & Naans',
+                  'Desserts & Sweets',
+                  'Beverages & Drinks',
+                  'Cocktails & Mocktails',
+                  'Hookah & Shisha',
+                ].map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Station Routing
+              </label>
+              <select
+                value={terminalItemForm.targetDestination}
+                onChange={(e) =>
+                  setTerminalItemForm({
+                    ...terminalItemForm,
+                    targetDestination: e.target.value as 'KITCHEN' | 'BAR' | 'HOOKAH',
+                  })
+                }
+                className="w-full bg-[#121622] border border-[#232b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+              >
+                <option value="KITCHEN">Kitchen Station</option>
+                <option value="BAR">Bar & Beverages</option>
+                <option value="HOOKAH">Hookah Lounge</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Dietary Type
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setTerminalItemForm({ ...terminalItemForm, dietaryType: 'VEG' })}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 ${
+                  terminalItemForm.dietaryType === 'VEG'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                    : 'bg-[#121622] text-slate-400 border-[#232b3d]'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span>Vegetarian (Veg)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTerminalItemForm({ ...terminalItemForm, dietaryType: 'NON_VEG' })}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 ${
+                  terminalItemForm.dietaryType === 'NON_VEG'
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                    : 'bg-[#121622] text-slate-400 border-[#232b3d]'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-400" />
+                <span>Non-Vegetarian</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Image URL (Optional)
+            </label>
+            <input
+              type="text"
+              placeholder="https://images.unsplash.com/..."
+              value={terminalItemForm.imageUrl}
+              onChange={(e) => setTerminalItemForm({ ...terminalItemForm, imageUrl: e.target.value })}
+              className="w-full bg-[#121622] border border-[#232b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-[#1f2536] flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsTerminalMenuModalOpen(false)}
+              disabled={isSavingTerminalItem}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={handleSaveTerminalMenuItem}
+              disabled={isSavingTerminalItem || !terminalItemForm.name.trim()}
+              className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
+            >
+              {isSavingTerminalItem ? 'Saving...' : editingTerminalItem ? 'Save Changes' : 'Add Dish to Catalog'}
+            </Button>
           </div>
         </div>
       </Modal>

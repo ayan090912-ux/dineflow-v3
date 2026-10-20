@@ -348,3 +348,38 @@ async def require_tenant_staff_or_owner(
         db=db
     )
 
+
+async def require_tenant_menu_manager(
+    restaurant_id: str,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+) -> CallerContext:
+    """Enforces that caller has menu management permissions (Owner, Admin, Manager, Event Manager, Event Coordinator, Chef)."""
+    return await verify_tenant_authorization(
+        restaurant_id=restaurant_id,
+        allowed_roles=[
+            "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
+            "MANAGER", "EVENT_MANAGER", "EVENT_COORDINATOR", "CHEF"
+        ],
+        caller=caller,
+        db=db
+    )
+
+
+async def require_tenant_event_manager(
+    restaurant_id: str,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+) -> CallerContext:
+    """Enforces that caller has event management permissions (Owner, Admin, Manager, Event Manager, Event Coordinator)."""
+    return await verify_tenant_authorization(
+        restaurant_id=restaurant_id,
+        allowed_roles=[
+            "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
+            "MANAGER", "EVENT_MANAGER", "EVENT_COORDINATOR"
+        ],
+        caller=caller,
+        db=db
+    )
+
+

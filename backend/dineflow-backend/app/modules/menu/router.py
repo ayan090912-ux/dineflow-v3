@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database.connection import get_db
-from app.core.security.tenant_auth import require_tenant_owner_or_admin, CallerContext
+from app.core.security.tenant_auth import require_tenant_owner_or_admin, require_tenant_menu_manager, CallerContext
 from app.modules.menu.models import MenuCategory, MenuItem
 from app.modules.websocket.manager import ws_manager
 
@@ -103,7 +103,7 @@ async def get_categories(restaurant_id: str, db: AsyncSession = Depends(get_db))
 async def create_category(
     restaurant_id: str,
     payload: CreateCategorySchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_menu_manager),
     db: AsyncSession = Depends(get_db)
 ):
     target_rest_id = caller.restaurant_id or restaurant_id
@@ -231,7 +231,7 @@ KNOWN_CATEGORY_MAP = {
 async def create_menu_item(
     restaurant_id: str,
     payload: CreateMenuItemSchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_menu_manager),
     db: AsyncSession = Depends(get_db)
 ):
     target_rest_id = caller.restaurant_id or restaurant_id
@@ -365,7 +365,7 @@ async def update_menu_item(
     restaurant_id: str,
     item_id: str,
     payload: UpdateMenuItemSchema,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_menu_manager),
     db: AsyncSession = Depends(get_db)
 ):
     target_rest_id = caller.restaurant_id or restaurant_id
@@ -457,7 +457,7 @@ async def update_menu_item(
 async def delete_menu_item(
     restaurant_id: str,
     item_id: str,
-    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    caller: CallerContext = Depends(require_tenant_menu_manager),
     db: AsyncSession = Depends(get_db)
 ):
     target_rest_id = caller.restaurant_id or restaurant_id
