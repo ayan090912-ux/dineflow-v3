@@ -36,6 +36,10 @@ import type {
   WeddingEvent,
   EventTable,
   PublicWeddingEventResponse,
+  EventAssistanceRequest,
+  EventAssistanceRequestItem,
+  EventAssistanceStatus,
+  EventAssistanceSummary,
 } from '../types';
 
 import {
@@ -540,6 +544,49 @@ export class DinelyApiClient extends BaseApiClient {
 
   async getPublicEvent(eventId: string, table?: string): Promise<PublicWeddingEventResponse> {
     return this.restaurant.getPublicEvent(eventId, table);
+  }
+
+  async requestTableAssistance(
+    eventId: string,
+    payload: {
+      tableNumber: string;
+      tableId?: string;
+      items: EventAssistanceRequestItem[];
+      guestName?: string;
+      guestNote?: string;
+      idempotencyKey?: string;
+    }
+  ): Promise<EventAssistanceRequest> {
+    return this.restaurant.requestTableAssistance(eventId, payload);
+  }
+
+  async getAssistanceRequestStatus(eventId: string, requestId: string): Promise<EventAssistanceRequest> {
+    return this.restaurant.getAssistanceRequestStatus(eventId, requestId);
+  }
+
+  async getTableAssistanceRequests(eventId: string, table: string): Promise<EventAssistanceRequest[]> {
+    return this.restaurant.getTableAssistanceRequests(eventId, table);
+  }
+
+  async getEventAssistanceRequests(
+    restaurantId: string,
+    eventId: string,
+    statusFilter?: string
+  ): Promise<{ summary: EventAssistanceSummary; requests: EventAssistanceRequest[] }> {
+    return this.restaurant.getEventAssistanceRequests(restaurantId, eventId, statusFilter);
+  }
+
+  async updateEventAssistanceStatus(
+    restaurantId: string,
+    eventId: string,
+    requestId: string,
+    payload: {
+      status: EventAssistanceStatus;
+      staffName?: string;
+      assignedStaffName?: string;
+    }
+  ): Promise<EventAssistanceRequest> {
+    return this.restaurant.updateEventAssistanceStatus(restaurantId, eventId, requestId, payload);
   }
 
   async getWeddingEvents(restaurantId?: string): Promise<WeddingEvent[]> {

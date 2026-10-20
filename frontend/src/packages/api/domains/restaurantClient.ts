@@ -19,6 +19,10 @@ import {
   WeddingEvent,
   EventTable,
   PublicWeddingEventResponse,
+  EventAssistanceRequest,
+  EventAssistanceRequestItem,
+  EventAssistanceStatus,
+  EventAssistanceSummary,
 } from '../../types';
 import { firebaseAuth } from '../../auth/firebase';
 import { BaseApiClient } from '../core/baseClient';
@@ -2944,6 +2948,96 @@ export class RestaurantClient {
       throw new Error(err.detail || `Error loading wedding event (${res.status})`);
     }
     return await res.json();
+  }
+
+  async requestTableAssistance(
+    eventId: string,
+    payload: {
+      tableNumber: string;
+      tableId?: string;
+      items: EventAssistanceRequestItem[];
+      guestName?: string;
+      guestNote?: string;
+      idempotencyKey?: string;
+    }
+  ): Promise<EventAssistanceRequest> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/public/events/${encodeURIComponent(eventId)}/assistance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to submit assistance request' }));
+      throw new Error(err.detail || `Error submitting assistance request (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  async getAssistanceRequestStatus(eventId: string, requestId: string): Promise<EventAssistanceRequest> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(
+      `${apiBase}/public/events/${encodeURIComponent(eventId)}/assistance/status/${encodeURIComponent(requestId)}`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to fetch assistance status' }));
+      throw new Error(err.detail || `Error fetching assistance status (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  async getTableAssistanceRequests(eventId: string, table: string): Promise<EventAssistanceRequest[]> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(
+      `${apiBase}/public/events/${encodeURIComponent(eventId)}/assistance?table=${encodeURIComponent(table)}`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!res.ok) {
+      return [];
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.requests || [];
+  }
+
+  async getEventAssistanceRequests(
+    restaurantId: string,
+    eventId: string,
+    statusFilter?: string
+  ): Promise<{ summary: EventAssistanceSummary; requests: EventAssistanceRequest[] }> {
+    const query = statusFilter && statusFilter !== 'ALL' ? `?status=${encodeURIComponent(statusFilter)}` : '';
+    return await this.base.executeProtectedRequest<{
+      summary: EventAssistanceSummary;
+      requests: EventAssistanceRequest[];
+    }>(
+      `/${encodeURIComponent(restaurantId)}/events/${encodeURIComponent(eventId)}/assistance${query}`,
+      { method: 'GET' },
+      'STAFF'
+    );
+  }
+
+  async updateEventAssistanceStatus(
+    restaurantId: string,
+    eventId: string,
+    requestId: string,
+    payload: {
+      status: EventAssistanceStatus;
+      staffName?: string;
+      assignedStaffName?: string;
+    }
+  ): Promise<EventAssistanceRequest> {
+    return await this.base.executeProtectedRequest<EventAssistanceRequest>(
+      `/${encodeURIComponent(restaurantId)}/events/${encodeURIComponent(eventId)}/assistance/${encodeURIComponent(requestId)}/status`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+      'STAFF'
+    );
   }
 }
 

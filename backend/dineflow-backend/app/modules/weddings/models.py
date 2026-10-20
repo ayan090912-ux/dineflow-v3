@@ -78,6 +78,11 @@ class WeddingEvent(Base, TimestampMixin):
     cover_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="DRAFT", nullable=False, index=True)  # DRAFT, PENDING_APPROVAL, APPROVED_SETUP_PENDING, SCHEDULED, ACTIVE, PAUSED, CLOSED, COMPLETED, CANCELLED
     is_ordering_open: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    has_food: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    has_bar: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    has_hookah: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    has_table_assistance: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    alcohol_policy_notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     menu_selection_type: Mapped[str] = mapped_column(String(30), default="FULL_MENU", nullable=False)  # FULL_MENU, RESTRICTED
     allowed_category_ids: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     allowed_item_ids: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
@@ -100,3 +105,23 @@ class EventTable(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("event_id", "table_number", name="uq_event_table_number"),
     )
+
+
+class EventAssistanceRequest(Base, TimestampMixin):
+    __tablename__ = "event_assistance_requests"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(255), ForeignKey("wedding_events.id", ondelete="CASCADE"), nullable=False, index=True)
+    restaurant_id: Mapped[str] = mapped_column(String(255), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
+    table_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    table_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    request_items: Mapped[Any] = mapped_column(JSON, nullable=False)
+    guest_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    guest_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="NEW", nullable=False, index=True)  # NEW, ACKNOWLEDGED, IN_PROGRESS, COMPLETED, CANCELLED
+    assigned_staff_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    assigned_staff_uid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    in_progress_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)

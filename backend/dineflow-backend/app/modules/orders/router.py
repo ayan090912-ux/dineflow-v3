@@ -46,6 +46,8 @@ class CreateOrderSchema(BaseModel):
     orderType: Optional[str] = "DINE_IN"
     eventId: Optional[str] = None
     eventName: Optional[str] = None
+    ageConfirmed: Optional[bool] = None
+    legalDrinkingAgeAffirmed: Optional[bool] = None
 
 class UpdateOrderStatusSchema(BaseModel):
     status: Optional[str] = None
@@ -591,6 +593,42 @@ async def create_order(
 
             # Authoritative server-side service duration policy & status validation
             validate_order_within_event_window(evt_obj, now_utc)
+
+            # Authoritative station availability enforcement
+            has_food_event = getattr(evt_obj, "has_food", True) if getattr(evt_obj, "has_food", None) is not None else True
+            has_bar_event = getattr(evt_obj, "has_bar", False) if getattr(evt_obj, "has_bar", None) is not None else False
+            has_hookah_event = getattr(evt_obj, "has_hookah", False) if getattr(evt_obj, "has_hookah", None) is not None else False
+
+            if has_kitchen and not has_food_event:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Food service is disabled for this event.",
+                )
+            if has_bar and not has_bar_event:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Bar & Drink service is disabled for this event.",
+                )
+            if has_hookah and not has_hookah_event:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Hookah / Shisha service is disabled for this event.",
+                )
+
+            # Alcohol legal age verification check
+            has_alcoholic_items = any(bool(it.get("isAlcoholic")) for it in items_list_dict)
+            if has_alcoholic_items:
+                if not has_bar_event:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Alcoholic beverage service is disabled for this event.",
+                    )
+                age_ok = getattr(payload, "legalDrinkingAgeAffirmed", None) or getattr(payload, "ageConfirmed", None) or is_staff_caller
+                if not age_ok:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Legal drinking age verification (21+) is required to order alcoholic beverages.",
+                    )
 
             # Table mapping check: If tableId or tableNumber provided, verify/bind to EventTable
             if tbl_num or tbl_id:

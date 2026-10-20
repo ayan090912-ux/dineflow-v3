@@ -212,6 +212,7 @@ class TestWeddingEventTerminal:
                     "tableCount": 3,
                     "status": "ACTIVE",
                     "isOrderingOpen": True,
+                    "hasBar": True,
                 },
                 headers={"Authorization": f"Bearer {ctx['tokens']['owner']}"},
             )
@@ -258,6 +259,7 @@ class TestWeddingEventTerminal:
                     "orderType": "EVENT_ORDER",
                     "eventId": event_id,
                     "customerName": "Guest Table 2",
+                    "legalDrinkingAgeAffirmed": True,
                     "items": [{
                         "menuItemId": ctx["items"]["bar"].id,
                         "name": ctx["items"]["bar"].name,
@@ -361,6 +363,8 @@ class TestWeddingEventTerminal:
                     "startTime": "00:00",
                     "endTime": "23:59",
                     "timezone": "UTC",
+                    "hasBar": True,
+                    "hasHookah": True,
                     "tableCount": 2,
                     "status": "ACTIVE",
                     "isOrderingOpen": True,
@@ -379,6 +383,7 @@ class TestWeddingEventTerminal:
                     "eventId": event_id,
                     "customerName": "VIP Table",
                     "notes": "Extra mint in shisha, medium rare short rib",
+                    "legalDrinkingAgeAffirmed": True,
                     "items": [
                         {
                             "menuItemId": ctx["items"]["food"].id,
@@ -559,6 +564,7 @@ class TestWeddingEventTerminal:
                     "tableCount": 2,
                     "status": "ACTIVE",
                     "isOrderingOpen": True,
+                    "hasBar": True,
                 },
                 headers={"Authorization": f"Bearer {ctx['tokens']['owner']}"},
             )
@@ -602,6 +608,7 @@ class TestWeddingEventTerminal:
                     "orderType": "EVENT_ORDER",
                     "eventId": event_id,
                     "customerName": "Late Comer",
+                    "legalDrinkingAgeAffirmed": True,
                     "items": [{
                         "menuItemId": ctx["items"]["bar"].id,
                         "name": ctx["items"]["bar"].name,

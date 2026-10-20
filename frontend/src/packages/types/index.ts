@@ -930,6 +930,11 @@ export interface WeddingEvent {
   extendedAt?: string;
   extendedBy?: string;
   extendedReason?: string;
+  hasFood?: boolean;
+  hasBar?: boolean;
+  hasHookah?: boolean;
+  hasTableAssistance?: boolean;
+  alcoholPolicyNotes?: string;
   tableCount?: number;
   orderCount?: number;
   totalRevenue?: number;
@@ -975,6 +980,11 @@ export interface PublicWeddingEventResponse {
     rawStatus?: string;
     isOrderingOpen: boolean;
     isServiceActive?: boolean;
+    hasFood?: boolean;
+    hasBar?: boolean;
+    hasHookah?: boolean;
+    hasTableAssistance?: boolean;
+    alcoholPolicyNotes?: string;
   };
   restaurant: {
     id: string;
@@ -1002,12 +1012,57 @@ export interface PublicWeddingEventResponse {
       isVegetarian?: boolean;
       isAlcoholic?: boolean;
       isAvailable?: boolean;
+      targetDestination?: 'KITCHEN' | 'BAR' | 'HOOKAH' | string;
+      dietaryType?: 'VEG' | 'NON_VEG' | 'EGG' | string;
       categoryName?: string;
       categoryId?: string;
       variants?: any;
       modifiers?: any;
     }>;
   }>;
+}
+
+export interface EventAssistanceRequestItem {
+  code: string;
+  label: string;
+  quantity?: number;
+  note?: string;
+}
+
+export type EventAssistanceStatus = 'NEW' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export interface EventAssistanceRequest {
+  id: string;
+  eventId: string;
+  restaurantId: string;
+  tableNumber: string;
+  tableId?: string | null;
+  items: EventAssistanceRequestItem[];
+  requestItems?: EventAssistanceRequestItem[];
+  guestName?: string;
+  guestNote?: string;
+  status: EventAssistanceStatus;
+  assignedStaffName?: string | null;
+  assignedStaffUid?: string | null;
+  acknowledgedAt?: string | null;
+  inProgressAt?: string | null;
+  completedAt?: string | null;
+  idempotencyKey?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface EventAssistanceSummary {
+  newRequestsCount: number;
+  acknowledgedCount: number;
+  inProgressCount: number;
+  completedCount: number;
+  waitingTablesCount: number;
+  new?: number;
+  acknowledged?: number;
+  inProgress?: number;
+  completed?: number;
+  waitingTables?: number;
 }
 
 export interface WeddingAccessRequest {

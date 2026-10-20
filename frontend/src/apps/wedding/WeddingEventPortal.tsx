@@ -33,11 +33,13 @@ import {
   Sliders,
   DollarSign,
   Info,
+  Bell,
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Button, Card, Badge, Modal, Input, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { realtimeBus } from '../../packages/api/realtime';
+import { EventTableAssistanceTerminal } from './EventTableAssistanceTerminal';
 import {
   WeddingEvent,
   EventTable,
@@ -66,6 +68,7 @@ export type EventPortalTab =
   | 'menu'
   | 'kitchen'
   | 'runner'
+  | 'assistance'
   | 'bar'
   | 'hookah'
   | 'staff'
@@ -92,6 +95,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
         'menu',
         'kitchen',
         'runner',
+        'assistance',
         'bar',
         'hookah',
         'staff',
@@ -147,6 +151,47 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
   }, []);
+
+  // Active Assistance Requests Count (Real-time indicator)
+  const [activeAssistanceCount, setActiveAssistanceCount] = useState<number>(0);
+  const [togglingStation, setTogglingStation] = useState<string | null>(null);
+
+  const loadAssistanceSummary = useCallback(async () => {
+    if (!restaurantId || !selectedEventId) return;
+    try {
+      const res = await api.getEventAssistanceRequests(restaurantId, selectedEventId, 'ACTIVE');
+      if (res && res.summary) {
+        setActiveAssistanceCount(
+          (res.summary.newRequestsCount ?? res.summary.new ?? 0) +
+          (res.summary.inProgressCount ?? res.summary.inProgress ?? 0) +
+          (res.summary.acknowledgedCount ?? res.summary.acknowledged ?? 0)
+        );
+      }
+    } catch {
+      // Non-blocking
+    }
+  }, [restaurantId, selectedEventId]);
+
+  useEffect(() => {
+    loadAssistanceSummary();
+    const interval = setInterval(loadAssistanceSummary, 10000);
+    return () => clearInterval(interval);
+  }, [loadAssistanceSummary]);
+
+  const handleToggleStation = async (field: 'hasFood' | 'hasBar' | 'hasHookah' | 'hasTableAssistance', currentValue?: boolean) => {
+    if (!selectedEventId) return;
+    const nextVal = currentValue === false ? true : false;
+    setTogglingStation(field);
+    try {
+      const updated = await api.updateWeddingEvent(selectedEventId, { [field]: nextVal }, restaurantId);
+      setEvents((prev) => prev.map((ev) => (ev.id === selectedEventId ? { ...ev, ...updated, [field]: nextVal } : ev)));
+      addToast('success', 'Station Updated', `${field} has been ${nextVal ? 'enabled' : 'disabled'} for this banquet.`);
+    } catch (err: any) {
+      addToast('error', 'Update Failed', err.message || 'Could not update station setting');
+    } finally {
+      setTogglingStation(null);
+    }
+  };
 
   // Staff Order Entry Modal State
   const [isStaffOrderModalOpen, setIsStaffOrderModalOpen] = useState<boolean>(false);
@@ -743,6 +788,25 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('assistance')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                    activeTab === 'assistance'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : 'text-slate-400 hover:text-white hover:bg-[#141824]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Bell className="w-4 h-4 text-amber-400" />
+                    <span>Table Assistance</span>
+                  </div>
+                  {activeAssistanceCount > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-rose-500 text-white font-bold text-[10px] flex items-center justify-center animate-pulse">
+                      {activeAssistanceCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
                   onClick={() => setActiveTab('bar')}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
                     activeTab === 'bar'
@@ -1192,6 +1256,17 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
             </div>
           )}
 
+          {/* TAB 6B: EVENT TABLE ASSISTANCE TERMINAL */}
+          {activeTab === 'assistance' && (
+            <EventTableAssistanceTerminal
+              restaurantId={restaurantId}
+              eventId={selectedEventId}
+              event={currentEvent}
+              currentStaffName={currentUser?.name || currentUser?.email || 'Assistance Staff'}
+              onToast={addToast}
+            />
+          )}
+
           {/* TAB 7: EVENT BAR TERMINAL */}
           {activeTab === 'bar' && (
             <div className="space-y-6 max-w-7xl mx-auto">
@@ -1341,36 +1416,94 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
               </div>
 
               <Card className="p-6 rounded-2xl bg-[#12151f] border border-[#1f2536] space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#181c2b]">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-[#181c2b]">
                   <div>
-                    <p className="font-bold text-sm text-white">Kitchen KDS Station</p>
-                    <p className="text-xs text-slate-400">Routes food items to the event kitchen terminal</p>
+                    <p className="font-bold text-sm text-white flex items-center gap-2">
+                      <ChefHat className="w-4 h-4 text-emerald-400" />
+                      Kitchen KDS Station
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">Routes banquet food courses and appetizers to the chef preparation queue</p>
                   </div>
-                  <Badge variant="success">Always Enabled</Badge>
+                  <Button
+                    size="sm"
+                    disabled={togglingStation === 'hasFood'}
+                    onClick={() => handleToggleStation('hasFood', currentEvent?.hasFood ?? true)}
+                    className={`text-xs font-bold rounded-xl px-4 ${
+                      currentEvent?.hasFood !== false
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                        : 'bg-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {currentEvent?.hasFood !== false ? 'Enabled ✓' : 'Disabled'}
+                  </Button>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#181c2b]">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-[#181c2b]">
                   <div>
-                    <p className="font-bold text-sm text-white">Runner & Delivery Dispatch</p>
-                    <p className="text-xs text-slate-400">Controls delivery progress to event tables</p>
+                    <p className="font-bold text-sm text-white flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-amber-400" />
+                      Table Assistance Service
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">Permits guests to request napkins, cutlery, extra plates, and water via QR</p>
                   </div>
-                  <Badge variant="success">Always Enabled</Badge>
+                  <Button
+                    size="sm"
+                    disabled={togglingStation === 'hasTableAssistance'}
+                    onClick={() => handleToggleStation('hasTableAssistance', currentEvent?.hasTableAssistance ?? true)}
+                    className={`text-xs font-bold rounded-xl px-4 ${
+                      currentEvent?.hasTableAssistance !== false
+                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                        : 'bg-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {currentEvent?.hasTableAssistance !== false ? 'Enabled ✓' : 'Disabled'}
+                  </Button>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#181c2b]">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-[#181c2b]">
                   <div>
-                    <p className="font-bold text-sm text-white">Bar & Mixology Station</p>
-                    <p className="text-xs text-slate-400">Enables dedicated event bar terminal</p>
+                    <p className="font-bold text-sm text-white flex items-center gap-2">
+                      <Wine className="w-4 h-4 text-purple-400" />
+                      Bar & Mixology Station
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Enables celebration cocktail & beverage station. Requires venue licensing & 21+ verification.
+                    </p>
                   </div>
-                  <Badge variant="brand">Optional Station</Badge>
+                  <Button
+                    size="sm"
+                    disabled={togglingStation === 'hasBar'}
+                    onClick={() => handleToggleStation('hasBar', currentEvent?.hasBar ?? false)}
+                    className={`text-xs font-bold rounded-xl px-4 ${
+                      currentEvent?.hasBar
+                        ? 'bg-purple-500 hover:bg-purple-400 text-white'
+                        : 'bg-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {currentEvent?.hasBar ? 'Enabled ✓' : 'Disabled'}
+                  </Button>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#181c2b]">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-[#181c2b]">
                   <div>
-                    <p className="font-bold text-sm text-white">Hookah & Shisha Station</p>
-                    <p className="text-xs text-slate-400">Enables dedicated event hookah terminal</p>
+                    <p className="font-bold text-sm text-white flex items-center gap-2">
+                      <Flame className="w-4 h-4 text-amber-400" />
+                      Hookah & Shisha Station
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">Enables dedicated event hookah lounge and flavor customization terminal</p>
                   </div>
-                  <Badge variant="brand">Optional Station</Badge>
+                  <Button
+                    size="sm"
+                    disabled={togglingStation === 'hasHookah'}
+                    onClick={() => handleToggleStation('hasHookah', currentEvent?.hasHookah ?? false)}
+                    className={`text-xs font-bold rounded-xl px-4 ${
+                      currentEvent?.hasHookah
+                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                        : 'bg-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {currentEvent?.hasHookah ? 'Enabled ✓' : 'Disabled'}
+                  </Button>
                 </div>
               </Card>
             </div>

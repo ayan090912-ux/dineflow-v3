@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
@@ -9,9 +9,10 @@ from sqlalchemy import select, func, or_, and_
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import get_caller_context, CallerContext, require_tenant_staff_or_owner, require_tenant_owner_or_admin
 from app.modules.restaurants.models import Restaurant
-from app.modules.weddings.models import WeddingEvent, EventTable
+from app.modules.weddings.models import WeddingEvent, EventTable, EventAssistanceRequest
 from app.modules.orders.models import Order
 from app.modules.menu.models import MenuCategory, MenuItem
+from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
 public_router = APIRouter()
@@ -55,6 +56,11 @@ def _format_event(event: WeddingEvent, table_count: int = 0, order_count: int = 
         "rawStatus": event.status or "DRAFT",
         "isOrderingOpen": bool(event.is_ordering_open and auth_status == "ACTIVE"),
         "isServiceActive": is_active_window,
+        "hasFood": getattr(event, "has_food", True) if getattr(event, "has_food", None) is not None else True,
+        "hasBar": getattr(event, "has_bar", False) if getattr(event, "has_bar", None) is not None else False,
+        "hasHookah": getattr(event, "has_hookah", False) if getattr(event, "has_hookah", None) is not None else False,
+        "hasTableAssistance": getattr(event, "has_table_assistance", True) if getattr(event, "has_table_assistance", None) is not None else True,
+        "alcoholPolicyNotes": getattr(event, "alcohol_policy_notes", None),
         "autoActivate": getattr(event, "auto_activate", True) if getattr(event, "auto_activate", None) is not None else True,
         "menuSelectionType": event.menu_selection_type or "FULL_MENU",
         "allowedCategoryIds": event.allowed_category_ids or [],
@@ -90,6 +96,30 @@ def _generate_event_qr_url(slug: str, event_id: str, table_number: str) -> str:
         return f"https://{clean_slug}.dinely.food/event/{event_id}/table/{clean_table}"
     return f"https://dinely.food/event/{event_id}/table/{clean_table}"
 
+def _format_assistance_request(req: EventAssistanceRequest) -> dict:
+    created_str = req.created_at.isoformat() if req.created_at else None
+    updated_str = req.updated_at.isoformat() if req.updated_at else None
+    return {
+        "id": req.id,
+        "eventId": req.event_id,
+        "restaurantId": req.restaurant_id,
+        "tableNumber": req.table_number,
+        "tableId": req.table_id,
+        "items": req.request_items or [],
+        "requestItems": req.request_items or [],
+        "guestName": req.guest_name or "",
+        "guestNote": req.guest_note or "",
+        "status": req.status,
+        "assignedStaffName": req.assigned_staff_name,
+        "assignedStaffUid": req.assigned_staff_uid,
+        "acknowledgedAt": req.acknowledged_at.isoformat() if req.acknowledged_at else None,
+        "inProgressAt": req.in_progress_at.isoformat() if req.in_progress_at else None,
+        "completedAt": req.completed_at.isoformat() if req.completed_at else None,
+        "idempotencyKey": req.idempotency_key,
+        "createdAt": created_str,
+        "updatedAt": updated_str,
+    }
+
 class CreateWeddingEventSchema(BaseModel):
     title: str
     coupleNames: Optional[str] = ""
@@ -107,6 +137,11 @@ class CreateWeddingEventSchema(BaseModel):
     coverImageUrl: Optional[str] = ""
     status: Optional[str] = "DRAFT"
     isOrderingOpen: Optional[bool] = True
+    hasFood: Optional[bool] = True
+    hasBar: Optional[bool] = False
+    hasHookah: Optional[bool] = False
+    hasTableAssistance: Optional[bool] = True
+    alcoholPolicyNotes: Optional[str] = None
     menuSelectionType: Optional[str] = "FULL_MENU"
     allowedCategoryIds: Optional[List[str]] = None
     allowedItemIds: Optional[List[str]] = None
@@ -132,6 +167,11 @@ class UpdateWeddingEventSchema(BaseModel):
     coverImageUrl: Optional[str] = None
     status: Optional[str] = None
     isOrderingOpen: Optional[bool] = None
+    hasFood: Optional[bool] = None
+    hasBar: Optional[bool] = None
+    hasHookah: Optional[bool] = None
+    hasTableAssistance: Optional[bool] = None
+    alcoholPolicyNotes: Optional[str] = None
     menuSelectionType: Optional[str] = None
     allowedCategoryIds: Optional[List[str]] = None
     allowedItemIds: Optional[List[str]] = None
@@ -155,6 +195,24 @@ class UpdateEventTableSchema(BaseModel):
     tableLabel: Optional[str] = None
     capacity: Optional[int] = None
     isActive: Optional[bool] = None
+
+class CreateEventAssistanceSchema(BaseModel):
+    tableNumber: Optional[str] = None
+    table: Optional[str] = None
+    table_number: Optional[str] = None
+    tableId: Optional[str] = None
+    items: Optional[List[Dict[str, Any]]] = None
+    requestItems: Optional[List[Dict[str, Any]]] = None
+    guestName: Optional[str] = None
+    guestNote: Optional[str] = None
+    notes: Optional[str] = None
+    note: Optional[str] = None
+    idempotencyKey: Optional[str] = None
+
+class UpdateEventAssistanceStatusSchema(BaseModel):
+    status: str
+    staffName: Optional[str] = None
+    assignedStaffName: Optional[str] = None
 
 # ==========================================
 # RESTAURANT OWNER & STAFF EVENT ENDPOINTS
@@ -260,6 +318,19 @@ async def create_wedding_event(
     else:
         eff_status = req_status or "ACTIVE"
 
+    has_bar_val = bool(payload.hasBar) if payload.hasBar is not None else False
+    if has_bar_val and getattr(rest, "has_bar", True) is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot enable Alcohol & Bar service: Venue lacks bar authorization.",
+        )
+    has_hookah_val = bool(payload.hasHookah) if payload.hasHookah is not None else False
+    if has_hookah_val and getattr(rest, "has_hookah", True) is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot enable Hookah/Shisha service: Venue lacks hookah lounge authorization.",
+        )
+
     new_event = WeddingEvent(
         id=event_id,
         restaurant_id=canonical_id,
@@ -281,6 +352,11 @@ async def create_wedding_event(
         cover_image_url=payload.coverImageUrl or None,
         status=eff_status,
         is_ordering_open=payload.isOrderingOpen if payload.isOrderingOpen is not None else True,
+        has_food=payload.hasFood if payload.hasFood is not None else True,
+        has_bar=has_bar_val,
+        has_hookah=has_hookah_val,
+        has_table_assistance=payload.hasTableAssistance if payload.hasTableAssistance is not None else True,
+        alcohol_policy_notes=payload.alcoholPolicyNotes,
         menu_selection_type=payload.menuSelectionType or "FULL_MENU",
         allowed_category_ids=payload.allowedCategoryIds or [],
         allowed_item_ids=payload.allowedItemIds or [],
@@ -441,6 +517,26 @@ async def update_wedding_event(
         ev.allowed_item_ids = payload.allowedItemIds
     if payload.estimatedGuestCount is not None:
         ev.estimated_guest_count = payload.estimatedGuestCount
+    if payload.hasBar is not None:
+        if payload.hasBar and getattr(rest, "has_bar", True) is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot enable Alcohol & Bar service: Venue lacks bar authorization."
+            )
+        ev.has_bar = bool(payload.hasBar)
+    if payload.hasHookah is not None:
+        if payload.hasHookah and getattr(rest, "has_hookah", True) is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot enable Hookah/Shisha service: Venue lacks hookah lounge authorization."
+            )
+        ev.has_hookah = bool(payload.hasHookah)
+    if payload.hasFood is not None:
+        ev.has_food = bool(payload.hasFood)
+    if payload.hasTableAssistance is not None:
+        ev.has_table_assistance = bool(payload.hasTableAssistance)
+    if payload.alcoholPolicyNotes is not None:
+        ev.alcohol_policy_notes = payload.alcoholPolicyNotes
     if payload.notes is not None:
         ev.notes = payload.notes
 
@@ -963,6 +1059,20 @@ async def get_public_wedding_event(
     items_res = await db.execute(items_stmt)
     items = items_res.scalars().all()
 
+    # Station availability for this event
+    has_food = getattr(ev, "has_food", True) if getattr(ev, "has_food", None) is not None else True
+    has_bar = getattr(ev, "has_bar", False) if getattr(ev, "has_bar", None) is not None else False
+    has_hookah = getattr(ev, "has_hookah", False) if getattr(ev, "has_hookah", None) is not None else False
+    has_assistance = getattr(ev, "has_table_assistance", True) if getattr(ev, "has_table_assistance", None) is not None else True
+
+    def _item_allowed_by_station(it: MenuItem) -> bool:
+        dest = getattr(it, "target_destination", None) or ("BAR" if it.is_alcoholic else "KITCHEN")
+        if dest == "BAR" or it.is_alcoholic:
+            return has_bar
+        if dest == "HOOKAH":
+            return has_hookah
+        return has_food
+
     # Filter menu if restricted
     allowed_cats = set(ev.allowed_category_ids or [])
     allowed_items = set(ev.allowed_item_ids or [])
@@ -973,7 +1083,7 @@ async def get_public_wedding_event(
         if is_restricted and allowed_cats and c.id not in allowed_cats:
             continue
 
-        c_items = [it for it in items if it.category_id == c.id]
+        c_items = [it for it in items if it.category_id == c.id and _item_allowed_by_station(it)]
         if is_restricted and allowed_items:
             c_items = [it for it in c_items if it.id in allowed_items]
 
@@ -992,6 +1102,8 @@ async def get_public_wedding_event(
                         "isVegetarian": it.is_vegetarian,
                         "isAlcoholic": it.is_alcoholic,
                         "isAvailable": it.is_available,
+                        "targetDestination": getattr(it, "target_destination", None) or ("BAR" if it.is_alcoholic else "KITCHEN"),
+                        "dietaryType": "NON_VEG" if not it.is_vegetarian else (getattr(it, "dietary_type", "VEG") or "VEG"),
                         "categoryName": c.name,
                         "categoryId": c.id,
                         "variants": getattr(it, "variants_json", None),
@@ -1003,9 +1115,9 @@ async def get_public_wedding_event(
 
     # Fallback if no categories or unassigned items
     if not filtered_menu and items:
-        valid_items = items
+        valid_items = [it for it in items if _item_allowed_by_station(it)]
         if is_restricted and allowed_items:
-            valid_items = [it for it in items if it.id in allowed_items]
+            valid_items = [it for it in valid_items if it.id in allowed_items]
         if valid_items:
             filtered_menu.append({
                 "id": "event-specials",
@@ -1021,6 +1133,8 @@ async def get_public_wedding_event(
                         "isVegetarian": it.is_vegetarian,
                         "isAlcoholic": it.is_alcoholic,
                         "isAvailable": it.is_available,
+                        "targetDestination": getattr(it, "target_destination", None) or ("BAR" if it.is_alcoholic else "KITCHEN"),
+                        "dietaryType": "NON_VEG" if not it.is_vegetarian else (getattr(it, "dietary_type", "VEG") or "VEG"),
                         "categoryName": "Event Menu",
                         "categoryId": "event-specials",
                     }
@@ -1057,6 +1171,11 @@ async def get_public_wedding_event(
             "rawStatus": ev.status or "DRAFT",
             "isOrderingOpen": is_ordering_available,
             "isServiceActive": is_active_window,
+            "hasFood": has_food,
+            "hasBar": has_bar,
+            "hasHookah": has_hookah,
+            "hasTableAssistance": has_assistance,
+            "alcoholPolicyNotes": getattr(ev, "alcohol_policy_notes", None),
         },
         "restaurant": {
             "id": rest.id,
@@ -1070,3 +1189,274 @@ async def get_public_wedding_event(
         ),
         "menu": filtered_menu,
     }
+
+# ==========================================
+# PUBLIC GUEST TABLE ASSISTANCE (NO AUTH)
+# ==========================================
+
+@router.post("/public/events/{event_id}/assistance", status_code=status.HTTP_201_CREATED)
+@public_router.post("/events/{event_id}/assistance", status_code=status.HTTP_201_CREATED)
+async def create_event_table_assistance_request(
+    event_id: str,
+    payload: CreateEventAssistanceSchema,
+    response: Response,
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(WeddingEvent).where(WeddingEvent.id == event_id)
+    res = await db.execute(stmt)
+    ev = res.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    now_utc = datetime.now(timezone.utc)
+    auth_status = get_authoritative_event_status(ev, now_utc)
+    if auth_status in ("CLOSED", "COMPLETED", "CANCELLED"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Table assistance is unavailable: Event has {auth_status.lower()}."
+        )
+
+    if getattr(ev, "has_table_assistance", True) is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Table assistance service is not enabled for this banquet."
+        )
+
+    raw_tbl = payload.tableNumber or payload.table or payload.table_number or ""
+    clean_tbl = str(raw_tbl).strip()
+    if not clean_tbl:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Table number is required.")
+
+    # Match against EventTable if available
+    t_stmt = select(EventTable).where(
+        EventTable.event_id == ev.id,
+        (EventTable.table_number == clean_tbl) | (EventTable.id == payload.tableId if payload.tableId else False)
+    )
+    t_res = await db.execute(t_stmt)
+    matched_tbl = t_res.scalar_one_or_none()
+    table_id_val = matched_tbl.id if matched_tbl else payload.tableId
+
+    req_items = payload.requestItems or payload.items or []
+    if not req_items or len(req_items) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one assistance item must be requested.")
+
+    note_val = (payload.guestNote or payload.notes or payload.note or "").strip() or None
+
+    # Idempotency Check: if identical request submitted within 10 minutes, return existing
+    if payload.idempotencyKey:
+        clean_key = payload.idempotencyKey.strip()
+        existing_stmt = select(EventAssistanceRequest).where(
+            EventAssistanceRequest.event_id == ev.id,
+            EventAssistanceRequest.idempotency_key == clean_key
+        )
+        existing_res = await db.execute(existing_stmt)
+        existing_req = existing_res.scalar_one_or_none()
+        if existing_req:
+            response.status_code = status.HTTP_200_OK
+            return _format_assistance_request(existing_req)
+
+    req_id = f"ast-{ev.id[:8]}-{int(now_utc.timestamp() * 1000)}"
+    new_req = EventAssistanceRequest(
+        id=req_id,
+        event_id=ev.id,
+        restaurant_id=ev.restaurant_id,
+        table_number=clean_tbl,
+        table_id=table_id_val,
+        request_items=req_items,
+        guest_name=payload.guestName.strip() if payload.guestName else None,
+        guest_note=note_val,
+        status="NEW",
+        idempotency_key=payload.idempotencyKey.strip() if payload.idempotencyKey else None,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(new_req)
+    await db.commit()
+    await db.refresh(new_req)
+
+    req_dict = _format_assistance_request(new_req)
+
+    try:
+        await ws_manager.broadcast_event(
+            ev.restaurant_id,
+            "event_assistance_created",
+            req_dict,
+            audience=["OWNER", "WAITER", "RUNNER", "STAFF"]
+        )
+    except Exception:
+        pass
+
+    return req_dict
+
+@router.get("/public/events/{event_id}/assistance/status/{request_id}")
+@public_router.get("/events/{event_id}/assistance/status/{request_id}")
+async def get_public_event_assistance_request_status(
+    event_id: str,
+    request_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(EventAssistanceRequest).where(
+        EventAssistanceRequest.event_id == event_id,
+        EventAssistanceRequest.id == request_id
+    )
+    res = await db.execute(stmt)
+    req = res.scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assistance request not found.")
+    return _format_assistance_request(req)
+
+@router.get("/public/events/{event_id}/assistance")
+@public_router.get("/events/{event_id}/assistance")
+async def list_public_event_assistance_by_table(
+    event_id: str,
+    table: str = Query(..., description="Table number"),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(EventAssistanceRequest).where(
+        EventAssistanceRequest.event_id == event_id,
+        EventAssistanceRequest.table_number == str(table).strip()
+    ).order_by(EventAssistanceRequest.created_at.desc()).limit(20)
+    res = await db.execute(stmt)
+    reqs = res.scalars().all()
+    return [_format_assistance_request(r) for r in reqs]
+
+# ==========================================
+# STAFF EVENT TABLE ASSISTANCE TERMINAL
+# ==========================================
+
+@router.get("/{restaurant_id}/events/{event_id}/assistance")
+async def list_event_assistance_requests(
+    restaurant_id: str,
+    event_id: str,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    ev_stmt = select(WeddingEvent).where(WeddingEvent.id == event_id, WeddingEvent.restaurant_id == canonical_id)
+    ev_res = await db.execute(ev_stmt)
+    ev = ev_res.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    stmt = select(EventAssistanceRequest).where(
+        EventAssistanceRequest.event_id == event_id,
+        EventAssistanceRequest.restaurant_id == canonical_id
+    ).order_by(EventAssistanceRequest.created_at.desc())
+    res = await db.execute(stmt)
+    all_reqs = res.scalars().all()
+
+    new_count = sum(1 for r in all_reqs if r.status == "NEW")
+    ack_count = sum(1 for r in all_reqs if r.status == "ACKNOWLEDGED")
+    in_prog_count = sum(1 for r in all_reqs if r.status == "IN_PROGRESS")
+    comp_count = sum(1 for r in all_reqs if r.status == "COMPLETED")
+    waiting_tables = set(r.table_number for r in all_reqs if r.status in ("NEW", "ACKNOWLEDGED", "IN_PROGRESS"))
+
+    summary = {
+        "newRequestsCount": new_count,
+        "acknowledgedCount": ack_count,
+        "inProgressCount": in_prog_count,
+        "completedCount": comp_count,
+        "waitingTablesCount": len(waiting_tables),
+        "new": new_count,
+        "acknowledged": ack_count,
+        "inProgress": in_prog_count,
+        "completed": comp_count,
+        "waitingTables": len(waiting_tables),
+    }
+
+    filtered = all_reqs
+    if status_filter:
+        clean_st = status_filter.strip().upper()
+        if clean_st == "ACTIVE":
+            filtered = [r for r in all_reqs if r.status in ("NEW", "ACKNOWLEDGED", "IN_PROGRESS")]
+        elif clean_st != "ALL":
+            filtered = [r for r in all_reqs if r.status == clean_st]
+
+    return {
+        "summary": summary,
+        "requests": [_format_assistance_request(r) for r in filtered]
+    }
+
+@router.patch("/{restaurant_id}/events/{event_id}/assistance/{request_id}/status")
+async def update_event_assistance_request_status(
+    restaurant_id: str,
+    event_id: str,
+    request_id: str,
+    payload: UpdateEventAssistanceStatusSchema,
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    stmt = select(EventAssistanceRequest).where(
+        EventAssistanceRequest.id == request_id,
+        EventAssistanceRequest.event_id == event_id,
+        EventAssistanceRequest.restaurant_id == canonical_id
+    )
+    res = await db.execute(stmt)
+    req = res.scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assistance request not found.")
+
+    target_status = payload.status.strip().upper()
+    valid_statuses = ("NEW", "ACKNOWLEDGED", "IN_PROGRESS", "COMPLETED", "CANCELLED")
+    if target_status not in valid_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status '{payload.status}'. Must be one of: {', '.join(valid_statuses)}"
+        )
+
+    # Idempotent completion
+    if req.status == "COMPLETED" and target_status == "COMPLETED":
+        return _format_assistance_request(req)
+
+    now_utc = datetime.now(timezone.utc)
+    staff_name = (payload.assignedStaffName or payload.staffName or "").strip() or caller.email or "Assistance Staff"
+
+    req.status = target_status
+    req.updated_at = now_utc
+
+    if target_status == "ACKNOWLEDGED":
+        req.acknowledged_at = req.acknowledged_at or now_utc
+        req.assigned_staff_name = staff_name
+        req.assigned_staff_uid = caller.uid
+    elif target_status == "IN_PROGRESS":
+        req.acknowledged_at = req.acknowledged_at or now_utc
+        req.in_progress_at = now_utc
+        req.assigned_staff_name = staff_name
+        req.assigned_staff_uid = caller.uid
+    elif target_status == "COMPLETED":
+        req.completed_at = now_utc
+        if not req.assigned_staff_name:
+            req.assigned_staff_name = staff_name
+            req.assigned_staff_uid = caller.uid
+    elif target_status == "NEW":
+        req.assigned_staff_name = None
+        req.assigned_staff_uid = None
+
+    await db.commit()
+    await db.refresh(req)
+
+    req_dict = _format_assistance_request(req)
+
+    try:
+        await ws_manager.broadcast_event(
+            canonical_id,
+            "event_assistance_updated",
+            req_dict,
+            audience=["OWNER", "WAITER", "RUNNER", "STAFF"]
+        )
+    except Exception:
+        pass
+
+    return req_dict
