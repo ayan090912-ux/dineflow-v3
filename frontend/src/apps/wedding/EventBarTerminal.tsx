@@ -296,6 +296,7 @@ export const EventBarTerminal: React.FC<EventBarTerminalProps> = ({
           {filteredOrders.map((order) => {
             const bStatus = order.barStatus || 'PENDING';
             const barItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
+            const displayItems = barItems.length > 0 ? barItems : (order.items || []);
             const isUpdating = updatingOrderId === order.id;
 
             // Multi-station status indicators for parent order
@@ -359,7 +360,7 @@ export const EventBarTerminal: React.FC<EventBarTerminalProps> = ({
 
                   {/* Drinks Items List */}
                   <div className="space-y-2 py-1">
-                    {barItems.map((item, idx) => (
+                    {displayItems.map((item, idx) => (
                       <div key={idx} className="bg-[#1b172d] p-2 rounded-xl border border-purple-900/30 flex items-start justify-between gap-2">
                         <div className="space-y-0.5">
                           <div className="text-sm font-medium text-white flex items-center gap-2">

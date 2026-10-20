@@ -47,17 +47,34 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
     completedCount: 0,
     waitingTablesCount: 0,
   });
+  const [effectiveEventId, setEffectiveEventId] = useState<string>(eventId || '');
+  const [fetchError, setFetchError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'NEW' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'COMPLETED' | 'ALL'>('ACTIVE');
   const [searchTable, setSearchTable] = useState<string>('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (eventId) {
+      setEffectiveEventId(eventId);
+    } else if (restaurantId) {
+      api.getWeddingEvents(restaurantId).then((evList) => {
+        if (evList && evList.length > 0) {
+          const active = evList.find((e) => e.status === 'ACTIVE') || evList[0];
+          setEffectiveEventId(active.id);
+        }
+      }).catch(() => {});
+    }
+  }, [eventId, restaurantId]);
+
   const fetchAssistanceData = useCallback(async (isSilent = false) => {
-    if (!restaurantId || !eventId) return;
+    const targetEventId = effectiveEventId || eventId;
+    if (!restaurantId || !targetEventId) return;
     if (!isSilent) setRefreshing(true);
+    setFetchError('');
     try {
-      const res = await api.getEventAssistanceRequests(restaurantId, eventId, statusFilter);
+      const res = await api.getEventAssistanceRequests(restaurantId, targetEventId, statusFilter);
       if (res) {
         setRequests(res.requests || []);
         if (res.summary) {
@@ -65,14 +82,17 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
         }
       }
     } catch (err: any) {
+      console.error('[EventTableAssistanceTerminal] Failed to fetch:', err);
+      const msg = err.message || 'Could not fetch table assistance requests';
+      setFetchError(msg);
       if (!isSilent && onToast) {
-        onToast('error', 'Assistance Queue Error', err.message || 'Could not fetch table assistance requests');
+        onToast('error', 'Assistance Queue Error', msg);
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [restaurantId, eventId, statusFilter, onToast]);
+  }, [restaurantId, effectiveEventId, eventId, statusFilter, onToast]);
 
   useEffect(() => {
     fetchAssistanceData();
@@ -87,9 +107,12 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
     targetStatus: EventAssistanceStatus,
     staffName?: string
   ) => {
+    const targetEventId = effectiveEventId || eventId;
+    if (!restaurantId || !targetEventId) return;
     setUpdatingId(requestId);
+    setFetchError('');
     try {
-      await api.updateEventAssistanceStatus(restaurantId, eventId, requestId, {
+      await api.updateEventAssistanceStatus(restaurantId, targetEventId, requestId, {
         status: targetStatus,
         assignedStaffName: staffName || currentStaffName,
       });
@@ -106,8 +129,10 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
       }
       await fetchAssistanceData(true);
     } catch (err: any) {
+      const msg = err.message || 'Could not update request status';
+      setFetchError(msg);
       if (onToast) {
-        onToast('error', 'Update Failed', err.message || 'Could not update request status');
+        onToast('error', 'Update Failed', msg);
       }
     } finally {
       setUpdatingId(null);
@@ -120,7 +145,10 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
         const query = searchTable.trim().toLowerCase();
         const matchesTable = (r.tableNumber || '').toLowerCase().includes(query);
         const matchesGuest = (r.guestName || '').toLowerCase().includes(query);
-        const matchesItems = (r.items || []).some((item) => (item.label || item.code || '').toLowerCase().includes(query));
+        const matchesItems = (r.items || []).some((item) => {
+          const itemText = typeof item === 'string' ? item : (item.label || item.code || item.name || '');
+          return itemText.toLowerCase().includes(query);
+        });
         if (!matchesTable && !matchesGuest && !matchesItems) return false;
       }
       return true;
@@ -189,6 +217,22 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
           </Button>
         </div>
       </div>
+
+      {/* Error Alert Banner */}
+      {fetchError && (
+        <div className="bg-rose-950/60 border border-rose-500/40 rounded-2xl p-4 flex items-center justify-between text-xs text-rose-200">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            onClick={() => setFetchError('')}
+            className="text-rose-400 hover:text-rose-100 font-mono text-xs underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Operational Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -368,19 +412,24 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
                     Requested Supplies & Assistance:
                   </p>
                   <div className="space-y-1.5">
-                    {(req.items || req.requestItems || []).map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs text-white">
-                        <div className="flex items-center gap-2">
-                          <span>{getItemIcon(item.code)}</span>
-                          <span className="font-medium text-slate-200">{item.label || item.code}</span>
+                    {(req.items || req.requestItems || []).map((item, idx) => {
+                      const itemObj = typeof item === 'string' ? { code: item, label: item, quantity: 1 } : item;
+                      const label = itemObj.label || itemObj.name || itemObj.code || 'Assistance Item';
+                      const code = itemObj.code || itemObj.label || '';
+                      return (
+                        <div key={idx} className="flex items-center justify-between text-xs text-white">
+                          <div className="flex items-center gap-2">
+                            <span>{getItemIcon(code)}</span>
+                            <span className="font-medium text-slate-200">{label}</span>
+                          </div>
+                          {itemObj.quantity && itemObj.quantity > 0 && (
+                            <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-bold text-xs">
+                              ×{itemObj.quantity}
+                            </span>
+                          )}
                         </div>
-                        {item.quantity && item.quantity > 0 && (
-                          <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-bold text-xs">
-                            ×{item.quantity}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {req.guestNote && (

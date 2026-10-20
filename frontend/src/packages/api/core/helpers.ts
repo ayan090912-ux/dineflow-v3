@@ -6,6 +6,7 @@ import {
   MenuCategory,
   MenuItem,
   Table,
+  getFulfillmentStation,
 } from '../../types';
 
 export const delay = (_ms = 0) => Promise.resolve();
@@ -146,8 +147,8 @@ export function normalizeOrder(raw: any): Order {
   const rawItems = raw.items || raw.items_json || raw.order_items || raw.orderItems || [];
   const normalizedItems: OrderItem[] = Array.isArray(rawItems)
     ? rawItems.map((i: any, idx: number) => {
-        const dest = (i.targetDestination || i.target_destination || i.station || '').toUpperCase();
-        const targetDestination: 'KITCHEN' | 'BAR' | 'HOOKAH' = dest === 'HOOKAH' ? 'HOOKAH' : dest === 'BAR' ? 'BAR' : 'KITCHEN';
+        const targetDestination = getFulfillmentStation(i);
+        const isAlcoholic = Boolean(i.isAlcoholic || i.is_alcoholic || targetDestination === 'BAR');
 
         return {
           id: i.id || `oi-${raw.id || 'ord'}-${idx}`,
@@ -156,11 +157,20 @@ export function normalizeOrder(raw: any): Order {
           price: typeof i.price === 'number' ? i.price : parseFloat(i.price || i.unit_price || i.unitPrice) || 0,
           quantity: typeof i.quantity === 'number' ? i.quantity : parseInt(i.quantity) || 1,
           notes: i.notes || '',
-          targetDestination: targetDestination,
-          isAlcoholic: Boolean(i.isAlcoholic || i.is_alcoholic || targetDestination === 'BAR'),
+          targetDestination,
+          isAlcoholic,
+          category: i.category || i.categoryName || i.barCategory || undefined,
         };
       })
     : [];
+
+  const hasK = normalizedItems.some((i) => i.targetDestination === 'KITCHEN');
+  const hasB = normalizedItems.some((i) => i.targetDestination === 'BAR');
+  const hasH = normalizedItems.some((i) => i.targetDestination === 'HOOKAH');
+
+  const rawK = raw.kitchen_status || raw.kitchenStatus;
+  const rawB = raw.bar_status || raw.barStatus;
+  const rawH = raw.hookah_status || raw.hookahStatus;
 
   return {
     id: raw.id || raw.order_id || raw.orderId || '',
@@ -170,9 +180,9 @@ export function normalizeOrder(raw: any): Order {
     tableNumber: raw.table_number || raw.tableNumber || 'Table 01',
     tableSessionId: raw.table_session_id || raw.tableSessionId || '',
     status: (raw.status || 'PENDING').toUpperCase() as OrderStatus,
-    kitchenStatus: (raw.kitchen_status || raw.kitchenStatus || raw.status || 'PENDING').toUpperCase(),
-    barStatus: (raw.bar_status || raw.barStatus || raw.status || 'PENDING').toUpperCase(),
-    hookahStatus: (raw.hookah_status || raw.hookahStatus || '').toUpperCase() || undefined,
+    kitchenStatus: (rawK ? String(rawK).toUpperCase() : (hasK ? (raw.status ? String(raw.status).toUpperCase() : 'PENDING') : undefined)) as any,
+    barStatus: (rawB ? String(rawB).toUpperCase() : (hasB ? (raw.status ? String(raw.status).toUpperCase() : 'PENDING') : undefined)) as any,
+    hookahStatus: (rawH ? String(rawH).toUpperCase() : (hasH ? (raw.status ? String(raw.status).toUpperCase() : 'PENDING') : undefined)) as any,
     claimedBy: raw.claimed_by || raw.claimedBy || undefined,
     deliveryStatus: raw.delivery_status || raw.deliveryStatus || undefined,
     deliveredAt: raw.delivered_at || raw.deliveredAt || undefined,

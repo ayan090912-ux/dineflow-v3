@@ -254,7 +254,19 @@ async def verify_tenant_authorization(
             detail=f"Cross-tenant access forbidden: Staff credentials issued for restaurant '{caller.restaurant_id}' cannot access restaurant '{restaurant.id}'."
         )
 
-    # 3. Check membership in PostgreSQL
+    # 3. Staff terminal fast-path: authenticated terminal staff callers accessing their own restaurant
+    if (caller.scope == "STAFF" or is_staff_header_auth) and caller.restaurant_id and caller.restaurant_id.strip() == restaurant.id:
+        if allowed_roles:
+            norm_allowed = [r.strip().upper() for r in allowed_roles]
+            if caller.role not in norm_allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Staff role '{caller.role}' is not authorized to perform this operation.",
+                )
+        caller.restaurant_id = restaurant.id
+        return caller
+
+    # 4. Check membership in PostgreSQL
     mem_stmt = select(RestaurantMembership).where(
         RestaurantMembership.restaurant_id == restaurant.id,
         or_(

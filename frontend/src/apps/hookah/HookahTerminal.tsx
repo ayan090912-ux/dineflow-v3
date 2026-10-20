@@ -159,11 +159,9 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
 
       const hookahOrders = allOrders
         .filter((o) => {
-          if (restaurant?.businessType !== 'WEDDING_ORDERING' && (o.orderType === 'WEDDING_EVENT' || Boolean((o as any).eventId))) {
-            return false;
-          }
           const hasHookahItems = o.items && o.items.some((i) => getFulfillmentStation(i) === 'HOOKAH');
-          return hasHookahItems;
+          const hasHookahStatus = Boolean(o.hookahStatus && (o.hookahStatus as string) !== 'NOT_REQUIRED');
+          return hasHookahItems || hasHookahStatus;
         })
         .map((o) => {
           const hookahItemsOnly = (o.items || []).filter((i) => getFulfillmentStation(i) === 'HOOKAH');
@@ -171,7 +169,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
           const effHookahStatus = isFinished ? 'COMPLETED' : (o.hookahStatus || 'PENDING');
           return {
             ...o,
-            items: hookahItemsOnly,
+            items: hookahItemsOnly.length > 0 ? hookahItemsOnly : o.items,
             hookahStatus: effHookahStatus,
           };
         });

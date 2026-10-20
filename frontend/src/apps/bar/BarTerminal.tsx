@@ -42,6 +42,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
   const [isLoading, setIsLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastNotification, setLastNotification] = useState<string>('');
+  const [actionError, setActionError] = useState<string>('');
 
   useEffect(() => {
     const currentRestId = api.getCurrentRestaurantId() || '';
@@ -155,17 +156,16 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
 
   const loadBarOrders = async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
+    setActionError('');
     try {
-      const restId = api.getCurrentRestaurantId() || undefined;
+      const restId = api.getCurrentRestaurantId() || restaurant?.id || undefined;
       const allOrders = await api.getOrders(restId, { station: 'BAR', activeOnly: true });
 
       const barOrders = allOrders
         .filter((o) => {
-          if (restaurant?.businessType !== 'WEDDING_ORDERING' && (o.orderType === 'WEDDING_EVENT' || Boolean((o as any).eventId))) {
-            return false;
-          }
           const hasBarItems = o.items && o.items.some((i) => getFulfillmentStation(i) === 'BAR');
-          return hasBarItems;
+          const hasBarStatus = Boolean(o.barStatus && (o.barStatus as string) !== 'NOT_REQUIRED');
+          return hasBarItems || hasBarStatus;
         })
         .map((o) => {
           const drinkItemsOnly = (o.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
@@ -173,20 +173,22 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
           const effBarStatus = isFinished ? 'COMPLETED' : (o.barStatus || 'PENDING');
           return {
             ...o,
-            items: drinkItemsOnly,
+            items: drinkItemsOnly.length > 0 ? drinkItemsOnly : o.items,
             barStatus: effBarStatus,
           };
         });
 
       setOrders(barOrders as any);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load bar orders:', err);
+      setActionError(err?.message || 'Unable to sync with live bar queue.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
+    setActionError('');
     try {
       const stationStatus =
         newStatus === 'READY'
@@ -203,13 +205,14 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
           setRecentDispatches((prev) => [
             { ...completedOrd, barStatus: 'COMPLETED', status: 'COMPLETED' },
             ...prev.filter((x) => x.id !== orderId),
-          ].slice(0, 5));
+          ].slice(0, 8));
         }
       }
 
       await loadBarOrders(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update drink order status:', err);
+      setActionError(err?.message || 'Failed to update bar status. Please try again.');
     }
   };
   // Divide orders into Bar Pipeline stages based strictly on authoritative station and order status
@@ -244,6 +247,22 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
 
   return (
     <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Error Alert Banner */}
+      {actionError && (
+        <div className="bg-rose-950/70 border-b border-rose-800/50 text-rose-200 px-6 py-2.5 text-xs font-mono flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            onClick={() => setActionError('')}
+            className="text-rose-400/80 hover:text-rose-100 text-xs px-2 py-0.5 rounded transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Top Banner Notification */}
       {lastNotification && (
         <div className="bg-emerald-950/60 border-b border-emerald-800/40 text-emerald-200 px-6 py-2.5 text-xs font-mono flex items-center justify-between">

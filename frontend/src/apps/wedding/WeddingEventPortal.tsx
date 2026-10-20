@@ -265,9 +265,18 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
 
       // Filter orders strictly to this event (or all event orders if no event selected)
       const filtered = fetchedOrders.filter((o) => {
-        const isEvOrder = o.orderType === 'WEDDING_EVENT' || Boolean(o.eventId);
+        const isEvOrder =
+          o.orderType === 'WEDDING_EVENT' ||
+          o.orderType === 'EVENT_ORDER' ||
+          Boolean(o.eventId) ||
+          Boolean((o as any).event_id);
         if (!selectedEventId) return isEvOrder;
-        return isEvOrder && (o.eventId === selectedEventId || (o as any).event_id === selectedEventId);
+        return (
+          isEvOrder &&
+          (o.eventId === selectedEventId ||
+            (o as any).event_id === selectedEventId ||
+            (!o.eventId && !(o as any).event_id))
+        );
       });
       setEventOrders(filtered);
       setMenuItems(fetchedMenu);

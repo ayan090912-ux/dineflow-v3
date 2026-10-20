@@ -1291,7 +1291,17 @@ async def create_event_table_assistance_request(
     ).order_by(EventAssistanceRequest.created_at.desc()).limit(1)
     dup_res = await db.execute(dup_stmt)
     dup_req = dup_res.scalar_one_or_none()
-    if dup_req and sorted(dup_req.request_items or []) == sorted(req_items):
+    def _norm_items_for_cmp(items):
+        res = []
+        for it in (items or []):
+            if isinstance(it, dict):
+                import json
+                res.append(json.dumps(it, sort_keys=True))
+            else:
+                res.append(str(it))
+        return sorted(res)
+
+    if dup_req and _norm_items_for_cmp(dup_req.request_items) == _norm_items_for_cmp(req_items):
         response.status_code = status.HTTP_200_OK
         return _format_public_assistance_request(dup_req)
 

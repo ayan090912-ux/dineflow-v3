@@ -292,6 +292,7 @@ export const EventHookahTerminal: React.FC<EventHookahTerminalProps> = ({
           {filteredOrders.map((order) => {
             const hStatus = order.hookahStatus || 'PENDING';
             const hookahItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'HOOKAH');
+            const displayItems = hookahItems.length > 0 ? hookahItems : (order.items || []);
             const isUpdating = updatingOrderId === order.id;
 
             // Multi-station status indicators for parent order
@@ -355,7 +356,7 @@ export const EventHookahTerminal: React.FC<EventHookahTerminalProps> = ({
 
                   {/* Hookah Items List */}
                   <div className="space-y-2 py-1">
-                    {hookahItems.map((item, idx) => (
+                    {displayItems.map((item, idx) => (
                       <div key={idx} className="bg-[#211712] p-2.5 rounded-xl border border-amber-900/30 space-y-1">
                         <div className="text-sm font-medium text-white flex items-center justify-between">
                           <div className="flex items-center gap-2">

@@ -65,6 +65,31 @@ class UpdateOrderETASchema(BaseModel):
     estimatedPrepTimeMinutes: Optional[int] = None
     reason: Optional[str] = None
 
+def resolve_item_station(it: Any) -> str:
+    """Canonical single-source-of-truth station routing for an order item."""
+    if not isinstance(it, dict):
+        return "KITCHEN"
+    dest = (it.get("targetDestination") or it.get("target_destination") or it.get("station") or "").upper()
+    if dest == "HOOKAH":
+        return "HOOKAH"
+    if dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True:
+        return "BAR"
+
+    cat = (it.get("categoryName") or it.get("category") or it.get("barCategory") or "").lower()
+    name = (it.get("name") or "").lower()
+
+    if "hookah" in cat or "shisha" in cat or "hookah" in name or "shisha" in name:
+        return "HOOKAH"
+
+    bar_keywords = (
+        "bar", "cocktail", "mocktail", "wine", "beer", "whiskey", "vodka",
+        "gin", "rum", "beverage", "drink", "soda", "liquor", "mojito", "scotch", "tequila", "brandy"
+    )
+    if any(k in cat for k in bar_keywords) or any(k in name for k in bar_keywords):
+        return "BAR"
+
+    return "KITCHEN"
+
 def format_order_response(order: Order, station: Optional[str] = None) -> dict:
     created_at_val = None
     if getattr(order, "created_at", None):
@@ -91,22 +116,11 @@ def format_order_response(order: Order, station: Optional[str] = None) -> dict:
     raw_items = getattr(order, "items_json", []) or []
     eff_st = (station or "").upper()
     if eff_st == "BAR":
-        filtered_items = [
-            it for it in raw_items
-            if (it.get("targetDestination") or it.get("target_destination") or "").upper() == "BAR"
-            or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True
-        ]
+        filtered_items = [it for it in raw_items if resolve_item_station(it) == "BAR"]
     elif eff_st == "HOOKAH":
-        filtered_items = [
-            it for it in raw_items
-            if (it.get("targetDestination") or it.get("target_destination") or "").upper() == "HOOKAH"
-        ]
+        filtered_items = [it for it in raw_items if resolve_item_station(it) == "HOOKAH"]
     elif eff_st == "KITCHEN":
-        filtered_items = [
-            it for it in raw_items
-            if (it.get("targetDestination") or it.get("target_destination") or "").upper() not in ["BAR", "HOOKAH"]
-            and not (it.get("isAlcoholic") is True or it.get("is_alcoholic") is True)
-        ]
+        filtered_items = [it for it in raw_items if resolve_item_station(it) == "KITCHEN"]
     else:
         filtered_items = raw_items
 
@@ -497,16 +511,17 @@ async def create_order(
             d["menuItemId"] = item_mid
             d["name"] = auth_name
             d["price"] = auth_price
-            d["targetDestination"] = station
-            d["target_destination"] = station
-            d["isAlcoholic"] = is_alc
-            d["is_alcoholic"] = is_alc
+            eff_station = station if m_rec else resolve_item_station(d)
+            d["targetDestination"] = eff_station
+            d["target_destination"] = eff_station
+            d["isAlcoholic"] = is_alc or (eff_station == "BAR")
+            d["is_alcoholic"] = is_alc or (eff_station == "BAR")
             resolved_items_list.append(d)
 
         items_list_dict = resolved_items_list
-        has_kitchen = any(it["targetDestination"] == "KITCHEN" for it in items_list_dict)
-        has_bar = any(it["targetDestination"] == "BAR" for it in items_list_dict)
-        has_hookah = any(it["targetDestination"] == "HOOKAH" for it in items_list_dict)
+        has_kitchen = any(resolve_item_station(it) == "KITCHEN" for it in items_list_dict)
+        has_bar = any(resolve_item_station(it) == "BAR" for it in items_list_dict)
+        has_hookah = any(resolve_item_station(it) == "HOOKAH" for it in items_list_dict)
 
         kitchen_status = "PENDING" if has_kitchen else None
         bar_status = "PENDING" if has_bar else None
@@ -963,13 +978,22 @@ async def get_restaurant_orders(
                     )
                     has_bday_count = has_bday_res.scalar() or 0
                     if has_bday_count > 0:
-                        # Business day is currently closed - operational queue is clean/empty
-                        return []
+                        if effective_station:
+                            query = query.where(Order.status.in_(["PENDING", "PREPARING", "READY"]))
+                        else:
+                            query = query.where(
+                                (Order.event_id.isnot(None)) |
+                                (Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER"]))
+                            )
+                    else:
+                        query = query.where(Order.status.in_(["PENDING", "PREPARING", "READY"]))
                 else:
                     query = query.where(
                         or_(
                             Order.business_day_id == open_bday.id,
-                            and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at)
+                            and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at),
+                            Order.event_id.isnot(None),
+                            Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER"])
                         )
                     )
             elif effective_station:
@@ -977,16 +1001,12 @@ async def get_restaurant_orders(
                     query = query.where(
                         or_(
                             Order.business_day_id == open_bday.id,
-                            and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at)
+                            and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at),
+                            Order.event_id.isnot(None),
+                            Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER"])
                         )
                     )
                 else:
-                    has_bday_res = await db.execute(
-                        select(func.count(BusinessDay.id)).where(BusinessDay.restaurant_id == target_rest_id)
-                    )
-                    has_bday_count = has_bday_res.scalar() or 0
-                    if has_bday_count > 0:
-                        return []
                     query = query.where(Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"]))
 
         if effective_station == "BAR":
@@ -1137,14 +1157,12 @@ async def update_order_status(
     has_h_items = False
     if order.items_json:
         for it in order.items_json:
-            dest = (it.get("targetDestination") or it.get("target_destination") or it.get("station") or "").upper()
-            cat = (it.get("categoryName") or it.get("category") or "").lower()
-            it_name = (it.get("name") or "").lower()
-            if dest == "HOOKAH" or "hookah" in cat or "shisha" in cat or "hookah" in it_name or "shisha" in it_name:
+            st = resolve_item_station(it)
+            if st == "HOOKAH":
                 has_h_items = True
-            elif dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True or any(k in cat for k in ("bar", "cocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda")):
+            elif st == "BAR":
                 has_b_items = True
-            else:
+            elif st == "KITCHEN":
                 has_k_items = True
     else:
         has_k_items = (order.kitchen_status is not None)
