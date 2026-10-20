@@ -423,6 +423,8 @@ async def create_order(
 
         is_staff_caller = caller.is_authenticated and (caller.role in ["OWNER", "RESTAURANT_OWNER", "WAITER", "CHEF", "BAR", "HOOKAH", "SHISHA", "MANAGER", "ADMIN"])
 
+        is_wedding_event = (payload.orderType == "WEDDING_EVENT") or bool(payload.eventId)
+
         resolved_items_list = []
         for i in payload.items:
             m_rec = menu_by_id.get(i.menuItemId or i.id) or menu_by_name.get((i.name or "").lower().strip())
@@ -446,11 +448,28 @@ async def create_order(
                 else:
                     station = "KITCHEN"
                 is_alc = bool(m_rec.is_alcoholic)
-                auth_price = float(m_rec.price)
+
+                if is_wedding_event:
+                    auth_price = 0.0
+                else:
+                    if float(m_rec.price or 0.0) <= 0.0:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Item '{m_rec.name}' has invalid zero pricing for standard dining. Please contact staff."
+                        )
+                    # Enforce that customer price cannot be arbitrarily lower than catalog price,
+                    # but allow legitimate modifiers/add-ons (price >= m_rec.price) and authorized staff discounts.
+                    if i.price is not None and float(i.price) >= float(m_rec.price):
+                        auth_price = float(i.price)
+                    elif is_staff_caller and i.price is not None and float(i.price) > 0.0:
+                        auth_price = float(i.price)
+                    else:
+                        auth_price = float(m_rec.price)
+
                 auth_name = m_rec.name
                 item_mid = m_rec.id
             else:
-                if not is_staff_caller and (payload.orderType or "") != "WEDDING_EVENT":
+                if len(db_menu_items) > 0 and not is_staff_caller and not is_wedding_event:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Item '{i.name or i.menuItemId or i.id}' is not found on the menu."
@@ -464,7 +483,12 @@ async def create_order(
                 else:
                     station = p_dest or "KITCHEN"
                 is_alc = bool(i.isAlcoholic)
-                auth_price = float(i.price or 0.0)
+                auth_price = 0.0 if is_wedding_event else float(i.price or 0.0)
+                if not is_wedding_event and auth_price <= 0.0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Item '{i.name or 'Custom item'}' requires a valid price greater than zero."
+                    )
                 auth_name = i.name
                 item_mid = i.menuItemId or i.id or f"item-custom-{int(now_utc.timestamp())}"
 
@@ -488,39 +512,45 @@ async def create_order(
         bar_status = "PENDING" if has_bar else None
         hookah_status = "PENDING" if has_hookah else None
 
-        subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
-        tax_amount = 0.0
-        total = subtotal
-        tax_breakdown = []
+        if is_wedding_event:
+            subtotal = 0.0
+            tax_amount = 0.0
+            total = 0.0
+            tax_breakdown = []
+        else:
+            subtotal = sum((float(i.get("price") or 0) * int(i.get("quantity") or 1)) for i in items_list_dict)
+            tax_amount = 0.0
+            total = subtotal
+            tax_breakdown = []
 
-        try:
-            cached_tax_entry = _ORDER_TAX_CACHE.get(restaurant.id)
-            if cached_tax_entry and (now_mono - cached_tax_entry[0] < _ORDER_TAX_CACHE_TTL):
-                active_taxes, tax_cats_map, tax_items_map = cached_tax_entry[1]
-            else:
-                # Resolve actual Restaurant DB model for tax configuration
-                r_db_res = await db.execute(select(Restaurant).where(Restaurant.id == restaurant.id))
-                rest_db_obj = r_db_res.scalar_one_or_none()
-                if not rest_db_obj:
-                    rest_db_obj = restaurant
+            try:
+                cached_tax_entry = _ORDER_TAX_CACHE.get(restaurant.id)
+                if cached_tax_entry and (now_mono - cached_tax_entry[0] < _ORDER_TAX_CACHE_TTL):
+                    active_taxes, tax_cats_map, tax_items_map = cached_tax_entry[1]
+                else:
+                    # Resolve actual Restaurant DB model for tax configuration
+                    r_db_res = await db.execute(select(Restaurant).where(Restaurant.id == restaurant.id))
+                    rest_db_obj = r_db_res.scalar_one_or_none()
+                    if not rest_db_obj:
+                        rest_db_obj = restaurant
 
-                active_taxes, tax_cats_map, tax_items_map = await BillingService.get_effective_taxes(rest_db_obj, db)
-                _ORDER_TAX_CACHE[restaurant.id] = (now_mono, (active_taxes, tax_cats_map, tax_items_map))
+                    active_taxes, tax_cats_map, tax_items_map = await BillingService.get_effective_taxes(rest_db_obj, db)
+                    _ORDER_TAX_CACHE[restaurant.id] = (now_mono, (active_taxes, tax_cats_map, tax_items_map))
 
-            calc = calculate_taxes(
-                items=items_list_dict,
-                active_taxes=active_taxes,
-                tax_categories_map=tax_cats_map,
-                tax_items_map=tax_items_map,
-                order_type=payload.orderType or "DINE_IN"
-            )
+                calc = calculate_taxes(
+                    items=items_list_dict,
+                    active_taxes=active_taxes,
+                    tax_categories_map=tax_cats_map,
+                    tax_items_map=tax_items_map,
+                    order_type=payload.orderType or "DINE_IN"
+                )
 
-            subtotal = calc["subtotal"]
-            tax_amount = calc["total_tax_amount"]
-            total = calc["grand_total"]
-            tax_breakdown = calc["tax_breakdown"]
-        except Exception as tax_err:
-            print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
+                subtotal = calc["subtotal"]
+                tax_amount = calc["total_tax_amount"]
+                total = calc["grand_total"]
+                tax_breakdown = calc["tax_breakdown"]
+            except Exception as tax_err:
+                print("[TAX_CALCULATION_NOTICE] Exception during tax lookup, using base totals:", tax_err)
 
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if restaurant.id in _ORDER_DAILY_SEQ and _ORDER_DAILY_SEQ[restaurant.id][0] == today_str:
@@ -1082,7 +1112,7 @@ async def update_order_status(
         if not caller.is_admin and caller_role not in allowed_delivery_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Forbidden: Station staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Runner, Waiter, and Manager roles own delivery."
+                detail=f"Forbidden: Station staff / Kitchen staff cannot deliver orders to tables. Staff role '{caller_role}' is not authorized to deliver. Only Runner, Waiter, and Manager roles own delivery."
             )
 
     # Safe duplicate/stale claim protection
@@ -1101,12 +1131,34 @@ async def update_order_status(
         if payload.deliveryStatus in ["DELIVERED", "COMPLETED"]:
             order.delivered_at = datetime.now(timezone.utc)
 
+    # Determine station items in order authoritatively from items and station statuses
+    has_k_items = False
+    has_b_items = False
+    has_h_items = False
+    if order.items_json:
+        for it in order.items_json:
+            dest = (it.get("targetDestination") or it.get("target_destination") or it.get("station") or "").upper()
+            cat = (it.get("categoryName") or it.get("category") or "").lower()
+            it_name = (it.get("name") or "").lower()
+            if dest == "HOOKAH" or "hookah" in cat or "shisha" in cat or "hookah" in it_name or "shisha" in it_name:
+                has_h_items = True
+            elif dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True or any(k in cat for k in ("bar", "cocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda")):
+                has_b_items = True
+            else:
+                has_k_items = True
+    else:
+        has_k_items = (order.kitchen_status is not None)
+        has_b_items = (order.bar_status is not None)
+        has_h_items = (order.hookah_status is not None)
+
     # Station-specific mutation role authorization
     if payload.hookahStatus:
         allowed_hookah_roles = [
             "HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
             "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
         ]
+        if payload.hookahStatus in ["COMPLETED", "DELIVERED", "SERVED"]:
+            allowed_hookah_roles.extend(["WAITER", "SERVER", "RUNNER"])
         if not caller.is_admin and caller_role not in allowed_hookah_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1119,6 +1171,8 @@ async def update_order_status(
             "BAR", "BARTENDER", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
             "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
         ]
+        if payload.barStatus in ["COMPLETED", "DELIVERED", "SERVED"]:
+            allowed_bar_roles.extend(["WAITER", "SERVER", "RUNNER"])
         if not caller.is_admin and caller_role not in allowed_bar_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1126,40 +1180,32 @@ async def update_order_status(
             )
         order.bar_status = payload.barStatus
 
-    if payload.kitchenStatus:
+    eff_kitchen_status = payload.kitchenStatus
+    if eff_kitchen_status is None and target_status in ["READY", "PREPARING", "ACCEPTED"] and has_k_items:
+        eff_kitchen_status = target_status
+
+    if eff_kitchen_status:
         allowed_kitchen_roles = [
             "KITCHEN", "CHEF", "COOK", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
             "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
         ]
+        if eff_kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"]:
+            allowed_kitchen_roles.extend(["WAITER", "SERVER", "RUNNER"])
         if not caller.is_admin and caller_role not in allowed_kitchen_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Forbidden: Staff role '{caller_role}' is not authorized to update Kitchen status. Only Kitchen staff and managers can update Kitchen station."
             )
-        order.kitchen_status = payload.kitchenStatus
-
-    # Determine station items in order
-    has_k_items = False
-    has_b_items = False
-    has_h_items = False
-    for it in (order.items_json or []):
-        dest = (it.get("targetDestination") or it.get("target_destination") or "").upper()
-        cat = (it.get("categoryName") or it.get("category") or "").lower()
-        it_name = (it.get("name") or "").lower()
-        if dest == "HOOKAH" or "hookah" in cat or "shisha" in cat or "hookah" in it_name or "shisha" in it_name:
-            has_h_items = True
-        elif dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True or any(k in cat for k in ("bar", "cocktail", "wine", "beer", "beverage", "drink")):
-            has_b_items = True
-        else:
-            has_k_items = True
+        order.kitchen_status = eff_kitchen_status
 
     # Reconcile overall status:
-    if payload.status and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]:
-        order.status = payload.status
-        if payload.status in ["DELIVERED", "COMPLETED"]:
+    # Terminal delivery/cancellation lifecycle:
+    if target_status in ["DELIVERED", "COMPLETED", "SERVED", "OUT_FOR_DELIVERY", "CANCELLED"] and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "RUNNER", "STAFF"]:
+        order.status = target_status
+        if target_status in ["DELIVERED", "COMPLETED", "SERVED"]:
             order.delivered_at = datetime.now(timezone.utc)
             order.delivery_status = "DELIVERED"
-        elif payload.status == "OUT_FOR_DELIVERY":
+        elif target_status == "OUT_FOR_DELIVERY":
             order.delivery_status = "OUT_FOR_DELIVERY"
     else:
         k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"])
@@ -1174,10 +1220,10 @@ async def update_order_status(
             order.status = "COMPLETED"
         elif k_ready and b_ready and h_ready:
             order.status = "READY"
-        elif (has_k_items and order.kitchen_status == "PREPARING") or (has_b_items and order.bar_status == "PREPARING") or (has_h_items and order.hookah_status == "PREPARING"):
+        elif (has_k_items and order.kitchen_status in ["PREPARING", "ACCEPTED", "READY"]) or (has_b_items and order.bar_status in ["PREPARING", "ACCEPTED", "READY"]) or (has_h_items and order.hookah_status in ["PREPARING", "ACCEPTED", "READY"]):
             order.status = "PREPARING"
-        elif payload.status:
-            order.status = payload.status
+        elif target_status and target_status not in ["READY", "COMPLETED"]:
+            order.status = target_status
 
     is_evt_order = (
         getattr(order, "order_type", "") in ["EVENT_ORDER", "WEDDING_EVENT"]

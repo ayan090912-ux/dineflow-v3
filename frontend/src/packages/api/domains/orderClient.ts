@@ -678,14 +678,17 @@ export class OrderClient {
 
   async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
     const order = this.base.orders.find((o) => o.id === orderId);
-    const orderStatus = status === 'READY' ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : undefined);
+    const barReady = !order?.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
+    const hookahReady = !order?.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
+    const isParentReady = (status === 'READY' && barReady && hookahReady);
+    const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
     await this.base.executeProtectedRequest<any>(
       `/orders/${encodeURIComponent(orderId)}/status`,
       {
         method: 'PUT',
         body: JSON.stringify({
-          status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+          status: isParentReady ? 'READY' : (order?.status || orderStatus),
           kitchenStatus: status,
         }),
       },
@@ -698,9 +701,7 @@ export class OrderClient {
         order.kitchenCompletedAt = new Date().toISOString();
       }
 
-      const barReady = !order.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
-      const hookahReady = !order.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
-      if (status === 'READY' && barReady && hookahReady) {
+      if (isParentReady) {
         order.status = 'READY';
         order.readyAt = new Date().toISOString();
       } else if (status === 'PREPARING' || status === 'ACCEPTED') {
@@ -720,7 +721,7 @@ export class OrderClient {
         data: order,
       });
 
-      if (order.status === 'READY' || status === 'READY') {
+      if (order.status === 'READY') {
         realtimeBus.emit('OrderReady' as any, {
           orderId: order.id,
           restaurantId: order.restaurantId,
@@ -734,14 +735,17 @@ export class OrderClient {
 
   async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
     const order = this.base.orders.find((o) => o.id === orderId);
-    const orderStatus = status === 'READY' ? 'READY' : (order?.status || 'PREPARING');
+    const kitchenReady = !order?.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
+    const hookahReady = !order?.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
+    const isParentReady = (status === 'READY' && kitchenReady && hookahReady);
+    const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
     await this.base.executeProtectedRequest<any>(
       `/orders/${encodeURIComponent(orderId)}/status`,
       {
         method: 'PUT',
         body: JSON.stringify({
-          status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+          status: isParentReady ? 'READY' : (order?.status || orderStatus),
           barStatus: status,
         }),
       },
@@ -754,9 +758,7 @@ export class OrderClient {
         order.barCompletedAt = new Date().toISOString();
       }
 
-      const kitchenReady = !order.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
-      const hookahReady = !order.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
-      if (status === 'READY' && kitchenReady && hookahReady) {
+      if (isParentReady) {
         order.status = 'READY';
         order.readyAt = new Date().toISOString();
       } else if (status === 'PREPARING' || status === 'ACCEPTED') {
@@ -790,14 +792,17 @@ export class OrderClient {
 
   async updateHookahStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
     const order = this.base.orders.find((o) => o.id === orderId);
-    const orderStatus = status === 'READY' ? 'READY' : (order?.status || 'PREPARING');
+    const kitchenReady = !order?.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
+    const barReady = !order?.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
+    const isParentReady = (status === 'READY' && kitchenReady && barReady);
+    const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
     await this.base.executeProtectedRequest<any>(
       `/orders/${encodeURIComponent(orderId)}/status`,
       {
         method: 'PUT',
         body: JSON.stringify({
-          status: order ? (status === 'READY' ? 'READY' : order.status) : orderStatus,
+          status: isParentReady ? 'READY' : (order?.status || orderStatus),
           hookahStatus: status,
         }),
       },
@@ -810,9 +815,7 @@ export class OrderClient {
         order.hookahCompletedAt = new Date().toISOString();
       }
 
-      const kitchenReady = !order.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
-      const barReady = !order.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
-      if (status === 'READY' && kitchenReady && barReady) {
+      if (isParentReady) {
         order.status = 'READY';
         order.readyAt = new Date().toISOString();
       } else if (status === 'PREPARING' || status === 'ACCEPTED') {

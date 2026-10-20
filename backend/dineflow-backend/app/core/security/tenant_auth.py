@@ -247,6 +247,13 @@ async def verify_tenant_authorization(
             detail=f"Restaurant '{restaurant_id}' was not found."
         )
 
+    # 2. Strict tenant isolation for staff callers
+    if caller.scope == "STAFF" and caller.restaurant_id and caller.restaurant_id.strip() != restaurant.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Cross-tenant access forbidden: Staff credentials issued for restaurant '{caller.restaurant_id}' cannot access restaurant '{restaurant.id}'."
+        )
+
     # 3. Check membership in PostgreSQL
     mem_stmt = select(RestaurantMembership).where(
         RestaurantMembership.restaurant_id == restaurant.id,

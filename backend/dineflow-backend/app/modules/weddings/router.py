@@ -120,6 +120,12 @@ def _format_assistance_request(req: EventAssistanceRequest) -> dict:
         "updatedAt": updated_str,
     }
 
+def _format_public_assistance_request(req: EventAssistanceRequest) -> dict:
+    """Sanitized public assistance representation. Strips internal staff database UID."""
+    data = _format_assistance_request(req)
+    data.pop("assignedStaffUid", None)
+    return data
+
 class CreateWeddingEventSchema(BaseModel):
     title: str
     coupleNames: Optional[str] = ""
@@ -1273,7 +1279,21 @@ async def create_event_table_assistance_request(
         existing_req = existing_res.scalar_one_or_none()
         if existing_req:
             response.status_code = status.HTTP_200_OK
-            return _format_assistance_request(existing_req)
+            return _format_public_assistance_request(existing_req)
+
+    # Duplicate rapid tap throttle: if same table requested active assistance within last 60 seconds with same items
+    recent_cut = now_utc - timedelta(seconds=60)
+    dup_stmt = select(EventAssistanceRequest).where(
+        EventAssistanceRequest.event_id == ev.id,
+        EventAssistanceRequest.table_number == clean_tbl,
+        EventAssistanceRequest.status.in_(["NEW", "ACKNOWLEDGED", "IN_PROGRESS"]),
+        EventAssistanceRequest.created_at >= recent_cut
+    ).order_by(EventAssistanceRequest.created_at.desc()).limit(1)
+    dup_res = await db.execute(dup_stmt)
+    dup_req = dup_res.scalar_one_or_none()
+    if dup_req and sorted(dup_req.request_items or []) == sorted(req_items):
+        response.status_code = status.HTTP_200_OK
+        return _format_public_assistance_request(dup_req)
 
     req_id = f"ast-{ev.id[:8]}-{int(now_utc.timestamp() * 1000)}"
     new_req = EventAssistanceRequest(
@@ -1306,7 +1326,7 @@ async def create_event_table_assistance_request(
     except Exception:
         pass
 
-    return req_dict
+    return _format_public_assistance_request(new_req)
 
 @router.get("/public/events/{event_id}/assistance/status/{request_id}")
 @public_router.get("/events/{event_id}/assistance/status/{request_id}")
@@ -1323,7 +1343,7 @@ async def get_public_event_assistance_request_status(
     req = res.scalar_one_or_none()
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assistance request not found.")
-    return _format_assistance_request(req)
+    return _format_public_assistance_request(req)
 
 @router.get("/public/events/{event_id}/assistance")
 @public_router.get("/events/{event_id}/assistance")
@@ -1338,15 +1358,13 @@ async def list_public_event_assistance_by_table(
     ).order_by(EventAssistanceRequest.created_at.desc()).limit(20)
     res = await db.execute(stmt)
     reqs = res.scalars().all()
-    return [_format_assistance_request(r) for r in reqs]
+    return [_format_public_assistance_request(r) for r in reqs]
 
 # ==========================================
 # STAFF EVENT TABLE ASSISTANCE TERMINAL
 # ==========================================
 
 @router.get("/{restaurant_id}/events/{event_id}/assistance")
-@public_router.get("/{restaurant_id}/events/{event_id}/assistance")
-@public_router.get("/restaurants/{restaurant_id}/events/{event_id}/assistance")
 async def list_event_assistance_requests(
     restaurant_id: str,
     event_id: str,
@@ -1406,8 +1424,6 @@ async def list_event_assistance_requests(
     }
 
 @router.patch("/{restaurant_id}/events/{event_id}/assistance/{request_id}/status")
-@public_router.patch("/{restaurant_id}/events/{event_id}/assistance/{request_id}/status")
-@public_router.patch("/restaurants/{restaurant_id}/events/{event_id}/assistance/{request_id}/status")
 async def update_event_assistance_request_status(
     restaurant_id: str,
     event_id: str,

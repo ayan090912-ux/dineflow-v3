@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -21,7 +21,7 @@ class CreateMenuItemSchema(BaseModel):
     categoryName: Optional[str] = None
     name: str
     description: Optional[str] = ""
-    price: float
+    price: float = Field(..., gt=0, description="Menu item price must be greater than zero")
     imageUrl: Optional[str] = None
     image: Optional[str] = None
     isAvailable: Optional[bool] = True
@@ -35,7 +35,7 @@ class CreateMenuItemSchema(BaseModel):
 class UpdateMenuItemSchema(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    price: Optional[float] = None
+    price: Optional[float] = Field(None, gt=0, description="Menu item price must be greater than zero")
     imageUrl: Optional[str] = None
     image: Optional[str] = None
     categoryId: Optional[str] = None
@@ -312,13 +312,19 @@ async def create_menu_item(
     is_alc = payload.isAlcoholic or (dest == "BAR")
     prep_time = payload.preparationTimeMinutes or payload.prepTimeMinutes or 15
 
+    if payload.price is None or float(payload.price) <= 0.0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Menu item price must be greater than zero."
+        )
+
     new_item = MenuItem(
         id=item_id,
         restaurant_id=target_rest_id,
         category_id=target_category_id,
         name=payload.name,
         description=payload.description or "",
-        price=payload.price,
+        price=float(payload.price),
         image_url=img,
         is_available=payload.isAvailable if payload.isAvailable is not None else True,
         is_vegetarian=is_veg,
@@ -376,7 +382,12 @@ async def update_menu_item(
     if payload.description is not None:
         item.description = payload.description
     if payload.price is not None:
-        item.price = payload.price
+        if float(payload.price) <= 0.0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Menu item price must be greater than zero."
+            )
+        item.price = float(payload.price)
     raw_cat_upd = (payload.categoryId or payload.category or payload.categoryName or "").strip() if (payload.categoryId or payload.category or payload.categoryName) else None
     if raw_cat_upd:
         query_cat_upd = select(MenuCategory).where(
