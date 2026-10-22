@@ -556,6 +556,57 @@ export interface BillingConfig {
   billingSettings?: Record<string, any>;
 }
 
+export type PrinterConnectionType = 'BROWSER' | 'NETWORK_LAN' | 'USB_BRIDGE' | 'BLUETOOTH';
+export type PrinterPaperWidth = '58mm' | '80mm';
+
+export interface RestaurantPrinter {
+  id: string;
+  restaurantId: string;
+  name: string;
+  connectionType: PrinterConnectionType;
+  ipAddress?: string;
+  port: number;
+  bridgeUrl?: string;
+  paperWidth: PrinterPaperWidth;
+  isDefault: boolean;
+  autoPrintOnBill: boolean;
+  copies: number;
+  isActive: boolean;
+  status: 'ONLINE' | 'OFFLINE' | 'ERROR';
+  lastTestPrintedAt?: string;
+  lastErrorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PrintJobResponse {
+  success: boolean;
+  message: string;
+  connectionType?: string;
+  paperWidth?: string;
+  escposBase64?: string;
+  billId?: string;
+  copiesPrinted?: number;
+  error?: string;
+}
+
+export interface PaymentTransaction {
+  id: string;
+  billId: string;
+  restaurantId: string;
+  gateway: string;
+  transactionReference: string;
+  gatewayOrderId?: string;
+  gatewayPaymentId?: string;
+  amount: number;
+  currency: string;
+  status: string;
+  paymentMethod: string;
+  rawPayload?: any;
+  verifiedAt?: string;
+  createdAt: string;
+}
+
 export interface Bill {
   id: string;
   restaurantId: string;
@@ -578,12 +629,24 @@ export interface Bill {
   roundOffAmount?: number;
   grandTotal: number;
   amountPaid?: number;
+  amountDue?: number;
   balanceDue?: number;
   status: BillStatus;
   paymentMethod?: PaymentMethod;
-  paymentStatus: 'UNPAID' | 'PAYMENT_PENDING' | 'PAYMENT_VERIFICATION_REQUIRED' | 'PAYMENT_AWAITING_CONFIRMATION' | 'PAYMENT_PROCESSING' | 'PAID' | 'FAILED';
+  paymentStatus: 'UNPAID' | 'PAYMENT_PENDING' | 'PAYMENT_VERIFICATION_REQUIRED' | 'PAYMENT_AWAITING_CONFIRMATION' | 'PAYMENT_PROCESSING' | 'PAID' | 'PARTIALLY_PAID' | 'FAILED' | 'CLOSED';
   paymentVerifiedBy?: string;
   paymentReference?: string;
+  paymentGateway?: string;
+  gatewayOrderId?: string;
+  gatewayPaymentId?: string;
+  gatewayQrId?: string;
+  paymentQrPayload?: string;
+  qrDataUrl?: string;
+  paymentInitiatedAt?: string;
+  paymentExpiresAt?: string;
+  printCount?: number;
+  lastPrintedAt?: string;
+  printerId?: string;
   requestedAt?: string;
   paidAt?: string;
   closedAt?: string;

@@ -247,6 +247,47 @@ async def ensure_db_schema_columns(conn):
         """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS allergens JSON;""",
         """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS flavour_profile VARCHAR(255);""",
         """CREATE INDEX IF NOT EXISTS ix_menu_items_catalogue_item_id ON menu_items (catalogue_item_id);""",
+        """CREATE TABLE IF NOT EXISTS restaurant_printers (
+            id VARCHAR(255) PRIMARY KEY,
+            restaurant_id VARCHAR(255) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            connection_type VARCHAR(50) DEFAULT 'BROWSER' NOT NULL,
+            ip_address VARCHAR(100),
+            port INTEGER DEFAULT 9100 NOT NULL,
+            bridge_url VARCHAR(255),
+            paper_width VARCHAR(20) DEFAULT '80mm' NOT NULL,
+            is_default BOOLEAN DEFAULT FALSE NOT NULL,
+            auto_print_on_bill BOOLEAN DEFAULT FALSE NOT NULL,
+            copies INTEGER DEFAULT 1 NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE NOT NULL,
+            status VARCHAR(30) DEFAULT 'ONLINE' NOT NULL,
+            last_test_printed_at TIMESTAMPTZ,
+            last_error_message TEXT,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+        );""",
+        """CREATE INDEX IF NOT EXISTS ix_restaurant_printers_restaurant_id ON restaurant_printers (restaurant_id);""",
+        """CREATE TABLE IF NOT EXISTS payment_transactions (
+            id VARCHAR(255) PRIMARY KEY,
+            bill_id VARCHAR(255) NOT NULL,
+            restaurant_id VARCHAR(255) NOT NULL,
+            gateway VARCHAR(50) NOT NULL,
+            transaction_reference VARCHAR(150) NOT NULL,
+            gateway_order_id VARCHAR(150),
+            gateway_payment_id VARCHAR(150),
+            amount FLOAT NOT NULL,
+            currency VARCHAR(10) DEFAULT 'INR' NOT NULL,
+            status VARCHAR(40) DEFAULT 'INITIATED' NOT NULL,
+            payment_method VARCHAR(50) DEFAULT 'UPI' NOT NULL,
+            raw_payload JSON,
+            verified_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+        );""",
+        """CREATE INDEX IF NOT EXISTS ix_payment_transactions_bill_id ON payment_transactions (bill_id);""",
+        """CREATE INDEX IF NOT EXISTS ix_payment_transactions_restaurant_id ON payment_transactions (restaurant_id);""",
+        """CREATE INDEX IF NOT EXISTS ix_payment_transactions_tx_ref ON payment_transactions (transaction_reference);""",
+        """CREATE INDEX IF NOT EXISTS ix_payment_transactions_gateway_payment_id ON payment_transactions (gateway_payment_id);""",
     ]
     for stmt in create_table_statements:
         try:
@@ -316,6 +357,21 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;",
         "CREATE INDEX IF NOT EXISTS ix_bills_business_day_id ON bills (business_day_id);",
         "CREATE INDEX IF NOT EXISTS ix_orders_business_day_id ON orders (business_day_id);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS gateway_order_id VARCHAR(255);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS gateway_payment_id VARCHAR(255);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS gateway_qr_id VARCHAR(255);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_qr_payload TEXT;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS amount_paid FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS amount_due FLOAT DEFAULT 0.0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_initiated_at TIMESTAMPTZ;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_expires_at TIMESTAMPTZ;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS print_count INTEGER DEFAULT 0;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS last_printed_at TIMESTAMPTZ;",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS printer_id VARCHAR(255);",
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_webhook_events_json JSON;",
+        "CREATE INDEX IF NOT EXISTS ix_bills_gateway_order_id ON bills (gateway_order_id);",
+        "CREATE INDEX IF NOT EXISTS ix_bills_gateway_payment_id ON bills (gateway_payment_id);",
     ]
     for stmt in schema_patch_statements:
         try:
@@ -526,6 +582,9 @@ from app.modules.weddings.platform_router import weddings_router, admin_weddings
 
 from app.modules.menu.library_router import library_router
 
+from app.modules.printers.router import router as printer_router
+from app.modules.payments.router import router as payment_router
+
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(staff_auth_router, prefix="/api/v1/staff/auth", tags=["Staff Authentication"])
@@ -540,6 +599,8 @@ app.include_router(public_wedding_router, prefix="/api/v1/public", tags=["Public
 app.include_router(public_wedding_router, prefix="/api/v1", tags=["Public Wedding Events Alias"])
 app.include_router(tax_router, prefix="/api/v1/restaurants", tags=["Taxes"])
 app.include_router(billing_router, prefix="/api/v1/restaurants", tags=["Billing & Invoices"])
+app.include_router(printer_router, prefix="/api/v1/restaurants", tags=["Printers"])
+app.include_router(payment_router, prefix="/api/v1/payments", tags=["Payments & Gateways"])
 app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
 app.include_router(library_router, prefix="/api/v1/menu/library", tags=["Global Menu Library"])
 app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])

@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, List, Any, Dict
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body, Request, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, or_
@@ -123,9 +123,18 @@ def format_bill_response(bill: Bill) -> dict:
         except Exception:
             updated_at_val = str(bill.updated_at)
 
-    amount_paid_val = float(bill.grand_total if bill.payment_status == "PAID" else 0.0)
-    balance_due_val = float(0.0 if bill.payment_status == "PAID" else bill.grand_total)
+    amount_paid_val = float(bill.grand_total if bill.payment_status == "PAID" else (getattr(bill, "amount_paid", 0.0) or 0.0))
+    balance_due_val = 0.0 if bill.payment_status == "PAID" else float(getattr(bill, "amount_due", 0.0) or max(0.0, bill.grand_total - amount_paid_val))
     taxable_subtotal_val = max(0.0, round(float(bill.subtotal or 0.0) - float(bill.discount_amount or 0.0), 2))
+
+    qr_payload = getattr(bill, "payment_qr_payload", None)
+    qr_data_url = None
+    if qr_payload:
+        from app.modules.payments.service import PaymentService
+        try:
+            qr_data_url = PaymentService.generate_qr_data_url(qr_payload)
+        except Exception:
+            pass
 
     return {
         "id": bill.id,
@@ -171,6 +180,17 @@ def format_bill_response(bill: Bill) -> dict:
         "payment_verified_by": bill.payment_verified_by,
         "paymentReference": bill.payment_reference,
         "payment_reference": bill.payment_reference,
+        "paymentGateway": getattr(bill, "payment_gateway", None),
+        "gatewayOrderId": getattr(bill, "gateway_order_id", None),
+        "gatewayPaymentId": getattr(bill, "gateway_payment_id", None),
+        "gatewayQrId": getattr(bill, "gateway_qr_id", None),
+        "paymentQrPayload": qr_payload,
+        "qrDataUrl": qr_data_url,
+        "paymentInitiatedAt": bill.payment_initiated_at.isoformat() if getattr(bill, "payment_initiated_at", None) else None,
+        "paymentExpiresAt": bill.payment_expires_at.isoformat() if getattr(bill, "payment_expires_at", None) else None,
+        "printCount": getattr(bill, "print_count", 0) or 0,
+        "lastPrintedAt": bill.last_printed_at.isoformat() if getattr(bill, "last_printed_at", None) else None,
+        "printerId": getattr(bill, "printer_id", None),
         "taxBreakdown": bill.tax_breakdown_json or [],
         "tax_breakdown": bill.tax_breakdown_json or [],
         "tax_breakdown_json": bill.tax_breakdown_json or [],
@@ -559,6 +579,29 @@ async def generate_table_invoice(
         db=db
     )
 
+    # Automatically generate / refresh dynamic payment request & UPI QR if unpaid
+    if bill.payment_status not in ["PAID", "CLOSED"]:
+        from app.modules.payments.service import PaymentService
+        try:
+            await PaymentService.create_or_refresh_bill_payment_request(bill=bill, rest=rest, db=db)
+        except Exception as pe:
+            print("[BILLING NOTICE] Dynamic payment QR generation warning:", pe)
+
+    # Check if default thermal printer is configured for auto-printing
+    from app.modules.printers.service import PrinterService
+    try:
+        default_printer = await PrinterService.get_default_printer(rest.id, db)
+        if default_printer and default_printer.auto_print_on_bill:
+            await PrinterService.print_bill_invoice(
+                bill_id=bill.id,
+                restaurant_id=rest.id,
+                printer_id=default_printer.id,
+                copies=default_printer.copies or 1,
+                db=db
+            )
+    except Exception as print_err:
+        print("[BILLING NOTICE] Auto-print warning:", print_err)
+
     formatted = format_bill_response(bill)
     try:
         await ws_manager.broadcast_event(
@@ -570,6 +613,8 @@ async def generate_table_invoice(
                 "tableNumber": bill.table_number,
                 "tableSessionId": bill.table_session_id,
                 "grandTotal": bill.grand_total,
+                "paymentQrPayload": bill.payment_qr_payload,
+                "qrDataUrl": formatted.get("qrDataUrl"),
                 "data": formatted,
             }
         )
@@ -585,6 +630,97 @@ async def generate_table_invoice(
         pass
 
     return formatted
+
+
+@router.post("/{restaurant_id}/billing/{bill_id}/generate-qr")
+async def generate_bill_qr_endpoint(
+    restaurant_id: str,
+    bill_id: str,
+    gateway: Optional[str] = Query(None),
+    caller: CallerContext = Depends(require_tenant_staff_or_owner),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Explicitly generates or refreshes a dynamic UPI payment QR for a specific bill.
+    """
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    if not rest:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == rest.id)
+    res = await db.execute(stmt)
+    bill = res.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    from app.modules.payments.service import PaymentService
+    qr_info = await PaymentService.create_or_refresh_bill_payment_request(
+        bill=bill,
+        rest=rest,
+        db=db,
+        preferred_gateway=gateway
+    )
+    formatted = format_bill_response(bill)
+
+    # Realtime notification
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=rest.id,
+            event_type="BillQrUpdated",
+            payload={
+                "billId": bill.id,
+                "invoiceNumber": bill.invoice_number,
+                "tableNumber": bill.table_number,
+                "qrPayload": bill.payment_qr_payload,
+                "qrDataUrl": formatted.get("qrDataUrl"),
+                "totalPayable": bill.grand_total,
+                "data": formatted,
+            }
+        )
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "qr": qr_info,
+        "bill": formatted
+    }
+
+
+@router.get("/{restaurant_id}/billing/{bill_id}/payment-status")
+async def get_bill_payment_status(
+    restaurant_id: str,
+    bill_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Authoritative payment status endpoint for customer screens and polling terminals.
+    """
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    if not rest:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == rest.id)
+    res = await db.execute(stmt)
+    bill = res.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    formatted = format_bill_response(bill)
+    return {
+        "billId": bill.id,
+        "invoiceNumber": bill.invoice_number,
+        "tableNumber": bill.table_number,
+        "paymentStatus": bill.payment_status,
+        "status": bill.status,
+        "amountPaid": float(bill.amount_paid or 0.0),
+        "amountDue": float(bill.amount_due or (0.0 if bill.payment_status == 'PAID' else bill.grand_total)),
+        "isPaid": (bill.payment_status == "PAID"),
+        "paymentMethod": bill.payment_method,
+        "paymentReference": bill.payment_reference,
+        "paidAt": bill.paid_at.isoformat() if bill.paid_at else None,
+        "bill": formatted
+    }
 
 
 @router.get("/{restaurant_id}/billing/diagnostic/{order_or_bill_id}")
@@ -669,6 +805,9 @@ async def record_bill_payment(
     bill.payment_verified_by = vb
     bill.payment_reference = pr
     bill.paid_at = now_utc_payment
+    amt_paid = float(payload.amount_paid or payload.amountPaid or bill.grand_total)
+    bill.amount_paid = amt_paid
+    bill.amount_due = max(0.0, round(float(bill.grand_total) - amt_paid, 2))
 
     if not getattr(bill, "business_day_id", None):
         from app.modules.business_day.models import BusinessDay
@@ -822,53 +961,79 @@ async def report_customer_payment(
 
 @router.post("/{restaurant_id}/billing/webhook/razorpay")
 async def razorpay_payment_webhook(
+    request: Request,
     restaurant_id: str,
-    payload: Dict[str, Any] = Body(...),
+    x_razorpay_signature: Optional[str] = Header(None, alias="X-Razorpay-Signature"),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Server-side Razorpay webhook handler (Part H, U).
-    Verifies gateway signature and automatically transitions bill to PAID.
+    Authoritative Razorpay Webhook Handler on Billing Router.
+    Cryptographically verifies signature using HMAC-SHA256 and records payment idempotently.
     """
     from app.core.config.settings import get_settings
-    settings = get_settings()
-    if not settings.RAZORPAY_WEBHOOK_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Razorpay payment gateway webhook is not configured: RAZORPAY_WEBHOOK_SECRET missing in environment."
-        )
+    from app.modules.payments.service import PaymentService
+    import json
 
-    # If configured, process payment.captured event
+    settings = get_settings()
+    raw_body = await request.body()
+
+    rest = await find_restaurant_by_identifier(restaurant_id, db)
+    target_rest_id = rest.id if rest else restaurant_id
+
+    # Discover webhook secret (restaurant custom override or platform setting)
+    webhook_secret = getattr(settings, "RAZORPAY_WEBHOOK_SECRET", None)
+    if rest and getattr(rest, "billing_settings_json", None):
+        webhook_secret = rest.billing_settings_json.get("razorpay_webhook_secret") or webhook_secret
+
+    if webhook_secret and x_razorpay_signature:
+        is_valid = PaymentService.verify_razorpay_webhook_signature(
+            raw_body=raw_body,
+            signature=x_razorpay_signature,
+            secret=webhook_secret
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cryptographic webhook signature"
+            )
+
+    try:
+        payload = json.loads(raw_body.decode('utf-8'))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed JSON payload")
+
     event = payload.get("event")
-    if event in ["payment.captured", "order.paid"]:
-        payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
-        notes = payment_entity.get("notes", {})
+    if event in ["payment.captured", "order.paid", "qr_code.credited"]:
+        payment_entity = (
+            payload.get("payload", {}).get("payment", {}).get("entity", {}) or
+            payload.get("payload", {}).get("order", {}).get("entity", {})
+        )
+        notes = payment_entity.get("notes", {}) or {}
         bill_id = notes.get("bill_id") or notes.get("billId")
+        if not bill_id:
+            receipt = payment_entity.get("receipt", "")
+            if receipt.startswith("bill-"):
+                bill_id = receipt.split("-")[0] + "-" + receipt.split("-")[1]
+
         if bill_id:
-            rest = await find_restaurant_by_identifier(restaurant_id, db)
-            target_rest_id = rest.id if rest else restaurant_id
-            stmt = select(Bill).where(Bill.id == bill_id, Bill.restaurant_id == target_rest_id)
-            res = await db.execute(stmt)
-            bill = res.scalar_one_or_none()
-            if bill:
-                bill.payment_status = "PAID"
-                bill.status = "PAID"
-                bill.payment_method = "ONLINE_UPI"
-                bill.payment_verified_by = "Razorpay_Webhook"
-                bill.payment_reference = payment_entity.get("id")
-                await db.commit()
-                await db.refresh(bill)
-                formatted = format_bill_response(bill)
-                try:
-                    await ws_manager.broadcast_event(
-                        restaurant_id=target_rest_id,
-                        event_type="BillPaid",
-                        payload={"billId": bill.id, "paymentStatus": "PAID", "data": formatted},
-                        target_audience=["WAITER", "OWNER", "CUSTOMER"]
-                    )
-                except Exception:
-                    pass
-                return {"status": "success", "billId": bill.id}
+            raw_amt = payment_entity.get("amount", 0)
+            amount_in_rupees = float(raw_amt) / 100.0 if raw_amt > 100 else float(raw_amt)
+            pay_id = payment_entity.get("id") or f"rzp_{payment_entity.get('order_id', 'pay')}"
+            order_id = payment_entity.get("order_id")
+
+            success, status_msg, updated_bill = await PaymentService.process_verified_payment(
+                db=db,
+                restaurant_id=target_rest_id,
+                bill_id=bill_id,
+                gateway="RAZORPAY",
+                transaction_reference=pay_id,
+                amount_paid=amount_in_rupees,
+                gateway_order_id=order_id,
+                gateway_payment_id=pay_id,
+                payment_method="UPI",
+                raw_payload=payload
+            )
+            return {"status": "success", "result": status_msg, "billId": bill_id}
 
     return {"status": "ignored"}
 

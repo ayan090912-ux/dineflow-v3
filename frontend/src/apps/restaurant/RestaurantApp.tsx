@@ -91,6 +91,7 @@ import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
 import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
+import { ThermalPrinterSettings } from './ThermalPrinterSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
 import { EventDayManagementView } from './EventDayManagementView';
@@ -183,7 +184,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [billingSearchQuery, setBillingSearchQuery] = useState('');
   const [billingStatusFilter, setBillingStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'CANCELLED'>('ALL');
   const [billingPaymentFilter, setBillingPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'UPI'>('ALL');
-  const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'taxes' | 'settings'>('terminal');
+  const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'taxes' | 'settings' | 'printers'>('terminal');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const recentToastKeys = useRef<Map<string, number>>(new Map());
 
@@ -3885,8 +3886,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   <QrCode className="w-3.5 h-3.5 text-emerald-400" />
                   <span>UPI & Bill Setup</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBillingSubTab('printers')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    billingSubTab === 'printers'
+                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#181d27]/60'
+                  }`}
+                >
+                  <Printer className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Thermal Printers</span>
+                </button>
               </div>
             </div>
+
+            {/* SUBTAB 5: THERMAL PRINTER HARDWARE */}
+            {billingSubTab === 'printers' && (
+              <ThermalPrinterSettings
+                restaurantId={currentRestaurant?.id || api.getCurrentRestaurantId() || ''}
+                addToast={addToast}
+              />
+            )}
 
             {/* SUBTAB 4: OWNER BILLING & UPI SETTINGS */}
             {billingSubTab === 'settings' && (
@@ -6072,7 +6094,131 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
             </div>
 
+            {/* Dynamic UPI QR Section */}
+            {(selectedBillDetails.paymentQrPayload || selectedBillDetails.qrDataUrl || currentRestaurant?.upiId) && (
+              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-200 block">Dynamic UPI Payment QR</span>
+                    <span className="text-[10px] text-slate-400">
+                      Exact bill amount encoded ({formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')})
+                    </span>
+                  </div>
+                  {selectedBillDetails.paymentStatus === 'PAID' ? (
+                    <Badge variant="success" className="text-[10px]">PAID & VERIFIED</Badge>
+                  ) : (
+                    <Badge variant="warning" className="text-[10px]">AWAITING PAYMENT</Badge>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+                  <div className="w-32 h-32 bg-white p-2 rounded-xl flex items-center justify-center shrink-0 shadow-md">
+                    {selectedBillDetails.qrDataUrl ? (
+                      <img src={selectedBillDetails.qrDataUrl} alt="Bill UPI QR" className="w-full h-full object-contain" />
+                    ) : selectedBillDetails.paymentQrPayload ? (
+                      <QRCodeDisplay value={selectedBillDetails.paymentQrPayload} size={112} />
+                    ) : (
+                      <QRCodeDisplay
+                        value={`upi://pay?pa=${encodeURIComponent(currentRestaurant?.upiId || '')}&pn=${encodeURIComponent(currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant')}&am=${selectedBillDetails.grandTotal.toFixed(2)}&cu=INR`}
+                        size={112}
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-slate-300 w-full">
+                    <div className="flex justify-between text-[11px] font-mono">
+                      <span className="text-slate-500">Gateway / Mode:</span>
+                      <span className="text-emerald-400 font-bold">{selectedBillDetails.paymentGateway || 'DIRECT_UPI'}</span>
+                    </div>
+                    {selectedBillDetails.gatewayOrderId && (
+                      <div className="flex justify-between text-[10px] font-mono">
+                        <span className="text-slate-500">Order Ref:</span>
+                        <span className="text-slate-400 truncate max-w-[150px]">{selectedBillDetails.gatewayOrderId}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-[11px] font-mono">
+                      <span className="text-slate-500">Total Payable:</span>
+                      <span className="text-white font-bold">{formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-mono">
+                      <span className="text-slate-500">Scan via:</span>
+                      <span className="text-slate-400">GPay, PhonePe, Paytm, BHIM</span>
+                    </div>
+
+                    <div className="pt-1 flex gap-2">
+                      <Button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+                            const statusData = await api.reconcileBillPayment(restId, selectedBillDetails.id);
+                            if (statusData.isPaid) {
+                              addToast('success', 'Payment Verified!', 'Bill is marked PAID and settled.');
+                              await loadData();
+                              setSelectedBillDetails(null);
+                            } else {
+                              addToast('info', 'Payment Pending', statusData.reconciliationMessage || 'Payment not yet confirmed by gateway.');
+                            }
+                          } catch (e: any) {
+                            addToast('warning', 'Reconciliation', e.message || 'Payment still pending.');
+                          }
+                        }}
+                        variant="outline"
+                        className="text-[10px] py-1 px-2 border-slate-700 text-cyan-400 hover:bg-cyan-500/10 flex-1"
+                      >
+                        Check Live Status 🔄
+                      </Button>
+
+                      <Button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+                            const qrRes = await api.generateBillPaymentQr(restId, selectedBillDetails.id);
+                            if (qrRes?.bill) {
+                              setSelectedBillDetails(qrRes.bill);
+                              addToast('success', 'Dynamic QR Refreshed', 'New UPI payment request generated.');
+                            }
+                          } catch (e: any) {
+                            addToast('danger', 'QR Error', e.message);
+                          }
+                        }}
+                        variant="outline"
+                        className="text-[10px] py-1 px-2 border-slate-700 text-slate-300 hover:text-white"
+                      >
+                        Regenerate QR ⚡
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="pt-2 flex flex-wrap justify-end gap-2">
+              <Button
+                onClick={async () => {
+                  try {
+                    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+                    const res = await api.printBillInvoice(restId, selectedBillDetails.id);
+                    if (res.success) {
+                      addToast('success', 'Thermal Print Dispatched', res.message || 'Receipt sent to thermal printer.');
+                      if (res.connectionType === 'BROWSER') {
+                        window.print();
+                      }
+                    } else {
+                      addToast('danger', 'Print Failed', res.message || 'Thermal printer error.');
+                    }
+                  } catch (e: any) {
+                    addToast('danger', 'Print Error', e.message || 'Could not print thermal receipt.');
+                  }
+                }}
+                variant="brand"
+                className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Thermal Receipt</span>
+              </Button>
+
               {selectedBillDetails.paymentStatus !== 'PAID' && (
                 <Button
                   onClick={() => {

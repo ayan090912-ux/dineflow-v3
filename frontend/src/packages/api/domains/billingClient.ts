@@ -7,6 +7,8 @@ import {
   Tax,
   WaiterNotification,
   getFulfillmentStation,
+  RestaurantPrinter,
+  PrintJobResponse,
 } from '../../types';
 import { BaseApiClient } from '../core/baseClient';
 import {
@@ -925,5 +927,116 @@ export class BillingClient {
       return await res.json();
     }
     return null;
+  }
+
+  // ==========================================
+  // THERMAL PRINTER MANAGEMENT
+  // ==========================================
+
+  async getPrinters(restaurantId?: string): Promise<RestaurantPrinter[]> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) return [];
+    try {
+      const printers = await this.base.executeProtectedRequest<RestaurantPrinter[]>(
+        `/restaurants/${encodeURIComponent(targetId)}/printers`,
+        { method: 'GET' }
+      );
+      return Array.isArray(printers) ? printers : [];
+    } catch (e) {
+      console.warn('Failed to fetch printers:', e);
+      return [];
+    }
+  }
+
+  async createPrinter(restaurantId: string, printerData: Partial<RestaurantPrinter>): Promise<RestaurantPrinter> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    return await this.base.executeProtectedRequest<RestaurantPrinter>(
+      `/restaurants/${encodeURIComponent(targetId)}/printers`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(printerData),
+      }
+    );
+  }
+
+  async updatePrinter(restaurantId: string, printerId: string, updates: Partial<RestaurantPrinter>): Promise<RestaurantPrinter> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    return await this.base.executeProtectedRequest<RestaurantPrinter>(
+      `/restaurants/${encodeURIComponent(targetId)}/printers/${encodeURIComponent(printerId)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }
+    );
+  }
+
+  async deletePrinter(restaurantId: string, printerId: string): Promise<boolean> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    await this.base.executeProtectedRequest(
+      `/restaurants/${encodeURIComponent(targetId)}/printers/${encodeURIComponent(printerId)}`,
+      { method: 'DELETE' }
+    );
+    return true;
+  }
+
+  async testPrint(restaurantId: string, printerId: string): Promise<PrintJobResponse> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    return await this.base.executeProtectedRequest<PrintJobResponse>(
+      `/restaurants/${encodeURIComponent(targetId)}/printers/${encodeURIComponent(printerId)}/test-print`,
+      { method: 'POST' }
+    );
+  }
+
+  async printBillInvoice(restaurantId: string, billId: string, printerId?: string, copies: number = 1): Promise<PrintJobResponse> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    return await this.base.executeProtectedRequest<PrintJobResponse>(
+      `/restaurants/${encodeURIComponent(targetId)}/printers/print-bill/${encodeURIComponent(billId)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printerId, copies }),
+      }
+    );
+  }
+
+  // ==========================================
+  // DYNAMIC PAYMENT QR & RECONCILIATION
+  // ==========================================
+
+  async generateBillPaymentQr(restaurantId: string, billId: string, gateway?: string): Promise<{ status: string; qr: any; bill: Bill }> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    const endpoint = gateway
+      ? `/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/generate-qr?gateway=${encodeURIComponent(gateway)}`
+      : `/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/generate-qr`;
+    return await this.base.executeProtectedRequest<{ status: string; qr: any; bill: Bill }>(
+      endpoint,
+      { method: 'POST' }
+    );
+  }
+
+  async getBillPaymentStatus(restaurantId: string, billId: string): Promise<any> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/billing/${encodeURIComponent(billId)}/payment-status`);
+    if (!res.ok) throw new Error('Failed to retrieve payment status');
+    return await res.json();
+  }
+
+  async reconcileBillPayment(restaurantId: string, billId: string): Promise<any> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId) || this.base.getCurrentRestaurantId();
+    if (!targetId) throw new Error('No active restaurant selected');
+    return await this.base.executeProtectedRequest(
+      `/payments/${encodeURIComponent(targetId)}/bills/${encodeURIComponent(billId)}/reconcile`,
+      { method: 'GET' }
+    );
   }
 }

@@ -456,14 +456,29 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
             </p>
           </div>
 
-          {/* MERCHANT UPI QR DISPLAY */}
-          {activeUpiEnabled && (activeQrUrl || activeUpiId) ? (
+          {/* DYNAMIC OR MERCHANT UPI QR DISPLAY */}
+          {(bill?.qrDataUrl || bill?.paymentQrPayload || activeQrUrl || activeUpiId) ? (
             <div className="bg-[#0b0d11] rounded-xl border border-white/[0.08] p-5 text-center space-y-3">
               <span className="text-[10px] font-mono uppercase tracking-wider text-white/50">
-                Scan with Any UPI App
+                {bill?.qrDataUrl || bill?.paymentQrPayload ? 'Bill-Specific Dynamic UPI QR • Scan to Pay' : 'Scan with Any UPI App'}
               </span>
 
-              {activeQrUrl ? (
+              {bill?.qrDataUrl ? (
+                <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg mx-auto flex items-center justify-center">
+                  <img
+                    src={bill.qrDataUrl}
+                    alt="Dynamic Bill UPI QR Code"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : bill?.paymentQrPayload ? (
+                <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg mx-auto flex items-center justify-center">
+                  <QRCodeDisplay
+                    value={bill.paymentQrPayload}
+                    size={168}
+                  />
+                </div>
+              ) : activeQrUrl ? (
                 <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg mx-auto flex items-center justify-center">
                   <img
                     src={activeQrUrl}

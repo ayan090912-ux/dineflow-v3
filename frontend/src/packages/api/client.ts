@@ -40,6 +40,8 @@ import type {
   EventAssistanceRequestItem,
   EventAssistanceStatus,
   EventAssistanceSummary,
+  RestaurantPrinter,
+  PrintJobResponse,
 } from '../types';
 
 import {
@@ -1013,6 +1015,45 @@ export class DinelyApiClient extends BaseApiClient {
 
   async calculateTaxes(restaurantId: string, items: any[], orderType: string = 'DINE_IN') {
     return this.billing.calculateTaxes(restaurantId, items, orderType);
+  }
+
+  // ==========================================
+  // PRINTER & PAYMENT DOMAIN DELEGATES
+  // ==========================================
+  async getPrinters(restaurantId?: string): Promise<RestaurantPrinter[]> {
+    return this.billing.getPrinters(restaurantId);
+  }
+
+  async createPrinter(restaurantId: string, printerData: Partial<RestaurantPrinter>): Promise<RestaurantPrinter> {
+    return this.billing.createPrinter(restaurantId, printerData);
+  }
+
+  async updatePrinter(restaurantId: string, printerId: string, updates: Partial<RestaurantPrinter>): Promise<RestaurantPrinter> {
+    return this.billing.updatePrinter(restaurantId, printerId, updates);
+  }
+
+  async deletePrinter(restaurantId: string, printerId: string): Promise<boolean> {
+    return this.billing.deletePrinter(restaurantId, printerId);
+  }
+
+  async testPrint(restaurantId: string, printerId: string): Promise<PrintJobResponse> {
+    return this.billing.testPrint(restaurantId, printerId);
+  }
+
+  async printBillInvoice(restaurantId: string, billId: string, printerId?: string, copies?: number): Promise<PrintJobResponse> {
+    return this.billing.printBillInvoice(restaurantId, billId, printerId, copies);
+  }
+
+  async generateBillPaymentQr(restaurantId: string, billId: string, gateway?: string) {
+    return this.billing.generateBillPaymentQr(restaurantId, billId, gateway);
+  }
+
+  async getBillPaymentStatus(restaurantId: string, billId: string) {
+    return this.billing.getBillPaymentStatus(restaurantId, billId);
+  }
+
+  async reconcileBillPayment(restaurantId: string, billId: string) {
+    return this.billing.reconcileBillPayment(restaurantId, billId);
   }
 
   // ==========================================

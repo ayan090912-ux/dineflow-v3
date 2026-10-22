@@ -81,3 +81,21 @@ class Bill(Base, TimestampMixin):
     items_snapshot_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     orders_snapshot_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
+    # Dynamic Payment Gateway & UPI QR Tracking
+    payment_gateway: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    gateway_order_id: Mapped[Optional[str]] = mapped_column(String(150), nullable=True, index=True)
+    gateway_payment_id: Mapped[Optional[str]] = mapped_column(String(150), nullable=True, index=True)
+    gateway_qr_id: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    payment_qr_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    amount_paid: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    amount_due: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    payment_initiated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Thermal Printer Tracking
+    print_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_printed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    printer_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    payment_webhook_events_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+
+
