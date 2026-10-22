@@ -57,6 +57,7 @@ import {
   LogOut,
   Truck,
   Search,
+  BookOpen,
 } from 'lucide-react';
 import {
   Button,
@@ -95,6 +96,7 @@ import { DayManagementView } from './DayManagementView';
 import { EventDayManagementView } from './EventDayManagementView';
 import { WeddingsTab } from './WeddingsTab';
 import { EventFloorplanTablesView } from './EventFloorplanTablesView';
+import { MenuLibraryModal } from './MenuLibraryModal';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
 import { sendAppNotification, registerServiceWorker } from '../../packages/utils/notifications';
@@ -213,6 +215,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [deletingCategory, setDeletingCategory] = useState<{ id: string; name: string; type: 'FOOD' | 'BAR' } | null>(null);
 
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [isMenuLibraryOpen, setIsMenuLibraryOpen] = useState(false);
   const [newItem, setNewItem] = useState({
     name: '',
     description: '',
@@ -929,6 +932,23 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     }
   }, [activeRestaurant?.id, currentRestaurant?.id]);
 
+  const handleRefreshMenu = useCallback(async () => {
+    const targetRestId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId();
+    if (!targetRestId) return;
+    try {
+      const [freshItems, freshFoodCats, freshBarCats] = await Promise.all([
+        api.getMenuItems(targetRestId).catch(() => []),
+        api.getCategories(targetRestId).catch(() => []),
+        api.getBarCategories(targetRestId).catch(() => []),
+      ]);
+      setMenuItems(freshItems || []);
+      setFoodCategories(freshFoodCats || []);
+      setBarCategories(freshBarCats || []);
+    } catch (e) {
+      console.error('[MenuRefresh] Failed to refresh menu:', e);
+    }
+  }, [activeRestaurant?.id, currentRestaurant?.id]);
+
   // Category CRUD Handlers
   const handleAddCategory = async () => {
     if (!newCategoryInput.trim()) {
@@ -1129,6 +1149,33 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     addToast('success', 'Menu Item Updated', `${editingItem.name} updated successfully`);
     setIsEditItemModalOpen(false);
     setEditingItem(null);
+  };
+
+  const handleQuickGenerateDescription = async (target: 'NEW' | 'EDIT') => {
+    const itemName = target === 'NEW' ? newItem.name : editingItem?.name;
+    const cat = target === 'NEW' ? newItem.categoryId : editingItem?.categoryId;
+    if (!itemName?.trim()) {
+      addToast('error', 'Item Name Required', 'Please enter an item name first to generate a description.');
+      return;
+    }
+    try {
+      const res = await api.restaurant.generateDescription({
+        itemName: itemName.trim(),
+        category: cat,
+        tone: 'artisanal',
+      });
+      if (res && (res.shortDescription || res.longDescription)) {
+        const desc = res.shortDescription || res.longDescription;
+        if (target === 'NEW') {
+          setNewItem((prev) => ({ ...prev, description: desc }));
+        } else if (editingItem) {
+          setEditingItem((prev) => (prev ? { ...prev, description: desc } : null));
+        }
+        addToast('success', 'Description Generated', 'Applied structured description template.');
+      }
+    } catch (e: any) {
+      addToast('error', 'Generator Notice', e.message || 'Could not auto-generate description.');
+    }
   };
 
   const handleDeleteItem = async () => {
@@ -1934,15 +1981,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
           <div className="flex flex-wrap items-center gap-2.5">
             {activeTab === 'menu' && (
-              <Button
-                variant="brand"
-                size="sm"
-                onClick={() => setIsAddItemModalOpen(true)}
-                icon={<Plus className="w-3.5 h-3.5" />}
-                className="text-xs"
-              >
-                Add Menu Item
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsMenuLibraryOpen(true)}
+                  icon={<BookOpen className="w-3.5 h-3.5 text-indigo-400" />}
+                  className="text-xs border-indigo-500/30 text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20"
+                >
+                  Menu Library
+                </Button>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => setIsAddItemModalOpen(true)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                  className="text-xs"
+                >
+                  Add Menu Item
+                </Button>
+              </>
             )}
             {activeTab === 'tables' && isModuleEnabled(currentRestaurant, 'tables') && (
               <Button
@@ -2976,6 +3034,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     icon={<Layers className="w-3.5 h-3.5 text-slate-300" />}
                   >
                     Manage Categories
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsMenuLibraryOpen(true)}
+                    className="text-xs border-indigo-500/30 text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 shadow-xs"
+                    icon={<BookOpen className="w-3.5 h-3.5 text-indigo-400" />}
+                  >
+                    Browse Menu Library
                   </Button>
 
                   {isBarEnabled && activeCatalogMode === 'BAR' && (
@@ -4625,12 +4693,25 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
           )}
 
-          <Input
-            label="Description"
-            placeholder="Ingredients and prep style..."
-            value={newItem.description}
-            onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-          />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300">Description</label>
+              <button
+                type="button"
+                onClick={() => handleQuickGenerateDescription('NEW')}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium cursor-pointer transition-colors"
+                title="Generate verified description from dish name & category"
+              >
+                <Sparkles className="w-3 h-3 text-indigo-400" />
+                <span>Auto-Generate</span>
+              </button>
+            </div>
+            <Input
+              placeholder="Ingredients and prep style..."
+              value={newItem.description}
+              onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+            />
+          </div>
 
           <ImageUpload
             label="Food Photo (Upload local file or URL)"
@@ -4802,11 +4883,24 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
             )}
 
-            <Input
-              label="Description"
-              value={editingItem.description}
-              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-            />
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-300">Description</label>
+                <button
+                  type="button"
+                  onClick={() => handleQuickGenerateDescription('EDIT')}
+                  className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium cursor-pointer transition-colors"
+                  title="Generate verified description from dish name & category"
+                >
+                  <Sparkles className="w-3 h-3 text-indigo-400" />
+                  <span>Auto-Generate</span>
+                </button>
+              </div>
+              <Input
+                value={editingItem.description}
+                onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+              />
+            </div>
 
             <ImageUpload
               label="Food Photo (Upload local file or URL)"
@@ -4862,6 +4956,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           </div>
         )}
       </Modal>
+
+      {/* Global Menu Library Modal */}
+      <MenuLibraryModal
+        isOpen={isMenuLibraryOpen}
+        onClose={() => setIsMenuLibraryOpen(false)}
+        restaurantId={currentRestaurant?.id || activeRestaurant?.id || ''}
+        existingCategories={[...foodCategories, ...barCategories]}
+        existingMenuItems={menuItems}
+        onItemsAdded={() => {
+          handleRefreshMenu();
+          addToast('success', 'Catalogue Imported', 'Selected items have been added to your restaurant menu.');
+        }}
+      />
 
       {/* Add Staff Member Modal */}
       <Modal

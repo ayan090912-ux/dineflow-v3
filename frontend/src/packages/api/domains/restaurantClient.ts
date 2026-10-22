@@ -23,6 +23,12 @@ import {
   EventAssistanceRequestItem,
   EventAssistanceStatus,
   EventAssistanceSummary,
+  CatalogueItem,
+  CatalogueResponse,
+  AddLibraryItemEntry,
+  AddLibraryItemsResponse,
+  DescriptionGenerateRequest,
+  DescriptionGenerateResponse,
 } from '../../types';
 import { firebaseAuth } from '../../auth/firebase';
 import { BaseApiClient } from '../core/baseClient';
@@ -1512,6 +1518,97 @@ export class RestaurantClient {
     this.base.invalidateQueryCache('categories:');
     realtimeBus.emit('MenuItemCreated' as any, { menuItemId: newItem.id, restaurantId: restId, data: newItem });
     return newItem;
+  }
+
+  async getMenuLibrary(params?: {
+    search?: string;
+    category?: string;
+    subcategory?: string;
+    cuisine?: string;
+    dietaryType?: string;
+    targetDestination?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<CatalogueResponse> {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.category) q.set('category', params.category);
+    if (params?.subcategory) q.set('subcategory', params.subcategory);
+    if (params?.cuisine) q.set('cuisine', params.cuisine);
+    if (params?.dietaryType) q.set('dietaryType', params.dietaryType);
+    if (params?.targetDestination) q.set('targetDestination', params.targetDestination);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.limit) q.set('limit', String(params.limit));
+
+    const path = `/menu/library${q.toString() ? '?' + q.toString() : ''}`;
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}${path}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to fetch catalogue' }));
+      throw new Error(err.detail || `Catalogue request failed (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  async getMenuLibraryItem(itemId: string): Promise<CatalogueItem> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/menu/library/${encodeURIComponent(itemId)}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to load catalogue item' }));
+      throw new Error(err.detail || `Catalogue item request failed (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  async generateDescription(payload: DescriptionGenerateRequest): Promise<DescriptionGenerateResponse> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/menu/library/generate-description`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to generate description' }));
+      throw new Error(err.detail || `Description generator failed (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  async getDescriptionTemplates(): Promise<any> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/menu/library/templates/descriptions`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to fetch templates' }));
+      throw new Error(err.detail || `Template request failed (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  async addLibraryItemsToMenu(restaurantId: string, items: AddLibraryItemEntry[]): Promise<AddLibraryItemsResponse> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
+    if (!restId) throw new Error("No active restaurant selected");
+
+    const res = await this.base.executeProtectedRequest<AddLibraryItemsResponse>(
+      `/menu/library/restaurants/${encodeURIComponent(restId)}/add-items`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ items })
+      },
+      'OWNER'
+    );
+    this.base.invalidateQueryCache('menu:');
+    this.base.invalidateQueryCache('categories:');
+    realtimeBus.emit('MenuItemCreated' as any, { restaurantId: restId });
+    return res;
   }
 
   async seedSampleMenu(restaurantId?: string): Promise<MenuItem[]> {

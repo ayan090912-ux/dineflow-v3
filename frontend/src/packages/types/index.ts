@@ -321,11 +321,102 @@ export interface MenuItem {
   discountPercentage?: number;
   isFeatured?: boolean;
   isRecommended?: boolean;
-  isBestSeller?: boolean;
   options?: {
     name: string;
     choices: { name: string; priceDelta: number }[];
   }[];
+  // Global Library metadata
+  catalogueItemId?: string;
+  shortDescription?: string;
+  cuisine?: string;
+  servingSize?: string;
+  allergens?: string[];
+  flavourProfile?: string;
+}
+
+export interface CatalogueItem {
+  id: string;
+  name: string;
+  aliases: string[];
+  category: 'FOOD' | 'BAR' | 'HOOKAH' | 'DESSERT' | 'BEVERAGE' | string;
+  subcategory: string;
+  cuisine: string;
+  shortDescription: string;
+  longDescription: string;
+  ingredients: string[];
+  preparationNotes?: string;
+  dietaryType: 'VEG' | 'NON_VEG' | 'EGG' | 'VEGAN';
+  isVegetarian: boolean;
+  isVegan: boolean;
+  containsEgg: boolean;
+  allergens: string[];
+  servingSize?: string;
+  targetDestination: 'KITCHEN' | 'BAR' | 'HOOKAH';
+  isAlcoholic: boolean;
+  preparationTimeMinutes: number;
+  imageUrl?: string;
+  imageAttribution?: string;
+  flavourProfile?: string;
+  suggestedPriceInr?: number;
+  isActive: boolean;
+  version: number;
+  provenance: string;
+  descriptionVariants?: Array<{ tone: string; shortDescription: string; longDescription: string }>;
+}
+
+export interface CatalogueResponse {
+  items: CatalogueItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  facets: {
+    categories: Array<{ category: string; count: number }>;
+    subcategories: string[];
+    cuisines: string[];
+  };
+}
+
+export interface AddLibraryItemEntry {
+  catalogueItemId: string;
+  price: number;
+  customName?: string;
+  customDescription?: string;
+  categoryName?: string;
+  categoryId?: string;
+  targetDestination?: string;
+  isAvailable?: boolean;
+  servingSize?: string;
+  duplicateAction?: 'SKIP' | 'CREATE_COPY' | 'OVERWRITE';
+}
+
+export interface AddLibraryItemsResponse {
+  addedCount: number;
+  skippedCount: number;
+  updatedCount: number;
+  added: MenuItem[];
+  skipped: Array<{ catalogueItemId: string; itemName?: string; reason: string }>;
+  updated: MenuItem[];
+}
+
+export interface DescriptionGenerateRequest {
+  itemName: string;
+  category?: string;
+  cuisine?: string;
+  flavourProfile?: string;
+  ingredients?: string[];
+  dietaryType?: string;
+  servingSize?: string;
+  tone?: 'classic' | 'modern' | 'concise' | 'artisanal';
+}
+
+export interface DescriptionGenerateResponse {
+  itemName: string;
+  category: string;
+  tone: string;
+  shortDescription: string;
+  longDescription: string;
+  variants: Array<{ tone: string; shortDescription: string; longDescription: string }>;
 }
 
 export interface MenuCategory {

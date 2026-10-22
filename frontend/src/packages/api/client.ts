@@ -661,6 +661,27 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.toggleMenuItemAvailability(itemId, restaurantId, currentStatus);
   }
 
+  // Global Menu Library
+  async getMenuLibrary(params?: any) {
+    return this.restaurant.getMenuLibrary(params);
+  }
+
+  async getMenuLibraryItem(itemId: string) {
+    return this.restaurant.getMenuLibraryItem(itemId);
+  }
+
+  async generateDescription(payload: any) {
+    return this.restaurant.generateDescription(payload);
+  }
+
+  async getDescriptionTemplates() {
+    return this.restaurant.getDescriptionTemplates();
+  }
+
+  async addLibraryItemsToMenu(restaurantId: string, items: any[]) {
+    return this.restaurant.addLibraryItemsToMenu(restaurantId, items);
+  }
+
   async getBarCategories(restaurantId?: string) {
     return this.restaurant.getBarCategories(restaurantId);
   }
@@ -1174,6 +1195,7 @@ export class DinelyApiClient extends BaseApiClient {
 
 // Single singleton facade instance consumed across the entire application
 export const api = new DinelyApiClient();
+export const dinelyClient = api;
 
 // Standalone domain clients if callers prefer domain-specific dependency injection
 export const authApi = api.auth;

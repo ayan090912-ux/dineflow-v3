@@ -205,6 +205,48 @@ async def ensure_db_schema_columns(conn):
         """ALTER TABLE wedding_events ADD COLUMN IF NOT EXISTS organizer_email VARCHAR(255);""",
         """CREATE INDEX IF NOT EXISTS ix_wedding_events_workspace_id ON wedding_events (workspace_id);""",
         """CREATE INDEX IF NOT EXISTS ix_wedding_events_organizer_email ON wedding_events (organizer_email);""",
+        """CREATE TABLE IF NOT EXISTS global_menu_library (
+            id VARCHAR(255) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            aliases JSON,
+            category VARCHAR(50) NOT NULL,
+            subcategory VARCHAR(100) NOT NULL,
+            cuisine VARCHAR(100) DEFAULT 'Pan-Indian' NOT NULL,
+            short_description VARCHAR(500) NOT NULL,
+            long_description TEXT NOT NULL,
+            ingredients JSON,
+            preparation_notes TEXT,
+            dietary_type VARCHAR(20) DEFAULT 'VEG' NOT NULL,
+            is_vegetarian BOOLEAN DEFAULT TRUE NOT NULL,
+            is_vegan BOOLEAN DEFAULT FALSE NOT NULL,
+            contains_egg BOOLEAN DEFAULT FALSE NOT NULL,
+            allergens JSON,
+            serving_size VARCHAR(100),
+            target_destination VARCHAR(20) DEFAULT 'KITCHEN' NOT NULL,
+            is_alcoholic BOOLEAN DEFAULT FALSE NOT NULL,
+            preparation_time_minutes INTEGER DEFAULT 15 NOT NULL,
+            image_url TEXT,
+            image_attribution VARCHAR(255),
+            flavour_profile VARCHAR(255),
+            suggested_price_inr FLOAT,
+            is_active BOOLEAN DEFAULT TRUE NOT NULL,
+            version INTEGER DEFAULT 1 NOT NULL,
+            provenance VARCHAR(100) DEFAULT 'dinely_curated_v1' NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+        );""",
+        """CREATE INDEX IF NOT EXISTS ix_global_menu_library_category ON global_menu_library (category);""",
+        """CREATE INDEX IF NOT EXISTS ix_global_menu_library_subcategory ON global_menu_library (subcategory);""",
+        """CREATE INDEX IF NOT EXISTS ix_global_menu_library_cuisine ON global_menu_library (cuisine);""",
+        """CREATE INDEX IF NOT EXISTS ix_global_menu_library_dietary_type ON global_menu_library (dietary_type);""",
+        """CREATE INDEX IF NOT EXISTS ix_global_menu_library_target_destination ON global_menu_library (target_destination);""",
+        """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS catalogue_item_id VARCHAR(255);""",
+        """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS short_description VARCHAR(500);""",
+        """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS cuisine VARCHAR(100);""",
+        """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS serving_size VARCHAR(100);""",
+        """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS allergens JSON;""",
+        """ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS flavour_profile VARCHAR(255);""",
+        """CREATE INDEX IF NOT EXISTS ix_menu_items_catalogue_item_id ON menu_items (catalogue_item_id);""",
     ]
     for stmt in create_table_statements:
         try:
@@ -482,6 +524,8 @@ from app.modules.terminals.router import router as terminal_router
 from app.modules.weddings.router import router as wedding_router, public_router as public_wedding_router
 from app.modules.weddings.platform_router import weddings_router, admin_weddings_router
 
+from app.modules.menu.library_router import library_router
+
 # API Routes
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(staff_auth_router, prefix="/api/v1/staff/auth", tags=["Staff Authentication"])
@@ -497,6 +541,7 @@ app.include_router(public_wedding_router, prefix="/api/v1", tags=["Public Weddin
 app.include_router(tax_router, prefix="/api/v1/restaurants", tags=["Taxes"])
 app.include_router(billing_router, prefix="/api/v1/restaurants", tags=["Billing & Invoices"])
 app.include_router(menu_router, prefix="/api/v1/restaurants", tags=["Menu"])
+app.include_router(library_router, prefix="/api/v1/menu/library", tags=["Global Menu Library"])
 app.include_router(table_router, prefix="/api/v1/restaurants", tags=["Tables"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["Orders"])
 app.include_router(customer_requests_router, prefix="/api/v1/customer-requests", tags=["Customer Requests"])
