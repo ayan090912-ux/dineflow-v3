@@ -2354,11 +2354,39 @@ export class RestaurantClient {
           id: data.id,
           restaurantId: data.restaurant_id || data.restaurantId || restId,
           date: data.business_date || data.date,
+          businessDate: data.business_date || data.businessDate || data.date,
+          currentBusinessDate: data.current_business_date || data.currentBusinessDate || data.business_date,
+          nextBusinessDate: data.next_business_date || data.nextBusinessDate,
           status: data.status || 'OPEN',
           openedAt: data.opened_at || data.openedAt,
           openedBy: data.opened_by || data.openedBy,
           closedAt: data.closed_at || data.closedAt,
           closedBy: data.closed_by || data.closedBy,
+          requiresRollover: data.requires_rollover ?? data.requiresRollover ?? false,
+          isStaleShift: data.is_stale_shift ?? data.isStaleShift ?? false,
+          totalOrders: data.total_orders ?? data.totalOrders ?? 0,
+          completedOrders: data.completed_orders ?? data.completedOrders ?? 0,
+          cancelledOrders: data.cancelled_orders ?? data.cancelledOrders ?? 0,
+          foodOrders: data.food_orders ?? data.foodOrders ?? 0,
+          barOrders: data.bar_orders ?? data.barOrders ?? 0,
+          totalSales: data.total_sales ?? data.totalSales ?? 0,
+          orderValue: data.order_value ?? data.orderValue ?? 0,
+          foodSales: data.food_sales ?? data.foodSales ?? 0,
+          barSales: data.bar_sales ?? data.barSales ?? 0,
+          cashSales: data.cash_sales ?? data.cashSales ?? 0,
+          cardSales: data.card_sales ?? data.cardSales ?? 0,
+          upiSales: data.upi_sales ?? data.upiSales ?? 0,
+          taxAmount: data.tax_amount ?? data.taxAmount ?? 0,
+          discountAmount: data.discount_amount ?? data.discountAmount ?? 0,
+          unpaidBillsAmount: data.unpaid_bills_amount ?? data.unpaidBillsAmount ?? 0,
+          averageOrderValue: data.average_order_value ?? data.averageOrderValue ?? 0,
+          activeTablesCount: data.active_tables_count ?? data.activeTablesCount,
+          activeSessionsCount: data.active_sessions_count ?? data.activeSessionsCount,
+          unpaidBillsCount: data.unpaid_bills_count ?? data.unpaidBillsCount,
+          kitchenPendingCount: data.kitchen_pending_count ?? data.kitchenPendingCount,
+          barPendingCount: data.bar_pending_count ?? data.barPendingCount,
+          hookahPendingCount: data.hookah_pending_count ?? data.hookahPendingCount,
+          waiterPendingCount: data.waiter_pending_count ?? data.waiterPendingCount,
           summary: data.summary,
         };
         const idx = this.base.businessDays.findIndex((b) => b.id === bday.id);
@@ -2437,7 +2465,7 @@ export class RestaurantClient {
     }
   }
 
-  async openBusinessDay(restaurantId?: string, openedBy?: string) {
+  async openBusinessDay(restaurantId?: string, openedBy?: string, businessDate?: string) {
     const restId = this.base.resolveTenantRestaurantId(restaurantId);
     if (!restId) throw new Error('No active restaurant selected');
 
@@ -2446,7 +2474,11 @@ export class RestaurantClient {
         `/restaurants/${encodeURIComponent(restId)}/business-day/open`,
         {
           method: 'POST',
-          body: JSON.stringify({ openedBy: openedBy || 'Manager' }),
+          body: JSON.stringify({
+            openedBy: openedBy || 'Manager',
+            business_date: businessDate,
+            businessDate: businessDate,
+          }),
         },
         'OWNER'
       );
@@ -2455,6 +2487,9 @@ export class RestaurantClient {
           id: data.id,
           restaurantId: data.restaurant_id || data.restaurantId || restId,
           date: data.business_date || data.date,
+          businessDate: data.business_date || data.businessDate || data.date,
+          currentBusinessDate: data.current_business_date || data.currentBusinessDate || data.business_date,
+          nextBusinessDate: data.next_business_date || data.nextBusinessDate,
           status: 'OPEN',
           openedAt: data.opened_at || data.openedAt || new Date().toISOString(),
           openedBy: data.opened_by || data.openedBy || openedBy || 'Manager',

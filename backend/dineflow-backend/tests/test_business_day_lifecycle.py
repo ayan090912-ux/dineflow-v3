@@ -631,3 +631,235 @@ class TestBusinessDayLifecycle:
             # Staff A queries Restaurant B's bar orders -> 403 Forbidden
             res = await ac.get(f"/api/v1/orders/restaurant/{rest_b.id}?station=BAR", headers=headers_a)
             assert res.status_code == 403
+
+    async def test_multi_day_gap_resynchronizes_to_current_date(self, db_session: AsyncSession):
+        """
+        Verify that determine_next_open_business_date calculates the restaurant's current local date
+        when a multi-day gap exists, and opening a shift with this date correctly records it.
+        """
+        from app.modules.business_day.router import determine_next_open_business_date
+
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"resync-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        # Create closed business day with an ancient date
+        old_closed_bday = BusinessDay(
+            id=f"bday-old-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            business_date="06 Oct 2026",
+            status="CLOSED",
+            opened_at=datetime(2026, 10, 6, 10, 0, 0, tzinfo=timezone.utc),
+            closed_at=datetime(2026, 10, 6, 23, 0, 0, tzinfo=timezone.utc),
+        )
+        db_session.add(old_closed_bday)
+        await db_session.commit()
+
+        # Authoritatively compute recommended next open business date
+        expected_date = determine_next_open_business_date(rest, old_closed_bday)
+        assert expected_date is not None
+        assert expected_date != "07 Oct 2026"
+
+        token = create_test_jwt({"sub": owner_uid, "email": owner_email, "role": "OWNER", "restaurant_id": rest.id})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            open_res = await ac.post(f"/api/v1/restaurants/{rest.id}/business-day/open", json={"business_date": expected_date}, headers=headers)
+            assert open_res.status_code == 200
+            data = open_res.json()
+            assert data["status"] == "OPEN"
+            assert data["business_date"] == expected_date
+
+    async def test_delivered_orders_excluded_from_station_pending_counts(self, db_session: AsyncSession):
+        """
+        Verify that orders that have already reached DELIVERED or COMPLETED status
+        are strictly excluded from station pending counts (bar_pending_count, kitchen_pending_count),
+        preventing phantom pending counts from historical orders.
+        """
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"deliv-filter-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        # Order marked DELIVERED but lingering bar_status='PENDING'
+        ord_delivered = Order(
+            id=f"ord-deliv-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_number="T5",
+            status="DELIVERED",
+            kitchen_status="COMPLETED",
+            bar_status="PENDING",
+            total_amount=150.0,
+            items_json=[],
+        )
+        db_session.add(ord_delivered)
+        await db_session.commit()
+
+        token = create_test_jwt({"sub": owner_uid, "email": owner_email, "role": "OWNER", "restaurant_id": rest.id})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            res = await ac.get(f"/api/v1/restaurants/{rest.id}/business-day/current", headers=headers)
+            assert res.status_code == 200
+            data = res.json()
+            assert data["bar_pending_count"] == 0
+            assert data["kitchen_pending_count"] == 0
+
+            precheck_res = await ac.get(f"/api/v1/restaurants/{rest.id}/business-day/precheck", headers=headers)
+            assert precheck_res.status_code == 200
+            precheck_data = precheck_res.json()
+            assert precheck_data["uncompletedBarOrdersCount"] == 0
+            assert precheck_data["uncompletedKitchenOrdersCount"] == 0
+
+    async def test_precheck_count_and_blocking_reasons_parity(self, db_session: AsyncSession):
+        """
+        Verify that precheck warnings count matches blocking_reasons array length exactly,
+        and that station items (kitchen, bar, waiter) provide valid navigational blocking reasons.
+        """
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"parity-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        tbl = Table(
+            id=f"tbl-p-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_number="T1",
+            status="AVAILABLE",
+            capacity=4,
+        )
+        db_session.add(tbl)
+
+        # 1. Unpaid bill
+        bill = Bill(
+            id=f"bill-p-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_id=tbl.id,
+            table_number="T1",
+            table_session_id=f"sess-{uuid.uuid4().hex[:6]}",
+            subtotal=300.0,
+            grand_total=300.0,
+            status="PENDING",
+            payment_status="UNPAID",
+        )
+        db_session.add(bill)
+
+        # 2. Open bar order
+        ord_bar = Order(
+            id=f"ord-bar-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_id=tbl.id,
+            table_number="T1",
+            status="ACCEPTED",
+            kitchen_status="NONE",
+            bar_status="PENDING",
+            total_amount=200.0,
+            items_json=[],
+        )
+        db_session.add(ord_bar)
+
+        # 3. Open waiter request
+        req = CustomerRequestModel(
+            id=f"req-p-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_id=tbl.id,
+            table_number="T1",
+            request_type="WATER",
+            message="Water please",
+            status="PENDING",
+        )
+        db_session.add(req)
+        await db_session.commit()
+
+        token = create_test_jwt({"sub": owner_uid, "email": owner_email, "role": "OWNER", "restaurant_id": rest.id})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            res = await ac.get(f"/api/v1/restaurants/{rest.id}/business-day/precheck", headers=headers)
+            assert res.status_code == 200
+            data = res.json()
+            # 3 total active items: 1 bill, 1 bar ticket, 1 waiter request
+            assert len(data["warnings"]) == 3
+            assert len(data["blocking_reasons"]) == 3
+            # Every blocking reason has an id, label, and link
+            types = [b["type"] for b in data["blocking_reasons"]]
+            assert "BILL" in types
+            assert "BAR" in types
+            assert "WAITER" in types
+            assert all(b.get("link") is not None for b in data["blocking_reasons"])
+
+    async def test_paid_sales_strictly_scoped_to_active_shift(self, db_session: AsyncSession):
+        """
+        Verify that lifetime historical paid bills do NOT leak into current operational sales.
+        When a new shift opens with 0 orders and 0 bills paid in that shift, total_sales is 0.0.
+        """
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"sales-scope-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        tbl = Table(
+            id=f"tbl-s-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_number="T1",
+            status="AVAILABLE",
+            capacity=4,
+        )
+        db_session.add(tbl)
+
+        # Create historical closed business day with paid bills
+        past_bday = BusinessDay(
+            id=f"bday-past-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            business_date="01 Oct 2026",
+            status="CLOSED",
+            opened_at=datetime(2026, 10, 1, 9, 0, 0, tzinfo=timezone.utc),
+            closed_at=datetime(2026, 10, 1, 23, 0, 0, tzinfo=timezone.utc),
+            total_sales=5000.0,
+            total_orders=10,
+        )
+        db_session.add(past_bday)
+
+        # Historical bill stamped with past shift
+        hist_bill = Bill(
+            id=f"bill-hist-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_id=tbl.id,
+            business_day_id=past_bday.id,
+            table_number="T1",
+            table_session_id=f"sess-hist-{uuid.uuid4().hex[:6]}",
+            subtotal=5000.0,
+            grand_total=5000.0,
+            status="PAID",
+            payment_status="PAID",
+            payment_method="CASH",
+            created_at=datetime(2026, 10, 1, 14, 0, 0, tzinfo=timezone.utc),
+        )
+        db_session.add(hist_bill)
+
+        # Now open today's business day
+        now_utc = datetime.now(timezone.utc)
+        today_bday = BusinessDay(
+            id=f"bday-today-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            business_date=now_utc.strftime("%d %b %Y"),
+            status="OPEN",
+            opened_at=now_utc,
+            opened_by=owner_email,
+        )
+        db_session.add(today_bday)
+        await db_session.commit()
+
+        token = create_test_jwt({"sub": owner_uid, "email": owner_email, "role": "OWNER", "restaurant_id": rest.id})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            res = await ac.get(f"/api/v1/restaurants/{rest.id}/business-day/current", headers=headers)
+            assert res.status_code == 200
+            data = res.json()
+            assert data["id"] == today_bday.id
+            # Authoritative shift sales must be 0.0, NOT 5000.0!
+            assert data["total_sales"] == 0.0
+            assert data["totalOrders"] == 0
+

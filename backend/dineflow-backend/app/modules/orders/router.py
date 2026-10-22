@@ -1241,6 +1241,12 @@ async def update_order_status(
         if target_status in ["DELIVERED", "COMPLETED", "SERVED"]:
             order.delivered_at = datetime.now(timezone.utc)
             order.delivery_status = "DELIVERED"
+            if order.kitchen_status in ["PENDING", "ACCEPTED", "PREPARING", "READY"]:
+                order.kitchen_status = "COMPLETED"
+            if order.bar_status in ["PENDING", "ACCEPTED", "PREPARING", "READY"]:
+                order.bar_status = "COMPLETED"
+            if order.hookah_status in ["PENDING", "ACCEPTED", "PREPARING", "READY"]:
+                order.hookah_status = "COMPLETED"
         elif target_status == "OUT_FOR_DELIVERY":
             order.delivery_status = "OUT_FOR_DELIVERY"
     else:

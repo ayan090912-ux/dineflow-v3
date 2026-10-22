@@ -32,6 +32,7 @@ import {
 import { formatCurrency } from '../../packages/utils/currency';
 import { BusinessDay, Order, Table, Bill, getFulfillmentStation } from '../../packages/types';
 import { api } from '../../packages/api/client';
+import { realtimeBus } from '../../packages/api/realtime';
 
 interface DayManagementViewProps {
   currentRestaurant: any;
@@ -101,6 +102,8 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
     }
   };
 
+  const [lastSynchronized, setLastSynchronized] = useState<Date>(new Date());
+
   useEffect(() => {
     loadPrecheck();
   }, [restId, currentBusinessDay?.id]);
@@ -111,11 +114,53 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
     }
   }, [isCloseModalOpen]);
 
+  // Automated Real-time Synchronization across all terminals
+  useEffect(() => {
+    const unsubscribe = realtimeBus.subscribe((event) => {
+      const t = event.type;
+      if (
+        t === 'BusinessDayOpened' ||
+        t === 'BusinessDayClosed' ||
+        t === 'DayOpened' ||
+        t === 'DayClosed' ||
+        t === 'BillPaid' ||
+        t === 'BillPaymentRecorded' ||
+        t === 'payment_updated' ||
+        t === 'payment_status_updated' ||
+        t === 'order_created' ||
+        t === 'OrderCreated' ||
+        t === 'order_status_updated' ||
+        t === 'OrderStatusUpdated' ||
+        t === 'order_delivered' ||
+        t === 'table_session_closed' ||
+        t === 'TableSessionClosed' ||
+        t === 'table_status_updated' ||
+        t === 'TableStatusUpdated'
+      ) {
+        loadPrecheck();
+        onRefreshData();
+        setLastSynchronized(new Date());
+      }
+    });
+
+    // Reliable 30-second heartbeat polling to guarantee synchronization even if network reconnects
+    const heartbeat = setInterval(() => {
+      loadPrecheck();
+      onRefreshData();
+      setLastSynchronized(new Date());
+    }, 30000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(heartbeat);
+    };
+  }, [restId]);
+
   // Determine current day metrics
   const isDayOpen = currentBusinessDay?.status === 'OPEN';
   const openBday = currentBusinessDay;
 
-  // Filter orders belonging to this business day
+  // Filter orders strictly belonging to this active business day shift
   const dayOrders = orders.filter((o) => {
     if (o.restaurantId !== currentRestaurant?.id) return false;
     if (!openBday) return true;
@@ -155,20 +200,37 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
     }
   });
 
-  const paidBillsTotal = bills.filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID').reduce((sum, b) => sum + (b.grandTotal || 0), 0);
-  const totalSales = paidBillsTotal > 0 ? paidBillsTotal : (foodSales + barSales);
+  // Filter bills strictly belonging to this active business day shift
+  const shiftBills = (bills || []).filter((b) => {
+    if (b.restaurantId !== currentRestaurant?.id) return false;
+    if (!openBday) return true;
+    if (b.businessDayId) return b.businessDayId === openBday.id;
+    if (openBday.openedAt) {
+      return new Date(b.createdAt).getTime() >= new Date(openBday.openedAt).getTime();
+    }
+    return true;
+  });
 
-  // Live counters
-  const activeTablesCount = precheck?.active_tables_count ?? tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied).length;
-  const activeSessionsCount = precheck?.active_sessions_count ?? 0;
-  const unpaidBillsCount = precheck?.unpaid_bills_count ?? bills.filter((b) => b.status !== 'PAID' && b.status !== 'CANCELLED').length;
-  const kitchenPendingCount = precheck?.uncompletedKitchenOrdersCount ?? orders.filter((o) => o.kitchenStatus === 'PENDING' || o.kitchenStatus === 'PREPARING').length;
-  const barPendingCount = precheck?.uncompletedBarOrdersCount ?? orders.filter((o) => o.barStatus === 'PENDING' || o.barStatus === 'PREPARING').length;
-  const waiterPendingCount = precheck?.open_waiter_requests_count ?? 0;
+  const shiftPaidBills = shiftBills.filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID');
+  const paidBillsTotal = shiftPaidBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+
+  // Authoritative totalSales: backend operational revenue first, then shift-filtered paid bills, or 0.00
+  const totalSales = currentBusinessDay?.totalSales !== undefined
+    ? (currentBusinessDay.totalSales || 0)
+    : paidBillsTotal;
+
+  // Live counters strictly excluding completed/delivered orders
+  const activeTablesCount = precheck?.active_tables_count ?? currentBusinessDay?.activeTablesCount ?? tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied).length;
+  const activeSessionsCount = precheck?.active_sessions_count ?? currentBusinessDay?.activeSessionsCount ?? 0;
+  const unpaidBillsCount = precheck?.unpaid_bills_count ?? currentBusinessDay?.unpaidBillsCount ?? shiftBills.filter((b) => b.status !== 'PAID' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID').length;
+  const kitchenPendingCount = precheck?.uncompletedKitchenOrdersCount ?? currentBusinessDay?.kitchenPendingCount ?? orders.filter((o) => (o.kitchenStatus === 'PENDING' || o.kitchenStatus === 'PREPARING') && !['COMPLETED', 'DELIVERED', 'CANCELLED'].includes(o.status)).length;
+  const barPendingCount = precheck?.uncompletedBarOrdersCount ?? currentBusinessDay?.barPendingCount ?? orders.filter((o) => (o.barStatus === 'PENDING' || o.barStatus === 'PREPARING') && !['COMPLETED', 'DELIVERED', 'CANCELLED'].includes(o.status)).length;
+  const waiterPendingCount = precheck?.open_waiter_requests_count ?? currentBusinessDay?.waiterPendingCount ?? 0;
 
   // Authoritative Dates
   const currentBusinessDate = currentBusinessDay?.date || (currentBusinessDay as any)?.business_date || 'Today';
   const nextBusinessDate = (currentBusinessDay as any)?.nextBusinessDate || (currentBusinessDay as any)?.next_business_date || 'Next Operational Day';
+  const requiresRollover = Boolean(currentBusinessDay?.requiresRollover || (currentBusinessDay as any)?.isStaleShift);
 
   // Handle Close Day
   const handleConfirmCloseDay = async () => {
@@ -198,7 +260,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
     if (!restId) return;
     setIsActionLoading(true);
     try {
-      const opened = await api.openBusinessDay(restId, currentUser?.name || currentUser?.email || 'Owner');
+      const opened = await api.openBusinessDay(restId, currentUser?.name || currentUser?.email || 'Owner', nextBusinessDate);
       addToast('success', 'Business Day Started ☀️', `Operational day ${opened?.date || nextBusinessDate} is now OPEN.`);
       await onRefreshData();
       await loadPrecheck();
@@ -274,6 +336,42 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Live Synchronization Status */}
+      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1 -mt-2">
+        <span className="flex items-center gap-1.5 text-emerald-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          Authoritative Realtime Sync Active
+        </span>
+        <span>
+          Last Synchronized: {lastSynchronized.toLocaleTimeString()}
+        </span>
+      </div>
+
+      {/* Shift Rollover Alert Banner */}
+      {isDayOpen && requiresRollover && (
+        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <p className="font-bold text-rose-300">
+                Shift Rollover Pending — Active Shift Date: {currentBusinessDate}
+              </p>
+              <p className="text-rose-200/80 text-[11px]">
+                This operational shift was opened on a prior calendar day. Please complete pre-check reconciliation and close the shift to align operational records with {nextBusinessDate}.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => setIsCloseModalOpen(true)}
+            className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-1.5 shrink-0 self-end sm:self-center"
+          >
+            Review & Close Day
+          </Button>
+        </div>
+      )}
 
       {/* Main Operational Hero Card */}
       <Card className="bg-[#12151b] border-[#1e232e] p-6 rounded-2xl shadow-sm space-y-6">
@@ -565,7 +663,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             <div className="flex items-center justify-between">
               <h5 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
-                Active Shift Pre-Check Notice ({precheck.warnings?.length || 0} active items)
+                Active Shift Pre-Check Notice ({precheck.blocking_reasons?.length || precheck.warnings?.length || 0} active items)
               </h5>
               <span className="text-[11px] font-mono text-amber-300/80">
                 Resolve before closing day
@@ -574,31 +672,52 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 
             <div className="space-y-1.5">
               {precheck.blocking_reasons && precheck.blocking_reasons.length > 0 ? (
-                precheck.blocking_reasons.map((item: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-2 rounded-lg bg-[#0e1117]/80 border border-amber-800/20 text-xs"
-                  >
-                    <span className="text-slate-300 font-mono flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                      {item.label}
-                    </span>
-                    {item.link && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onNavigateTab(item.link === '/tables' ? 'tables' : 'billing')}
-                        className="h-6 px-2 text-[10px] border-amber-700/50 text-amber-300 hover:bg-amber-900/30"
-                      >
-                        {item.type === 'TABLE' ? 'View Table' : 'View Bill'}
-                      </Button>
-                    )}
-                  </div>
-                ))
+                precheck.blocking_reasons.map((item: any, idx: number) => {
+                  let targetTab = 'billing';
+                  let actionText = 'View Bill';
+                  if (item.type === 'TABLE' || item.link === '/tables') {
+                    targetTab = 'tables';
+                    actionText = 'View Table';
+                  } else if (item.type === 'KITCHEN' || item.link === '/kitchen') {
+                    targetTab = 'kitchen';
+                    actionText = 'View Kitchen';
+                  } else if (item.type === 'BAR' || item.link === '/bar') {
+                    targetTab = 'bar';
+                    actionText = 'View Bar';
+                  } else if (item.type === 'HOOKAH' || item.link === '/hookah') {
+                    targetTab = 'hookah';
+                    actionText = 'View Hookah';
+                  } else if (item.type === 'WAITER' || item.link === '/waiter') {
+                    targetTab = 'waiter';
+                    actionText = 'View Requests';
+                  }
+
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2 rounded-lg bg-[#0e1117]/80 border border-amber-800/20 text-xs"
+                    >
+                      <span className="text-slate-300 font-mono flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                        {item.label}
+                      </span>
+                      {item.link && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onNavigateTab(targetTab)}
+                          className="h-6 px-2 text-[10px] border-amber-700/50 text-amber-300 hover:bg-amber-900/30 shrink-0 ml-2"
+                        >
+                          {actionText}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })
               ) : (
                 precheck.warnings?.map((w: string, idx: number) => (
                   <div key={idx} className="text-xs text-amber-200/90 font-mono flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                     {w}
                   </div>
                 ))

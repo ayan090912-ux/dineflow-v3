@@ -418,6 +418,15 @@ class BillingService:
             if payment_method:
                 existing_bill.payment_method = payment_method
             existing_bill.status = "BILL_REQUESTED"
+            from app.modules.business_day.models import BusinessDay
+            bday_q = select(BusinessDay.id).where(
+                BusinessDay.restaurant_id == rest.id,
+                BusinessDay.status == "OPEN"
+            ).order_by(BusinessDay.opened_at.desc()).limit(1)
+            bday_res = await db.execute(bday_q)
+            active_bday_id = bday_res.scalar_one_or_none()
+            if active_bday_id and not getattr(existing_bill, "business_day_id", None):
+                existing_bill.business_day_id = active_bday_id
 
             # Update Table & Session status
             await cls._sync_table_status(rest.id, tbl_num, effective_sess_id, existing_bill.id, db)
@@ -434,6 +443,14 @@ class BillingService:
         total_bills = inv_count_res.scalar() or 0
         invoice_number = f"{prefix}{current_num + total_bills}"
 
+        from app.modules.business_day.models import BusinessDay
+        bday_q = select(BusinessDay.id).where(
+            BusinessDay.restaurant_id == rest.id,
+            BusinessDay.status == "OPEN"
+        ).order_by(BusinessDay.opened_at.desc()).limit(1)
+        bday_res = await db.execute(bday_q)
+        active_bday_id = bday_res.scalar_one_or_none()
+
         bill_id = f"bill-{uuid.uuid4().hex[:12]}"
         new_bill = Bill(
             id=bill_id,
@@ -441,6 +458,7 @@ class BillingService:
             table_id=table_id or calc_data["tableId"] or f"table-{tbl_num}",
             table_number=tbl_num,
             table_session_id=effective_sess_id,
+            business_day_id=active_bday_id,
             invoice_number=invoice_number,
             subtotal=calc_data["subtotal"],
             discount_amount=calc_data["discountAmount"],

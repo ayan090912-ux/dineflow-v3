@@ -60,6 +60,8 @@ class Bill(Base, TimestampMixin):
     table_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     table_number: Mapped[str] = mapped_column(String(50), nullable=False)
     table_session_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    business_day_id: Mapped[Optional[str]] = mapped_column(String(255), ForeignKey("business_days.id", ondelete="SET NULL"), nullable=True, index=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     subtotal: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     discount_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)

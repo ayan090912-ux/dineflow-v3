@@ -726,6 +726,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           );
         }
         api.getBills(restId).then((b) => setBills(b || [])).catch(() => {});
+        api.getCurrentBusinessDay(restId).then(setCurrentBusinessDay).catch(() => {});
+        api.getBusinessDayPrecheck(restId).then(setDayClosePrecheck).catch(() => {});
         addToast('success', 'Payment Received 💰', `Bill payment updated: ₹${payloadData.amount || payloadData.grandTotal || ''} (${newStatus})`);
       } else if (event.type === 'ETAUpdated') {
         addToast('info', 'ETA Adjusted ⏱️', `Order #${event.orderId} ETA set to ${event.estimatedPrepTimeMinutes}m`);
@@ -2095,8 +2097,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 }
               });
 
-              const paidBillsTotal = (bills || []).filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID').reduce((sum, b) => sum + (b.grandTotal || 0), 0);
-              const totalSales = paidBillsTotal > 0 ? paidBillsTotal : (foodSales + barSales);
+              const dayBills = (bills || []).filter((b) => {
+                if (b.restaurantId !== currentRestaurant?.id) return false;
+                if (!openBday) return true;
+                if (b.businessDayId) return b.businessDayId === openBday.id;
+                if (openBday.openedAt) {
+                  return new Date(b.createdAt).getTime() >= new Date(openBday.openedAt).getTime();
+                }
+                return true;
+              });
+
+              const shiftPaidBills = dayBills.filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID');
+              const shiftPaidTotal = shiftPaidBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+
+              const totalSales = currentBusinessDay?.totalSales !== undefined
+                ? (currentBusinessDay.totalSales || 0)
+                : shiftPaidTotal;
 
               return (
                 <>

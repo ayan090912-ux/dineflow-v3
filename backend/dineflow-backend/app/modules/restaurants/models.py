@@ -41,6 +41,7 @@ class Restaurant(Base, TimestampMixin, SoftDeleteMixin):
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="OPEN", nullable=False)
     currency: Mapped[str] = mapped_column(String(20), default="INR (₹)", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(100), default="Asia/Kolkata", nullable=False)
     tax_percentage: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)
     legal_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

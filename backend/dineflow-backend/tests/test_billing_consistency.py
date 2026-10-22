@@ -255,7 +255,7 @@ async def test_05_tax_inclusive_and_exclusive_pricing(db_session, setup_billing_
                 {"id": "item-drink-1", "categoryId": "cat-bar-a", "name": "Craft Mojito", "price": 110.0, "quantity": 1}
             ]
         }
-        res = await ac.post("/api/v1/orders", json=order_payload)
+        res = await ac.post("/api/v1/orders", json=order_payload, headers=STAFF_HEADER_A)
         assert res.status_code == 201
         data = res.json()
         # Inclusive price: grand total stays 110.0, tax is extracted internally (10.0)
@@ -276,7 +276,7 @@ async def test_06_item_level_discounts(db_session, setup_billing_env):
                 {"id": "item-food-1", "name": "Special Promo Dish", "price": 250.0, "quantity": 2}
             ]
         }
-        res = await ac.post("/api/v1/orders", json=order_payload)
+        res = await ac.post("/api/v1/orders", json=order_payload, headers=STAFF_HEADER_A)
         assert res.status_code == 201
         data = res.json()
         assert data["subtotal"] == 500.0
@@ -341,7 +341,7 @@ async def test_09_fractional_monetary_values_and_rounding(db_session, setup_bill
             "restaurantId": "rest-billing-test-a",
             "tableNumber": "Table 01",
             "items": [{"id": "item-food-1", "name": "Dish", "price": 199.99, "quantity": 3}]
-        })
+        }, headers=STAFF_HEADER_A)
         bill_res = await ac.get("/api/v1/restaurants/rest-billing-test-a/billing/table/Table 01/bill")
         assert bill_res.status_code == 200
         data = bill_res.json()

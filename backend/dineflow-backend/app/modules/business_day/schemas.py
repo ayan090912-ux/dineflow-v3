@@ -27,6 +27,8 @@ class BusinessDayPrecheckResponse(BaseModel):
     active_sessions_count: int = 0
     uncompletedKitchenOrdersCount: int = 0
     uncompletedBarOrdersCount: int = 0
+    uncompletedHookahOrdersCount: int = 0
+    uncompleted_hookah_orders_count: int = 0
     openOrdersCount: int = 0
     open_orders_count: int = 0
     openWaiterRequestsCount: int = 0
@@ -37,6 +39,10 @@ class BusinessDayPrecheckResponse(BaseModel):
     total_orders_today: int = 0
     totalSalesToday: float = 0.0
     total_sales_today: float = 0.0
+    orderValueToday: float = 0.0
+    order_value_today: float = 0.0
+    unpaidBillsAmount: float = 0.0
+    unpaid_bills_amount: float = 0.0
     warnings: List[str] = []
     blocking_reasons: List[Dict[str, Any]] = []
 

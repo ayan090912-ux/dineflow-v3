@@ -1,5 +1,6 @@
 import uuid
 import logging
+import zoneinfo
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -22,10 +23,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def get_restaurant_tz(rest: Optional[Restaurant]) -> zoneinfo.ZoneInfo:
+    tz_str = getattr(rest, "timezone", None) or "Asia/Kolkata"
+    try:
+        return zoneinfo.ZoneInfo(tz_str)
+    except Exception:
+        return zoneinfo.ZoneInfo("Asia/Kolkata")
+
+
+def get_operational_business_date(dt: Optional[datetime], rest: Optional[Restaurant]) -> str:
+    """
+    Authoritative computation of operational business date formatted as '%d %b %Y' (e.g. '22 Oct 2026')
+    in the restaurant's configured local timezone.
+    """
+    if not dt:
+        dt = datetime.now(timezone.utc)
+    tz = get_restaurant_tz(rest)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local_dt = dt.astimezone(tz)
+    return local_dt.strftime("%d %b %Y")
+
+
 def compute_next_business_date(current_date_str: str) -> str:
     """
     Authoritative computation of next business date from a date formatted as '%d %b %Y' (e.g. '04 Oct 2026').
-    Safely advances the calendar day and supports cross-midnight operational shifts.
+    Safely advances the calendar day by +1.
     """
     try:
         dt = datetime.strptime(current_date_str.strip(), "%d %b %Y")
@@ -34,6 +57,32 @@ def compute_next_business_date(current_date_str: str) -> str:
     except Exception:
         now_utc = datetime.now(timezone.utc)
         return (now_utc + timedelta(days=1)).strftime("%d %b %Y")
+
+
+def determine_next_open_business_date(rest: Optional[Restaurant], last_closed: Optional[BusinessDay] = None) -> str:
+    """
+    Authoritatively determines what the next open business date should be.
+    Prevents stale shift dates (e.g. from 10 days ago) from propagating forward sequentially
+    by synchronizing to the restaurant's current local calendar date if a gap exists.
+    """
+    now_tz = datetime.now(get_restaurant_tz(rest))
+    today_str = now_tz.strftime("%d %b %Y")
+    if not last_closed or not last_closed.business_date:
+        return today_str
+
+    try:
+        last_dt = datetime.strptime(last_closed.business_date.strip(), "%d %b %Y").date()
+        today_date = now_tz.date()
+        if today_date > last_dt:
+            # Calendar date has moved past the last closed business day (multi-day gap or normal morning next day)
+            return today_str
+        elif today_date == last_dt:
+            # Last closed day was already opened and closed today: default to tomorrow
+            return (now_tz + timedelta(days=1)).strftime("%d %b %Y")
+        else:
+            return (last_dt + timedelta(days=1)).strftime("%d %b %Y")
+    except Exception:
+        return today_str
 
 
 async def _resolve_restaurant(restaurant_id: str, db: AsyncSession) -> Restaurant:
@@ -54,9 +103,22 @@ async def _resolve_restaurant(restaurant_id: str, db: AsyncSession) -> Restauran
     return rest
 
 
-def _format_business_day(bday: BusinessDay) -> dict:
+def _format_business_day(bday: BusinessDay, rest: Optional[Restaurant] = None) -> dict:
     next_date = compute_next_business_date(bday.business_date) if bday.business_date else None
+    recommended_date = determine_next_open_business_date(rest, bday)
+
     avg_order_val = round(bday.total_sales / bday.total_orders, 2) if bday.total_orders > 0 else 0.0
+
+    requires_rollover = False
+    is_stale_shift = False
+    if bday.status == "OPEN" and bday.opened_at:
+        tz = get_restaurant_tz(rest)
+        now_local = datetime.now(tz)
+        opened_local = bday.opened_at.replace(tzinfo=timezone.utc).astimezone(tz) if bday.opened_at.tzinfo is None else bday.opened_at.astimezone(tz)
+        # Shift requires rollover if opened on a past date or open for > 24 hours
+        if now_local.date() > opened_local.date() or (now_local - opened_local > timedelta(hours=24)):
+            requires_rollover = True
+            is_stale_shift = True
 
     return {
         "id": bday.id,
@@ -78,6 +140,10 @@ def _format_business_day(bday: BusinessDay) -> dict:
         "closedAt": bday.closed_at.isoformat() if bday.closed_at else None,
         "closed_by": bday.closed_by,
         "closedBy": bday.closed_by,
+        "requires_rollover": requires_rollover,
+        "requiresRollover": requires_rollover,
+        "is_stale_shift": is_stale_shift,
+        "isStaleShift": is_stale_shift,
         "total_orders": bday.total_orders,
         "totalOrders": bday.total_orders,
         "food_orders": bday.food_orders,
@@ -150,9 +216,9 @@ async def get_current_business_day(
         )
         latest_bday = any_day_res.scalar_one_or_none()
         if not latest_bday:
-            # Brand new restaurant with no business day records at all: auto-initialize initial day
+            # Brand new restaurant with no business day records at all: auto-initialize initial day with current operational date
             now_utc = datetime.now(timezone.utc)
-            today_str = now_utc.strftime("%d %b %Y")
+            today_str = get_operational_business_date(now_utc, rest)
             new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
             current_bday = BusinessDay(
                 id=new_id,
@@ -169,9 +235,111 @@ async def get_current_business_day(
             # Return the latest business day (which is currently CLOSED)
             current_bday = latest_bday
 
-    formatted = _format_business_day(current_bday)
+    formatted = _format_business_day(current_bday, rest)
 
-    # Enrich with live operational counters
+    # If day is OPEN, compute authoritative live operational & financial counters scoped to this shift!
+    if current_bday.status == "OPEN":
+        since_time = current_bday.opened_at
+        
+        # 1. Orders belonging to this active shift
+        ord_query = select(Order).where(
+            Order.restaurant_id == rest.id,
+            or_(
+                Order.business_day_id == current_bday.id,
+                and_(Order.business_day_id.is_(None), Order.created_at >= since_time)
+            )
+        )
+        ord_res = await db.execute(ord_query)
+        shift_orders = ord_res.scalars().all()
+        
+        total_orders = len(shift_orders)
+        completed_orders = sum(1 for o in shift_orders if o.status in ["COMPLETED", "DELIVERED"])
+        cancelled_orders = sum(1 for o in shift_orders if o.status == "CANCELLED")
+        non_cancelled_orders = [o for o in shift_orders if o.status != "CANCELLED"]
+        
+        order_value = round(sum(o.total_amount or 0.0 for o in non_cancelled_orders), 2)
+        food_orders = 0
+        bar_orders = 0
+        food_sales = 0.0
+        bar_sales = 0.0
+        for o in non_cancelled_orders:
+            items = o.items_json or []
+            has_food = False
+            has_bar = False
+            for item in items:
+                it_price = float(item.get("price", 0.0))
+                it_qty = int(item.get("quantity", 1))
+                it_total = it_price * it_qty
+                if item.get("station") == "BAR" or item.get("target_destination") == "BAR":
+                    bar_sales += it_total
+                    has_bar = True
+                else:
+                    food_sales += it_total
+                    has_food = True
+            if has_food:
+                food_orders += 1
+            if has_bar:
+                bar_orders += 1
+
+        # 2. Paid bills belonging to this active shift
+        bill_query = select(Bill).where(
+            Bill.restaurant_id == rest.id,
+            or_(
+                Bill.business_day_id == current_bday.id,
+                and_(Bill.business_day_id.is_(None), Bill.created_at >= since_time)
+            )
+        )
+        bill_res = await db.execute(bill_query)
+        shift_bills = bill_res.scalars().all()
+        
+        paid_bills = [b for b in shift_bills if b.status == "PAID" or b.payment_status == "PAID"]
+        unpaid_bills = [b for b in shift_bills if b.status not in ["PAID", "CANCELLED"] and b.payment_status != "PAID"]
+
+        cash_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CASH"), 2)
+        card_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CARD"), 2)
+        upi_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method in ["UPI", "ONLINE_UPI", "QR_CODE"]), 2)
+        tax_amount = round(sum(b.tax_amount for b in paid_bills), 2)
+        discount_amount = round(sum(b.discount_amount for b in paid_bills), 2)
+        paid_revenue = round(cash_sales + card_sales + upi_sales, 2)
+        unpaid_bills_amount = round(sum(b.grand_total for b in unpaid_bills), 2)
+        
+        total_sales = paid_revenue
+        avg_order_val = round(total_sales / total_orders, 2) if total_orders > 0 else 0.0
+
+        formatted["total_orders"] = total_orders
+        formatted["totalOrders"] = total_orders
+        formatted["completed_orders"] = completed_orders
+        formatted["completedOrders"] = completed_orders
+        formatted["cancelled_orders"] = cancelled_orders
+        formatted["cancelledOrders"] = cancelled_orders
+        formatted["food_orders"] = food_orders
+        formatted["foodOrders"] = food_orders
+        formatted["bar_orders"] = bar_orders
+        formatted["barOrders"] = bar_orders
+        formatted["total_sales"] = total_sales
+        formatted["totalSales"] = total_sales
+        formatted["order_value"] = order_value
+        formatted["orderValue"] = order_value
+        formatted["food_sales"] = round(food_sales, 2)
+        formatted["foodSales"] = round(food_sales, 2)
+        formatted["bar_sales"] = round(bar_sales, 2)
+        formatted["barSales"] = round(bar_sales, 2)
+        formatted["tax_amount"] = tax_amount
+        formatted["taxAmount"] = tax_amount
+        formatted["discount_amount"] = discount_amount
+        formatted["discountAmount"] = discount_amount
+        formatted["cash_sales"] = cash_sales
+        formatted["cashSales"] = cash_sales
+        formatted["card_sales"] = card_sales
+        formatted["cardSales"] = card_sales
+        formatted["upi_sales"] = upi_sales
+        formatted["upiSales"] = upi_sales
+        formatted["unpaid_bills_amount"] = unpaid_bills_amount
+        formatted["unpaidBillsAmount"] = unpaid_bills_amount
+        formatted["average_order_value"] = avg_order_val
+        formatted["averageOrderValue"] = avg_order_val
+
+    # Live operational station counters (with strict exclusion of DELIVERED / COMPLETED / CANCELLED orders)
     tbl_res = await db.execute(
         select(func.count(Table.id)).where(Table.restaurant_id == rest.id, Table.status == "OCCUPIED")
     )
@@ -203,7 +371,8 @@ async def get_current_business_day(
     k_res = await db.execute(
         select(func.count(Order.id)).where(
             Order.restaurant_id == rest.id,
-            Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+            Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
         )
     )
     kitchen_pending_count = k_res.scalar() or 0
@@ -213,12 +382,24 @@ async def get_current_business_day(
     b_res = await db.execute(
         select(func.count(Order.id)).where(
             Order.restaurant_id == rest.id,
-            Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+            Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
         )
     )
     bar_pending_count = b_res.scalar() or 0
     formatted["bar_pending_count"] = bar_pending_count
     formatted["barPendingCount"] = bar_pending_count
+
+    h_res = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.restaurant_id == rest.id,
+            Order.hookah_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+        )
+    )
+    hookah_pending_count = h_res.scalar() or 0
+    formatted["hookah_pending_count"] = hookah_pending_count
+    formatted["hookahPendingCount"] = hookah_pending_count
 
     w_res = await db.execute(
         select(func.count(CustomerRequestModel.id)).where(
@@ -263,23 +444,35 @@ async def get_business_day_precheck(
     )
     open_orders_count = ord_open_res.scalar() or 0
 
-    # 4. Uncompleted Kitchen Orders
+    # 4. Uncompleted Kitchen Orders (excluding orders already completed or delivered)
     k_res = await db.execute(
         select(func.count(Order.id)).where(
             Order.restaurant_id == rest.id,
-            Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+            Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
         )
     )
     uncompleted_kitchen_count = k_res.scalar() or 0
 
-    # 5. Uncompleted Bar Orders
+    # 5. Uncompleted Bar Orders (excluding orders already completed or delivered)
     b_res = await db.execute(
         select(func.count(Order.id)).where(
             Order.restaurant_id == rest.id,
-            Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+            Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
         )
     )
     uncompleted_bar_count = b_res.scalar() or 0
+
+    # Hookah Orders (excluding orders already completed or delivered)
+    h_res = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.restaurant_id == rest.id,
+            Order.hookah_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+        )
+    )
+    uncompleted_hookah_count = h_res.scalar() or 0
 
     # 6. Open Waiter Requests
     w_res = await db.execute(
@@ -315,15 +508,32 @@ async def get_business_day_precheck(
     ords_res = await db.execute(
         select(func.count(Order.id), func.coalesce(func.sum(Order.total_amount), 0.0)).where(
             Order.restaurant_id == rest.id,
-            Order.created_at >= since_time,
+            or_(
+                Order.business_day_id == (open_bday.id if open_bday else None),
+                Order.created_at >= since_time
+            ),
             Order.status != "CANCELLED"
         )
     )
     ord_row = ords_res.first()
     total_orders_today = ord_row[0] if ord_row else 0
-    total_sales_today = float(ord_row[1]) if ord_row else 0.0
+    order_value_today = float(ord_row[1]) if ord_row else 0.0
 
-    warnings = []
+    # Paid bills today (Authoritative collected sales)
+    paid_bills_res = await db.execute(
+        select(func.coalesce(func.sum(Bill.grand_total), 0.0)).where(
+            Bill.restaurant_id == rest.id,
+            or_(
+                Bill.business_day_id == (open_bday.id if open_bday else None),
+                Bill.created_at >= since_time
+            ),
+            or_(Bill.status == "PAID", Bill.payment_status == "PAID")
+        )
+    )
+    total_sales_today = float(paid_bills_res.scalar() or 0.0)
+    unpaid_bills_amount = float(sum(b.grand_total for b in unpaid_bills))
+
+    warnings: List[str] = []
     blocking_reasons: List[Dict[str, Any]] = []
 
     for t in occupied_tables:
@@ -351,11 +561,48 @@ async def get_business_day_precheck(
         })
 
     if uncompleted_kitchen_count > 0:
-        warnings.append(f"{uncompleted_kitchen_count} order(s) still in preparation in Kitchen KDS.")
+        label = f"{uncompleted_kitchen_count} order(s) still in preparation in Kitchen KDS."
+        warnings.append(label)
+        blocking_reasons.append({
+            "type": "KITCHEN",
+            "id": "kitchen-pending",
+            "count": uncompleted_kitchen_count,
+            "label": label,
+            "link": "/kitchen",
+        })
+
     if uncompleted_bar_count > 0:
-        warnings.append(f"{uncompleted_bar_count} beverage order(s) pending in Bar station.")
+        label = f"{uncompleted_bar_count} beverage order(s) pending in Bar station."
+        warnings.append(label)
+        blocking_reasons.append({
+            "type": "BAR",
+            "id": "bar-pending",
+            "count": uncompleted_bar_count,
+            "label": label,
+            "link": "/bar",
+        })
+
+    if uncompleted_hookah_count > 0:
+        label = f"{uncompleted_hookah_count} hookah order(s) pending in Hookah station."
+        warnings.append(label)
+        blocking_reasons.append({
+            "type": "HOOKAH",
+            "id": "hookah-pending",
+            "count": uncompleted_hookah_count,
+            "label": label,
+            "link": "/hookah",
+        })
+
     if open_waiter_requests_count > 0:
-        warnings.append(f"{open_waiter_requests_count} customer service request(s) open.")
+        label = f"{open_waiter_requests_count} customer service request(s) open."
+        warnings.append(label)
+        blocking_reasons.append({
+            "type": "WAITER",
+            "id": "waiter-pending",
+            "count": open_waiter_requests_count,
+            "label": label,
+            "link": "/waiter",
+        })
 
     can_close = len(warnings) == 0
 
@@ -368,6 +615,8 @@ async def get_business_day_precheck(
         "active_sessions_count": active_sessions_count,
         "uncompletedKitchenOrdersCount": uncompleted_kitchen_count,
         "uncompletedBarOrdersCount": uncompleted_bar_count,
+        "uncompletedHookahOrdersCount": uncompleted_hookah_count,
+        "uncompleted_hookah_orders_count": uncompleted_hookah_count,
         "open_orders_count": open_orders_count,
         "openOrdersCount": open_orders_count,
         "openWaiterRequestsCount": open_waiter_requests_count,
@@ -378,6 +627,10 @@ async def get_business_day_precheck(
         "total_orders_today": total_orders_today,
         "totalSalesToday": total_sales_today,
         "total_sales_today": total_sales_today,
+        "orderValueToday": order_value_today,
+        "order_value_today": order_value_today,
+        "unpaidBillsAmount": unpaid_bills_amount,
+        "unpaid_bills_amount": unpaid_bills_amount,
         "warnings": warnings,
         "blocking_reasons": blocking_reasons,
     }
@@ -410,8 +663,8 @@ async def close_business_day(
         last_closed = last_closed_res.scalar_one_or_none()
         if last_closed:
             # Idempotent return for repeated close requests
-            closed_formatted = _format_business_day(last_closed)
-            next_business_date = compute_next_business_date(last_closed.business_date)
+            closed_formatted = _format_business_day(last_closed, rest)
+            next_business_date = compute_next_business_date(last_closed.business_date) if last_closed.business_date else None
             closed_formatted["next_business_date"] = next_business_date
             closed_formatted["nextBusinessDate"] = next_business_date
             closed_formatted["previous_business_date"] = last_closed.business_date
@@ -430,7 +683,7 @@ async def close_business_day(
         count = any_day_res.scalar() or 0
         if count == 0:
             now_utc = datetime.now(timezone.utc)
-            today_str = now_utc.strftime("%d %b %Y")
+            today_str = get_operational_business_date(now_utc, rest)
             current_bday = BusinessDay(
                 id=f"bday-{rest.id}-{uuid.uuid4().hex[:10]}",
                 restaurant_id=rest.id,
@@ -470,10 +723,12 @@ async def close_business_day(
         orders_res_check = await db.execute(
             select(func.count(Order.id)).where(
                 Order.restaurant_id == rest.id,
+                Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"]),
                 or_(
                     Order.status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
                     Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
-                    Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
+                    Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
+                    Order.hookah_status.in_(["PENDING", "ACCEPTED", "PREPARING"])
                 )
             )
         )
@@ -499,7 +754,7 @@ async def close_business_day(
     orders_res = await db.execute(
         select(Order).where(
             Order.restaurant_id == rest.id,
-            or_(Order.created_at >= since_time, Order.business_day_id == current_bday.id)
+            or_(Order.business_day_id == current_bday.id, Order.created_at >= since_time)
         )
     )
     day_orders = orders_res.scalars().all()
@@ -508,21 +763,16 @@ async def close_business_day(
     completed_orders = sum(1 for o in day_orders if o.status in ["COMPLETED", "DELIVERED"])
     cancelled_orders = sum(1 for o in day_orders if o.status == "CANCELLED")
 
-    total_sales = 0.0
     food_sales = 0.0
     bar_sales = 0.0
     food_orders = 0
     bar_orders = 0
-    tax_amount = 0.0
-
     tables_served_set = set()
 
     for o in day_orders:
         if o.table_id:
             tables_served_set.add(o.table_id)
         if o.status != "CANCELLED":
-            total_sales += o.total_amount or 0.0
-            tax_amount += o.tax_amount or 0.0
             items = o.items_json or []
             has_food = False
             has_bar = False
@@ -541,33 +791,26 @@ async def close_business_day(
             if has_bar:
                 bar_orders += 1
 
-    # Payment breakdown from bills
+    # Payment breakdown from bills belonging to this shift
     day_session_ids = {o.table_session_id for o in day_orders if o.table_session_id}
     bills_res = await db.execute(
         select(Bill).where(
             Bill.restaurant_id == rest.id,
+            or_(
+                Bill.business_day_id == current_bday.id,
+                Bill.created_at >= since_time
+            ),
             or_(Bill.status == "PAID", Bill.payment_status == "PAID")
         )
     )
-    all_paid_bills = bills_res.scalars().all()
-    paid_bills = [
-        b for b in all_paid_bills
-        if (b.table_session_id and b.table_session_id in day_session_ids)
-        or (b.created_at and since_time and (
-            (b.created_at.replace(tzinfo=timezone.utc) if b.created_at.tzinfo is None else b.created_at) >= (since_time.replace(tzinfo=timezone.utc) if since_time.tzinfo is None else since_time)
-        ))
-    ]
+    paid_bills = bills_res.scalars().all()
 
     cash_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CASH"), 2)
     card_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CARD"), 2)
     upi_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method in ["UPI", "ONLINE_UPI", "QR_CODE"]), 2)
+    tax_amount = round(sum(b.tax_amount for b in paid_bills), 2)
     discount_amount = round(sum(b.discount_amount for b in paid_bills), 2)
-
-    total_paid_bills_sales = round(cash_sales + card_sales + upi_sales, 2)
-    if paid_bills:
-        total_sales = total_paid_bills_sales
-        tax_amount = round(sum(b.tax_amount for b in paid_bills), 2)
-
+    total_sales = round(cash_sales + card_sales + upi_sales, 2)
     avg_order_val = round(total_sales / total_orders, 2) if total_orders > 0 else 0.0
 
     # 3. Finalize current BusinessDay
@@ -580,8 +823,8 @@ async def close_business_day(
     current_bday.completed_orders = completed_orders
     current_bday.cancelled_orders = cancelled_orders
     current_bday.total_sales = total_sales
-    current_bday.food_sales = food_sales
-    current_bday.bar_sales = bar_sales
+    current_bday.food_sales = round(food_sales, 2)
+    current_bday.bar_sales = round(bar_sales, 2)
     current_bday.tax_amount = tax_amount
     current_bday.discount_amount = discount_amount
     current_bday.cash_sales = cash_sales
@@ -595,8 +838,8 @@ async def close_business_day(
         "completedOrders": completed_orders,
         "cancelledOrders": cancelled_orders,
         "totalSales": total_sales,
-        "foodSales": food_sales,
-        "barSales": bar_sales,
+        "foodSales": round(food_sales, 2),
+        "barSales": round(bar_sales, 2),
         "cashSales": cash_sales,
         "cardSales": card_sales,
         "upiSales": upi_sales,
@@ -628,7 +871,7 @@ async def close_business_day(
         ).execution_options(synchronize_session=False)
     )
 
-    # Authoritatively stamp business_day_id on all orders from this operational shift
+    # C. Authoritatively stamp business_day_id on all orders and bills from this operational shift
     await db.execute(
         update(Order).where(
             Order.restaurant_id == rest.id,
@@ -638,8 +881,17 @@ async def close_business_day(
             )
         ).values(business_day_id=current_bday.id).execution_options(synchronize_session=False)
     )
+    await db.execute(
+        update(Bill).where(
+            Bill.restaurant_id == rest.id,
+            or_(
+                Bill.business_day_id == current_bday.id,
+                and_(Bill.business_day_id.is_(None), Bill.created_at >= since_time)
+            )
+        ).values(business_day_id=current_bday.id).execution_options(synchronize_session=False)
+    )
 
-    # C. Clear live operational queue: finalize uncompleted orders so they don't linger on live KDS/Bar
+    # D. Clear live operational queue: finalize uncompleted orders so they don't linger on live KDS/Bar/Hookah
     await db.execute(
         update(Order).where(
             Order.restaurant_id == rest.id,
@@ -648,11 +900,12 @@ async def close_business_day(
         ).values(
             status="COMPLETED",
             kitchen_status="COMPLETED",
-            bar_status="COMPLETED"
+            bar_status="COMPLETED",
+            hookah_status="COMPLETED"
         ).execution_options(synchronize_session=False)
     )
 
-    # Also seal any completed orders with lingering station statuses
+    # Seal any completed orders with lingering station statuses
     await db.execute(
         update(Order).where(
             Order.restaurant_id == rest.id,
@@ -660,15 +913,17 @@ async def close_business_day(
             Order.status.in_(["COMPLETED", "DELIVERED"]),
             or_(
                 Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"]),
-                Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"])
+                Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"]),
+                Order.hookah_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"])
             )
         ).values(
             kitchen_status="COMPLETED",
-            bar_status="COMPLETED"
+            bar_status="COMPLETED",
+            hookah_status="COMPLETED"
         ).execution_options(synchronize_session=False)
     )
 
-    # D. Resolve open customer requests (Waiter)
+    # E. Resolve open customer requests (Waiter)
     await db.execute(
         update(CustomerRequestModel).where(
             CustomerRequestModel.restaurant_id == rest.id,
@@ -682,8 +937,8 @@ async def close_business_day(
     await db.commit()
     await db.refresh(current_bday)
 
-    closed_formatted = _format_business_day(current_bday)
-    next_business_date = compute_next_business_date(current_bday.business_date)
+    closed_formatted = _format_business_day(current_bday, rest)
+    next_business_date = compute_next_business_date(current_bday.business_date) if current_bday.business_date else None
     closed_formatted["next_business_date"] = next_business_date
     closed_formatted["nextBusinessDate"] = next_business_date
     closed_formatted["previous_business_date"] = current_bday.business_date
@@ -771,13 +1026,13 @@ async def open_business_day(
     res = await db.execute(query)
     existing = res.scalar_one_or_none()
     if existing:
-        return _format_business_day(existing)
+        return _format_business_day(existing, rest)
 
     now_utc = datetime.now(timezone.utc)
     
     # 2. Authoritative determination of business date:
     # A. If explicitly provided in payload and valid, use it
-    # B. Otherwise determine from last closed business day (+ 1 day) or current calendar date
+    # B. Otherwise determine from last closed business day synchronized with restaurant local timezone!
     chosen_date: Optional[str] = None
     input_date = payload.business_date or payload.businessDate
     if input_date and input_date.strip():
@@ -793,7 +1048,7 @@ async def open_business_day(
         if last_closed and last_closed.business_date:
             chosen_date = compute_next_business_date(last_closed.business_date)
         else:
-            chosen_date = now_utc.strftime("%d %b %Y")
+            chosen_date = get_operational_business_date(now_utc, rest)
 
     new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
     new_bday = BusinessDay(
@@ -827,7 +1082,7 @@ async def open_business_day(
     await db.commit()
     await db.refresh(new_bday)
 
-    formatted = _format_business_day(new_bday)
+    formatted = _format_business_day(new_bday, rest)
 
     # Audit Log
     AdminAuditLogger.log_action(
@@ -896,7 +1151,7 @@ async def get_business_day_history(
     ).order_by(BusinessDay.closed_at.desc(), BusinessDay.opened_at.desc()).limit(30)
     res = await db.execute(query)
     days = res.scalars().all()
-    return [_format_business_day(d) for d in days]
+    return [_format_business_day(d, rest) for d in days]
 
 
 @router.get("/history/{day_id}")
@@ -920,7 +1175,7 @@ async def get_historical_business_day_detail(
     if not bday:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historical business day record not found.")
 
-    return _format_business_day(bday)
+    return _format_business_day(bday, rest)
 
 
 @router.get("/history/{day_id}/orders")
@@ -959,4 +1214,3 @@ async def get_historical_business_day_orders(
     orders = res_orders.scalars().all()
     from app.modules.orders.router import format_order_response
     return [format_order_response(o) for o in orders]
-

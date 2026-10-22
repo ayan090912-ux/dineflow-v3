@@ -178,6 +178,10 @@ def format_bill_response(bill: Bill) -> dict:
         "items_snapshot_json": bill.items_snapshot_json or [],
         "orders": bill.orders_snapshot_json or [],
         "orders_snapshot_json": bill.orders_snapshot_json or [],
+        "businessDayId": getattr(bill, "business_day_id", None),
+        "business_day_id": getattr(bill, "business_day_id", None),
+        "paidAt": bill.paid_at.isoformat() if getattr(bill, "paid_at", None) else None,
+        "paid_at": bill.paid_at.isoformat() if getattr(bill, "paid_at", None) else None,
         "createdAt": created_at_val,
         "created_at": created_at_val,
         "updatedAt": updated_at_val,
@@ -658,11 +662,26 @@ async def record_bill_payment(
     vb = payload.verified_by or payload.verifiedBy or caller.email or caller.uid or "Staff"
     pr = payload.payment_reference or payload.paymentReference or f"PAY-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
+    now_utc_payment = datetime.now(timezone.utc)
     bill.payment_status = "PAID"
     bill.status = "PAID"
     bill.payment_method = pm
     bill.payment_verified_by = vb
     bill.payment_reference = pr
+    bill.paid_at = now_utc_payment
+
+    if not getattr(bill, "business_day_id", None):
+        from app.modules.business_day.models import BusinessDay
+        bday_q = select(BusinessDay.id).where(
+            BusinessDay.restaurant_id == target_rest_id,
+            BusinessDay.status == "OPEN"
+        ).order_by(BusinessDay.opened_at.desc()).limit(1)
+        bday_res = await db.execute(bday_q)
+        active_bday_id = bday_res.scalar_one_or_none()
+        if active_bday_id:
+            bill.business_day_id = active_bday_id
+
+
 
     await db.commit()
     await db.refresh(bill)
