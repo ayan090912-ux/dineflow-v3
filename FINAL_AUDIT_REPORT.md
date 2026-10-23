@@ -363,4 +363,71 @@ DineFlow v3 was refactored to support multiple independent business types under 
 - **Frontend Typecheck:** `npm run typecheck` passes with **0 errors**.
 - **Frontend Production Build:** `npm run build` succeeds in **2.08s**, generating independent chunks for `BusinessHub` (21.5 kB), `BarApp` (14.4 kB), `CartApp` (15.7 kB), `WeddingEventPortal` (237 kB), and `RestaurantApp` (346 kB).
 
+---
+
+## 17. Production Root Cause Diagnosis, Remediation & Live Verification
+
+### 17.1 Root Cause Diagnosis
+The production screenshot of `https://the-leo.dinely.food/restaurant/dashboard?tab=inventory` showed **Wedding & Events — PORTAL** due to two compounding factors:
+1. **Stale Production Deployment:**
+   - AWS EC2 production instance `i-0997b0b381dfb3fd0` was running the 11-hour-old commit `195ae858c24ffeb0f4c62231b5e71341a47c708f`.
+   - In that commit, `RestaurantApp.tsx` conditionally rendered `{ id: 'weddings', label: 'Wedding & Events', badge: 'PORTAL' }` whenever `isModuleEnabled(currentRestaurant, 'weddings')` was truthy.
+2. **Legacy Persisted Database Flag in Neon PostgreSQL:**
+   - Live query of `https://the-leo.dinely.food/api/v1/restaurants/public/resolve` returned:
+     ```json
+     "enabledModules": ["kitchen", "inventory", "billing", "tables", "waiter", "weddings"]
+     ```
+   - Because The Leo had `"weddings"` in its database column from early system onboarding, the stale frontend sidebar continued to mount the portal link.
+
+### 17.2 Full-Stack Architectural Fixes
+1. **Contract-Level Type Enforcement (`frontend/src/packages/types/index.ts`):**
+   - Hardened `isModuleEnabled`:
+     ```ts
+     if (modLower === 'weddings' || modLower === 'wedding') {
+       if (bType !== 'WEDDING_EVENT' && bType !== 'WEDDING_ORDERING') {
+         return false; // Impossible for a restaurant, bar, or cart to enable weddings
+       }
+     }
+     ```
+2. **Backend API Normalization (`app/core/tenant/resolver.py` & `app/modules/restaurants/router.py`):**
+   - In `resolve_public_tenant`, `get_restaurant`, `update_restaurant_details`, and `update_workspace_modules`:
+     - If `b_type in ["RESTAURANT", "BAR", "SMALL_CART", "FOOD_CART"]`, `"weddings"` is unconditionally stripped from `enabledModules` before being returned to clients or saved to the database.
+3. **Database Migration & Startup Hygiene (`app/main.py`):**
+   - Added raw PostgreSQL `jsonb` migration query in `baseline_sync_statements` and Python `flag_modified` hygiene loop in `_background_startup_init()`:
+     ```sql
+     UPDATE restaurants
+     SET enabled_modules = (
+         SELECT COALESCE(jsonb_agg(m), '[]'::jsonb)
+         FROM jsonb_array_elements_text(enabled_modules::jsonb) AS m
+         WHERE m != 'weddings'
+     )
+     WHERE (business_type IN ('RESTAURANT', 'BAR', 'SMALL_CART', 'FOOD_CART') OR business_type IS NULL OR slug = 'the-leo')
+       AND enabled_modules::text LIKE '%"weddings"%';
+     ```
+
+### 17.3 Production Deployment & Live Verification
+- **Git Commit:** `6cd1915f68e927e7b0fafacaad34bcd204b71005` pushed to `origin security-hardening-cleanup`.
+- **Deployment Execution:** `python3 scripts/deploy_prod.py --target all --branch security-hardening-cleanup` rebuilt both `dinely_backend` and `dinely_web` Docker containers on AWS EC2 `i-0997b0b381dfb3fd0`.
+- **Live Verification Evidence:**
+  - `curl -s https://dinely.food/healthz` ➔ `HTTP 200 {"status":"healthy","version":"2.0.0","commit":"6cd1915f68e927e7b0fafacaad34bcd204b71005"}`
+  - `curl -s https://the-leo.dinely.food/api/v1/restaurants/public/resolve`:
+    ```json
+    {
+      "id": "rest-1790715516065-f135b5",
+      "name": "the leo",
+      "businessType": "RESTAURANT",
+      "enabledModules": [
+        "kitchen",
+        "inventory",
+        "billing",
+        "tables",
+        "waiter"
+      ]
+    }
+    ```
+    `"weddings"` is completely absent.
+  - `curl -s https://the-leo.dinely.food | grep -o 'assets/index-[^"]*\.js'` ➔ `assets/index-CYRidWTD.js` (verified new frontend bundle from commit `6cd1915`).
+  - `https://dinely.food/hub` ➔ Returns HTTP 200 with the active Central Business Hub.
+
+
 
