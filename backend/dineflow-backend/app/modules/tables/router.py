@@ -184,7 +184,7 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     # Query active table sessions for this restaurant to enforce single source of truth
     query_active_sessions = select(TableSession).where(
         (TableSession.restaurant_id == canonical_id) &
-        (TableSession.status == "ACTIVE")
+        (TableSession.status != "CLOSED")
     )
     res_sesses = await db.execute(query_active_sessions)
     active_sessions = res_sesses.scalars().all()
@@ -248,7 +248,7 @@ async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depen
 
     query = select(TableSession).where(
         (TableSession.restaurant_id == canonical_id) &
-        (TableSession.status == "ACTIVE")
+        (TableSession.status != "CLOSED")
     ).order_by(TableSession.session_started_at.desc())
     result = await db.execute(query)
     return result.scalars().all()
@@ -483,7 +483,7 @@ async def get_table_session(
     query_sess = select(TableSession).where(
         (TableSession.restaurant_id.in_(valid_rest_ids)) &
         ((TableSession.table_id == resolved_tbl_id) | (TableSession.table_number == resolved_tbl_num)) &
-        (TableSession.status == "ACTIVE")
+        (TableSession.status != "CLOSED")
     ).order_by(TableSession.session_started_at.desc())
     res_sess = await db.execute(query_sess)
     active_sess = res_sess.scalars().first()
@@ -547,7 +547,7 @@ async def create_table_session(
     query_sess = select(TableSession).where(
         (TableSession.restaurant_id.in_(valid_rest_ids)) &
         ((TableSession.table_id == resolved_tbl_id) | (TableSession.table_number == resolved_tbl_num)) &
-        (TableSession.status == "ACTIVE")
+        (TableSession.status != "CLOSED")
     ).order_by(TableSession.session_started_at.desc())
     res_sess = await db.execute(query_sess)
     active_sesses = res_sess.scalars().all()
@@ -722,7 +722,7 @@ async def close_table_session(
     query_sess = select(TableSession).where(
         (TableSession.restaurant_id.in_(search_rest_ids)) &
         ((TableSession.table_id == tbl.id) | (TableSession.table_number == tbl.table_number)) &
-        (TableSession.status == "ACTIVE")
+        (TableSession.status != "CLOSED")
     )
 
     res_sess = await db.execute(query_sess)

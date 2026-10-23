@@ -321,6 +321,14 @@ async def ensure_db_schema_columns(conn):
            END
            WHERE (has_tables IS TRUE OR has_tables IS NULL)
              AND (enabled_modules IS NULL OR NOT (enabled_modules::jsonb ? 'tables'));""",
+        """UPDATE restaurants
+           SET enabled_modules = (
+               SELECT COALESCE(jsonb_agg(m), '[]'::jsonb)
+               FROM jsonb_array_elements_text(enabled_modules::jsonb) AS m
+               WHERE m != 'weddings'
+           )
+           WHERE (business_type IN ('RESTAURANT', 'BAR', 'SMALL_CART', 'FOOD_CART') OR business_type IS NULL OR slug = 'the-leo' OR id = 'rest-1790715516065-f135b5')
+             AND enabled_modules::text LIKE '%"weddings"%';""",
     ]
     for stmt in baseline_sync_statements:
         try:
@@ -387,6 +395,33 @@ async def _background_startup_init():
             await conn.run_sync(Base.metadata.create_all)
         async with engine.begin() as conn:
             await ensure_db_schema_columns(conn)
+
+        # Baseline Data Hygiene: Ensure RESTAURANT, BAR, and SMALL_CART workspaces never retain 'weddings' module
+        try:
+            from sqlalchemy.ext.asyncio import AsyncSession
+            from app.modules.restaurants.models import Restaurant
+            from sqlalchemy import select, or_
+            from sqlalchemy.orm.attributes import flag_modified
+            async with AsyncSession(engine) as session:
+                r_stmt = select(Restaurant).where(
+                    or_(
+                        Restaurant.business_type.in_(["RESTAURANT", "BAR", "SMALL_CART", "FOOD_CART"]),
+                        Restaurant.business_type.is_(None),
+                        Restaurant.slug == "the-leo",
+                        Restaurant.id == "rest-1790715516065-f135b5"
+                    )
+                )
+                r_res = await session.execute(r_stmt)
+                needs_commit = False
+                for r in r_res.scalars().all():
+                    if r.enabled_modules and "weddings" in r.enabled_modules:
+                        r.enabled_modules = [m for m in r.enabled_modules if m != "weddings"]
+                        flag_modified(r, "enabled_modules")
+                        needs_commit = True
+                if needs_commit:
+                    await session.commit()
+        except Exception as sanitization_err:
+            print("[DATA HYGIENE NOTICE]:", sanitization_err)
     except Exception as e:
         print("[STARTUP NOTICE] Database table initialization:", e)
 

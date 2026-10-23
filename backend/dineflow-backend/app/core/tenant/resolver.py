@@ -183,6 +183,11 @@ async def resolve_public_tenant(
     pub_slug = rest.public_slug or rest.slug or rest.id
     canonical_domain = f"https://{pub_slug}.dinely.food"
 
+    raw_modules = list(rest.enabled_modules or [])
+    b_type_norm = (rest.business_type or "RESTAURANT").upper()
+    if b_type_norm in ["RESTAURANT", "BAR", "SMALL_CART", "FOOD_CART"]:
+        raw_modules = [m for m in raw_modules if m != "weddings"]
+
     res_ctx = ResolvedTenantContext(
         restaurant_id=rest.id,
         name=rest.name,
@@ -209,7 +214,7 @@ async def resolve_public_tenant(
             "hasWaiter": rest.has_waiter,
             "hasInventory": rest.has_inventory,
             "hasBilling": rest.has_billing,
-            "enabledModules": rest.enabled_modules,
+            "enabledModules": raw_modules,
             "currency": rest.currency,
             "taxPercentage": rest.tax_percentage,
             "theme": rest.theme_json,

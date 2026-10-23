@@ -308,13 +308,29 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
     }
   }, [currentEvent?.id]);
 
-  // Periodic polling for live event operations (every 7 seconds)
+  // Periodic polling for live event operations (visibility-aware)
   useEffect(() => {
     if (!currentEvent?.id) return;
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       loadTerminalData(true);
-    }, 7000);
-    return () => clearInterval(interval);
+    }, 10000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadTerminalData(true);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+    };
   }, [currentEvent?.id, currentRestaurant?.id]);
 
   // Load Menu items & categories when wizard opens

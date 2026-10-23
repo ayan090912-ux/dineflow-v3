@@ -41,8 +41,16 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
   const [recentDispatches, setRecentDispatches] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const soundEnabledRef = React.useRef(true);
+  const notifiedOrderIdsRef = React.useRef<Set<string>>(new Set());
+  const hasInitializedRef = React.useRef(false);
   const [lastNotification, setLastNotification] = useState<string>('');
   const [actionError, setActionError] = useState<string>('');
+
+  // Keep soundEnabledRef in sync without triggering effect re-registration
+  React.useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   useEffect(() => {
     const currentRestId = api.getCurrentRestaurantId() || '';
@@ -51,8 +59,10 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     }
 
     loadBarOrders(true);
+    setTimeout(() => { hasInitializedRef.current = true; }, 2000);
     const pollInterval = setInterval(() => loadBarOrders(false), 30000);
 
+    // Per-session event deduplication — stable, not recreated on sound toggle
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event: any) => {
@@ -61,20 +71,21 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
         return;
       }
 
-      // Ignore updates for other stations if specifically targeted for kitchen only
+      // Ignore updates for other stations
       if (event.type === 'FulfillmentTicketUpdated' && event.station && event.station !== 'BAR') {
         return;
       }
 
-      // Day Closed Reset - clean live operational queues
+      // Day Closed Reset
       if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
         setOrders([]);
         setRecentDispatches([]);
+        notifiedOrderIdsRef.current.clear();
         setLastNotification('Business Day Closed 🌅 Bar queue reset for new day.');
         return;
       }
 
-      // Day Opened - reload fresh tickets for the new business day
+      // Day Opened
       if (event.type === 'DayOpened' || event.type === 'BusinessDayOpened') {
         setOrders([]);
         setRecentDispatches([]);
@@ -96,6 +107,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
         event.type === 'TableSessionClosed' ||
         (event.type === 'FulfillmentTicketUpdated' && event.station === 'BAR')
       ) {
+        // Reload data silently for all order-related events
         loadBarOrders(false);
 
         const evtId = event.eventId || event.event_id;
@@ -104,28 +116,48 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
         }
         if (evtId) {
           handledEventIds.add(evtId);
+          if (handledEventIds.size > 500) {
+            const first = Array.from(handledEventIds)[0];
+            handledEventIds.delete(first);
+          }
         }
 
-        // Only alert on newly created drink orders
-        if (
+        // Alert only on genuine new BAR-destined orders, after initial load, once per order
+        const isNewBarOrder =
           event.type === 'order_created' ||
           event.type === 'OrderCreated' ||
-          (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR')
-        ) {
-          setLastNotification(
-            `New Beverage Ticket #${(event.orderId || event.parentOrderId || event.id || '').slice(-4)} for Table ${event.tableNumber || 'Bar'}`
-          );
-          if (soundEnabled) {
-            playNotificationSound();
+          (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'BAR');
+
+        if (isNewBarOrder && hasInitializedRef.current) {
+          const orderId = event.orderId || event.parentOrderId || event.id || evtId;
+          // Verify this event actually has BAR-destined items or is a FulfillmentTicket for BAR
+          const isBarFulfillment = event.type === 'FulfillmentTicketUpdated' && event.station === 'BAR';
+          const items: any[] = (event as any).items || (event as any).payload?.items || [];
+          const hasBarItems = isBarFulfillment || items.some((i: any) => getFulfillmentStation(i) === 'BAR');
+
+          if (hasBarItems && orderId && !notifiedOrderIdsRef.current.has(orderId)) {
+            notifiedOrderIdsRef.current.add(orderId);
+            if (notifiedOrderIdsRef.current.size > 200) {
+              const first = Array.from(notifiedOrderIdsRef.current)[0];
+              notifiedOrderIdsRef.current.delete(first);
+            }
+            setLastNotification(
+              `New Beverage Ticket #${String(orderId).slice(-4)} for Table ${event.tableNumber || 'Bar'}`
+            );
+            if (soundEnabledRef.current) {
+              playNotificationSound();
+            }
           }
         }
       } else if (event.type === 'RECONNECTED') {
+        // Silent data refresh on reconnect
         loadBarOrders(false);
       }
     });
 
     const unsubStatus = realtimeBus.subscribeStatus((status) => {
       if (status === 'CONNECTED') {
+        // Silently refresh on reconnect — no sound
         loadBarOrders(false);
       }
     });
@@ -135,7 +167,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
       unsubscribe();
       unsubStatus();
     };
-  }, [soundEnabled]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps — sound managed via soundEnabledRef, not re-registration
 
   const playNotificationSound = () => {
     try {
@@ -159,10 +192,14 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     setActionError('');
     try {
       const restId = api.getCurrentRestaurantId() || restaurant?.id || undefined;
-      const allOrders = await api.getOrders(restId, { station: 'BAR', activeOnly: true });
+      const isNotWedding = (restaurant as any)?.businessType !== 'WEDDING_ORDERING';
+      const allOrders = await api.getOrders(restId, { station: 'BAR', activeOnly: true, excludeEvents: isNotWedding });
 
       const barOrders = allOrders
         .filter((o) => {
+          if ((restaurant as any)?.businessType !== 'WEDDING_ORDERING' && (o.orderType === 'WEDDING_EVENT' || o.eventId)) {
+            return false;
+          }
           const hasBarItems = o.items && o.items.some((i) => getFulfillmentStation(i) === 'BAR');
           const hasBarStatus = Boolean(o.barStatus && (o.barStatus as string) !== 'NOT_REQUIRED');
           return hasBarItems || hasBarStatus;

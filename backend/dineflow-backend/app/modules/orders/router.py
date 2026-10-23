@@ -16,7 +16,7 @@ from app.modules.business_day.models import BusinessDay
 from app.modules.restaurants.models import Restaurant
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
-from app.modules.billing.service import BillingService
+from app.modules.billing.service import BillingService, get_table_variants
 
 router = APIRouter()
 
@@ -175,6 +175,7 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         "notes": getattr(order, "notes", ""),
         "subtotal": subtotal_val,
         "tax_amount": tax_amount_val,
+        "taxAmount": tax_amount_val,
         "total_amount": total_amount_val,
         "totalAmount": total_amount_val,
         "order_number": ord_num or "#ORD-1",
@@ -374,6 +375,7 @@ async def create_order(
 
         if not is_wedding_event:
             session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id or 'tbl'}-{int(now_utc.timestamp() * 1000)}"
+            t_candidates = get_table_variants(tbl_num)
 
             try:
                 from sqlalchemy import case
@@ -382,7 +384,7 @@ async def create_order(
                         select(TableSession).where(
                             (TableSession.restaurant_id == restaurant.id) &
                             (TableSession.id == payload.tableSessionId) &
-                            (TableSession.status == "ACTIVE")
+                            (TableSession.status != "CLOSED")
                         )
                     )
                     direct_sess = res_direct_sess.scalar_one_or_none()
@@ -394,14 +396,20 @@ async def create_order(
                             tbl_num = direct_sess.table_number
 
                 if not actual_session_id:
+                    table_sess_filters = []
+                    if tbl_id:
+                        table_sess_filters.append(TableSession.table_id == tbl_id)
+                    if t_candidates:
+                        table_sess_filters.append(TableSession.table_number.in_(t_candidates))
+
                     query_sess = select(TableSession).where(
                         (TableSession.restaurant_id == restaurant.id) &
                         (
                             (TableSession.id == session_id) |
                             (
-                                ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
-                                (TableSession.status == "ACTIVE")
-                            )
+                                or_(*table_sess_filters) &
+                                (TableSession.status != "CLOSED")
+                            ) if table_sess_filters else (TableSession.id == session_id)
                         )
                     ).order_by(
                         case((TableSession.id == session_id, 1), else_=0).desc(),
@@ -410,7 +418,7 @@ async def create_order(
                     res_sess = await db.execute(query_sess)
                     matched_sess = res_sess.scalar_one_or_none()
 
-                    if matched_sess and matched_sess.status == "ACTIVE":
+                    if matched_sess and matched_sess.status != "CLOSED":
                         actual_session_id = matched_sess.id
                     else:
                         try:
@@ -430,8 +438,8 @@ async def create_order(
                             print("[SESSION_CREATION_RACE_HANDLED]:", flush_err)
                             res_sess_race = await db.execute(select(TableSession).where(
                                 (TableSession.restaurant_id == restaurant.id) &
-                                ((TableSession.table_id == tbl_id) if tbl_id else (TableSession.table_number == tbl_num)) &
-                                (TableSession.status == "ACTIVE")
+                                (or_(*table_sess_filters) if table_sess_filters else (TableSession.id == session_id)) &
+                                (TableSession.status != "CLOSED")
                             ).order_by(TableSession.session_started_at.desc()).limit(1))
                             race_sess = res_sess_race.scalar_one_or_none()
                             if race_sess:
@@ -892,11 +900,12 @@ async def get_customer_orders(
         query = query.where(Order.table_session_id == table_session_id)
     elif table_id:
         from app.modules.tables.models import TableSession
+        t_variants = get_table_variants(table_id)
         query_sess = select(TableSession).where(
             (TableSession.restaurant_id == canonical_rest_id) &
-            ((TableSession.table_id == table_id) | (TableSession.table_number == table_id)) &
-            (TableSession.status == "ACTIVE")
-        )
+            ((TableSession.table_id == table_id) | (TableSession.table_number.in_(t_variants))) &
+            (TableSession.status != "CLOSED")
+        ).order_by(TableSession.session_started_at.desc())
         res_sess = await db.execute(query_sess)
         active_sess = res_sess.scalars().first()
 
@@ -908,7 +917,13 @@ async def get_customer_orders(
     query = query.order_by(Order.created_at.desc())
     result = await db.execute(query)
     orders = result.scalars().all()
-    return [format_order_response(o) for o in orders]
+    return [
+        format_order_response(
+            o,
+            hide_financials=(bool(o.event_id) or getattr(o, "order_type", "") in ["EVENT_ORDER", "WEDDING_EVENT"])
+        )
+        for o in orders
+    ]
 
 
 
@@ -919,6 +934,7 @@ async def get_restaurant_orders(
     station: Optional[str] = Query(None),
     business_day_id: Optional[str] = Query(None),
     event_id: Optional[str] = Query(None),
+    exclude_events: bool = Query(False),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
@@ -971,6 +987,8 @@ async def get_restaurant_orders(
 
         if event_id:
             query = query.where(Order.event_id == event_id.strip())
+        elif exclude_events:
+            query = query.where(Order.event_id.is_(None), Order.order_type.notin_(["WEDDING_EVENT", "EVENT_ORDER"]))
 
         # 1. Explicit business day history filter
         if business_day_id:
@@ -1028,9 +1046,15 @@ async def get_restaurant_orders(
                     query = query.where(Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"]))
 
         if effective_station == "BAR":
-            bar_subq = select(OrderItem.order_id).where(
-                (OrderItem.target_destination == "BAR")
-            ).scalar_subquery()
+            bar_subq = (
+                select(OrderItem.order_id)
+                .join(Order, OrderItem.order_id == Order.id)
+                .where(
+                    Order.restaurant_id == target_rest_id,
+                    OrderItem.target_destination == "BAR"
+                )
+                .scalar_subquery()
+            )
             query = query.where(or_(Order.id.in_(bar_subq), Order.bar_status.isnot(None)))
             if active_only:
                 query = query.where(
@@ -1039,9 +1063,15 @@ async def get_restaurant_orders(
                 )
 
         elif effective_station == "HOOKAH":
-            hookah_subq = select(OrderItem.order_id).where(
-                (OrderItem.target_destination == "HOOKAH")
-            ).scalar_subquery()
+            hookah_subq = (
+                select(OrderItem.order_id)
+                .join(Order, OrderItem.order_id == Order.id)
+                .where(
+                    Order.restaurant_id == target_rest_id,
+                    OrderItem.target_destination == "HOOKAH"
+                )
+                .scalar_subquery()
+            )
             query = query.where(or_(Order.id.in_(hookah_subq), Order.hookah_status.isnot(None)))
             if active_only:
                 query = query.where(
@@ -1050,10 +1080,16 @@ async def get_restaurant_orders(
                 )
 
         elif effective_station == "KITCHEN":
-            kitchen_subq = select(OrderItem.order_id).where(
-                (OrderItem.target_destination == "KITCHEN")
-            ).scalar_subquery()
-            query = query.where(Order.id.in_(kitchen_subq))
+            kitchen_subq = (
+                select(OrderItem.order_id)
+                .join(Order, OrderItem.order_id == Order.id)
+                .where(
+                    Order.restaurant_id == target_rest_id,
+                    OrderItem.target_destination == "KITCHEN"
+                )
+                .scalar_subquery()
+            )
+            query = query.where(or_(Order.id.in_(kitchen_subq), Order.kitchen_status.isnot(None)))
             if active_only:
                 query = query.where(
                     Order.kitchen_status.in_(["PENDING", "PREPARING", "READY"]),
@@ -1063,7 +1099,7 @@ async def get_restaurant_orders(
         elif active_only:
             query_sess = select(TableSession.id).where(
                 (TableSession.restaurant_id == target_rest_id) &
-                (TableSession.status == "ACTIVE")
+                (TableSession.status != "CLOSED")
             )
             res_sess = await db.execute(query_sess)
             active_session_ids = [r[0] for r in res_sess.all()]

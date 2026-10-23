@@ -186,11 +186,19 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
             <span className="text-xs font-mono text-slate-400 hidden sm:inline">Workspace Hub</span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="hidden sm:block text-right text-xs">
               <p className="font-semibold text-white">{userName}</p>
               <p className="text-[11px] text-slate-500 font-mono">{currentUser?.email}</p>
             </div>
+            <button
+              onClick={() => { window.location.href = '/hub'; }}
+              className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-xs font-semibold text-amber-400 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Open DineFlow Central Business Hub"
+            >
+              <Grid className="w-3.5 h-3.5" />
+              <span>Business Hub</span>
+            </button>
             <button
               onClick={handleLogout}
               className="px-3 py-1.5 rounded-lg border border-[#2d3545] hover:border-slate-500 bg-[#1a1e27] hover:bg-[#222734] text-xs font-medium text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"

@@ -34,9 +34,11 @@ import {
   DollarSign,
   Info,
   Bell,
+  Receipt,
+  FileText,
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { Button, Card, Badge, Modal, Input, DinelyLogo } from '../../packages/ui';
+import { Button, Card, Badge, Modal, Input, DinelyLogo, ProductSwitcher } from '../../packages/ui';
 import { api } from '../../packages/api/client';
 import { realtimeBus } from '../../packages/api/realtime';
 import { EventTableAssistanceTerminal } from './EventTableAssistanceTerminal';
@@ -68,12 +70,14 @@ export type EventPortalTab =
   | 'day_management'
   | 'tables'
   | 'menu'
+  | 'orders'
   | 'kitchen'
   | 'runner'
   | 'assistance'
   | 'bar'
   | 'hookah'
   | 'staff'
+  | 'billing'
   | 'workspace_settings';
 
 export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
@@ -95,26 +99,31 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
         'day_management',
         'tables',
         'menu',
+        'orders',
         'kitchen',
         'runner',
         'assistance',
         'bar',
         'hookah',
         'staff',
+        'billing',
         'workspace_settings',
       ].includes(tabParam)) {
         return tabParam;
       }
       const p = window.location.pathname.toLowerCase();
-      if (p.includes('/tables') || p.includes('/floorplan')) return 'tables';
-      if (p.includes('/menu')) return 'menu';
-      if (p.includes('/day') || p.includes('/schedule')) return 'day_management';
+      if (p.includes('/tables') || p.includes('/floorplan') || p.includes('/guests')) return 'tables';
+      if (p.includes('/menu') || p.includes('/food-menu')) return 'menu';
+      if (p.includes('/orders')) return 'orders';
+      if (p.includes('/day') || p.includes('/schedule') || p.includes('/day-management')) return 'day_management';
       if (p.includes('/kitchen') || p.includes('/kds')) return 'kitchen';
       if (p.includes('/runner') || p.includes('/delivery')) return 'runner';
       if (p.includes('/bar')) return 'bar';
       if (p.includes('/hookah') || p.includes('/shisha')) return 'hookah';
+      if (p.includes('/assistance')) return 'assistance';
       if (p.includes('/staff')) return 'staff';
-      if (p.includes('/settings') || p.includes('/setup')) return 'workspace_settings';
+      if (p.includes('/billing')) return 'billing';
+      if (p.includes('/settings') || p.includes('/setup') || p.includes('/terminals')) return 'workspace_settings';
     }
     return 'command_center';
   });
@@ -221,6 +230,10 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
   // Station Filter State for Event Menu Catalog
   const [menuStationFilter, setMenuStationFilter] = useState<'ALL' | 'KITCHEN' | 'BAR' | 'HOOKAH'>('ALL');
   const [menuSearchQuery, setMenuSearchQuery] = useState<string>('');
+
+  // Order Stream Filter State
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'PENDING' | 'PREPARING' | 'READY' | 'DELIVERED'>('ALL');
+  const [orderSearchQuery, setOrderSearchQuery] = useState<string>('');
 
   // 1. Load Restaurant Details & Events
   const loadEvents = useCallback(async () => {
@@ -630,12 +643,27 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
                 Dinely · Wedding & Events
               </span>
               <Badge variant="brand" className="text-[9px] uppercase font-mono px-2 py-0 bg-amber-500/20 text-amber-300 border-amber-500/40">
-                EVENT PORTAL
+                EVENT OS
               </Badge>
             </div>
             <p className="text-[10px] text-slate-400 font-mono truncate max-w-xs sm:max-w-md">
               {currentRestaurant?.name || 'Grand Banquet Center'}
             </p>
+          </div>
+
+          {/* Symmetrical Dual-Product Switcher to switch to Restaurant Management */}
+          <div className="hidden lg:flex items-center ml-3">
+            <ProductSwitcher
+              activeProduct="weddings"
+              theme="dark"
+              compact
+              onSwitch={(p) => {
+                if (p === 'restaurants') {
+                  if (onNavigate) onNavigate('/restaurant/dashboard');
+                  else window.location.href = '/restaurant/dashboard';
+                }
+              }}
+            />
           </div>
         </div>
 
@@ -753,7 +781,38 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
                   }`}
                 >
                   <Grid className="w-4 h-4 text-emerald-400" />
-                  <span>Floorplan & Tables</span>
+                  <span>Floorplan & Guests</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('menu')}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                    activeTab === 'menu'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : 'text-slate-400 hover:text-white hover:bg-[#141824]'
+                  }`}
+                >
+                  <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+                  <span>Food & Beverage Menus</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('orders')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                    activeTab === 'orders'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : 'text-slate-400 hover:text-white hover:bg-[#141824]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <ShoppingBag className="w-4 h-4 text-amber-400" />
+                    <span>Live Orders Stream</span>
+                  </div>
+                  {eventOrders.length > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-[#181c2b] text-amber-300 text-[10px] font-mono flex items-center justify-center border border-amber-500/30">
+                      {eventOrders.length}
+                    </span>
+                  )}
                 </button>
               </nav>
             </div>
@@ -854,18 +913,6 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
               </p>
               <nav className="space-y-1">
                 <button
-                  onClick={() => setActiveTab('menu')}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
-                    activeTab === 'menu'
-                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                      : 'text-slate-400 hover:text-white hover:bg-[#141824]'
-                  }`}
-                >
-                  <UtensilsCrossed className="w-4 h-4 text-amber-400" />
-                  <span>Event Menu & Packages</span>
-                </button>
-
-                <button
                   onClick={() => setActiveTab('staff')}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
                     activeTab === 'staff'
@@ -875,6 +922,18 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
                 >
                   <Users className="w-4 h-4 text-amber-400" />
                   <span>Event Staff & Roles</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('billing')}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                    activeTab === 'billing'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : 'text-slate-400 hover:text-white hover:bg-[#141824]'
+                  }`}
+                >
+                  <Receipt className="w-4 h-4 text-amber-400" />
+                  <span>Banquet Billing & Invoices</span>
                 </button>
 
                 <button
@@ -1454,6 +1513,287 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
                   </Button>
                 </div>
               </Card>
+            </div>
+          )}
+
+          {/* TAB 11: EVENT ORDERS STREAM */}
+          {activeTab === 'orders' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5 text-amber-400" />
+                    Live Event Orders Stream
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Real-time feed of guest table orders for {currentEvent?.title || 'Current Event'}. Course fulfillment tracking with zero guest billing.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="brand" className="text-xs font-mono">
+                    {eventOrders.length} Total Orders
+                  </Badge>
+                  <Badge variant="warning" className="text-xs font-mono">
+                    {eventOrders.filter((o) => o.status === 'PENDING' || o.status === 'ACCEPTED' || o.status === 'PREPARING').length} In Prep
+                  </Badge>
+                  <Badge variant="success" className="text-xs font-mono">
+                    {eventOrders.filter((o) => o.status === 'READY' || o.status === 'DELIVERED' || o.status === 'COMPLETED').length} Fulfilled
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Order Stream Filter & Search */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-2xl bg-[#12151f] border border-[#1f2536]">
+                <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+                  {(['ALL', 'PENDING', 'PREPARING', 'READY', 'DELIVERED'] as const).map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setOrderStatusFilter(st)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+                        orderStatusFilter === st
+                          ? 'bg-amber-500 text-slate-950 font-bold shadow-sm shadow-amber-500/20'
+                          : 'text-slate-400 hover:text-white hover:bg-[#181c2b]'
+                      }`}
+                    >
+                      {st === 'ALL' ? 'All Orders' : st}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="w-full sm:w-72">
+                  <Input
+                    placeholder="Search table, dish, or ID..."
+                    value={orderSearchQuery}
+                    onChange={(e) => setOrderSearchQuery(e.target.value)}
+                    icon={<Search className="w-4 h-4 text-slate-400" />}
+                    className="text-xs bg-[#181c2b] border-[#252c3d]"
+                  />
+                </div>
+              </div>
+
+              {/* Orders Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {eventOrders
+                  .filter((order) => {
+                    if (orderStatusFilter !== 'ALL' && order.status !== orderStatusFilter) return false;
+                    if (orderSearchQuery.trim()) {
+                      const q = orderSearchQuery.toLowerCase();
+                      const matchTable = (order.tableNumber || '').toLowerCase().includes(q);
+                      const matchId = (order.id || '').toLowerCase().includes(q);
+                      const matchCustomer = (order.customerName || '').toLowerCase().includes(q);
+                      return matchTable || matchId || matchCustomer;
+                    }
+                    return true;
+                  })
+                  .map((order) => {
+                    const prog = getStationProgress(order);
+                    return (
+                      <Card key={order.id} className="p-4 rounded-2xl bg-[#12151f] border border-[#1f2536] space-y-3 shadow-lg">
+                        <div className="flex items-center justify-between border-b border-[#1f2536] pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-bold font-mono text-amber-300">
+                              Table {cleanTableBadge(order.tableNumber)}
+                            </span>
+                            {order.customerName && (
+                              <span className="text-xs text-slate-400 truncate max-w-[120px]">
+                                · {order.customerName}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-400 bg-[#181c2b] px-2 py-0.5 rounded border border-[#252c3d]">
+                            #{order.id.slice(-6)}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                            Requested Courses ({order.items?.length || 0}):
+                          </p>
+                          {(order.items || []).map((it, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-[#181c2b]">
+                              <span className="font-medium text-white">{it.quantity}x {it.name}</span>
+                              <span className="text-[10px] font-mono text-slate-400">
+                                {getFulfillmentStation(it)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {order.notes && (
+                          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 italic">
+                            Note: {order.notes}
+                          </div>
+                        )}
+
+                        <div className="pt-2 flex items-center justify-between gap-2 border-t border-[#1f2536]">
+                          <Badge
+                            variant={
+                              order.status === 'DELIVERED' || order.status === 'COMPLETED'
+                                ? 'success'
+                                : order.status === 'READY'
+                                ? 'brand'
+                                : 'warning'
+                            }
+                            className="text-xs font-mono"
+                          >
+                            {order.status}
+                          </Badge>
+
+                          {order.status === 'READY' && (
+                            <Button
+                              size="sm"
+                              variant="brand"
+                              onClick={() => handleAdvanceDelivery(order.id, 'DELIVERED')}
+                              className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                            >
+                              Deliver ✓
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
+              </div>
+
+              {eventOrders.length === 0 && (
+                <div className="p-12 text-center bg-[#12151f] rounded-2xl border border-[#1f2536]">
+                  <ShoppingBag className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-white">No banquet orders submitted yet.</p>
+                  <p className="text-xs text-slate-400 mt-1">Orders placed by guests or staff will stream here automatically.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 12: BANQUET CONTRACT & FINANCIAL MANAGEMENT */}
+          {activeTab === 'billing' && (
+            <div className="space-y-6 max-w-5xl mx-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-amber-400" />
+                    Banquet Contract & Financial Management
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Master event contract, per-plate catering packages, deposit reconciliation, and host invoices.
+                  </p>
+                </div>
+
+                <Badge variant="danger" className="text-xs font-mono px-3 py-1 bg-rose-500/10 text-rose-300 border-rose-500/30">
+                  <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                  Restricted: Event Managers Only
+                </Badge>
+              </div>
+
+              {/* Confidentiality Notice */}
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex items-start gap-3">
+                <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <p className="font-bold text-white">Guest Privacy Enforced</p>
+                  <p className="text-amber-300/80 mt-0.5">
+                    Banquet guests who scan table QR codes experience 100% complimentary ordering with all monetary totals completely hidden. All catering fees are billed exclusively through this master organizer contract.
+                  </p>
+                </div>
+              </div>
+
+              {/* Financial Metrics Overview */}
+              {(() => {
+                const guestCount = currentEvent?.estimatedGuestCount || 100;
+                const cateringRate = 45;
+                const barRate = currentEvent?.hasBar ? 20 : 0;
+                const serviceFeePct = 10;
+                const subtotal = guestCount * (cateringRate + barRate);
+                const serviceFee = subtotal * (serviceFeePct / 100);
+                const grandTotal = subtotal + serviceFee;
+                const depositPaid = grandTotal * 0.5;
+                const balanceDue = grandTotal - depositPaid;
+
+                return (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <Card className="p-4 rounded-2xl bg-[#12151f] border border-[#1f2536]">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Contracted Guests</p>
+                        <p className="text-2xl font-bold font-mono text-white mt-1">{guestCount}</p>
+                        <p className="text-[11px] text-slate-400 mt-1">{currentEvent?.venueName || 'Banquet Hall'}</p>
+                      </Card>
+
+                      <Card className="p-4 rounded-2xl bg-[#12151f] border border-[#1f2536]">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Total Contract Value</p>
+                        <p className="text-2xl font-bold font-mono text-amber-300 mt-1">${grandTotal.toLocaleString()}</p>
+                        <p className="text-[11px] text-emerald-400 mt-1">${cateringRate + barRate} / guest + 10% fee</p>
+                      </Card>
+
+                      <Card className="p-4 rounded-2xl bg-[#12151f] border border-[#1f2536]">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Deposit Received</p>
+                        <p className="text-2xl font-bold font-mono text-emerald-400 mt-1">${depositPaid.toLocaleString()}</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Paid on booking (50%)</p>
+                      </Card>
+
+                      <Card className="p-4 rounded-2xl bg-[#12151f] border border-[#1f2536]">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Outstanding Balance</p>
+                        <p className="text-2xl font-bold font-mono text-rose-300 mt-1">${balanceDue.toLocaleString()}</p>
+                        <p className="text-[11px] text-amber-400 mt-1">Due post-event closing</p>
+                      </Card>
+                    </div>
+
+                    {/* Master Banquet Agreement Breakdown */}
+                    <Card className="p-6 rounded-2xl bg-[#12151f] border border-[#1f2536] space-y-4">
+                      <div className="flex items-center justify-between border-b border-[#1f2536] pb-3">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-amber-400" />
+                          <h4 className="font-bold text-sm text-white">Event Contract Line Items</h4>
+                        </div>
+                        <Badge variant="brand" className="text-xs font-mono">
+                          FOLIO #{currentEvent?.id.slice(-8).toUpperCase() || 'BANQUET-01'}
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between py-2 border-b border-[#181c2b]">
+                          <span className="text-slate-300">Dining & Food Courses ({guestCount} guests @ ${cateringRate}/plate)</span>
+                          <span className="font-mono text-white">${(guestCount * cateringRate).toLocaleString()}</span>
+                        </div>
+                        {currentEvent?.hasBar && (
+                          <div className="flex justify-between py-2 border-b border-[#181c2b]">
+                            <span className="text-slate-300">Open Bar & Mixology Surcharge ({guestCount} guests @ ${barRate}/guest)</span>
+                            <span className="font-mono text-white">${(guestCount * barRate).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between py-2 border-b border-[#181c2b]">
+                          <span className="text-slate-300">Venue Operations & Service Charge ({serviceFeePct}%)</span>
+                          <span className="font-mono text-white">${serviceFee.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between py-2 pt-3 font-bold text-sm">
+                          <span className="text-white">Master Contract Total</span>
+                          <span className="font-mono text-amber-300">${grandTotal.toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 flex flex-wrap items-center justify-end gap-3 border-t border-[#1f2536]">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addToast('info', 'Invoice Generated', `Master invoice for ${currentEvent?.title || 'Banquet Event'} has been generated.`)}
+                          className="text-xs flex items-center gap-2"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Print / Export Invoice
+                        </Button>
+
+                        <Button
+                          variant="brand"
+                          size="sm"
+                          onClick={() => addToast('success', 'Payment Recorded', `Recorded balance payment for ${currentEvent?.title || 'Event'}.`)}
+                          className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
+                        >
+                          Record Host Payment ✓
+                        </Button>
+                      </div>
+                    </Card>
+                  </>
+                );
+              })()}
             </div>
           )}
         </main>

@@ -17,8 +17,8 @@ class Order(Base, TimestampMixin):
     business_day_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False, index=True)  # PENDING | ACCEPTED | PREPARING | READY | COMPLETED | CANCELLED
-    kitchen_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True)
-    bar_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True)
+    kitchen_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True, index=True)
+    bar_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True, index=True)
     hookah_status: Mapped[Optional[str]] = mapped_column(String(30), default=None, nullable=True, index=True)
     customer_name: Mapped[Optional[str]] = mapped_column(String(255), default="Guest", nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -44,13 +44,13 @@ class OrderItem(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     order_id: Mapped[str] = mapped_column(String(255), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
-    menu_item_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    menu_item_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     unit_price: Mapped[float] = mapped_column(Float, nullable=False)
     subtotal: Mapped[float] = mapped_column(Float, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    target_destination: Mapped[Optional[str]] = mapped_column(String(20), default="KITCHEN", nullable=True)
+    target_destination: Mapped[Optional[str]] = mapped_column(String(20), default="KITCHEN", nullable=True, index=True)
 
 class Bill(Base, TimestampMixin):
     __tablename__ = "bills"

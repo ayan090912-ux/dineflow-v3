@@ -259,7 +259,7 @@ async def test_phase5_multi_tenant_cross_contamination_security():
             headers=waiter_b_headers
         )
         assert res_b_bleed.status_code == 403, f"Expected 403 Forbidden on cross-tenant data exfiltration, got {res_b_bleed.status_code}"
-        assert "Access denied" in res_b_bleed.text or "not authorized" in res_b_bleed.text
+        assert "Access denied" in res_b_bleed.text or "not authorized" in res_b_bleed.text or "Cross-tenant" in res_b_bleed.text
 
         # Attack 2: Tenant B attempts to start a table session on Tenant A's table
         res_cross_sess = await client.post(

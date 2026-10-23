@@ -273,6 +273,7 @@ class TestEventOrderingLifecycle:
                     "status": "ACTIVE",
                     "autoActivate": False,
                     "tableCount": 2,
+                    "timezone": "UTC",
                 },
                 headers=headers,
             )
@@ -318,6 +319,7 @@ class TestEventOrderingLifecycle:
                     "endTime": "23:59",
                     "status": "ACTIVE",
                     "tableCount": 3,
+                    "timezone": "UTC",
                 },
                 headers=headers,
             )
@@ -371,6 +373,7 @@ class TestEventOrderingLifecycle:
                     "endTime": "23:59",
                     "status": "ACTIVE",
                     "tableCount": 5,
+                    "timezone": "UTC",
                 },
                 headers=headers,
             )
@@ -536,6 +539,7 @@ class TestEventOrderingLifecycle:
                     "startTime": "00:00",
                     "endTime": "23:59",
                     "status": "ACTIVE",
+                    "timezone": "UTC",
                 },
                 headers=headers,
             )

@@ -98,6 +98,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
   // Preferences & Status State
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
+  // Ref so mute/unmute does NOT re-register the event subscription effect
+  const isAudioMutedRef = React.useRef<boolean>(false);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isErrorState, setIsErrorState] = useState<boolean>(false);
@@ -153,6 +155,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   const waiterName = currentUser?.name || 'Ayaan';
   const assignedTerminal = (currentUser as any)?.assignedTerminal || 'WAITER-01';
 
+  // Keep isAudioMutedRef in sync with state without re-registering effects
+  useEffect(() => {
+    isAudioMutedRef.current = isAudioMuted;
+  }, [isAudioMuted]);
+
   // Live Clock Tick
   useEffect(() => {
     const updateClock = () => {
@@ -172,9 +179,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       if (!silent) setIsErrorState(false);
       const targetRestId = currentRestaurantId;
 
+      const isNotWedding = (restaurant as any)?.businessType !== 'WEDDING_ORDERING';
       const [reqData, ordData, tblData, notifData, sessionData, billData] = await Promise.all([
         api.getCustomerRequests(targetRestId),
-        api.getOrders(targetRestId),
+        api.getOrders(targetRestId, { excludeEvents: isNotWedding }),
         api.getTables(targetRestId),
         api.getWaiterNotifications(targetRestId),
         api.getActiveTableSessions(targetRestId),
@@ -182,7 +190,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       ]);
 
       setRequests(reqData);
-      setOrders(ordData);
+      const cleanOrders = (ordData || []).filter(
+        (o: Order) => !isNotWedding || (o.orderType !== 'WEDDING_EVENT' && !o.eventId)
+      );
+      setOrders(cleanOrders);
       setTables(tblData);
       setNotifications(notifData);
       setActiveSessions(sessionData || []);
@@ -263,14 +274,14 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         }
       }
 
-      // 3. Play chime for call/ready events
+      // 3. Play chime for call/ready events — read mute state from ref (stable, no closure staleness)
       const isChimeEvent =
         event.type === 'service_request_created' ||
         event.type === 'order_ready' ||
         event.type === 'CustomerRequestCreated' ||
         event.type === 'OrderReady';
 
-      if (isChimeEvent && !isAudioMuted) {
+      if (isChimeEvent && !isAudioMutedRef.current) {
         playNotificationChime();
       }
 
@@ -470,7 +481,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     return () => {
       unsubscribe();
     };
-  }, [isAudioMuted, currentRestaurantId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRestaurantId]); // isAudioMuted intentionally excluded — managed via ref
 
   // Request Actions with Instant Optimistic UI Response
   const handleAcceptRequest = async (requestId: string) => {
@@ -590,19 +602,51 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     }
   };
 
+  // Helper to open Bill Modal and load authoritative running bill from backend
+  const openBillActionModal = async (
+    tableNum: string,
+    sessionId?: string,
+    req?: CustomerRequest,
+    existingBill?: Bill | null
+  ) => {
+    setSelectedBillForAction({
+      bill: existingBill || null,
+      request: req,
+      tableNumber: tableNum,
+      tableSessionId: sessionId,
+    });
+
+    try {
+      const runningBill = await api.getRunningTableBill(currentRestaurantId, tableNum, sessionId);
+      if (runningBill) {
+        setSelectedBillForAction((prev) => {
+          if (!prev || !matchTableNumber(prev.tableNumber, tableNum)) return prev;
+          return {
+            ...prev,
+            bill: runningBill,
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to fetch authoritative running bill:', e);
+    }
+  };
+
   // Computed data collections
   const activeTablesList = useMemo(() => {
     const activeSessionTableIds = new Set(
       activeSessions
-        .filter((s) => s.status === 'ACTIVE')
+        .filter((s) => s.status !== 'CLOSED')
         .flatMap((s) => [s.tableId, s.tableNumber?.toLowerCase()].filter(Boolean))
     );
 
     return tables.filter((t) => {
       const isSessionActive =
+        t.status === 'OCCUPIED' ||
+        t.status === 'BILL_REQUESTED' ||
         activeSessionTableIds.has(t.id) ||
         (t.tableNumber && activeSessionTableIds.has(t.tableNumber.toLowerCase())) ||
-        activeSessions.some((s) => s.status === 'ACTIVE' && matchTableNumber(s.tableNumber, t.tableNumber));
+        activeSessions.some((s) => s.status !== 'CLOSED' && matchTableNumber(s.tableNumber, t.tableNumber));
 
       if (!isSessionActive) return false;
 
@@ -1146,12 +1190,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                   size="sm"
                                   className="w-1/2 text-xs font-medium border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-7"
                                   onClick={() =>
-                                    setSelectedBillForAction({
-                                      bill: matchingBill || null,
-                                      request: req,
-                                      tableNumber: req.tableNumber,
-                                      tableSessionId: req.tableSessionId,
-                                    })
+                                    openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
                                   }
                                 >
                                   View Bill
@@ -1162,12 +1201,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                     size="sm"
                                     className="w-1/2 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-7"
                                     onClick={() =>
-                                      setSelectedBillForAction({
-                                        bill: matchingBill || null,
-                                        request: req,
-                                        tableNumber: req.tableNumber,
-                                        tableSessionId: req.tableSessionId,
-                                      })
+                                      openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
                                     }
                                   >
                                     Verify Payment
@@ -1187,12 +1221,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                     size="sm"
                                     className="w-1/2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
                                     onClick={() =>
-                                      setSelectedBillForAction({
-                                        bill: matchingBill || null,
-                                        request: req,
-                                        tableNumber: req.tableNumber,
-                                        tableSessionId: req.tableSessionId,
-                                      })
+                                      openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
                                     }
                                   >
                                     Record Payment
@@ -1546,12 +1575,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                 size="sm"
                                 className="w-full text-xs font-medium border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-8"
                                 onClick={() =>
-                                  setSelectedBillForAction({
-                                    bill: matchingBill || null,
-                                    request: req,
-                                    tableNumber: req.tableNumber,
-                                    tableSessionId: req.tableSessionId,
-                                  })
+                                  openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
                                 }
                               >
                                 View Bill
@@ -1562,12 +1586,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                   size="sm"
                                   className="w-full text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-8"
                                   onClick={() =>
-                                    setSelectedBillForAction({
-                                      bill: matchingBill || null,
-                                      request: req,
-                                      tableNumber: req.tableNumber,
-                                      tableSessionId: req.tableSessionId,
-                                    })
+                                    openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
                                   }
                                 >
                                   Verify Payment
@@ -1587,12 +1606,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                   size="sm"
                                   className="w-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-8"
                                   onClick={() =>
-                                    setSelectedBillForAction({
-                                      bill: matchingBill || null,
-                                      request: req,
-                                      tableNumber: req.tableNumber,
-                                      tableSessionId: req.tableSessionId,
-                                    })
+                                    openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
                                   }
                                 >
                                   Record Payment
@@ -1849,6 +1863,18 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         ₹{calculatedTotal.toFixed(2)}
                       </span>
                     </div>
+                    {bill && (bill.amountPaid || 0) > 0 ? (
+                      <div className="flex justify-between text-xs font-mono text-emerald-400 pt-1">
+                        <span>Amount Paid:</span>
+                        <span>₹{(bill.amountPaid || 0).toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                    {bill && (bill.amountPaid || 0) > 0 ? (
+                      <div className="flex justify-between text-xs font-mono font-bold text-amber-400 pt-1">
+                        <span>Balance Due:</span>
+                        <span>₹{(bill.balanceDue !== undefined ? bill.balanceDue : Math.max(0, calculatedTotal - (bill.amountPaid || 0))).toFixed(2)}</span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

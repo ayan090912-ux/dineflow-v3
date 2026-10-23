@@ -11,6 +11,25 @@ from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem
 from app.modules.taxes.calculation import calculate_taxes
 
 
+def get_table_variants(table_number: str) -> List[str]:
+    raw = (table_number or "").strip()
+    if not raw:
+        return []
+    variants = {raw, f"Table {raw}", raw.replace("Table ", "").strip()}
+    import re
+    digits = re.findall(r'\d+', raw)
+    if digits:
+        clean_num = digits[0].lstrip("0") or "0"
+        padded_2 = clean_num.zfill(2)
+        variants.add(clean_num)
+        variants.add(padded_2)
+        variants.add(f"Table {clean_num}")
+        variants.add(f"Table {padded_2}")
+        variants.add(f"table_{clean_num}")
+        variants.add(f"table_{padded_2}")
+    return [v for v in variants if v]
+
+
 class SynthesizedTax:
     """Fallback tax record when restaurant relies on default restaurant.tax_percentage"""
     def __init__(
@@ -143,19 +162,15 @@ class BillingService:
         """
         tbl_num = (table_number or "").strip()
         sess_id = (table_session_id or "").strip() or None
+        t_candidates = get_table_variants(tbl_num)
 
-        # Resolve session if not explicitly provided
+        # 1. Resolve session if not explicitly provided
         actual_session = None
         if sess_id:
             s_res = await db.execute(select(TableSession).where(TableSession.id == sess_id))
             actual_session = s_res.scalar_one_or_none()
 
-        if not actual_session and tbl_num:
-            t_candidates = [
-                tbl_num,
-                f"Table {tbl_num}",
-                tbl_num.replace("Table ", "").strip()
-            ]
+        if not actual_session and t_candidates:
             s_query = select(TableSession).where(
                 TableSession.restaurant_id == rest.id,
                 TableSession.table_number.in_(t_candidates),
@@ -166,48 +181,63 @@ class BillingService:
             if actual_session:
                 sess_id = actual_session.id
 
-        # Query all non-cancelled orders belonging to this session or table
+        # 2. Query all non-cancelled orders belonging to this active session
         orders_query = select(Order).where(
             Order.restaurant_id == rest.id,
-            Order.status != "CANCELLED"
+            Order.status.notin_(["CANCELLED", "VOID"])
         )
         if sess_id:
-            orders_query = orders_query.where(Order.table_session_id == sess_id)
+            if actual_session:
+                session_start = actual_session.session_started_at
+                session_end = actual_session.session_closed_at
+                time_filters = [Order.created_at >= session_start]
+                if session_end:
+                    time_filters.append(Order.created_at <= session_end)
+                table_filters = []
+                if actual_session.table_id:
+                    table_filters.append(Order.table_id == actual_session.table_id)
+                if t_candidates:
+                    table_filters.append(Order.table_number.in_(t_candidates))
+                
+                orders_query = orders_query.where(
+                    or_(
+                        Order.table_session_id == sess_id,
+                        and_(or_(*table_filters), *time_filters) if table_filters else (Order.table_session_id == sess_id)
+                    )
+                )
+            else:
+                orders_query = orders_query.where(Order.table_session_id == sess_id)
         else:
-            t_candidates = [
-                tbl_num,
-                f"Table {tbl_num}",
-                tbl_num.replace("Table ", "").strip()
-            ]
-            orders_query = orders_query.where(Order.table_number.in_(t_candidates))
+            table_filters = []
+            if table_id:
+                table_filters.append(Order.table_id == table_id)
+            if t_candidates:
+                table_filters.append(Order.table_number.in_(t_candidates))
+            if table_filters:
+                orders_query = orders_query.where(or_(*table_filters))
+            if actual_session:
+                orders_query = orders_query.where(Order.created_at >= actual_session.session_started_at)
+                if actual_session.session_closed_at:
+                    orders_query = orders_query.where(Order.created_at <= actual_session.session_closed_at)
 
         o_res = await db.execute(orders_query.order_by(Order.created_at.asc()))
         table_orders = list(o_res.scalars().all())
 
-        # Fallback if no orders found by session ID: search by tableId / tableNumber
-        if not table_orders and (table_id or tbl_num):
-            t_filters = []
-            if table_id:
-                t_filters.append(Order.table_id == table_id)
-            if tbl_num:
-                t_filters.extend([
-                    Order.table_number == tbl_num,
-                    Order.table_number == f"Table {tbl_num}",
-                    Order.table_number == tbl_num.replace("Table ", "").strip()
-                ])
-            fallback_query = select(Order).where(
-                Order.restaurant_id == rest.id,
-                Order.status != "CANCELLED",
-                or_(*t_filters)
-            ).order_by(Order.created_at.desc()).limit(20)
-            fb_res = await db.execute(fallback_query)
-            table_orders = list(fb_res.scalars().all())
+        # Auto-link unassigned orders to active session
+        if sess_id:
+            for ord_obj in table_orders:
+                if not getattr(ord_obj, "table_session_id", None):
+                    ord_obj.table_session_id = sess_id
 
-        # Aggregate items
+        # 3. Aggregate billable items across all eligible orders
         bill_items: List[Dict[str, Any]] = []
         for order in table_orders:
             items = getattr(order, "items_json", []) or []
             for itm in items:
+                # Exclude voided or cancelled items
+                if itm.get("status") in ["CANCELLED", "VOID"] or itm.get("is_cancelled") or itm.get("isCancelled"):
+                    continue
+
                 raw_p = itm.get("price")
                 if raw_p is None:
                     raw_p = itm.get("unit_price")
@@ -276,6 +306,49 @@ class BillingService:
         round_off = round(round(raw_total) - raw_total, 2)
         grand_total = round(raw_total + round_off, 2)
 
+        # Check existing paid amounts across paid bills or open bill for this session / table
+        already_paid_amount = 0.0
+        paid_bills_stmt = select(Bill).where(
+            Bill.restaurant_id == rest.id,
+            or_(
+                Bill.status == "PAID",
+                Bill.payment_status == "PAID"
+            )
+        )
+        if sess_id:
+            paid_bills_stmt = paid_bills_stmt.where(Bill.table_session_id == sess_id)
+        elif t_candidates:
+            paid_bills_stmt = paid_bills_stmt.where(Bill.table_number.in_(t_candidates))
+            if actual_session:
+                paid_bills_stmt = paid_bills_stmt.where(Bill.created_at >= actual_session.session_started_at)
+        p_res = await db.execute(paid_bills_stmt)
+        for pb in p_res.scalars().all():
+            already_paid_amount = round(already_paid_amount + float(getattr(pb, "amount_paid", 0.0) or getattr(pb, "grand_total", 0.0) or 0.0), 2)
+
+        open_bill_stmt = select(Bill).where(
+            Bill.restaurant_id == rest.id,
+            Bill.payment_status != "PAID",
+            Bill.status.notin_(["CLOSED", "CANCELLED", "PAID"])
+        )
+        if sess_id:
+            open_bill_stmt = open_bill_stmt.where(Bill.table_session_id == sess_id)
+        elif t_candidates:
+            open_bill_stmt = open_bill_stmt.where(Bill.table_number.in_(t_candidates))
+            if actual_session:
+                open_bill_stmt = open_bill_stmt.where(Bill.created_at >= actual_session.session_started_at)
+        ob_res = await db.execute(open_bill_stmt.order_by(Bill.created_at.desc()).limit(1))
+        open_bill = ob_res.scalar_one_or_none()
+        if open_bill and getattr(open_bill, "amount_paid", 0.0):
+            already_paid_amount = round(already_paid_amount + float(open_bill.amount_paid or 0.0), 2)
+
+        balance_due = max(0.0, round(grand_total - already_paid_amount, 2))
+        if balance_due <= 0.0 and already_paid_amount > 0.0:
+            eff_payment_status = "PAID"
+        elif already_paid_amount > 0.0:
+            eff_payment_status = "PARTIALLY_PAID"
+        else:
+            eff_payment_status = "UNPAID"
+
         # Determine Effective Tax Percentage for high-level display
         effective_tax_pct = float(rest.tax_percentage or 5.0)
         if active_taxes and active_taxes[0].type == "PERCENTAGE":
@@ -325,10 +398,12 @@ class BillingService:
             "round_off_amount": round_off,
             "grandTotal": grand_total,
             "grand_total": grand_total,
-            "amountPaid": 0.0,
-            "amount_paid": 0.0,
-            "balanceDue": grand_total,
-            "balance_due": grand_total,
+            "amountPaid": already_paid_amount,
+            "amount_paid": already_paid_amount,
+            "balanceDue": balance_due,
+            "balance_due": balance_due,
+            "paymentStatus": eff_payment_status,
+            "payment_status": eff_payment_status,
         }
 
     @classmethod
@@ -354,6 +429,7 @@ class BillingService:
         """
         sess_id = (table_session_id or "").strip() or None
         tbl_num = (table_number or "").strip()
+        t_candidates = get_table_variants(tbl_num)
 
         # Check for existing open/unpaid bill for this session or table
         existing_bill = None
@@ -367,12 +443,7 @@ class BillingService:
             b_res = await db.execute(b_stmt)
             existing_bill = b_res.scalar_one_or_none()
 
-        if not existing_bill and tbl_num:
-            t_candidates = [
-                tbl_num,
-                f"Table {tbl_num}",
-                tbl_num.replace("Table ", "").strip()
-            ]
+        if not existing_bill and t_candidates:
             b_stmt = select(Bill).where(
                 Bill.restaurant_id == rest.id,
                 Bill.table_number.in_(t_candidates),
@@ -412,6 +483,9 @@ class BillingService:
             existing_bill.tax_amount = calc_data["taxAmount"]
             existing_bill.round_off_amount = calc_data["roundOffAmount"]
             existing_bill.grand_total = calc_data["grandTotal"]
+            existing_bill.amount_paid = calc_data["amountPaid"]
+            existing_bill.amount_due = calc_data["balanceDue"]
+            existing_bill.payment_status = calc_data["paymentStatus"]
             existing_bill.tax_breakdown_json = calc_data["taxBreakdown"]
             existing_bill.items_snapshot_json = calc_data["items"]
             existing_bill.orders_snapshot_json = calc_data["orders"]
@@ -428,7 +502,7 @@ class BillingService:
             if active_bday_id and not getattr(existing_bill, "business_day_id", None):
                 existing_bill.business_day_id = active_bday_id
 
-            # Update Table & Session status
+            # Update Table status (TableSession status remains ACTIVE)
             await cls._sync_table_status(rest.id, tbl_num, effective_sess_id, existing_bill.id, db)
             await db.commit()
             await db.refresh(existing_bill)
@@ -469,8 +543,10 @@ class BillingService:
             tax_amount=calc_data["taxAmount"],
             round_off_amount=calc_data["roundOffAmount"],
             grand_total=calc_data["grandTotal"],
+            amount_paid=calc_data["amountPaid"],
+            amount_due=calc_data["balanceDue"],
             status="BILL_REQUESTED",
-            payment_status="UNPAID",
+            payment_status=calc_data["paymentStatus"],
             payment_method=payment_method,
             tax_breakdown_json=calc_data["taxBreakdown"],
             items_snapshot_json=calc_data["items"],
@@ -493,11 +569,7 @@ class BillingService:
         bill_id: str,
         db: AsyncSession
     ) -> None:
-        t_candidates = [
-            table_number,
-            f"Table {table_number}",
-            table_number.replace("Table ", "").strip()
-        ]
+        t_candidates = get_table_variants(table_number)
         tbl_stmt = select(Table).where(
             Table.restaurant_id == restaurant_id,
             Table.table_number.in_(t_candidates)
@@ -507,13 +579,8 @@ class BillingService:
         if tbl:
             tbl.status = "BILL_REQUESTED"
 
-        if table_session_id:
-            sess_stmt = select(TableSession).where(TableSession.id == table_session_id)
-            sess_res = await db.execute(sess_stmt)
-            sess = sess_res.scalar_one_or_none()
-            if sess:
-                sess.status = "BILL_REQUESTED"
-                sess.bill_id = bill_id
+        # TableSession.status remains "ACTIVE" so that additional customer orders
+        # are reliably placed into the same table session and aggregated onto the bill!
 
     @classmethod
     async def generate_billing_diagnostic(

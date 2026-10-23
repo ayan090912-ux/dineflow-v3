@@ -13,7 +13,7 @@ from app.modules.tables.models import Table, TableSession
 from app.modules.orders.models import Order, Bill
 from app.modules.taxes.models import Tax, TaxCategory, TaxMenuItem, InvoiceTaxSnapshot
 from app.modules.taxes.calculation import calculate_taxes
-from app.modules.billing.service import BillingService
+from app.modules.billing.service import BillingService, get_table_variants
 from app.modules.websocket.manager import ws_manager
 
 router = APIRouter()
@@ -123,7 +123,7 @@ def format_bill_response(bill: Bill) -> dict:
         except Exception:
             updated_at_val = str(bill.updated_at)
 
-    amount_paid_val = float(bill.grand_total if bill.payment_status == "PAID" else (getattr(bill, "amount_paid", 0.0) or 0.0))
+    amount_paid_val = float(getattr(bill, "amount_paid", 0.0) or (bill.grand_total if bill.payment_status == "PAID" else 0.0))
     balance_due_val = 0.0 if bill.payment_status == "PAID" else float(getattr(bill, "amount_due", 0.0) or max(0.0, bill.grand_total - amount_paid_val))
     taxable_subtotal_val = max(0.0, round(float(bill.subtotal or 0.0) - float(bill.discount_amount or 0.0), 2))
 
@@ -415,22 +415,36 @@ async def get_running_table_bill(
 
     effective_sess_id = session_id or table_session_id or None
     tbl_num = (table_number or "").strip()
+    t_candidates = get_table_variants(tbl_num)
 
-    # 1. Check if an existing Bill already exists for this table/session
-    t_candidates = [
-        tbl_num,
-        f"Table {tbl_num}",
-        tbl_num.replace("Table ", "").strip()
-    ]
-    query = select(Bill).where(
-        Bill.restaurant_id == rest.id,
-        Bill.table_number.in_(t_candidates),
-    )
+    # 1. Resolve active TableSession if not explicitly provided
+    if not effective_sess_id and t_candidates:
+        s_stmt = select(TableSession).where(
+            TableSession.restaurant_id == rest.id,
+            TableSession.table_number.in_(t_candidates),
+            TableSession.status != "CLOSED"
+        ).order_by(TableSession.session_started_at.desc()).limit(1)
+        s_res = await db.execute(s_stmt)
+        active_sess = s_res.scalar_one_or_none()
+        if active_sess:
+            effective_sess_id = active_sess.id
+
+    # 2. Check if an existing Bill already exists for this table/session
+    existing_bill = None
     if effective_sess_id:
-        query = query.where(Bill.table_session_id == effective_sess_id)
-    query = query.order_by(Bill.created_at.desc()).limit(1)
-    b_res = await db.execute(query)
-    existing_bill = b_res.scalar_one_or_none()
+        query = select(Bill).where(
+            Bill.restaurant_id == rest.id,
+            Bill.table_session_id == effective_sess_id
+        ).order_by(Bill.created_at.desc()).limit(1)
+        b_res = await db.execute(query)
+        existing_bill = b_res.scalar_one_or_none()
+    elif t_candidates:
+        query = select(Bill).where(
+            Bill.restaurant_id == rest.id,
+            Bill.table_number.in_(t_candidates),
+        ).order_by(Bill.created_at.desc()).limit(1)
+        b_res = await db.execute(query)
+        existing_bill = b_res.scalar_one_or_none()
 
     # Immutability Guarantee: If bill is already paid or closed, return historical snapshot
     if existing_bill and existing_bill.payment_status == "PAID":
@@ -459,6 +473,9 @@ async def get_running_table_bill(
         existing_bill.tax_amount = calc_data["taxAmount"]
         existing_bill.round_off_amount = calc_data["roundOffAmount"]
         existing_bill.grand_total = calc_data["grandTotal"]
+        existing_bill.amount_paid = calc_data["amountPaid"]
+        existing_bill.amount_due = calc_data["balanceDue"]
+        existing_bill.payment_status = calc_data["paymentStatus"]
         existing_bill.tax_breakdown_json = calc_data["taxBreakdown"]
         existing_bill.items_snapshot_json = calc_data["items"]
         existing_bill.orders_snapshot_json = calc_data["orders"]
@@ -499,13 +516,13 @@ async def get_running_table_bill(
         "round_off_amount": calc_data["roundOffAmount"],
         "grandTotal": calc_data["grandTotal"],
         "grand_total": calc_data["grandTotal"],
-        "amountPaid": 0.0,
-        "amount_paid": 0.0,
-        "balanceDue": calc_data["grandTotal"],
-        "balance_due": calc_data["grandTotal"],
+        "amountPaid": calc_data["amountPaid"],
+        "amount_paid": calc_data["amountPaid"],
+        "balanceDue": calc_data["balanceDue"],
+        "balance_due": calc_data["balanceDue"],
         "status": "OPEN",
-        "paymentStatus": "UNPAID",
-        "payment_status": "UNPAID",
+        "paymentStatus": calc_data["paymentStatus"],
+        "payment_status": calc_data["paymentStatus"],
         "paymentMethod": None,
         "payment_method": None,
         "paymentVerifiedBy": None,
@@ -796,20 +813,28 @@ async def record_bill_payment(
 
     pm = payload.payment_method or payload.paymentMethod or "CASH"
     vb = payload.verified_by or payload.verifiedBy or caller.email or caller.uid or "Staff"
-    pr = payload.payment_reference or payload.paymentReference or f"PAY-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    pr = payload.payment_reference or payload.paymentReference or f"PAY-{bill.id}-{uuid.uuid4().hex[:8]}"
 
-    now_utc_payment = datetime.now(timezone.utc)
-    bill.payment_status = "PAID"
-    bill.status = "PAID"
-    bill.payment_method = pm
-    bill.payment_verified_by = vb
-    bill.payment_reference = pr
-    bill.paid_at = now_utc_payment
-    amt_paid = float(payload.amount_paid or payload.amountPaid or bill.grand_total)
-    bill.amount_paid = amt_paid
-    bill.amount_due = max(0.0, round(float(bill.grand_total) - amt_paid, 2))
+    amt_to_pay = float(payload.amount_paid if payload.amount_paid is not None else (payload.amountPaid if payload.amountPaid is not None else (bill.amount_due if getattr(bill, "amount_due", 0.0) > 0 else bill.grand_total)))
 
-    if not getattr(bill, "business_day_id", None):
+    from app.modules.payments.service import PaymentService
+    success, status_msg, updated_bill = await PaymentService.process_verified_payment(
+        db=db,
+        restaurant_id=target_rest_id,
+        bill_id=bill.id,
+        gateway=f"MANUAL_{pm}",
+        transaction_reference=pr,
+        amount_paid=amt_to_pay,
+        payment_method=pm,
+        raw_payload={"verified_by": vb, "notes": "Staff manual payment record"}
+    )
+    if not updated_bill:
+        updated_bill = bill
+
+    if vb and hasattr(updated_bill, "payment_verified_by"):
+        updated_bill.payment_verified_by = vb
+
+    if not getattr(updated_bill, "business_day_id", None):
         from app.modules.business_day.models import BusinessDay
         bday_q = select(BusinessDay.id).where(
             BusinessDay.restaurant_id == target_rest_id,
@@ -818,49 +843,51 @@ async def record_bill_payment(
         bday_res = await db.execute(bday_q)
         active_bday_id = bday_res.scalar_one_or_none()
         if active_bday_id:
-            bill.business_day_id = active_bday_id
-
-
+            updated_bill.business_day_id = active_bday_id
 
     await db.commit()
-    await db.refresh(bill)
+    await db.refresh(updated_bill)
 
-    formatted = format_bill_response(bill)
+    formatted = format_bill_response(updated_bill)
 
     # Broadcast Realtime Event
     try:
         now_iso = datetime.now(timezone.utc).isoformat()
         payment_evt_id = f"evt-pay-{uuid.uuid4().hex[:12]}"
-        pay_id = bill.payment_reference or f"pay-{bill.id}"
+        pay_id = updated_bill.payment_reference or f"pay-{updated_bill.id}"
         event_payload = {
             "event_id": payment_evt_id,
             "eventId": payment_evt_id,
             "restaurant_id": target_rest_id,
             "restaurantId": target_rest_id,
-            "table_id": bill.table_id,
-            "tableId": bill.table_id,
-            "table_session_id": bill.table_session_id,
-            "tableSessionId": bill.table_session_id,
-            "table_number": bill.table_number,
-            "tableNumber": bill.table_number,
-            "bill_id": bill.id,
-            "billId": bill.id,
+            "table_id": updated_bill.table_id,
+            "tableId": updated_bill.table_id,
+            "table_session_id": updated_bill.table_session_id,
+            "tableSessionId": updated_bill.table_session_id,
+            "table_number": updated_bill.table_number,
+            "tableNumber": updated_bill.table_number,
+            "bill_id": updated_bill.id,
+            "billId": updated_bill.id,
             "payment_id": pay_id,
             "paymentId": pay_id,
-            "status": "PAID",
-            "payment_status": "PAID",
-            "paymentStatus": "PAID",
-            "amount": float(bill.grand_total),
-            "grand_total": float(bill.grand_total),
-            "grandTotal": float(bill.grand_total),
-            "payment_method": bill.payment_method,
-            "paymentMethod": bill.payment_method,
+            "status": updated_bill.status,
+            "payment_status": updated_bill.payment_status,
+            "paymentStatus": updated_bill.payment_status,
+            "amount": float(updated_bill.amount_paid or updated_bill.grand_total),
+            "amount_paid": float(updated_bill.amount_paid or 0.0),
+            "amountPaid": float(updated_bill.amount_paid or 0.0),
+            "amount_due": float(updated_bill.amount_due or 0.0),
+            "amountDue": float(updated_bill.amount_due or 0.0),
+            "grand_total": float(updated_bill.grand_total),
+            "grandTotal": float(updated_bill.grand_total),
+            "payment_method": updated_bill.payment_method,
+            "paymentMethod": updated_bill.payment_method,
             "timestamp": now_iso,
             "data": formatted,
         }
         await ws_manager.broadcast_event(
             restaurant_id=target_rest_id,
-            event_type="payment_status_updated",
+            event_type="BillPaid" if updated_bill.payment_status == "PAID" else "payment_status_updated",
             payload=event_payload,
             target_audience=["WAITER", "OWNER", "CUSTOMER", "POS"]
         )
@@ -876,10 +903,11 @@ async def record_bill_payment(
     return {
         **formatted,
         "status": "success",
-        "paymentStatus": "PAID",
-        "billStatus": bill.status,
-        "bill_status": bill.status,
-        "message": f"Payment of ₹{bill.grand_total} recorded successfully via {bill.payment_method}",
+        "paymentStatus": updated_bill.payment_status,
+        "payment_status": updated_bill.payment_status,
+        "billStatus": updated_bill.status,
+        "bill_status": updated_bill.status,
+        "message": f"Payment of ₹{amt_to_pay:.2f} recorded successfully via {updated_bill.payment_method}",
         "bill": formatted,
     }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, ArrowRight } from 'lucide-react';
-import { DinelyLogo } from '../../../packages/ui';
+import { DinelyLogo, ProductSwitcher } from '../../../packages/ui';
 
 interface LandingNavbarProps {
   currentUser?: any;
@@ -19,6 +19,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
   onStaffLogin,
   onOpenWorkspace,
   onNavigateSection,
+  onNavigateWeddings,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -81,6 +82,20 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             >
               <DinelyLogo size="md" />
             </button>
+
+            {/* Canonical Dual-Product Switcher */}
+            <div className="hidden sm:flex items-center">
+              <ProductSwitcher
+                activeProduct="restaurants"
+                theme="dark"
+                onSwitch={(p) => {
+                  if (p === 'weddings') {
+                    if (onNavigateWeddings) onNavigateWeddings();
+                    else window.location.href = '/weddings';
+                  }
+                }}
+              />
+            </div>
           </div>
 
           {/* Desktop Navigation */}
@@ -170,6 +185,21 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             aria-label="Mobile navigation"
           >
             <div className="flex flex-col gap-1.5 px-6 pt-24">
+              {/* Product Switcher for Mobile */}
+              <div className="mb-4 flex justify-center">
+                <ProductSwitcher
+                  activeProduct="restaurants"
+                  theme="dark"
+                  onSwitch={(p) => {
+                    setMobileMenuOpen(false);
+                    if (p === 'weddings') {
+                      if (onNavigateWeddings) onNavigateWeddings();
+                      else window.location.href = '/weddings';
+                    }
+                  }}
+                />
+              </div>
+
               {navLinks.map((link) => (
                 <a
                   key={link.id}

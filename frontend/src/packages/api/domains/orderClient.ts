@@ -16,7 +16,7 @@ export class OrderClient {
 
   async getOrders(
     restaurantId?: string,
-    options?: { station?: 'KITCHEN' | 'BAR' | 'HOOKAH' | string; activeOnly?: boolean; businessDayId?: string; eventId?: string }
+    options?: { station?: 'KITCHEN' | 'BAR' | 'HOOKAH' | string; activeOnly?: boolean; businessDayId?: string; eventId?: string; excludeEvents?: boolean }
   ): Promise<Order[]> {
     const targetId = this.base.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
@@ -35,6 +35,9 @@ export class OrderClient {
       }
       if (options?.eventId) {
         params.append('event_id', options.eventId);
+      }
+      if (options?.excludeEvents) {
+        params.append('exclude_events', 'true');
       }
       const qs = params.toString();
       if (qs) {

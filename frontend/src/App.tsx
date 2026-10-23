@@ -31,6 +31,10 @@ const PendingApprovalPage = lazy(() => import('./apps/onboarding/PendingApproval
 const WorkspaceSelector = lazy(() => import('./apps/onboarding/WorkspaceSelector').then(m => ({ default: m.WorkspaceSelector })));
 const WeddingGuestApp = lazy(() => import('./apps/wedding/WeddingGuestApp').then(m => ({ default: m.WeddingGuestApp })));
 const WeddingEventPortal = lazy(() => import('./apps/wedding/WeddingEventPortal').then(m => ({ default: m.WeddingEventPortal })));
+const WeddingLandingPage = lazy(() => import('./apps/wedding/WeddingLandingPage').then(m => ({ default: m.WeddingLandingPage })));
+const BusinessHub = lazy(() => import('./apps/hub/BusinessHub').then(m => ({ default: m.BusinessHub })));
+const BarApp = lazy(() => import('./apps/bar/BarApp').then(m => ({ default: m.BarApp })));
+const CartApp = lazy(() => import('./apps/cart/CartApp').then(m => ({ default: m.CartApp })));
 
 function RouteLoadingFallback() {
   return (
@@ -685,11 +689,11 @@ function AppContent() {
               setCurrentUser(user);
               const r = (user?.role || '').toUpperCase();
               const target = (
-                r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/events/portal?tab=kitchen' :
-                r === 'BAR' || r === 'BARTENDER' ? '/events/portal?tab=bar' :
-                r === 'HOOKAH' || r === 'SHISHA' ? '/events/portal?tab=hookah' :
-                r === 'WAITER' || r === 'RUNNER' ? '/events/portal?tab=runner' :
-                '/events/portal'
+                r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/weddings/dashboard?tab=kitchen' :
+                r === 'BAR' || r === 'BARTENDER' ? '/weddings/dashboard?tab=bar' :
+                r === 'HOOKAH' || r === 'SHISHA' ? '/weddings/dashboard?tab=hookah' :
+                r === 'WAITER' || r === 'RUNNER' ? '/weddings/dashboard?tab=runner' :
+                '/weddings/dashboard'
               );
               navigateTo(target);
             }}
@@ -711,11 +715,11 @@ function AppContent() {
                 setCurrentUser(user);
                 const r = (user?.role || '').toUpperCase();
                 const target = (
-                  r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/events/portal?tab=kitchen' :
-                  r === 'BAR' || r === 'BARTENDER' ? '/events/portal?tab=bar' :
-                  r === 'HOOKAH' || r === 'SHISHA' ? '/events/portal?tab=hookah' :
-                  r === 'WAITER' || r === 'RUNNER' ? '/events/portal?tab=runner' :
-                  '/events/portal'
+                  r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/weddings/dashboard?tab=kitchen' :
+                  r === 'BAR' || r === 'BARTENDER' ? '/weddings/dashboard?tab=bar' :
+                  r === 'HOOKAH' || r === 'SHISHA' ? '/weddings/dashboard?tab=hookah' :
+                  r === 'WAITER' || r === 'RUNNER' ? '/weddings/dashboard?tab=runner' :
+                  '/weddings/dashboard'
                 );
                 navigateTo(target);
               }}
@@ -729,6 +733,45 @@ function AppContent() {
             currentUser={currentUser}
             onLogout={() => handleLogout('/weddings/login')}
             onNavigate={navigateTo}
+          />
+        );
+      }
+
+      // 0.06. Dedicated Bar Operating System
+      if (
+        tenantApp === 'BAR_OS' ||
+        (resolvedTenant.businessType === 'BAR' && (tenantApp === 'SETTINGS' || cleanPath.startsWith('/restaurant') || cleanPath === '/dashboard'))
+      ) {
+        return (
+          <BarApp
+            business={resolvedTenant}
+            onNavigate={navigateTo}
+            onLogout={() => handleLogout('/bar/login')}
+          />
+        );
+      }
+
+      // 0.07. Dedicated Small Cart Operating System
+      if (
+        tenantApp === 'CART_OS' ||
+        ((resolvedTenant.businessType === 'SMALL_CART' || resolvedTenant.businessType === 'FOOD_CART') && (tenantApp === 'SETTINGS' || cleanPath.startsWith('/restaurant') || cleanPath === '/dashboard'))
+      ) {
+        return (
+          <CartApp
+            business={resolvedTenant}
+            onNavigate={navigateTo}
+            onLogout={() => handleLogout('/cart/login')}
+          />
+        );
+      }
+
+      // 0.08. Central Business Hub
+      if (tenantApp === 'HUB' || cleanPath === '/hub' || cleanPath.startsWith('/hub/')) {
+        return (
+          <BusinessHub
+            user={currentUser}
+            onNavigate={navigateTo}
+            onLogout={() => handleLogout('/login')}
           />
         );
       }
@@ -1466,11 +1509,11 @@ function AppContent() {
             setCurrentUser(user);
             const r = (user?.role || '').toUpperCase();
             const target = (
-              r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/events/portal?tab=kitchen' :
-              r === 'BAR' || r === 'BARTENDER' ? '/events/portal?tab=bar' :
-              r === 'HOOKAH' || r === 'SHISHA' ? '/events/portal?tab=hookah' :
-              r === 'WAITER' || r === 'RUNNER' ? '/events/portal?tab=runner' :
-              '/events/portal'
+              r === 'CHEF' || r === 'KITCHEN' || r === 'COOK' ? '/weddings/dashboard?tab=kitchen' :
+              r === 'BAR' || r === 'BARTENDER' ? '/weddings/dashboard?tab=bar' :
+              r === 'HOOKAH' || r === 'SHISHA' ? '/weddings/dashboard?tab=hookah' :
+              r === 'WAITER' || r === 'RUNNER' ? '/weddings/dashboard?tab=runner' :
+              '/weddings/dashboard'
             );
             navigateTo(target);
           }}
@@ -1584,6 +1627,36 @@ function AppContent() {
       cleanPath.startsWith('/weddings/dashboard/') ||
       cleanPath === '/wedding/dashboard' ||
       cleanPath.startsWith('/wedding/dashboard/') ||
+      cleanPath === '/weddings/events' ||
+      cleanPath.startsWith('/weddings/events/') ||
+      cleanPath === '/weddings/terminals' ||
+      cleanPath.startsWith('/weddings/terminals/') ||
+      cleanPath === '/weddings/food-menu' ||
+      cleanPath.startsWith('/weddings/food-menu/') ||
+      cleanPath === '/weddings/menu' ||
+      cleanPath.startsWith('/weddings/menu/') ||
+      cleanPath === '/weddings/orders' ||
+      cleanPath.startsWith('/weddings/orders/') ||
+      cleanPath === '/weddings/kitchen' ||
+      cleanPath.startsWith('/weddings/kitchen/') ||
+      cleanPath === '/weddings/bar' ||
+      cleanPath.startsWith('/weddings/bar/') ||
+      cleanPath === '/weddings/hookah' ||
+      cleanPath.startsWith('/weddings/hookah/') ||
+      cleanPath === '/weddings/assistance' ||
+      cleanPath.startsWith('/weddings/assistance/') ||
+      cleanPath === '/weddings/guests' ||
+      cleanPath.startsWith('/weddings/guests/') ||
+      cleanPath === '/weddings/tables' ||
+      cleanPath.startsWith('/weddings/tables/') ||
+      cleanPath === '/weddings/billing' ||
+      cleanPath.startsWith('/weddings/billing/') ||
+      cleanPath === '/weddings/settings' ||
+      cleanPath.startsWith('/weddings/settings/') ||
+      cleanPath === '/weddings/staff' ||
+      cleanPath.startsWith('/weddings/staff/') ||
+      cleanPath === '/weddings/day-management' ||
+      cleanPath.startsWith('/weddings/day-management/') ||
       cleanPath === '/events/command-center' ||
       cleanPath.startsWith('/events/command-center/') ||
       cleanPath === '/events/day-management' ||
@@ -1610,7 +1683,7 @@ function AppContent() {
             onNavigate={navigateTo}
             onLoginSuccess={(_, user) => {
               setCurrentUser(user);
-              navigateTo(cleanPath.includes('tab=') ? cleanPath : '/events/portal');
+              navigateTo(cleanPath.includes('tab=') ? cleanPath : cleanPath === '/weddings/login' ? '/weddings/dashboard' : cleanPath);
             }}
           />
         );
@@ -1633,11 +1706,25 @@ function AppContent() {
       cleanPath === '/weddings/apply'
     ) {
       if (currentUser) {
-        navigateTo('/events/portal');
-      } else {
-        navigateTo('/wizard?mode=create&type=WEDDING_ORDERING');
+        return (
+          <WeddingEventPortal
+            activeRestaurant={currentRestaurant}
+            currentUser={currentUser}
+            onLogout={() => handleLogout('/weddings/login')}
+            onNavigate={navigateTo}
+          />
+        );
       }
-      return null;
+      return (
+        <WeddingLandingPage
+          onNavigateHome={() => navigateTo('/')}
+          onNavigateOrganizerLogin={() => navigateTo('/weddings/login')}
+          onOpenDashboard={() => navigateTo('/weddings/dashboard')}
+          onNavigateOrganizerDashboard={() => navigateTo('/weddings/dashboard')}
+          onNavigate={navigateTo}
+          currentUser={currentUser}
+        />
+      );
     }
 
     // Weddings & Luxury Events Guest Application (Platform or Root Domain Deep Link)
@@ -1648,6 +1735,59 @@ function AppContent() {
       cleanPath.startsWith('/wedding/guest/')
     ) {
       return <WeddingGuestApp />;
+    }
+
+    // 7.6. Central Business Hub (Platform Domain)
+    if (
+      cleanPath === '/hub' ||
+      cleanPath.startsWith('/hub/') ||
+      cleanPath === '/hub/businesses/new'
+    ) {
+      return (
+        <BusinessHub
+          user={currentUser}
+          onNavigate={navigateTo}
+          onLogout={() => handleLogout('/login')}
+        />
+      );
+    }
+
+    // 7.7. Dedicated Bar Operating System (Platform Domain)
+    if (
+      cleanPath.startsWith('/bar/dashboard') ||
+      cleanPath.startsWith('/bar/menu') ||
+      cleanPath.startsWith('/bar/tabs') ||
+      cleanPath.startsWith('/bar/inventory') ||
+      cleanPath.startsWith('/bar/settings') ||
+      cleanPath.startsWith('/bar/staff') ||
+      cleanPath.startsWith('/bar/reports')
+    ) {
+      return (
+        <BarApp
+          business={currentRestaurant}
+          onNavigate={navigateTo}
+          onLogout={() => handleLogout('/bar/login')}
+        />
+      );
+    }
+
+    // 7.8. Dedicated Small Cart Operating System (Platform Domain)
+    if (
+      cleanPath.startsWith('/cart/dashboard') ||
+      cleanPath.startsWith('/cart/pos') ||
+      cleanPath.startsWith('/cart/menu') ||
+      cleanPath.startsWith('/cart/settings') ||
+      cleanPath.startsWith('/cart/orders') ||
+      cleanPath === '/cart' ||
+      cleanPath === '/cart/'
+    ) {
+      return (
+        <CartApp
+          business={currentRestaurant}
+          onNavigate={navigateTo}
+          onLogout={() => handleLogout('/cart/login')}
+        />
+      );
     }
 
     // 8. Restaurant OS & Operational Terminals on PLATFORM DOMAIN (Root Domain Redirect)

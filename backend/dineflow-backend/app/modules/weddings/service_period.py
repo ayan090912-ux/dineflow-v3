@@ -230,7 +230,7 @@ def get_authoritative_event_status(
 
     # If start time hasn't arrived yet, status is SCHEDULED unless staff explicitly activated it
     if s_dt and eval_now < s_dt:
-        if ordering_open and (c_status == "ACTIVE" or is_auto):
+        if ordering_open and c_status == "ACTIVE":
             return "ACTIVE"
         return "SCHEDULED"
 

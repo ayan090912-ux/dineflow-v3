@@ -151,16 +151,69 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     realtimeBus.connect(restId, 'CUSTOMER', sId);
 
-    const fetchLiveCustomerOrders = () => {
-      api.getCustomerOrders(restId, tId || selectedTableNum, sId).then((orders) => {
-        if (Array.isArray(orders)) {
-          setCustomerOrders(orders);
+    const isOrdersEqual = (a: any[], b: any[]): boolean => {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        const o1 = a[i];
+        const o2 = b[i];
+        if (
+          o1.id !== o2.id ||
+          o1.status !== o2.status ||
+          o1.kitchenStatus !== o2.kitchenStatus ||
+          o1.barStatus !== o2.barStatus ||
+          o1.hookahStatus !== o2.hookahStatus ||
+          o1.deliveryStatus !== o2.deliveryStatus ||
+          o1.paymentStatus !== o2.paymentStatus ||
+          o1.totalAmount !== o2.totalAmount ||
+          o1.etaTargetTimestamp !== o2.etaTargetTimestamp
+        ) {
+          return false;
         }
-      });
+      }
+      return true;
+    };
+
+    let isFetchingOrders = false;
+    const fetchLiveCustomerOrders = () => {
+      if (isFetchingOrders || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) {
+        return;
+      }
+      isFetchingOrders = true;
+      api.getCustomerOrders(restId, tId || selectedTableNum, sId)
+        .then((orders) => {
+          if (Array.isArray(orders)) {
+            setCustomerOrders((prev) => (isOrdersEqual(prev, orders) ? prev : orders));
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          isFetchingOrders = false;
+        });
     };
 
     fetchLiveCustomerOrders();
-    const pollInterval = setInterval(fetchLiveCustomerOrders, 5000);
+
+    // Adaptive polling: when WebSocket is actively connected, back off to 30s heartbeat.
+    // If WebSocket is disconnected or reconnecting, poll every 8s.
+    const pollInterval = setInterval(() => {
+      if (realtimeBus.getStatus() === 'CONNECTED') {
+        return;
+      }
+      fetchLiveCustomerOrders();
+    }, 8000);
+
+    const heartbeatInterval = setInterval(() => {
+      fetchLiveCustomerOrders();
+    }, 30000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLiveCustomerOrders();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       const evtRestId = event.restaurantId || (event as any).restaurant_id;
@@ -249,6 +302,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     return () => {
       clearInterval(pollInterval);
+      clearInterval(heartbeatInterval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
       unsubscribe();
     };
   }, [currentRestaurant?.id, currentTable?.id, currentTableSession?.id, selectedTableNum]);

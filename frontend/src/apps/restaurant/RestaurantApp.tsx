@@ -4,6 +4,7 @@ import {
   ShoppingBag,
   ChefHat,
   Grid,
+  ArrowLeft,
   UtensilsCrossed,
   Users,
   Package,
@@ -77,6 +78,7 @@ import {
   ToastMessage,
   DinelyLogo,
   LoadingScreen,
+  ProductSwitcher,
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
@@ -94,9 +96,6 @@ import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { ThermalPrinterSettings } from './ThermalPrinterSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
-import { EventDayManagementView } from './EventDayManagementView';
-import { WeddingsTab } from './WeddingsTab';
-import { EventFloorplanTablesView } from './EventFloorplanTablesView';
 import { MenuLibraryModal } from './MenuLibraryModal';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
@@ -116,11 +115,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   onNavigate,
 }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'hookah' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings' | 'weddings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'hookah' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings'>(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab')?.toLowerCase();
-      if (tabParam === 'weddings' || tabParam === 'wedding') return 'weddings';
+      if (tabParam === 'weddings' || tabParam === 'wedding') {
+        if (onNavigate) onNavigate('/weddings/dashboard');
+        else window.location.href = '/weddings/dashboard';
+        return 'dashboard';
+      }
       if (tabParam === 'menu') return 'menu';
       if (tabParam === 'tables' || tabParam === 'floorplan') return 'tables';
       if (tabParam === 'orders') return 'orders';
@@ -136,7 +139,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (tabParam === 'workspace_settings' || tabParam === 'settings') return 'workspace_settings';
 
       const p = window.location.pathname.toLowerCase();
-      if (p.includes('/weddings') || p.includes('/wedding')) return 'weddings';
+      if (p.includes('/weddings') || p.includes('/wedding')) {
+        if (onNavigate) onNavigate('/weddings/dashboard');
+        else window.location.href = '/weddings/dashboard';
+        return 'dashboard';
+      }
       if (p.includes('/menu')) return 'menu';
       if (p.includes('/floorplan') || p.includes('/tables')) return 'tables';
       if (p.includes('/staff') || p.includes('/employees')) return 'staff';
@@ -151,11 +158,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (p.includes('/day-management') || p.includes('/daily-closing') || p.includes('/day') || p.includes('/closing')) return 'day_management';
       if (p.includes('/workspace_settings') || p.includes('/settings')) return 'workspace_settings';
     }
-    const isEvent = Boolean(
-      (activeRestaurant && (activeRestaurant.businessType === 'WEDDING_ORDERING' || isModuleEnabled(activeRestaurant, 'weddings')))
-    );
-    return isEvent ? 'weddings' : 'dashboard';
+    return 'dashboard';
   });
+
+  useEffect(() => {
+    const rawType = (activeRestaurant?.businessType || '').toUpperCase();
+    if (rawType.includes('WEDDING') || rawType.includes('EVENT')) {
+      if (onNavigate) onNavigate('/weddings/dashboard');
+      else window.location.href = '/weddings/dashboard';
+    } else if (rawType === 'BAR') {
+      if (onNavigate) onNavigate('/bar/dashboard');
+      else window.location.href = '/bar/dashboard';
+    } else if (rawType.includes('CART') || rawType.includes('TRUCK')) {
+      if (onNavigate) onNavigate('/cart/dashboard');
+      else window.location.href = '/cart/dashboard';
+    }
+  }, [activeRestaurant, onNavigate]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.history?.replaceState) {
@@ -1653,6 +1671,24 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 bg-[#151922] px-2 py-0.5 rounded border border-[#242b3b]">Owner OS</span>
           </div>
 
+          {/* Return to Central Business Hub Button */}
+          <div className="mb-4 px-1">
+            <button
+              onClick={() => {
+                if (onNavigate) onNavigate('/hub');
+                else window.location.href = '/hub';
+              }}
+              className="w-full px-3 py-2 rounded-xl bg-[#141822] hover:bg-[#1a202d] border border-[#222838] hover:border-[#353f56] text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-between transition-all cursor-pointer group"
+              title="Switch Business or Open Central Hub"
+            >
+              <div className="flex items-center gap-2">
+                <Grid className="w-3.5 h-3.5 text-orange-400" />
+                <span>Business Hub</span>
+              </div>
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+
           {/* Multi-Restaurant Outlet Switcher Button */}
           <div className="mb-5 px-1">
             <button
@@ -1720,14 +1756,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     ...(isFoodCart && !hasTablesModule
                       ? [{ id: 'qr_pickup', label: 'Counter Pickup QR', icon: <QrCode className="w-4 h-4 text-sky-400" />, badge: 'PICKUP' }]
                       : []),
-                    ...(isModuleEnabled(currentRestaurant, 'weddings')
-                      ? [{
-                          id: 'weddings',
-                          label: 'Wedding & Events',
-                          icon: <Sparkles className="w-4 h-4 text-amber-400" />,
-                          badge: 'PORTAL',
-                        }]
-                      : []),
                   ],
                 },
                 {
@@ -1778,10 +1806,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         <button
                           key={item.id}
                           onClick={() => {
-                            if (item.id === 'weddings' && onNavigate) {
-                              onNavigate('/events/portal');
-                              return;
-                            }
                             setActiveTab(item.id as any);
                           }}
                           className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -1958,7 +1982,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Day Management'}
               {activeTab === 'theme' && 'Brand Identity & Styling'}
               {activeTab === 'workspace_settings' && 'Terminals & Settings'}
-              {activeTab === 'weddings' && 'Wedding & Events Management'}
               {activeTab === 'waiter' && 'Waiter Terminal OS'}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
@@ -1976,7 +1999,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {(activeTab === 'business_day' || activeTab === 'day_management') && 'Authoritative operational business-day lifecycle, shift register reconciliation, station prechecks, and daily closing.'}
               {activeTab === 'theme' && "Customize your restaurant's digital storefront, logo, accent colors, and typography."}
               {activeTab === 'workspace_settings' && 'Manage active operational modules, terminal access URLs, and branch configuration.'}
-              {activeTab === 'weddings' && 'Manage banquet events, dedicated event portal, decoupled table QR codes, and live guest catering.'}
             </p>
           </div>
 
@@ -4520,64 +4542,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
         {/* Tab: Business Day & Day Management */}
         {(activeTab === 'business_day' || activeTab === 'day_management') && (
-          (currentRestaurant?.businessType === 'WEDDING_ORDERING' || isModuleEnabled(currentRestaurant, 'weddings')) ? (
-            <EventDayManagementView
-              currentRestaurant={currentRestaurant}
-              currentUser={currentUser}
-              onNavigateTab={(tab) => setActiveTab(tab as any)}
-              onRefreshData={loadData}
-              addToast={addToast}
-            />
-          ) : (
-            <DayManagementView
-              currentRestaurant={currentRestaurant}
-              currentBusinessDay={currentBusinessDay}
-              businessDayHistory={businessDayHistory}
-              orders={orders}
-              tables={tables}
-              bills={bills}
-              theme={theme}
-              currentUser={currentUser}
-              onNavigateTab={(tab) => setActiveTab(tab as any)}
-              onRefreshData={loadData}
-              addToast={addToast}
-            />
-          )
+          <DayManagementView
+            currentRestaurant={currentRestaurant}
+            currentBusinessDay={currentBusinessDay}
+            businessDayHistory={businessDayHistory}
+            orders={orders}
+            tables={tables}
+            bills={bills}
+            theme={theme}
+            currentUser={currentUser}
+            onNavigateTab={(tab) => setActiveTab(tab as any)}
+            onRefreshData={loadData}
+            addToast={addToast}
+          />
         )}
-
-        {/* Tab: Wedding & Banquet Ordering */}
-        {activeTab === 'weddings' && (
-          <div className="space-y-6">
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">Dinely Wedding & Events Portal</h4>
-                  <p className="text-xs text-slate-400">Launch the dedicated operational portal for event catering, banquet QR codes, and real-time station execution.</p>
-                </div>
-              </div>
-              <Button
-                variant="brand"
-                onClick={() => onNavigate ? onNavigate('/events/portal') : (window.location.href = '/events/portal')}
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shrink-0"
-              >
-                Open Event Portal →
-              </Button>
-            </div>
-            <WeddingsTab
-              currentRestaurant={currentRestaurant}
-              currentUser={currentUser}
-              addToast={(t: any) => {
-                if (t && typeof t === 'object') {
-                  addToast(t.type || 'info', t.title || '', t.message);
-                }
-              }}
-            />
-          </div>
-        )}
-
       </main>
 
       {/* QR Code Modal */}

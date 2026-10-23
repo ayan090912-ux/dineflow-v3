@@ -18,6 +18,10 @@ class RestaurantLifecycleStatus(str, Enum):
 class BusinessType(str, Enum):
     RESTAURANT = "RESTAURANT"
     BAR = "BAR"
+    SMALL_CART = "SMALL_CART"
+    WEDDING_EVENT = "WEDDING_EVENT"
+    FOOD_CART = "FOOD_CART"
+    WEDDING_ORDERING = "WEDDING_ORDERING"
     CAFE = "CAFE"
     FOOD_TRUCK = "FOOD_TRUCK"
 

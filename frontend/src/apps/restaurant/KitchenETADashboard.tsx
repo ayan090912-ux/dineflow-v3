@@ -227,8 +227,13 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     activeRole === 'WAITER' ? 'WAITER' : activeRole === 'OWNER' ? 'ANALYTICS' : 'KDS'
   );
 
-  // Sound preference
+  // Sound preference — stored as ref so mute/unmute does NOT re-register effects
   const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
+  // Stable set of order IDs for which the NEW_ORDER chime has already played this session
+  const notifiedOrderIdsRef = useRef<Set<string>>(new Set());
+  // Guards against playing sounds for pre-existing orders on initial page load
+  const hasInitializedRef = useRef(false);
 
   // Live Clock Time State
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -304,36 +309,42 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     }
   }, [viewMode]);
 
+  // Keep isMutedRef in sync with isMuted state without causing effect re-registration
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
   // Subscribe to Realtime Bus Events & Background Polling (Scoped by restaurant_id)
+  // NOTE: Empty dependency array — this effect registers ONCE and reads mute state via ref
   useEffect(() => {
     const currentRestId = api.getCurrentRestaurantId() || '';
     if (currentRestId) {
       realtimeBus.connect(currentRestId, 'KITCHEN');
     }
 
+    // fetchFreshOrders refreshes data silently. It NEVER plays sound.
+    // Sounds are ONLY triggered by genuine backend WS events (order_created).
     const fetchFreshOrders = () => {
       const restId = currentRestId || undefined;
-      api.getOrders(restId, { station: 'KITCHEN' }).then((freshOrders) => {
+      const isNotWeddingBusiness = (restaurant as any)?.businessType !== 'WEDDING_ORDERING';
+      api.getOrders(restId, { station: 'KITCHEN', excludeEvents: isNotWeddingBusiness }).then((freshOrders) => {
         if (!freshOrders) return;
-        const validOrders = (freshOrders || []).filter((o) => (restaurant as any)?.businessType === 'WEDDING_ORDERING' || (o.orderType !== 'WEDDING_EVENT' && !o.eventId));
-        setOrders((prevOrders) => {
-          const currentList = Array.isArray(prevOrders) ? prevOrders : [];
-          if (!isMuted && validOrders.length > currentList.length) {
-            const hasNewPending = validOrders.some(
-              (fo) => fo.status === 'PENDING' && !currentList.some((po) => po.id === fo.id)
-            );
-            if (hasNewPending) {
-              playKitchenChime('NEW_ORDER');
-            }
-          }
-          return validOrders;
-        });
+        const validOrders = (freshOrders || []).filter(
+          (o) => !isNotWeddingBusiness || (o.orderType !== 'WEDDING_EVENT' && !o.eventId)
+        );
+        // Silent data refresh — no sound here, ever
+        setOrders(validOrders);
       }).catch(() => {});
     };
 
+    // Initial load is silent (populate existing orders without any alert)
     fetchFreshOrders();
+    // Mark initialized after first load so subsequent events can play sound
+    setTimeout(() => { hasInitializedRef.current = true; }, 2000);
+
     const pollInterval = setInterval(fetchFreshOrders, 30000);
 
+    // Per-session event deduplication (stable across re-renders, reset only on full effect re-registration)
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
@@ -341,11 +352,12 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       if (evtRestId && currentRestId && String(evtRestId).toLowerCase() !== String(currentRestId).toLowerCase()) {
         return;
       }
+      // Skip events targeted at other stations
       if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station === 'BAR') {
         return;
       }
 
-      // Targeted ETA Update - Update specific ticket without refetching the entire board
+      // Targeted ETA Update — update specific ticket without refetching the entire board
       if (event.type === 'ETAUpdated' || (event as any).type === 'ETA_UPDATED') {
         const orderId = (event as any).orderId || (event as any).order_id;
         const mins = (event as any).estimatedPrepTimeMinutes;
@@ -366,7 +378,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         return;
       }
 
-      // Targeted Order Status Update
+      // Targeted Order Status Update — no sound, just UI update
       if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
         const orderId = (event as any).orderId || (event as any).order_id;
         const status = (event as any).status;
@@ -375,11 +387,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? {
-                    ...o,
-                    status: status || o.status,
-                    kitchenStatus: kitchenStatus || o.kitchenStatus,
-                  }
+                ? { ...o, status: status || o.status, kitchenStatus: kitchenStatus || o.kitchenStatus }
                 : o
             )
           );
@@ -387,34 +395,52 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         return;
       }
 
-      // Day Closed Reset - clean live operational queues
+      // Day Closed Reset
       if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
         setOrders([]);
         setBumpedHistory([]);
+        notifiedOrderIdsRef.current.clear();
         showToast('Business Day Closed 🌅 Live kitchen queues reset for the new day.', 'info');
         return;
       }
 
+      // Global deduplication by event ID
       const evtId = event.eventId || (event as any).event_id;
       if (evtId && handledEventIds.has(evtId)) {
         return;
       }
       if (evtId) {
         handledEventIds.add(evtId);
+        if (handledEventIds.size > 500) {
+          const first = Array.from(handledEventIds)[0];
+          handledEventIds.delete(first);
+        }
       }
 
-      if (!isMuted && (event.type === 'order_created' || event.type === 'OrderCreated')) {
-        playKitchenChime('NEW_ORDER');
+      if (event.type === 'order_created' || event.type === 'OrderCreated') {
+        const orderId = (event as any).orderId || (event as any).order_id || evtId;
+        // Play NEW_ORDER chime once per order per session, only after initial load
+        if (hasInitializedRef.current && !isMutedRef.current && orderId && !notifiedOrderIdsRef.current.has(orderId)) {
+          notifiedOrderIdsRef.current.add(orderId);
+          if (notifiedOrderIdsRef.current.size > 200) {
+            const first = Array.from(notifiedOrderIdsRef.current)[0];
+            notifiedOrderIdsRef.current.delete(first);
+          }
+          playKitchenChime('NEW_ORDER');
+        }
+        // Reload data silently (no sound from fetchFreshOrders)
         fetchFreshOrders();
       } else if (event.type === 'TableMerged') {
         showToast(`🔗 Large Gathering Table Merge: ${event.data?.mergedGroupLabel || 'Tables Combined'}`, 'info');
       } else if (event.type === 'RECONNECTED') {
+        // Reconnect: reload data silently
         fetchFreshOrders();
       }
     });
 
     const unsubStatus = realtimeBus.subscribeStatus((status) => {
       if (status === 'CONNECTED') {
+        // Silently refresh data on reconnect — no sound
         fetchFreshOrders();
       }
     });
@@ -424,7 +450,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       unsubscribe();
       unsubStatus();
     };
-  }, [isMuted]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps — mute/unmute managed via isMutedRef, not re-registration
 
 
   // Handlers

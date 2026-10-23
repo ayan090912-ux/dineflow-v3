@@ -34,9 +34,17 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
   const [recentDispatches, setRecentDispatches] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const soundEnabledRef = React.useRef(true);
+  const notifiedOrderIdsRef = React.useRef<Set<string>>(new Set());
+  const hasInitializedRef = React.useRef(false);
   const [lastNotification, setLastNotification] = useState<string>('');
   const [isConnected, setIsConnected] = useState(true);
   const [actionError, setActionError] = useState<string>('');
+
+  // Keep soundEnabledRef in sync without triggering effect re-registration
+  React.useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   useEffect(() => {
     const currentRestId = api.getCurrentRestaurantId() || restaurant?.id || '';
@@ -45,8 +53,10 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     }
 
     loadHookahOrders(true);
+    setTimeout(() => { hasInitializedRef.current = true; }, 2000);
     const pollInterval = setInterval(() => loadHookahOrders(false), 25000);
 
+    // Per-session event deduplication — stable, not recreated on sound toggle
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event: any) => {
@@ -55,7 +65,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
         return;
       }
 
-      // Ignore updates specifically targeted for kitchen or bar only
+      // Ignore updates specifically targeted for kitchen or bar
       if (event.type === 'FulfillmentTicketUpdated' && event.station && event.station !== 'HOOKAH') {
         return;
       }
@@ -64,11 +74,12 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
       if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
         setOrders([]);
         setRecentDispatches([]);
+        notifiedOrderIdsRef.current.clear();
         setLastNotification('Business Day Closed 🌅 Hookah & Shisha queue reset for new day.');
         return;
       }
 
-      // Day Opened - reload fresh tickets for the new business day
+      // Day Opened
       if (event.type === 'DayOpened' || event.type === 'BusinessDayOpened') {
         setOrders([]);
         setRecentDispatches([]);
@@ -88,6 +99,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
         event.type === 'TableSessionClosed' ||
         (event.type === 'FulfillmentTicketUpdated' && event.station === 'HOOKAH')
       ) {
+        // Reload data silently for all order-related events
         loadHookahOrders(false);
 
         const evtId = event.eventId || event.event_id;
@@ -96,23 +108,42 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
         }
         if (evtId) {
           handledEventIds.add(evtId);
+          if (handledEventIds.size > 500) {
+            const first = Array.from(handledEventIds)[0];
+            handledEventIds.delete(first);
+          }
         }
 
-        // Alert on new hookah orders
-        if (
+        // Alert only on genuine new HOOKAH-destined orders, after initial load, once per order
+        const isNewHookahOrder =
           event.type === 'order_created' ||
           event.type === 'OrderCreated' ||
-          (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'HOOKAH')
-        ) {
-          setLastNotification(
-            `New Hookah Order #${(event.orderId || event.parentOrderId || event.id || '').slice(-4)} for Table ${event.tableNumber || 'Lounge'}`
-          );
-          if (soundEnabled) {
-            playNotificationSound();
+          (event.type === 'FulfillmentTicketUpdated' && event.status === 'PENDING' && event.station === 'HOOKAH');
+
+        if (isNewHookahOrder && hasInitializedRef.current) {
+          const orderId = event.orderId || event.parentOrderId || event.id || evtId;
+          // Verify this event actually has HOOKAH-destined items
+          const isHookahFulfillment = event.type === 'FulfillmentTicketUpdated' && event.station === 'HOOKAH';
+          const items: any[] = (event as any).items || (event as any).payload?.items || [];
+          const hasHookahItems = isHookahFulfillment || items.some((i: any) => getFulfillmentStation(i) === 'HOOKAH');
+
+          if (hasHookahItems && orderId && !notifiedOrderIdsRef.current.has(orderId)) {
+            notifiedOrderIdsRef.current.add(orderId);
+            if (notifiedOrderIdsRef.current.size > 200) {
+              const first = Array.from(notifiedOrderIdsRef.current)[0];
+              notifiedOrderIdsRef.current.delete(first);
+            }
+            setLastNotification(
+              `New Hookah Order #${String(orderId).slice(-4)} for Table ${event.tableNumber || 'Lounge'}`
+            );
+            if (soundEnabledRef.current) {
+              playNotificationSound();
+            }
           }
         }
       } else if (event.type === 'RECONNECTED') {
         setIsConnected(true);
+        // Silent data refresh on reconnect
         loadHookahOrders(false);
       }
     });
@@ -120,6 +151,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     const unsubStatus = realtimeBus.subscribeStatus((status) => {
       if (status === 'CONNECTED') {
         setIsConnected(true);
+        // Silently refresh on reconnect — no sound
         loadHookahOrders(false);
       } else if (status === 'DISCONNECTED') {
         setIsConnected(false);
@@ -131,7 +163,8 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
       unsubscribe();
       unsubStatus();
     };
-  }, [soundEnabled, restaurant?.id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps — sound managed via soundEnabledRef, not re-registration
 
   const playNotificationSound = () => {
     try {
@@ -155,10 +188,14 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     setActionError('');
     try {
       const restId = api.getCurrentRestaurantId() || restaurant?.id || undefined;
-      const allOrders = await api.getOrders(restId, { station: 'HOOKAH', activeOnly: true });
+      const isNotWedding = (restaurant as any)?.businessType !== 'WEDDING_ORDERING';
+      const allOrders = await api.getOrders(restId, { station: 'HOOKAH', activeOnly: true, excludeEvents: isNotWedding });
 
       const hookahOrders = allOrders
         .filter((o) => {
+          if ((restaurant as any)?.businessType !== 'WEDDING_ORDERING' && (o.orderType === 'WEDDING_EVENT' || o.eventId)) {
+            return false;
+          }
           const hasHookahItems = o.items && o.items.some((i) => getFulfillmentStation(i) === 'HOOKAH');
           const hasHookahStatus = Boolean(o.hookahStatus && (o.hookahStatus as string) !== 'NOT_REQUIRED');
           return hasHookahItems || hasHookahStatus;

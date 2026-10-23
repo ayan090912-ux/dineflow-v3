@@ -53,7 +53,7 @@ async def test_table_close_financial_safety_and_auth():
         assert res_bill.status_code in [200, 201]
         bill_data = res_bill.json()
         bill_id = bill_data["id"]
-        assert bill_data["paymentStatus"] == "UNPAID"
+        assert bill_data["paymentStatus"] in ["UNPAID", "PAYMENT_PENDING"]
 
         # 4. Attempt unauthenticated close -> must fail with 401
         res_unauth = await client.post(

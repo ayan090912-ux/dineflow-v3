@@ -82,6 +82,7 @@ export const LandingWebsite: React.FC<LandingWebsiteProps> = ({
         onStaffLogin={onStaffLogin || (() => onNavigate ? onNavigate('/staff/login') : window.location.href = '/staff/login')}
         onOpenWorkspace={handleOpenWorkspace}
         onNavigateSection={scrollToSection}
+        onNavigateWeddings={() => onNavigate ? onNavigate('/weddings') : window.location.href = '/weddings'}
       />
 
       {/* 2. Cinematic Hero Section */}

@@ -261,13 +261,35 @@ async def signup_restaurant_tenant(
     domain_url = f"https://{public_slug}.dinely.food"
     user_uid = payload.ownerUid or f"owner-{uuid.uuid4().hex[:10]}"
 
-    b_type = (payload.businessType or "RESTAURANT").upper()
-    has_bar = (b_type == "BAR")
-    modules = ["kitchen", "waiter", "inventory", "billing"]
-    if has_bar:
-        modules.append("bar")
+    raw_b_type = str(payload.businessType or "RESTAURANT").upper().strip()
+    if raw_b_type in ("SMALL_CART", "FOOD_CART", "CART", "FOOD_TRUCK"):
+        b_type = "SMALL_CART"
+        has_bar = False
+        has_tables = False
+        has_waiter = False
+        modules = ["kitchen", "inventory", "billing"]
+    elif raw_b_type in ("WEDDING_EVENT", "WEDDING_ORDERING", "WEDDINGS", "EVENT_VENUE"):
+        b_type = "WEDDING_EVENT"
+        has_bar = True
+        has_tables = True
+        has_waiter = True
+        modules = ["weddings", "kitchen", "bar", "hookah", "tables", "billing"]
+    elif raw_b_type == "BAR":
+        b_type = "BAR"
+        has_bar = True
+        has_tables = True
+        has_waiter = True
+        modules = ["bar", "inventory", "billing", "tables", "waiter"]
+    else:
+        b_type = "RESTAURANT"
+        has_bar = bool(getattr(payload, "hasBar", False))
+        has_tables = True
+        has_waiter = True
+        modules = ["kitchen", "waiter", "inventory", "billing", "tables"]
+        if has_bar:
+            modules.append("bar")
 
-    # 2. Create Restaurant
+    # 2. Create Restaurant / Business
     new_rest = Restaurant(
         id=rest_id,
         name=clean_name,
@@ -277,9 +299,9 @@ async def signup_restaurant_tenant(
         cuisine=payload.cuisine or "Multi-Cuisine",
         business_type=b_type,
         has_bar=has_bar,
-        has_tables=True,
+        has_tables=has_tables,
         has_kitchen=True,
-        has_waiter=True,
+        has_waiter=has_waiter,
         has_inventory=True,
         has_billing=True,
         enabled_modules=modules,
@@ -500,23 +522,42 @@ async def create_restaurant(
         await db.refresh(existing)
         return existing
 
-    # Compute default enabled modules if not provided
-    b_type = (payload.businessType or "RESTAURANT").upper()
-    if payload.enabledModules:
-        modules = payload.enabledModules
+    # Compute default enabled modules with strict business-type isolation
+    raw_b_type = str(payload.businessType or "RESTAURANT").upper().strip()
+    if raw_b_type in ("SMALL_CART", "FOOD_CART", "CART", "FOOD_TRUCK"):
+        b_type = "SMALL_CART"
+        default_modules = ["kitchen", "inventory", "billing"]
+        has_tables = False
+    elif raw_b_type in ("WEDDING_EVENT", "WEDDING_ORDERING", "WEDDINGS", "EVENT_VENUE"):
+        b_type = "WEDDING_EVENT"
+        default_modules = ["weddings", "kitchen", "bar", "hookah", "tables", "billing"]
+        has_tables = True
+    elif raw_b_type == "BAR":
+        b_type = "BAR"
+        default_modules = ["bar", "inventory", "billing", "tables", "waiter"]
+        has_tables = True
     else:
-        if b_type == "FOOD_CART":
-            modules = ["kitchen", "inventory", "billing"]
-            if payload.hasWaiter:
-                modules.append("waiter")
-        elif b_type == "BAR":
-            modules = ["bar", "kitchen", "waiter", "inventory", "billing"]
-        else: # RESTAURANT
-            modules = ["kitchen", "waiter", "inventory", "billing"]
-            if payload.hasBar:
-                modules.append("bar")
+        b_type = "RESTAURANT"
+        default_modules = ["kitchen", "waiter", "inventory", "billing", "tables"]
+        if payload.hasBar:
+            default_modules.append("bar")
+        if getattr(payload, "hasHookah", False):
+            default_modules.append("hookah")
+        has_tables = True
 
-    has_tables = payload.hasTables if payload.hasTables is not None else (b_type != "FOOD_CART" or "waiter" in modules)
+    if payload.enabledModules:
+        # Enforce that RESTAURANT and BAR never receive wedding modules, and SMALL_CART stays compact
+        if b_type == "RESTAURANT":
+            modules = [m for m in payload.enabledModules if m != "weddings"]
+        elif b_type == "BAR":
+            modules = [m for m in payload.enabledModules if m != "weddings"]
+        elif b_type == "SMALL_CART":
+            modules = [m for m in payload.enabledModules if m not in ("weddings", "tables", "waiter")]
+        else:
+            modules = payload.enabledModules
+    else:
+        modules = default_modules
+
     if has_tables and "tables" not in modules:
         modules.append("tables")
 
@@ -722,6 +763,65 @@ async def get_owner_restaurants(
     rests = result.scalars().all()
     return rests
 
+@router.get("/hub/businesses")
+async def get_hub_businesses(
+    owner_email: Optional[str] = Query(None),
+    owner_uid: Optional[str] = Query(None),
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Central Business Hub endpoint.
+    Retrieves all businesses authorized for caller, categorized into their respective dedicated OS:
+    1. RESTAURANT -> Restaurant OS (/restaurant/dashboard)
+    2. BAR -> Bar OS (/bar/dashboard)
+    3. SMALL_CART -> Small Cart OS (/cart/dashboard)
+    4. WEDDING_EVENT -> Wedding & Events OS (/weddings/dashboard)
+    """
+    rests = await get_owner_restaurants(owner_email=owner_email, owner_uid=owner_uid, caller=caller, db=db)
+    hub_items = []
+    for r in rests:
+        raw_type = (r.business_type or "RESTAURANT").upper().strip()
+        if raw_type in ("SMALL_CART", "FOOD_CART", "CART", "FOOD_TRUCK"):
+            canonical_type = "SMALL_CART"
+            os_type = "CART_OS"
+            launch_route = "/cart/dashboard"
+        elif raw_type in ("WEDDING_EVENT", "WEDDING_ORDERING", "WEDDINGS", "EVENT_VENUE"):
+            canonical_type = "WEDDING_EVENT"
+            os_type = "WEDDINGS_OS"
+            launch_route = "/weddings/dashboard"
+        elif raw_type == "BAR":
+            canonical_type = "BAR"
+            os_type = "BAR_OS"
+            launch_route = "/bar/dashboard"
+        else:
+            canonical_type = "RESTAURANT"
+            os_type = "RESTAURANT_OS"
+            launch_route = "/restaurant/dashboard"
+
+        hub_items.append({
+            "id": r.id,
+            "name": r.name,
+            "slug": r.slug,
+            "publicSlug": r.public_slug,
+            "businessType": canonical_type,
+            "rawBusinessType": r.business_type,
+            "osType": os_type,
+            "launchRoute": launch_route,
+            "lifecycleStatus": r.lifecycle_status,
+            "isApproved": r.is_approved,
+            "status": r.status,
+            "address": r.address or "",
+            "phone": r.phone or "",
+            "hasBar": r.has_bar,
+            "hasTables": r.has_tables,
+            "hasKitchen": r.has_kitchen,
+            "hasWaiter": r.has_waiter,
+            "enabledModules": r.enabled_modules or [],
+            "createdAt": r.created_at.isoformat() if r.created_at else None,
+        })
+    return hub_items
+
 @router.get("/{restaurant_id}")
 async def get_restaurant(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     clean_id = (restaurant_id or "").strip()
@@ -919,11 +1019,16 @@ async def get_workspace_modules(
     if not rest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
+    b_type_norm = (rest.business_type or "RESTAURANT").upper()
+    eff_modules = list(rest.enabled_modules or [])
+    if b_type_norm in ["RESTAURANT", "BAR", "SMALL_CART", "FOOD_CART"]:
+        eff_modules = [m for m in eff_modules if m != "weddings"]
+
     return {
         "status": "success",
         "restaurantId": rest.id,
         "businessType": rest.business_type,
-        "enabledModules": rest.enabled_modules or [],
+        "enabledModules": eff_modules,
         "hasKitchen": rest.has_kitchen,
         "hasWaiter": rest.has_waiter,
         "hasBar": rest.has_bar,
@@ -957,7 +1062,10 @@ async def update_workspace_modules(
     if not rest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
-    modules = payload.enabledModules
+    b_type_norm = (rest.business_type or "RESTAURANT").upper()
+    modules = list(payload.enabledModules)
+    if b_type_norm in ["RESTAURANT", "BAR", "SMALL_CART", "FOOD_CART"]:
+        modules = [m for m in modules if m != "weddings"]
     rest.enabled_modules = modules
     rest.has_kitchen = payload.hasKitchen if payload.hasKitchen is not None else ("kitchen" in modules)
     rest.has_waiter = payload.hasWaiter if payload.hasWaiter is not None else ("waiter" in modules)

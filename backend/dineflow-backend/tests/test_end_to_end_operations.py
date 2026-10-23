@@ -34,6 +34,11 @@ async def test_end_to_end_full_restaurant_operations():
             "X-Staff-Restaurant-Id": rest_a,
             "X-Staff-Id": "staff-ayaan"
         }
+        kitchen_headers_a = {
+            "X-Staff-Role": "CHEF",
+            "X-Staff-Restaurant-Id": rest_a,
+            "X-Staff-Id": "staff-chef-ayaan"
+        }
 
         # TEST 17 & TEST 1: Owner adds Food Item (DEBUG PIZZA, ₹299, KITCHEN)
         pizza_payload = {
@@ -134,7 +139,7 @@ async def test_end_to_end_full_restaurant_operations():
         res_prep = await client.put(
             f"/api/v1/orders/{order_a_id}/status",
             json={"kitchenStatus": "PREPARING", "estimatedPrepTimeMinutes": 15},
-            headers=staff_headers_a
+            headers=kitchen_headers_a
         )
         assert res_prep.status_code == 200
         prep_order = res_prep.json()

@@ -145,6 +145,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
   const [activeTab, setActiveTab] = useState<OperationsTab>(initialTab);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAudioMuted, setIsAudioMuted] = useState(false);
+  // Ref so mute/unmute does NOT re-register the event subscription effect
+  const isAudioMutedRef = useRef(false);
   const [currentTime, setCurrentTime] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'LIVE' | 'RECONNECTING' | 'OFFLINE'>('LIVE');
 
@@ -174,6 +176,11 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
     setToast({ title, desc, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  // Keep isAudioMutedRef in sync with state without re-registering effects
+  useEffect(() => {
+    isAudioMutedRef.current = isAudioMuted;
+  }, [isAudioMuted]);
 
   // Clock
   useEffect(() => {
@@ -255,7 +262,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
       // Targeted Event Handling
       if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated') {
         const reqType = (event as any).requestType || 'WATER';
-        if (!isAudioMuted) playChime('WAITER');
+        if (!isAudioMutedRef.current) playChime('WAITER');
         showToast(`Customer Request 🛎️`, `${tblNum} requested ${reqType}`, 'warning');
         api.getCustomerRequests(restId).then(setCustomerRequests).catch(() => {});
         setAuditEvents((prev) => [
@@ -263,7 +270,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
           ...prev.slice(0, 40),
         ]);
       } else if (event.type === 'order_created' || event.type === 'OrderCreated') {
-        if (!isAudioMuted) playChime('ORDER');
+        if (!isAudioMutedRef.current) playChime('ORDER');
         showToast(`New Order Placed 🔥`, `Order #${(event.orderId || '').slice(-4)} from ${tblNum}`, 'success');
         api.getOrders(restId).then(setOrders).catch(() => {});
         api.getActiveTableSessions(restId).then(setActiveSessions).catch(() => {});
@@ -272,7 +279,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
           ...prev.slice(0, 40),
         ]);
       } else if (event.type === 'order_ready' || event.type === 'OrderReady') {
-        if (!isAudioMuted) playChime('READY');
+        if (!isAudioMutedRef.current) playChime('READY');
         showToast(`Plate Ready to Serve 🍽️`, `Order for ${tblNum} is ready at pickup counter`, 'info');
         setOrders((prev) =>
           prev.map((o) => (o.id === event.orderId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o))
@@ -301,7 +308,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
       clearInterval(pollInterval);
       unsubscribe();
     };
-  }, [currentRestaurantId, isAudioMuted]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRestaurantId]); // isAudioMuted intentionally excluded — managed via isAudioMutedRef
 
   // --- Derived Collections ---
 

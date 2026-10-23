@@ -299,6 +299,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.getOwnedRestaurants(ownerEmail, ownerUid);
   }
 
+  async getHubBusinesses(ownerEmail?: string, ownerUid?: string): Promise<any[]> {
+    return this.restaurant.getHubBusinesses(ownerEmail, ownerUid);
+  }
+
   async createRestaurantForOwner(restData: {
     name: string;
     cuisine?: string;
@@ -825,7 +829,7 @@ export class DinelyApiClient extends BaseApiClient {
   // ==========================================
   async getOrders(
     restaurantId?: string,
-    options?: { station?: 'KITCHEN' | 'BAR' | 'HOOKAH' | string; activeOnly?: boolean; businessDayId?: string; eventId?: string }
+    options?: { station?: 'KITCHEN' | 'BAR' | 'HOOKAH' | string; activeOnly?: boolean; businessDayId?: string; eventId?: string; excludeEvents?: boolean }
   ): Promise<Order[]> {
     return this.orderClient.getOrders(restaurantId, options);
   }

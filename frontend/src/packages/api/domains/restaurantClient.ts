@@ -2850,6 +2850,71 @@ export class RestaurantClient {
     return this.getOwnerRestaurants(ownerEmail, ownerUid);
   }
 
+  async getHubBusinesses(ownerEmail?: string, ownerUid?: string): Promise<any[]> {
+    const scope = getPortalScopeFromPath();
+    const user = this.base.getCurrentUser(scope);
+    const email = (ownerEmail || user?.email || (typeof window !== 'undefined' && firebaseAuth?.currentUser?.email) || '').trim().toLowerCase();
+    const uid = (ownerUid || user?.id || (typeof window !== 'undefined' && firebaseAuth?.currentUser?.uid) || '').trim();
+
+    try {
+      const params = new URLSearchParams();
+      if (email) params.append('owner_email', email);
+      if (uid) params.append('owner_uid', uid);
+      const data = await this.base.executeProtectedRequest<any[]>(
+        `/restaurants/hub/businesses?${params.toString()}`,
+        {},
+        scope
+      );
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    } catch (e) {
+      console.warn('API fetch for getHubBusinesses failed, falling back to mapped owner restaurants:', e);
+    }
+
+    const allRests = await this.getOwnerRestaurants(ownerEmail, ownerUid);
+    return allRests.map((r) => {
+      const rawType = (r.businessType || 'RESTAURANT').toUpperCase();
+      let osType = 'RESTAURANT_OS';
+      let launchRoute = '/restaurant/dashboard';
+      let canonicalType = 'RESTAURANT';
+      if (rawType.includes('CART') || rawType.includes('TRUCK')) {
+        osType = 'CART_OS';
+        launchRoute = '/cart/dashboard';
+        canonicalType = 'SMALL_CART';
+      } else if (rawType.includes('WEDDING') || rawType.includes('EVENT')) {
+        osType = 'WEDDINGS_OS';
+        launchRoute = '/weddings/dashboard';
+        canonicalType = 'WEDDING_EVENT';
+      } else if (rawType === 'BAR') {
+        osType = 'BAR_OS';
+        launchRoute = '/bar/dashboard';
+        canonicalType = 'BAR';
+      }
+      return {
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        publicSlug: (r as any).publicSlug || r.slug,
+        businessType: canonicalType,
+        rawBusinessType: r.businessType,
+        osType,
+        launchRoute,
+        lifecycleStatus: r.lifecycleStatus,
+        isApproved: r.isApproved,
+        status: r.status,
+        address: r.address || '',
+        phone: r.phone || '',
+        hasBar: r.hasBar,
+        hasTables: r.hasTables,
+        hasKitchen: r.hasKitchen,
+        hasWaiter: r.hasWaiter,
+        enabledModules: r.enabledModules || [],
+        createdAt: (r as any).createdAt,
+      };
+    });
+  }
+
   async createOrganization(orgData: any) {
     await delay(200);
     const newOrg: Organization = {

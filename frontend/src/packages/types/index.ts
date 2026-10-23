@@ -86,6 +86,20 @@ export function isModuleEnabled(
   const bType = (restaurant.businessType || 'RESTAURANT').toUpperCase();
   const modLower = module.toLowerCase();
 
+  // Business-Type Strict Partitioning: A Restaurant, Bar, or Small Cart must NEVER enable weddings
+  if (modLower === 'weddings' || modLower === 'wedding') {
+    if (bType !== 'WEDDING_EVENT' && bType !== 'WEDDING_ORDERING') {
+      return false;
+    }
+  }
+
+  // Small Carts do not support dine-in tables, waiter call, or wedding operations
+  if (bType === 'SMALL_CART' || bType === 'FOOD_CART') {
+    if (modLower === 'tables' || modLower === 'waiter' || modLower === 'weddings') {
+      return false;
+    }
+  }
+
   // If checking tables module:
   if (modLower === 'tables') {
     if (restaurant.hasTables === false) return false;
@@ -182,7 +196,7 @@ export type RestaurantLifecycleStatus =
   | 'ARCHIVED'
   | 'DELETED';
 
-export type BusinessType = 'RESTAURANT' | 'CAFE' | 'BAR' | 'FOOD_CART' | 'FOOD_TRUCK' | 'WEDDING_ORDERING';
+export type BusinessType = 'RESTAURANT' | 'BAR' | 'SMALL_CART' | 'WEDDING_EVENT' | 'CAFE' | 'FOOD_CART' | 'FOOD_TRUCK' | 'WEDDING_ORDERING';
 
 export interface Restaurant {
   id: string;

@@ -18,6 +18,9 @@ export type TenantAppType =
   | 'KITCHEN'
   | 'WAITER'
   | 'BAR'
+  | 'BAR_OS'
+  | 'CART_OS'
+  | 'HUB'
   | 'HOOKAH'
   | 'INVENTORY'
   | 'BILLING'
@@ -138,7 +141,37 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     return 'WAITER';
   }
 
-  // 4. Bar Terminal
+  // 3.1. Business Hub
+  if (p === '/hub' || p.startsWith('/hub/')) {
+    return 'HUB';
+  }
+
+  // 3.2. Small Cart OS
+  if (p === '/cart' || p.startsWith('/cart/')) {
+    return 'CART_OS';
+  }
+
+  // 3.3. Dedicated Bar OS Dashboard & Management
+  if (
+    p === '/bar/dashboard' ||
+    p.startsWith('/bar/dashboard/') ||
+    p === '/bar/menu' ||
+    p.startsWith('/bar/menu/') ||
+    p === '/bar/tabs' ||
+    p.startsWith('/bar/tabs/') ||
+    p === '/bar/inventory' ||
+    p.startsWith('/bar/inventory/') ||
+    p === '/bar/staff' ||
+    p.startsWith('/bar/staff/') ||
+    p === '/bar/settings' ||
+    p.startsWith('/bar/settings/') ||
+    p === '/bar/reports' ||
+    p.startsWith('/bar/reports/')
+  ) {
+    return 'BAR_OS';
+  }
+
+  // 4. Bar Station Terminal (Inside Restaurant)
   if (p === '/bar' || p.startsWith('/bar/') || p === '/bartender' || p.startsWith('/bartender/')) {
     return 'BAR';
   }
@@ -219,7 +252,11 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p === '/events/staff' ||
     p.startsWith('/events/staff/') ||
     p === '/events/settings' ||
-    p.startsWith('/events/settings/')
+    p.startsWith('/events/settings/') ||
+    p === '/weddings' ||
+    p.startsWith('/weddings/') ||
+    p === '/wedding' ||
+    p.startsWith('/wedding/')
   ) {
     return 'EVENT_PORTAL';
   }

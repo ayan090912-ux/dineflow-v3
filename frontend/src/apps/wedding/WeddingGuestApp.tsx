@@ -199,8 +199,27 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
 
   useEffect(() => {
     fetchTableAssistance();
-    const interval = setInterval(fetchTableAssistance, 6000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      fetchTableAssistance();
+    }, 10000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchTableAssistance();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+    };
   }, [fetchTableAssistance]);
 
   // Load last persisted order for this event & table upon reload / mount
