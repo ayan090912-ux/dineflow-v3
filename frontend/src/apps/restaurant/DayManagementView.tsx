@@ -61,7 +61,6 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   onRefreshData,
   addToast,
 }) => {
-  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
   const [selectedHistoricalDay, setSelectedHistoricalDay] = useState<BusinessDay | null>(null);
   const [historicalOrders, setHistoricalOrders] = useState<Order[]>([]);
   const [isHistOrdersLoading, setIsHistOrdersLoading] = useState(false);
@@ -69,8 +68,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const [precheck, setPrecheck] = useState<any>(null);
   const [isPrecheckLoading, setIsPrecheckLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [closingNotes, setClosingNotes] = useState('');
-  const [forceCloseChecked, setForceCloseChecked] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncError, setIsSyncError] = useState(false);
+  const [lastSynchronized, setLastSynchronized] = useState<Date>(new Date());
 
   const restId = currentRestaurant?.id || api.getCurrentRestaurantId();
 
@@ -88,31 +88,26 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
     }
   }, [selectedHistoricalDay?.id, restId]);
 
-  // Load precheck whenever the modal opens or data changes
+  // Load precheck & reconciliation data
   const loadPrecheck = async () => {
     if (!restId) return;
     setIsPrecheckLoading(true);
     try {
       const data = await api.getBusinessDayPrecheck(restId);
       setPrecheck(data);
+      setIsSyncError(false);
+      setLastSynchronized(new Date());
     } catch (err: any) {
       console.warn('[DayManagementView] Failed to load precheck:', err);
+      setIsSyncError(true);
     } finally {
       setIsPrecheckLoading(false);
     }
   };
 
-  const [lastSynchronized, setLastSynchronized] = useState<Date>(new Date());
-
   useEffect(() => {
     loadPrecheck();
   }, [restId, currentBusinessDay?.id]);
-
-  useEffect(() => {
-    if (isCloseModalOpen) {
-      loadPrecheck();
-    }
-  }, [isCloseModalOpen]);
 
   // Automated Real-time Synchronization across all terminals
   useEffect(() => {
@@ -278,42 +273,21 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const isStaleShift = Boolean(backendBday?.isStaleShift || backendBday?.is_stale_shift);
   const nextRolloverAt = backendBday?.nextRolloverAt ? new Date(backendBday.nextRolloverAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '04:00 AM';
 
-  // Handle Close Day
-  const handleConfirmCloseDay = async () => {
+  // Manual trigger for ledger synchronization if network was disconnected
+  const handleManualSync = async () => {
     if (!restId) return;
-    setIsActionLoading(true);
+    setIsSyncing(true);
     try {
-      await api.closeBusinessDay(restId, currentUser?.name || currentUser?.email || 'Owner', {
-        closingNotes,
-        forceCloseActiveTables: forceCloseChecked,
-        forceFinalizeOrders: forceCloseChecked,
-      });
-      addToast('success', 'Business Day Closed 🌅', `Operational day ${currentBusinessDate} safely sealed and archived.`);
-      setIsCloseModalOpen(false);
-      setClosingNotes('');
-      setForceCloseChecked(false);
       await onRefreshData();
       await loadPrecheck();
+      setIsSyncError(false);
+      setLastSynchronized(new Date());
+      addToast('info', 'Synchronized', 'Operational metrics updated from ledger.');
     } catch (err: any) {
-      addToast('error', 'Close Day Error', err?.message || 'Failed to close business day.');
+      setIsSyncError(true);
+      addToast('error', 'Sync Failed', err?.message || 'Failed to reach synchronization service.');
     } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  // Handle Start / Restart Next Day
-  const handleStartNextDay = async () => {
-    if (!restId) return;
-    setIsActionLoading(true);
-    try {
-      const opened = await api.openBusinessDay(restId, currentUser?.name || currentUser?.email || 'Owner', nextBusinessDate);
-      addToast('success', 'Business Day Started ☀️', `Operational day ${opened?.date || nextBusinessDate} is now OPEN.`);
-      await onRefreshData();
-      await loadPrecheck();
-    } catch (err: any) {
-      addToast('error', 'Start Day Error', err?.message || 'Failed to start business day.');
-    } finally {
-      setIsActionLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -346,14 +320,14 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                 Day Management
                 <Badge
-                  variant={isDayOpen ? 'success' : 'warning'}
-                  className="font-mono text-[10px] px-2 py-0.5 ml-2"
+                  variant="success"
+                  className="font-mono text-[10px] px-2.5 py-0.5 ml-2 bg-emerald-950/60 text-emerald-400 border-emerald-800/60"
                 >
-                  {isDayOpen ? 'STATUS: OPEN' : 'STATUS: CLOSED'}
+                  AUTOMATIC LIFECYCLE ACTIVE
                 </Badge>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Authoritative business-day lifecycle control, operational reset, and financial summary auditing.
+                Continuous automated business-day lifecycle, real-time timezone tracking, shift reconciliation, and audit ledger.
               </p>
             </div>
           </div>
@@ -363,83 +337,56 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={async () => {
-              await onRefreshData();
-              await loadPrecheck();
-              addToast('info', 'Refreshed', 'Day operational counters synchronized.');
-            }}
-            className="border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white text-xs px-3 py-2"
-            icon={<RefreshCw className={`w-3.5 h-3.5 ${isPrecheckLoading ? 'animate-spin' : ''}`} />}
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white text-xs px-3.5 py-2 font-mono"
+            icon={<RefreshCw className={`w-3.5 h-3.5 ${isSyncing || isPrecheckLoading ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />}
           >
-            Refresh
+            {isSyncing ? 'Syncing...' : 'Sync Ledger'}
           </Button>
-
-          {isDayOpen ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => setIsCloseModalOpen(true)}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-4 py-2"
-              icon={<RotateCcw className="w-3.5 h-3.5" />}
-            >
-              CLOSE DAY
-            </Button>
-          ) : (
-            <Button
-              variant="brand"
-              size="sm"
-              onClick={handleStartNextDay}
-              disabled={isActionLoading}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-4 py-2"
-              icon={<RotateCcw className="w-3.5 h-3.5" />}
-            >
-              START {nextBusinessDate.toUpperCase()}
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Live Synchronization Status */}
       <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1 -mt-2">
-        <span className="flex items-center gap-1.5 text-emerald-400">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Authoritative Realtime Sync Active
-        </span>
+        {isSyncError ? (
+          <span className="flex items-center gap-1.5 text-amber-400">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            Sync Disconnected / Stale — Check Connection
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Automatic Continuous Sync Active ({tz})
+          </span>
+        )}
         <span>
-          Last Synchronized: {lastSynchronized.toLocaleTimeString()}
+          Last Synchronized: {lastSynchronized ? lastSynchronized.toLocaleTimeString() : 'Pending'}
         </span>
       </div>
 
       {/* Shift Rollover Alert Banner */}
-      {isDayOpen && requiresRollover && (
-        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+      {requiresRollover && (
+        <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/50 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
           <div className="flex items-start sm:items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5 sm:mt-0" />
+            <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
             <div className="space-y-0.5">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-rose-300 text-sm">
-                  Shift Rollover Required — Active Shift Date: {currentBusinessDate}
+                <span className="font-bold text-amber-300 text-sm">
+                  Automatic Rollover Scheduled — Active Shift: {currentBusinessDate}
                 </span>
                 {isStaleShift && (
                   <Badge variant="warning" className="text-[10px] bg-amber-900/60 text-amber-300 border-amber-700/60 font-mono">
-                    Stale Shift: Current Date is {currentLocalDate || 'Today'}
+                    Prior-Day Shift Active ({currentLocalDate || 'Today'})
                   </Badge>
                 )}
               </div>
-              <p className="text-rose-200/90 text-[11px] leading-relaxed">
-                This shift was opened on {currentBusinessDate} and requires rollover. You can either review open orders and close the shift manually, or cleanly synchronize and advance the ledger to {currentLocalDate || nextBusinessDate}.
+              <p className="text-amber-200/90 text-[11px] leading-relaxed">
+                The continuous background service advances the business day automatically at {nextRolloverAt} ({tz}). All orders and payments continue to be attributed accurately to this operational shift.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCloseModalOpen(true)}
-              className="border-rose-800 text-rose-300 hover:bg-rose-900/40 font-bold text-xs px-3.5 py-1.5"
-            >
-              Review & Close Day
-            </Button>
             <Button
               variant="brand"
               size="sm"
@@ -448,7 +395,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-1.5 shadow-sm"
               icon={isActionLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
             >
-              Synchronize to {currentLocalDate || 'Today'}
+              Sync to {currentLocalDate || 'Today'}
             </Button>
           </div>
         </div>
@@ -471,12 +418,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span className="text-2xl sm:text-3xl font-bold font-mono text-white tracking-tight">
                 {currentBusinessDate}
               </span>
-              <Badge variant={isDayOpen ? 'success' : 'outline'} className="text-[10px] font-mono">
-                {isDayOpen ? 'ACTIVE SHIFT' : 'SEALED'}
+              <Badge variant="success" className="text-[10px] font-mono bg-emerald-950/60 text-emerald-400 border-emerald-800/60">
+                ACTIVE OPERATIONAL DAY
               </Badge>
               {isStaleShift && (
-                <Badge variant="warning" className="text-[9px] bg-rose-950/60 text-rose-300 border-rose-800/60 font-mono">
-                  ROLLOVER PENDING
+                <Badge variant="warning" className="text-[9px] bg-amber-950/60 text-amber-300 border-amber-800/60 font-mono">
+                  ROLLOVER SCHEDULED
                 </Badge>
               )}
             </div>
@@ -485,9 +432,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span>{currentLiveTime || 'Syncing live clock...'}</span>
             </div>
             <p className="text-xs text-slate-400 pt-0.5">
-              {isDayOpen
-                ? 'All live POS, KDS, Bar, and Table orders belong to this operational shift.'
-                : 'Operational shift closed. No new customer orders will post to this day.'}
+              All live POS, KDS, Bar, and Table orders continuously belong to this operational shift.
             </p>
           </div>
 
@@ -508,23 +453,21 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <div className="flex justify-between items-center text-slate-300">
                 <span className="text-slate-500">Opened By:</span>
                 <span className="text-slate-200 truncate max-w-[150px]">
-                  {currentBusinessDay?.openedBy || 'Manager'}
+                  {currentBusinessDay?.openedBy || 'System / Auto-Rollover Daemon'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-300">
                 <span className="text-slate-500">Auto-Rollover Cutoff:</span>
                 <span className="text-amber-300 font-semibold">{nextRolloverAt}</span>
               </div>
-              {!isDayOpen && currentBusinessDay?.closedAt && (
-                <div className="flex justify-between items-center text-slate-300 pt-1 border-t border-[#1e232e]">
-                  <span className="text-slate-500 flex items-center gap-1.5">
-                    <Clock className="w-3 h-3 text-amber-400" /> Closed At:
-                  </span>
-                  <span className="font-semibold text-amber-300">
-                    {new Date(currentBusinessDay.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              )}
+              <div className="flex justify-between items-center text-slate-300 pt-1 border-t border-[#1e232e]">
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" /> Service Mode:
+                </span>
+                <span className="text-emerald-400 font-semibold text-[11px]">
+                  Continuous Automatic Rollover
+                </span>
+              </div>
             </div>
           </div>
 
@@ -537,7 +480,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span className="text-xl font-bold font-mono text-emerald-400">
                 {nextBusinessDate}
               </span>
-              {isDayOpen && isStaleShift && (
+              {isStaleShift && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -551,66 +494,10 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               )}
             </div>
             <p className="text-xs text-slate-400">
-              Operational date advances authoritatively across midnight using restaurant timezone ({tz}) and rollover rules.
+              Operational date advances authoritatively across midnight using restaurant timezone ({tz}) and rollover cutoff ({nextRolloverAt}).
             </p>
           </div>
         </div>
-
-        {/* Operational Reset Banner if Closed */}
-        {!isDayOpen && (
-          <div className="p-5 rounded-xl bg-emerald-950/20 border border-emerald-800/30 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Business Day Closed Successfully
-                </h4>
-                <p className="text-xs text-slate-300">
-                  Previous Day <span className="font-mono font-bold text-white">({currentBusinessDate})</span> is sealed.
-                  Live operational tables and station queues have been cleanly reset.
-                </p>
-              </div>
-
-              <Button
-                variant="brand"
-                onClick={handleStartNextDay}
-                disabled={isActionLoading}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-5 py-2.5 shrink-0"
-                icon={<RotateCcw className="w-4 h-4" />}
-              >
-                START {nextBusinessDate.toUpperCase()}
-              </Button>
-            </div>
-
-            {/* Checklist of what reset cleanly */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-emerald-800/30 text-[11px] font-mono text-slate-300">
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> Tables AVAILABLE
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> Sessions CLOSED
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> KDS queue cleared
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> Bar queue cleared
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> Waiter queue reset
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> Orders preserved
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> Bills preserved
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-300">
-                <Check className="w-3.5 h-3.5 text-emerald-400" /> Ledger intact
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Live Operational Counters (8 Cards) */}
         <div className="space-y-3">
@@ -909,16 +796,16 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           )}
         </div>
 
-        {/* Precheck Warnings & Action Banner if Open */}
+        {/* Active Station Operational Notice */}
         {isDayOpen && precheck && !precheck.can_close_safely && (
           <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-800/40 space-y-3">
             <div className="flex items-center justify-between">
               <h5 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
-                Active Shift Pre-Check Notice ({precheck.blocking_reasons?.length || precheck.warnings?.length || 0} active items)
+                Active Shift Station Notice ({precheck.blocking_reasons?.length || precheck.warnings?.length || 0} active items)
               </h5>
               <span className="text-[11px] font-mono text-amber-300/80">
-                Resolve before closing day
+                Live stations requiring attention
               </span>
             </div>
 
@@ -998,7 +885,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         {businessDayHistory.length === 0 ? (
           <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-dashed border-[#1e232e] text-xs text-slate-400 space-y-1">
             <p className="font-semibold text-slate-300">No closed business days in history ledger yet.</p>
-            <p>When you close an operational shift, its verified financial statement will appear here.</p>
+            <p>Historical financial statements will appear here automatically as daily rollovers occur.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -1082,132 +969,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         )}
       </Card>
 
-      {/* Confirmation Modal: Close Business Day */}
-      <Modal
-        isOpen={isCloseModalOpen}
-        onClose={() => setIsCloseModalOpen(false)}
-        title="Close Operational Business Day"
-        maxWidth="md"
-      >
-        <div className="space-y-4 font-sans text-xs">
-          {/* Notice Banner */}
-          <div className="p-4 bg-amber-950/30 border border-amber-800/40 rounded-xl space-y-1.5 text-amber-200">
-            <h4 className="font-bold text-sm flex items-center gap-2 text-amber-300">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-              End of Operational Shift Confirmation
-            </h4>
-            <p className="text-amber-300/80 leading-relaxed">
-              This action closes the business day for <span className="font-bold text-white font-mono">{currentBusinessDate}</span>.
-              All active tables and table sessions will be marked available/closed.
-              Historical financial records, orders, bills, and payments remain permanently preserved.
-            </p>
-          </div>
 
-          {/* Operational Precheck Status */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
-                Operational Precheck Status
-              </span>
-              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                precheck?.can_close_safely
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                  : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-              }`}>
-                {precheck?.can_close_safely ? '✓ All Stations Clear' : `⚠️ ${precheck?.warnings?.length || 0} Open Items`}
-              </span>
-            </div>
-
-            {precheck && !precheck.can_close_safely && (
-              <div className="p-3 bg-[#0e1117] rounded-xl border border-amber-800/30 space-y-2">
-                <p className="text-[11px] text-amber-300/90 font-medium">
-                  The following items are still active in the restaurant:
-                </p>
-                <div className="space-y-1 font-mono text-[11px]">
-                  {precheck.warnings?.map((w: string, i: number) => (
-                    <div key={i} className="text-amber-200/80 flex items-center gap-2">
-                      <span className="w-1 h-1 rounded-full bg-amber-400" />
-                      {w}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="pt-2 border-t border-amber-900/30 flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="forceCloseCheck"
-                    checked={forceCloseChecked}
-                    onChange={(e) => setForceCloseChecked(e.target.checked)}
-                    className="rounded border-amber-700 text-amber-500 focus:ring-amber-500"
-                  />
-                  <label htmlFor="forceCloseCheck" className="text-[11px] text-slate-300 font-medium cursor-pointer">
-                    Force close remaining active tables and open tickets cleanly
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Summary Box */}
-          <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-2 font-mono">
-            <div className="flex justify-between items-center text-slate-400 pb-2 border-b border-[#1e232e]">
-              <span>Business Date:</span>
-              <span className="font-bold text-white">{currentBusinessDate}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-400">
-              <span>Orders Processed:</span>
-              <span className="font-bold text-white">{dayOrders.length}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-400">
-              <span>Food Sales:</span>
-              <span className="text-emerald-400">{formatCurrency(foodSales, theme.currency)}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-400">
-              <span>Bar Sales:</span>
-              <span className="text-purple-400">{formatCurrency(barSales, theme.currency)}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-400 pt-2 border-t border-[#1e232e] text-sm font-bold">
-              <span className="text-white">Total Shift Sales:</span>
-              <span className="text-emerald-400 text-base">{formatCurrency(totalSales, theme.currency)}</span>
-            </div>
-          </div>
-
-          {/* Optional Closing Notes */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">
-              Closing Shift Notes (Optional)
-            </label>
-            <input
-              type="text"
-              value={closingNotes}
-              onChange={(e) => setClosingNotes(e.target.value)}
-              placeholder="e.g. Clean register close, weekend evening shift"
-              className="w-full px-3 py-2 bg-[#0e1117] border border-[#1e232e] rounded-xl text-xs text-white placeholder-slate-600 focus:border-emerald-500 outline-none"
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-[#1e232e]">
-            <Button
-              variant="outline"
-              onClick={() => setIsCloseModalOpen(false)}
-              disabled={isActionLoading}
-              className="border-[#1e232e] text-slate-300 hover:text-white text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmCloseDay}
-              disabled={isActionLoading || (!precheck?.can_close_safely && !forceCloseChecked)}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-4"
-              icon={isActionLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : undefined}
-            >
-              {isActionLoading ? 'Closing Business Day...' : 'CONFIRM & CLOSE BUSINESS DAY'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Historical Day Read-Only Detail Modal */}
       {selectedHistoricalDay && (

@@ -449,14 +449,22 @@ async def _business_day_rollover_daemon():
             from sqlalchemy import select
 
             async with AsyncSession(engine) as session:
+                from sqlalchemy import or_
+                import uuid
                 r_stmt = select(Restaurant).where(
                     Restaurant.deleted_at.is_(None),
-                    Restaurant.business_type.in_(["RESTAURANT", "BAR", "FOOD_TRUCK", "SMALL_CART"])
+                    or_(
+                        Restaurant.business_type.in_(["RESTAURANT", "BAR", "FOOD_TRUCK", "SMALL_CART", "FOOD_CART"]),
+                        Restaurant.business_type.is_(None)
+                    )
                 )
                 r_res = await session.execute(r_stmt)
                 restaurants = r_res.scalars().all()
 
                 for rest in restaurants:
+                    # Skip wedding events or standalone event portal businesses
+                    if getattr(rest, "business_type", None) in ["WEDDINGS", "EVENT_ORGANIZER"]:
+                        continue
                     if not getattr(rest, "auto_rollover_enabled", True):
                         continue
                     try:
@@ -470,6 +478,28 @@ async def _business_day_rollover_daemon():
                             req_rollover, _ = check_shift_requires_rollover(open_bday, rest)
                             if req_rollover:
                                 await perform_business_day_rollover(rest, session, caller_actor="System / Auto-Rollover Daemon")
+                        else:
+                            # Auto-initialize active operational day if none exists
+                            from app.modules.business_day.service import get_operational_business_date
+                            now_utc = datetime.now(timezone.utc)
+                            target_date = get_operational_business_date(now_utc, rest)
+                            chk_stmt = select(BusinessDay).where(
+                                BusinessDay.restaurant_id == rest.id,
+                                BusinessDay.status == "OPEN"
+                            )
+                            chk_res = await session.execute(chk_stmt)
+                            if not chk_res.scalar_one_or_none():
+                                new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
+                                init_bday = BusinessDay(
+                                    id=new_id,
+                                    restaurant_id=rest.id,
+                                    business_date=target_date,
+                                    status="OPEN",
+                                    opened_at=now_utc,
+                                    opened_by="System / Auto-Rollover Daemon",
+                                )
+                                session.add(init_bday)
+                                await session.commit()
                     except Exception as rest_err:
                         print(f"[ROLLOVER DAEMON REST ERROR {rest.id}]:", rest_err)
         except asyncio.CancelledError:

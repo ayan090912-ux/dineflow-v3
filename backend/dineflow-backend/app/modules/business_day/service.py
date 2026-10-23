@@ -451,17 +451,28 @@ async def perform_business_day_rollover(
     )
 
     # 6. Establish the new business date synchronized to restaurant's local operational date
-    next_date = get_operational_business_date(now_utc, rest)
-    new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
-    new_bday = BusinessDay(
-        id=new_id,
-        restaurant_id=rest.id,
-        business_date=next_date,
-        status="OPEN",
-        opened_at=now_utc,
-        opened_by=caller_actor,
-    )
-    db.add(new_bday)
+    # Concurrency guard: check if another worker opened a business day concurrently
+    check_concurrent = select(BusinessDay).where(
+        BusinessDay.restaurant_id == rest.id,
+        BusinessDay.status == "OPEN"
+    ).with_for_update()
+    concurrent_res = await db.execute(check_concurrent)
+    existing_open = concurrent_res.scalar_one_or_none()
+
+    if existing_open:
+        new_bday = existing_open
+    else:
+        next_date = get_operational_business_date(now_utc, rest)
+        new_id = f"bday-{rest.id}-{uuid.uuid4().hex[:10]}"
+        new_bday = BusinessDay(
+            id=new_id,
+            restaurant_id=rest.id,
+            business_date=next_date,
+            status="OPEN",
+            opened_at=now_utc,
+            opened_by=caller_actor,
+        )
+        db.add(new_bday)
 
     await db.commit()
     await db.refresh(current_bday)

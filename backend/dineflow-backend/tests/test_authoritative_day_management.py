@@ -284,3 +284,136 @@ class TestAuthoritativeDayManagement:
             select(func.count(BusinessDay.id)).where(BusinessDay.restaurant_id == rest.id, BusinessDay.status == "OPEN")
         )
         assert open_days_res.scalar() == 1
+
+    async def test_overnight_service_orders_attribution(self, db_session: AsyncSession):
+        """
+        Verify overnight operational date attribution:
+        Time before 04:00 AM cutoff belongs to preceding calendar day.
+        Time at or after 04:00 AM cutoff belongs to the new calendar day.
+        """
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"night-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        # 02:30 AM on 24 Oct in Asia/Kolkata (+05:30) is 23 Oct 21:00 UTC
+        dt_night = datetime(2026, 10, 23, 21, 0, tzinfo=timezone.utc)
+        op_date_night = get_operational_business_date(dt_night, rest)
+        assert op_date_night == "23 Oct 2026"
+
+        # 04:30 AM on 24 Oct in Asia/Kolkata (+05:30) is 23 Oct 23:00 UTC
+        dt_morning = datetime(2026, 10, 23, 23, 0, tzinfo=timezone.utc)
+        op_date_morning = get_operational_business_date(dt_morning, rest)
+        assert op_date_morning == "24 Oct 2026"
+
+    async def test_new_day_accepts_orders_while_prior_day_reconciliation_pending(self, db_session: AsyncSession):
+        """
+        Verify that when a business day rolls over with unbilled/unsettled orders,
+        the prior day is marked requires_reconciliation = True,
+        and the new operational day opens freely and accepts new customer orders.
+        """
+        owner_uid = f"uid_{uuid.uuid4().hex[:6]}"
+        owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
+        rest = await self._create_test_restaurant(db_session, f"recon-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
+
+        # 1. Day 1: 16 Oct with unbilled orders
+        day1 = BusinessDay(
+            id=f"bday-day1-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            business_date="16 Oct 2026",
+            status="OPEN",
+            opened_at=datetime.now(timezone.utc) - timedelta(days=3),
+            opened_by=owner_email,
+        )
+        db_session.add(day1)
+
+        ord_unbilled = Order(
+            id=f"ord-unbilled-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_number="T1",
+            business_day_id=day1.id,
+            status="COMPLETED",
+            kitchen_status="COMPLETED",
+            total_amount=1008.0,
+            items_json=[],
+        )
+        db_session.add(ord_unbilled)
+        await db_session.commit()
+
+        # 2. Rollover occurs
+        rolled, closed_day, new_day = await perform_business_day_rollover(rest, db_session, caller_actor="Auto Daemon")
+        assert rolled is True
+        assert closed_day.id == day1.id
+        assert closed_day.status == "CLOSED"
+        assert closed_day.requires_reconciliation is True
+        assert closed_day.unbilled_orders_amount == 1008.0
+        assert closed_day.total_sales == 0.0
+
+        # 3. New day is OPEN and ready to take orders
+        assert new_day.status == "OPEN"
+        assert new_day.total_orders == 0
+        assert new_day.total_sales == 0.0
+
+        # 4. New order placed today
+        ord_today = Order(
+            id=f"ord-today-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_number="T2",
+            business_day_id=new_day.id,
+            status="DELIVERED",
+            total_amount=500.0,
+            items_json=[],
+        )
+        db_session.add(ord_today)
+        await db_session.commit()
+
+        # 5. Query active ledger
+        metrics_today = await calculate_shift_financial_ledger(rest.id, new_day, db_session)
+        assert metrics_today["total_orders"] == 1
+        assert metrics_today["gross_sales"] == 500.0
+
+        # 6. Verify Day 1 historical record was completely untouched
+        await db_session.refresh(closed_day)
+        assert closed_day.unbilled_orders_amount == 1008.0
+        assert closed_day.gross_sales == 1008.0
+
+    async def test_tenant_isolation_business_days(self, db_session: AsyncSession):
+        """
+        Verify that multiple restaurants maintain completely isolated business day lifecycles.
+        """
+        owner_uid_a = f"uid_a_{uuid.uuid4().hex[:6]}"
+        owner_email_a = f"a_{uuid.uuid4().hex[:6]}@test.com"
+        rest_a = await self._create_test_restaurant(db_session, f"tenant-a-{uuid.uuid4().hex[:6]}", owner_uid_a, owner_email_a)
+
+        owner_uid_b = f"uid_b_{uuid.uuid4().hex[:6]}"
+        owner_email_b = f"b_{uuid.uuid4().hex[:6]}@test.com"
+        rest_b = await self._create_test_restaurant(db_session, f"tenant-b-{uuid.uuid4().hex[:6]}", owner_uid_b, owner_email_b)
+
+        # Open days for both
+        bday_a = BusinessDay(
+            id=f"bday-a-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest_a.id,
+            business_date="20 Oct 2026",
+            status="OPEN",
+            opened_at=datetime.now(timezone.utc) - timedelta(days=2),
+            opened_by=owner_email_a,
+        )
+        bday_b = BusinessDay(
+            id=f"bday-b-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest_b.id,
+            business_date="22 Oct 2026",
+            status="OPEN",
+            opened_at=datetime.now(timezone.utc) - timedelta(days=1),
+            opened_by=owner_email_b,
+        )
+        db_session.add_all([bday_a, bday_b])
+        await db_session.commit()
+
+        # Rollover restaurant A only
+        rolled_a, closed_a, new_a = await perform_business_day_rollover(rest_a, db_session, caller_actor="Worker A")
+        assert rolled_a is True
+        assert closed_a.id == bday_a.id
+
+        # Restaurant B must remain OPEN and untouched
+        await db_session.refresh(bday_b)
+        assert bday_b.status == "OPEN"
+        assert bday_b.business_date == "22 Oct 2026"
