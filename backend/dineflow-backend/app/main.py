@@ -380,6 +380,15 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_webhook_events_json JSON;",
         "CREATE INDEX IF NOT EXISTS ix_bills_gateway_order_id ON bills (gateway_order_id);",
         "CREATE INDEX IF NOT EXISTS ix_bills_gateway_payment_id ON bills (gateway_payment_id);",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS rollover_time VARCHAR(10) DEFAULT '04:00';",
+        "ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS auto_rollover_enabled BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS gross_sales FLOAT DEFAULT 0.0;",
+        "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS net_sales FLOAT DEFAULT 0.0;",
+        "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS service_charge_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS unpaid_bills_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS unbilled_orders_amount FLOAT DEFAULT 0.0;",
+        "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS requires_reconciliation BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS is_auto_rolled BOOLEAN DEFAULT FALSE;",
     ]
     for stmt in schema_patch_statements:
         try:
@@ -425,13 +434,60 @@ async def _background_startup_init():
     except Exception as e:
         print("[STARTUP NOTICE] Database table initialization:", e)
 
+async def _business_day_rollover_daemon():
+    """
+    Continuous background daemon running every 60 seconds.
+    Authoritatively checks business day rollover for all active restaurants in their local timezone.
+    """
+    await asyncio.sleep(8)  # Let startup migrations finish
+    while True:
+        try:
+            from sqlalchemy.ext.asyncio import AsyncSession
+            from app.modules.restaurants.models import Restaurant
+            from app.modules.business_day.service import perform_business_day_rollover, check_shift_requires_rollover
+            from app.modules.business_day.models import BusinessDay
+            from sqlalchemy import select
+
+            async with AsyncSession(engine) as session:
+                r_stmt = select(Restaurant).where(
+                    Restaurant.deleted_at.is_(None),
+                    Restaurant.business_type.in_(["RESTAURANT", "BAR", "FOOD_TRUCK", "SMALL_CART"])
+                )
+                r_res = await session.execute(r_stmt)
+                restaurants = r_res.scalars().all()
+
+                for rest in restaurants:
+                    if not getattr(rest, "auto_rollover_enabled", True):
+                        continue
+                    try:
+                        bday_stmt = select(BusinessDay).where(
+                            BusinessDay.restaurant_id == rest.id,
+                            BusinessDay.status == "OPEN"
+                        ).order_by(BusinessDay.opened_at.desc()).limit(1)
+                        bday_res = await session.execute(bday_stmt)
+                        open_bday = bday_res.scalar_one_or_none()
+                        if open_bday:
+                            req_rollover, _ = check_shift_requires_rollover(open_bday, rest)
+                            if req_rollover:
+                                await perform_business_day_rollover(rest, session, caller_actor="System / Auto-Rollover Daemon")
+                    except Exception as rest_err:
+                        print(f"[ROLLOVER DAEMON REST ERROR {rest.id}]:", rest_err)
+        except asyncio.CancelledError:
+            break
+        except Exception as loop_err:
+            print("[ROLLOVER DAEMON LOOP ERROR]:", loop_err)
+        await asyncio.sleep(60)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Launch startup migration tasks asynchronously in background so uvicorn binds to port immediately
     bg_task = asyncio.create_task(_background_startup_init())
+    rollover_task = asyncio.create_task(_business_day_rollover_daemon())
     yield
     if not bg_task.done():
         bg_task.cancel()
+    if not rollover_task.done():
+        rollover_task.cancel()
 
 
 app = FastAPI(

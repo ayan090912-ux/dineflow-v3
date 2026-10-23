@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Any
-from sqlalchemy import String, Integer, Float, Text, ForeignKey, DateTime, JSON
+from sqlalchemy import String, Integer, Float, Text, ForeignKey, DateTime, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database.connection import Base
 from app.core.database.base_model import TimestampMixin
@@ -29,15 +29,24 @@ class BusinessDay(Base, TimestampMixin):
     cancelled_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     total_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    gross_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    net_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     food_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     bar_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     discount_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    service_charge_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     # Payment Breakdown
     cash_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     card_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     upi_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    # Receivables & Reconciliation
+    unpaid_bills_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    unbilled_orders_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    requires_reconciliation: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_auto_rolled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     closing_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     summary_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)

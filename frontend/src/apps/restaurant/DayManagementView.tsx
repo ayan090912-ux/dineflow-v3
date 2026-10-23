@@ -214,10 +214,53 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const shiftPaidBills = shiftBills.filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID');
   const paidBillsTotal = shiftPaidBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
 
-  // Authoritative totalSales: backend operational revenue first, then shift-filtered paid bills, or 0.00
-  const totalSales = currentBusinessDay?.totalSales !== undefined
-    ? (currentBusinessDay.totalSales || 0)
-    : paidBillsTotal;
+  // Live clock in restaurant timezone
+  const tz = (currentBusinessDay as any)?.restaurantTimezone || currentRestaurant?.timezone || 'Asia/Kolkata';
+  const [currentLiveTime, setCurrentLiveTime] = useState<string>('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      try {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-IN', {
+          timeZone: tz,
+          weekday: 'short',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+        });
+        setCurrentLiveTime(formatter.format(now));
+      } catch {
+        setCurrentLiveTime(new Date().toLocaleTimeString());
+      }
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, [tz]);
+
+  // Authoritative financial ledger numbers
+  const backendBday = currentBusinessDay as any;
+  const settledSales = backendBday?.settledSales ?? backendBday?.totalSales ?? paidBillsTotal;
+  const grossSales = backendBday?.grossSales ?? backendBday?.orderValue ?? dayOrders.reduce((sum, o) => sum + (o.status !== 'CANCELLED' ? (o.totalAmount || 0) : 0), 0);
+  const unbilledOrdersAmount = backendBday?.unbilledOrdersAmount ?? precheck?.unbilled_orders_amount ?? Math.max(0, grossSales - settledSales);
+  const unbilledOrdersCount = backendBday?.unbilledOrdersCount ?? precheck?.unbilled_orders_count ?? 0;
+  const unpaidBillsAmount = backendBday?.unpaidBillsAmount ?? precheck?.unpaid_bills_amount ?? 0;
+  const outstandingReceivables = backendBday?.outstandingReceivables ?? (unbilledOrdersAmount + unpaidBillsAmount);
+  const cashSales = backendBday?.cashSales ?? 0;
+  const cardSales = backendBday?.cardSales ?? 0;
+  const upiSales = backendBday?.upiSales ?? 0;
+  const taxAmount = backendBday?.taxAmount ?? 0;
+  const discountAmount = backendBday?.discountAmount ?? 0;
+  const serviceChargeAmount = backendBday?.serviceChargeAmount ?? 0;
+  const netSales = backendBday?.netSales ?? Math.max(0, grossSales - discountAmount);
+
+  // Authoritative totalSales
+  const totalSales = settledSales;
 
   // Live counters strictly excluding completed/delivered orders
   const activeTablesCount = precheck?.active_tables_count ?? currentBusinessDay?.activeTablesCount ?? tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied).length;
@@ -228,9 +271,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const waiterPendingCount = precheck?.open_waiter_requests_count ?? currentBusinessDay?.waiterPendingCount ?? 0;
 
   // Authoritative Dates
-  const currentBusinessDate = currentBusinessDay?.date || (currentBusinessDay as any)?.business_date || 'Today';
-  const nextBusinessDate = (currentBusinessDay as any)?.nextBusinessDate || (currentBusinessDay as any)?.next_business_date || 'Next Operational Day';
-  const requiresRollover = Boolean(currentBusinessDay?.requiresRollover || (currentBusinessDay as any)?.isStaleShift);
+  const currentBusinessDate = currentBusinessDay?.date || backendBday?.business_date || 'Today';
+  const currentLocalDate = backendBday?.currentLocalDate || backendBday?.current_local_date;
+  const nextBusinessDate = backendBday?.nextBusinessDate || backendBday?.next_business_date || 'Next Operational Day';
+  const requiresRollover = Boolean(currentBusinessDay?.requiresRollover || backendBday?.isStaleShift || backendBday?.requires_rollover);
+  const isStaleShift = Boolean(backendBday?.isStaleShift || backendBday?.is_stale_shift);
+  const nextRolloverAt = backendBday?.nextRolloverAt ? new Date(backendBday.nextRolloverAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '04:00 AM';
 
   // Handle Close Day
   const handleConfirmCloseDay = async () => {
@@ -266,6 +312,22 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
       await loadPrecheck();
     } catch (err: any) {
       addToast('error', 'Start Day Error', err?.message || 'Failed to start business day.');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Handle Stale Shift Recovery / Synchronize & Advance
+  const handleSyncAndAdvance = async () => {
+    if (!restId) return;
+    setIsActionLoading(true);
+    try {
+      const res = await api.syncAndAdvanceBusinessDay(restId);
+      addToast('success', 'Day Synchronized ☀️', `Shift cleanly synchronized and advanced to ${res?.activeDay?.business_date || 'Today'}. Historical ledger archived.`);
+      await onRefreshData();
+      await loadPrecheck();
+    } catch (err: any) {
+      addToast('error', 'Sync Error', err?.message || 'Failed to synchronize business day.');
     } finally {
       setIsActionLoading(false);
     }
@@ -350,26 +412,45 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 
       {/* Shift Rollover Alert Banner */}
       {isDayOpen && requiresRollover && (
-        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-start sm:items-center gap-2.5">
+        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+          <div className="flex items-start sm:items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5 sm:mt-0" />
-            <div>
-              <p className="font-bold text-rose-300">
-                Shift Rollover Pending — Active Shift Date: {currentBusinessDate}
-              </p>
-              <p className="text-rose-200/80 text-[11px]">
-                This operational shift was opened on a prior calendar day. Please complete pre-check reconciliation and close the shift to align operational records with {nextBusinessDate}.
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-rose-300 text-sm">
+                  Shift Rollover Required — Active Shift Date: {currentBusinessDate}
+                </span>
+                {isStaleShift && (
+                  <Badge variant="warning" className="text-[10px] bg-amber-900/60 text-amber-300 border-amber-700/60 font-mono">
+                    Stale Shift: Current Date is {currentLocalDate || 'Today'}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-rose-200/90 text-[11px] leading-relaxed">
+                This shift was opened on {currentBusinessDate} and requires rollover. You can either review open orders and close the shift manually, or cleanly synchronize and advance the ledger to {currentLocalDate || nextBusinessDate}.
               </p>
             </div>
           </div>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => setIsCloseModalOpen(true)}
-            className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-1.5 shrink-0 self-end sm:self-center"
-          >
-            Review & Close Day
-          </Button>
+          <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCloseModalOpen(true)}
+              className="border-rose-800 text-rose-300 hover:bg-rose-900/40 font-bold text-xs px-3.5 py-1.5"
+            >
+              Review & Close Day
+            </Button>
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={handleSyncAndAdvance}
+              disabled={isActionLoading}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-1.5 shadow-sm"
+              icon={isActionLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+            >
+              Synchronize to {currentLocalDate || 'Today'}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -377,19 +458,33 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
       <Card className="bg-[#12151b] border-[#1e232e] p-6 rounded-2xl shadow-sm space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-6 border-b border-[#1e232e]">
           {/* Current Business Date */}
-          <div className="space-y-1">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold block">
-              Current Business Date
-            </span>
-            <div className="flex items-baseline gap-2">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold block">
+                Current Business Date
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">
+                {tz}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-2xl sm:text-3xl font-bold font-mono text-white tracking-tight">
                 {currentBusinessDate}
               </span>
               <Badge variant={isDayOpen ? 'success' : 'outline'} className="text-[10px] font-mono">
-                {isDayOpen ? 'ACTIVE DAY' : 'SEALED'}
+                {isDayOpen ? 'ACTIVE SHIFT' : 'SEALED'}
               </Badge>
+              {isStaleShift && (
+                <Badge variant="warning" className="text-[9px] bg-rose-950/60 text-rose-300 border-rose-800/60 font-mono">
+                  ROLLOVER PENDING
+                </Badge>
+              )}
             </div>
-            <p className="text-xs text-slate-400">
+            <div className="flex items-center gap-2 pt-0.5 text-xs font-mono text-emerald-400">
+              <Clock className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
+              <span>{currentLiveTime || 'Syncing live clock...'}</span>
+            </div>
+            <p className="text-xs text-slate-400 pt-0.5">
               {isDayOpen
                 ? 'All live POS, KDS, Bar, and Table orders belong to this operational shift.'
                 : 'Operational shift closed. No new customer orders will post to this day.'}
@@ -399,9 +494,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           {/* Opened / Closed Metadata */}
           <div className="space-y-2 border-t md:border-t-0 md:border-l border-[#1e232e] md:pl-6 pt-4 md:pt-0">
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold block">
-              Shift Attribution
+              Shift Attribution & Schedule
             </span>
-            <div className="space-y-1 text-xs font-mono">
+            <div className="space-y-1.5 text-xs font-mono">
               <div className="flex justify-between items-center text-slate-300">
                 <span className="text-slate-500 flex items-center gap-1.5">
                   <Clock className="w-3 h-3 text-emerald-400" /> Opened At:
@@ -415,6 +510,10 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 <span className="text-slate-200 truncate max-w-[150px]">
                   {currentBusinessDay?.openedBy || 'Manager'}
                 </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500">Auto-Rollover Cutoff:</span>
+                <span className="text-amber-300 font-semibold">{nextRolloverAt}</span>
               </div>
               {!isDayOpen && currentBusinessDay?.closedAt && (
                 <div className="flex justify-between items-center text-slate-300 pt-1 border-t border-[#1e232e]">
@@ -434,13 +533,25 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold block">
               Next Business Day Cycle
             </span>
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-baseline justify-between gap-2">
               <span className="text-xl font-bold font-mono text-emerald-400">
                 {nextBusinessDate}
               </span>
+              {isDayOpen && isStaleShift && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncAndAdvance}
+                  disabled={isActionLoading}
+                  className="h-6 px-2 text-[10px] border-emerald-700/60 text-emerald-400 hover:bg-emerald-950/40"
+                  icon={isActionLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                >
+                  Advance
+                </Button>
+              )}
             </div>
             <p className="text-xs text-slate-400">
-              System authoritatively advances date, preserving timezone and cross-midnight rules.
+              Operational date advances authoritatively across midnight using restaurant timezone ({tz}) and rollover rules.
             </p>
           </div>
         </div>
@@ -508,35 +619,82 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           </h4>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-            {/* 1. Current Sales */}
+            {/* 1. Collected Revenue (Paid Bills) */}
             <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
-                <span>Current Sales</span>
+                <span>Collected Revenue</span>
                 <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
               </div>
               <p className="text-xl sm:text-2xl font-bold text-emerald-400 tracking-tight">
-                {formatCurrency(totalSales, theme.currency)}
+                {formatCurrency(settledSales, theme.currency)}
               </p>
-              <span className="text-[10px] text-slate-400 block">
-                Food: {formatCurrency(foodSales, theme.currency)} • Bar: {formatCurrency(barSales, theme.currency)}
+              <span className="text-[10px] text-slate-400 block truncate">
+                Cash: {formatCurrency(cashSales, theme.currency)} • Card: {formatCurrency(cardSales, theme.currency)} • UPI: {formatCurrency(upiSales, theme.currency)}
+              </span>
+              <span className="text-[9px] text-slate-500 block">
+                {paidBillsTotal === 0 && grossSales > 0 ? '⚠️ Zero bills settled yet' : 'Realized register receipts'}
               </span>
             </div>
 
-            {/* 2. Current Orders */}
+            {/* 2. Gross Order Demand */}
             <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
-                <span>Current Orders</span>
+                <span>Gross Order Demand</span>
                 <ShoppingBag className="w-3.5 h-3.5 text-sky-400" />
+              </div>
+              <p className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                {formatCurrency(grossSales, theme.currency)}
+              </p>
+              <span className="text-[10px] text-slate-400 block truncate">
+                Food: {formatCurrency(foodSales, theme.currency)} • Bar: {formatCurrency(barSales, theme.currency)}
+              </span>
+              <span className="text-[9px] text-slate-500 block">
+                {dayOrders.length} placed • {completedOrders.length} fulfilled
+              </span>
+            </div>
+
+            {/* 3. Pending Receivables */}
+            <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
+              <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
+                <span>Pending Receivables</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigateTab('billing')}
+                  className="h-5 px-1.5 text-[9px] border-[#1e232e] text-slate-400 hover:text-white"
+                >
+                  Billing
+                </Button>
+              </div>
+              <p className={`text-xl sm:text-2xl font-bold tracking-tight ${outstandingReceivables > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
+                {formatCurrency(outstandingReceivables, theme.currency)}
+              </p>
+              <span className="text-[10px] text-slate-400 block truncate">
+                {unbilledOrdersCount} unbilled ({formatCurrency(unbilledOrdersAmount, theme.currency)}) • {unpaidBillsCount} unpaid ({formatCurrency(unpaidBillsAmount, theme.currency)})
+              </span>
+              <span className="text-[9px] text-slate-500 block">
+                {outstandingReceivables > 0 ? '⚠️ Uncollected shift orders' : 'All orders settled'}
+              </span>
+            </div>
+
+            {/* 4. Current Orders */}
+            <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
+              <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
+                <span>Day Orders</span>
+                <Receipt className="w-3.5 h-3.5 text-purple-400" />
               </div>
               <p className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                 {dayOrders.length}
               </p>
               <span className="text-[10px] text-slate-400 block">
-                {completedOrders.length} Completed • {cancelledOrders.length} Cancelled
+                {completedOrders.length} Delivered • {cancelledOrders.length} Cancelled
+              </span>
+              <span className="text-[9px] text-slate-500 block">
+                {dayOrders.filter(o => !['COMPLETED', 'DELIVERED', 'CANCELLED'].includes(o.status)).length} active in prep
               </span>
             </div>
 
-            {/* 3. Active Tables */}
+            {/* 5. Active Tables */}
             <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
                 <span>Active Tables</span>
@@ -557,7 +715,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               </span>
             </div>
 
-            {/* 4. Open Sessions */}
+            {/* 6. Open Sessions */}
             <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
                 <span>Open Sessions</span>
@@ -571,28 +729,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               </span>
             </div>
 
-            {/* 5. Unpaid Bills */}
-            <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
-                <span>Unpaid Bills</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onNavigateTab('billing')}
-                  className="h-5 px-1.5 text-[9px] border-[#1e232e] text-slate-400 hover:text-white"
-                >
-                  View
-                </Button>
-              </div>
-              <p className={`text-xl sm:text-2xl font-bold tracking-tight ${unpaidBillsCount > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
-                {unpaidBillsCount}
-              </p>
-              <span className="text-[10px] text-slate-400 block">
-                {unpaidBillsCount === 0 ? 'Zero pending checks' : 'Awaiting payment settlement'}
-              </span>
-            </div>
-
-            {/* 6. Kitchen Pending */}
+            {/* 7. Kitchen Pending */}
             <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
                 <span>Kitchen Pending</span>
@@ -613,7 +750,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               </span>
             </div>
 
-            {/* 7. Bar Pending */}
+            {/* 8. Bar Pending */}
             <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
               <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
                 <span>Bar Pending</span>
@@ -633,28 +770,143 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 Beverage queue tickets
               </span>
             </div>
+          </div>
+        </div>
 
-            {/* 8. Waiter Pending */}
-            <div className="p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
-              <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-semibold">
-                <span>Waiter Pending</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onNavigateTab('waiter')}
-                  className="h-5 px-1.5 text-[9px] border-[#1e232e] text-slate-400 hover:text-white"
-                >
-                  OS
-                </Button>
-              </div>
-              <p className={`text-xl sm:text-2xl font-bold tracking-tight ${waiterPendingCount > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
-                {waiterPendingCount}
+        {/* Daily Financial Reconciliation Ledger Panel */}
+        <div className="p-5 rounded-2xl bg-[#0e1117] border border-[#1e232e] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1e232e] pb-3">
+            <div className="space-y-0.5">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-emerald-400" />
+                Daily Financial Reconciliation Ledger
+              </h4>
+              <p className="text-xs text-slate-400">
+                Authoritative double-entry comparison reconciling gross order demand against settled cash flow.
               </p>
-              <span className="text-[10px] text-slate-400 block">
-                Customer call requests
+            </div>
+            <Badge
+              variant={outstandingReceivables > 0 ? 'warning' : 'success'}
+              className="font-mono text-[10px] self-start sm:self-center"
+            >
+              {outstandingReceivables > 0 ? 'RECONCILIATION PENDING' : 'LEDGER BALANCED'}
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
+            {/* Column 1: Order Demand & Value Analysis */}
+            <div className="p-4 bg-[#12151b] rounded-xl border border-[#1e232e] space-y-2">
+              <span className="text-[10px] font-semibold uppercase text-slate-400 block pb-1 border-b border-[#1e232e]">
+                1. Order Demand & Value Analysis
               </span>
+              <div className="flex justify-between items-center text-slate-300">
+                <span>Gross Order Value:</span>
+                <span className="font-bold text-white">{formatCurrency(grossSales, theme.currency)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400 pl-2 text-[11px]">
+                <span>├─ Food Orders:</span>
+                <span className="text-slate-300">{formatCurrency(foodSales, theme.currency)} ({foodOrdersCount})</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400 pl-2 text-[11px]">
+                <span>└─ Beverage / Bar Orders:</span>
+                <span className="text-slate-300">{formatCurrency(barSales, theme.currency)} ({barOrdersCount})</span>
+              </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>Discounts Applied:</span>
+                  <span className="text-rose-400">-{formatCurrency(discountAmount, theme.currency)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-slate-300">
+                <span>Net Sales (Pre-Tax):</span>
+                <span className="font-semibold text-slate-200">{formatCurrency(netSales, theme.currency)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span>Applicable Taxes:</span>
+                <span className="text-slate-300">{formatCurrency(taxAmount, theme.currency)}</span>
+              </div>
+              {serviceChargeAmount > 0 && (
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>Service Charges:</span>
+                  <span className="text-slate-300">{formatCurrency(serviceChargeAmount, theme.currency)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Column 2: Payment Realization & Receivables */}
+            <div className="p-4 bg-[#12151b] rounded-xl border border-[#1e232e] space-y-2">
+              <span className="text-[10px] font-semibold uppercase text-slate-400 block pb-1 border-b border-[#1e232e]">
+                2. Payment Realization & Receivables
+              </span>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="font-bold text-emerald-400">Total Settled Revenue (Paid Bills):</span>
+                <span className="font-bold text-emerald-400 text-sm">{formatCurrency(settledSales, theme.currency)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400 pl-2 text-[11px]">
+                <span>├─ Cash Receipts:</span>
+                <span className="text-slate-300">{formatCurrency(cashSales, theme.currency)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400 pl-2 text-[11px]">
+                <span>├─ UPI / QR Collections:</span>
+                <span className="text-slate-300">{formatCurrency(upiSales, theme.currency)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400 pl-2 text-[11px]">
+                <span>└─ Card Collections:</span>
+                <span className="text-slate-300">{formatCurrency(cardSales, theme.currency)}</span>
+              </div>
+              <div className="pt-1 border-t border-[#1e232e] flex justify-between items-center text-slate-300">
+                <span className={unbilledOrdersAmount > 0 ? 'text-amber-400 font-semibold' : 'text-slate-400'}>
+                  Unbilled Orders ({unbilledOrdersCount} completed):
+                </span>
+                <span className={unbilledOrdersAmount > 0 ? 'text-amber-400 font-bold' : 'text-slate-300'}>
+                  {formatCurrency(unbilledOrdersAmount, theme.currency)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className={unpaidBillsAmount > 0 ? 'text-rose-400 font-semibold' : 'text-slate-400'}>
+                  Unpaid Bills ({unpaidBillsCount} pending):
+                </span>
+                <span className={unpaidBillsAmount > 0 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
+                  {formatCurrency(unpaidBillsAmount, theme.currency)}
+                </span>
+              </div>
+              <div className="pt-1 border-t border-[#1e232e] flex justify-between items-center font-bold">
+                <span className={outstandingReceivables > 0 ? 'text-rose-400' : 'text-emerald-400'}>
+                  Total Outstanding Receivables:
+                </span>
+                <span className={`text-sm ${outstandingReceivables > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {formatCurrency(outstandingReceivables, theme.currency)}
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* Audit Explanation Banner */}
+          {outstandingReceivables > 0 ? (
+            <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-800/30 flex items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-start sm:items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+                <span className="text-amber-200/90 font-mono text-[11px]">
+                  <strong>Ledger Reconciliation Notice:</strong> Collected sales shows {formatCurrency(settledSales, theme.currency)} because exactly {formatCurrency(settledSales, theme.currency)} in bills have been paid. {unbilledOrdersCount > 0 ? `${unbilledOrdersCount} order(s) worth ${formatCurrency(unbilledOrdersAmount, theme.currency)} were completed without a paid bill.` : ''} {unpaidBillsCount > 0 ? `${unpaidBillsCount} bill(s) worth ${formatCurrency(unpaidBillsAmount, theme.currency)} await payment.` : ''}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onNavigateTab('billing')}
+                className="h-6 px-2.5 text-[10px] border-amber-700/60 text-amber-300 hover:bg-amber-900/30 shrink-0"
+              >
+                Go to Billing
+              </Button>
+            </div>
+          ) : (
+            <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-800/30 flex items-center gap-2 text-xs font-mono text-emerald-300 text-[11px]">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                <strong>Audit Reconciled:</strong> All customer order demand is fully billed, collected, and balanced against settled cash and digital receipts.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Precheck Warnings & Action Banner if Open */}
@@ -756,9 +1008,10 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   <th className="pb-3 px-3">Business Date</th>
                   <th className="pb-3 px-3">Status</th>
                   <th className="pb-3 px-3">Orders</th>
-                  <th className="pb-3 px-3">Food Sales</th>
-                  <th className="pb-3 px-3">Bar Sales</th>
-                  <th className="pb-3 px-3">Total Sales</th>
+                  <th className="pb-3 px-3">Food</th>
+                  <th className="pb-3 px-3">Bar</th>
+                  <th className="pb-3 px-3">Settled Sales</th>
+                  <th className="pb-3 px-3">Order Demand</th>
                   <th className="pb-3 px-3">Closed By</th>
                   <th className="pb-3 px-3 text-right">Details</th>
                 </tr>
@@ -769,7 +1022,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   const bOrders = bSummary.totalOrders ?? (b as any).totalOrders ?? (b as any).total_orders ?? 0;
                   const bFoodSales = bSummary.foodSales ?? (b as any).foodSales ?? (b as any).food_sales ?? 0;
                   const bBarSales = bSummary.barSales ?? (b as any).barSales ?? (b as any).bar_sales ?? 0;
-                  const bTotalSales = bSummary.totalSales ?? (b as any).totalSales ?? (b as any).total_sales ?? 0;
+                  const bSettledSales = bSummary.settledSales ?? bSummary.totalSales ?? (b as any).settled_sales ?? (b as any).totalSales ?? (b as any).total_sales ?? 0;
+                  const bGrossSales = bSummary.grossSales ?? bSummary.orderValue ?? (b as any).gross_sales ?? bSettledSales;
+                  const bReqRecon = Boolean(bSummary.requiresReconciliation ?? (b as any).requires_reconciliation);
 
                   return (
                     <tr
@@ -778,7 +1033,14 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                       className="hover:bg-[#141822]/80 transition-colors cursor-pointer group"
                     >
                       <td className="py-3 px-3 font-bold text-white group-hover:text-emerald-400 transition-colors">
-                        {b.date || (b as any).business_date}
+                        <div className="flex items-center gap-1.5">
+                          <span>{b.date || (b as any).business_date}</span>
+                          {bReqRecon && (
+                            <Badge variant="warning" className="text-[9px] py-0 px-1 border-amber-800/60 text-amber-300">
+                              Recon
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-3">
                         <Badge variant="outline" className="text-[10px] border-[#1e232e] text-slate-300">
@@ -789,7 +1051,10 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                       <td className="py-3 px-3 text-emerald-400">{formatCurrency(bFoodSales, theme.currency)}</td>
                       <td className="py-3 px-3 text-purple-400">{formatCurrency(bBarSales, theme.currency)}</td>
                       <td className="py-3 px-3 font-bold text-emerald-400">
-                        {formatCurrency(bTotalSales, theme.currency)}
+                        {formatCurrency(bSettledSales, theme.currency)}
+                      </td>
+                      <td className="py-3 px-3 text-slate-300">
+                        {formatCurrency(bGrossSales, theme.currency)}
                       </td>
                       <td className="py-3 px-3 text-slate-400 truncate max-w-[120px]">
                         {b.closedBy || (b as any).closed_by || 'Owner'}
@@ -1024,38 +1289,54 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               const tOrders = summary.totalOrders ?? (selectedHistoricalDay as any).total_orders ?? 0;
               const fSales = summary.foodSales ?? (selectedHistoricalDay as any).food_sales ?? 0;
               const bSales = summary.barSales ?? (selectedHistoricalDay as any).bar_sales ?? 0;
-              const tSales = summary.totalSales ?? (selectedHistoricalDay as any).total_sales ?? 0;
+              const tSales = summary.settledSales ?? summary.totalSales ?? (selectedHistoricalDay as any).settled_sales ?? (selectedHistoricalDay as any).total_sales ?? 0;
+              const gSales = summary.grossSales ?? summary.orderValue ?? (selectedHistoricalDay as any).gross_sales ?? tSales;
+              const unbilledAmt = summary.unbilledOrdersAmount ?? (selectedHistoricalDay as any).unbilled_orders_amount ?? 0;
+              const unpaidAmt = summary.unpaidBillsAmount ?? (selectedHistoricalDay as any).unpaid_bills_amount ?? 0;
               const cashSales = summary.cashSales ?? (selectedHistoricalDay as any).cash_sales ?? 0;
               const cardSales = summary.cardSales ?? (selectedHistoricalDay as any).card_sales ?? 0;
               const upiSales = summary.upiSales ?? (selectedHistoricalDay as any).upi_sales ?? 0;
               const taxAmt = summary.taxAmount ?? (selectedHistoricalDay as any).tax_amount ?? 0;
               const discountAmt = summary.discountAmount ?? (selectedHistoricalDay as any).discount_amount ?? 0;
-              const aov = summary.averageOrderValue ?? (tOrders > 0 ? tSales / tOrders : 0);
+              const aov = summary.averageOrderValue ?? (tOrders > 0 ? gSales / tOrders : 0);
+              const hasReconNotice = unbilledAmt > 0 || unpaidAmt > 0 || Boolean((selectedHistoricalDay as any).requires_reconciliation || summary.requiresReconciliation);
 
               return (
                 <div className="space-y-3 font-mono">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <div className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e]">
-                      <span className="text-[10px] text-slate-400 uppercase block">Total Sales</span>
+                      <span className="text-[10px] text-slate-400 uppercase block">Settled Revenue</span>
                       <span className="text-base font-bold text-emerald-400 mt-1 block">
                         {formatCurrency(tSales, theme.currency)}
                       </span>
                     </div>
 
                     <div className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e]">
-                      <span className="text-[10px] text-slate-400 uppercase block">Total Orders</span>
+                      <span className="text-[10px] text-slate-400 uppercase block">Gross Demand</span>
                       <span className="text-base font-bold text-white mt-1 block">
-                        {tOrders}
+                        {formatCurrency(gSales, theme.currency)}
                       </span>
                     </div>
 
                     <div className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e]">
-                      <span className="text-[10px] text-slate-400 uppercase block">Avg Order Value</span>
+                      <span className="text-[10px] text-slate-400 uppercase block">Orders / Avg Value</span>
                       <span className="text-base font-bold text-sky-400 mt-1 block">
-                        {formatCurrency(aov, theme.currency)}
+                        {tOrders} • {formatCurrency(aov, theme.currency)}
                       </span>
                     </div>
                   </div>
+
+                  {hasReconNotice && (
+                    <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-xl text-xs space-y-1">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5 text-[11px]">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                        Reconciliation Notice at Shift Close
+                      </span>
+                      <p className="text-amber-200/80 text-[11px]">
+                        This shift was sealed with pending receivables. {unbilledAmt > 0 ? `Unbilled orders: ${formatCurrency(unbilledAmt, theme.currency)}. ` : ''}{unpaidAmt > 0 ? `Unpaid bills: ${formatCurrency(unpaidAmt, theme.currency)}.` : ''} All items remain intact in historical audit records.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Payment Breakdown */}
                   <div className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1.5 text-[11px]">

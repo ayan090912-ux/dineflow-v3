@@ -42,6 +42,8 @@ class Restaurant(Base, TimestampMixin, SoftDeleteMixin):
     status: Mapped[str] = mapped_column(String(20), default="OPEN", nullable=False)
     currency: Mapped[str] = mapped_column(String(20), default="INR (₹)", nullable=False)
     timezone: Mapped[str] = mapped_column(String(100), default="Asia/Kolkata", nullable=False)
+    rollover_time: Mapped[str] = mapped_column(String(10), default="04:00", nullable=False)
+    auto_rollover_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     tax_percentage: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)
     legal_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

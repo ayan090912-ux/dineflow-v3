@@ -43,6 +43,10 @@ class BusinessDayPrecheckResponse(BaseModel):
     order_value_today: float = 0.0
     unpaidBillsAmount: float = 0.0
     unpaid_bills_amount: float = 0.0
+    unbilledOrdersAmount: float = 0.0
+    unbilled_orders_amount: float = 0.0
+    unbilledOrdersCount: int = 0
+    unbilled_orders_count: int = 0
     warnings: List[str] = []
     blocking_reasons: List[Dict[str, Any]] = []
 

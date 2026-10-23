@@ -2736,6 +2736,19 @@ export class RestaurantClient {
     return backendResult || openDay;
   }
 
+  async syncAndAdvanceBusinessDay(restaurantId?: string) {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId);
+    if (!restId) throw new Error('No active restaurant selected');
+
+    const result = await this.base.executeProtectedRequest<any>(
+      `/restaurants/${encodeURIComponent(restId)}/business-day/sync-and-advance`,
+      { method: 'POST' },
+      'OWNER'
+    );
+    this.base.invalidateQueryCache();
+    return result;
+  }
+
   async getBusinessDayHistory(restaurantId?: string): Promise<BusinessDay[]> {
     const restId = this.base.resolveTenantRestaurantId(restaurantId);
     if (!restId) return [];

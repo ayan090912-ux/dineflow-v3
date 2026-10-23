@@ -812,6 +812,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.closeBusinessDay(restaurantId, closedBy, options);
   }
 
+  async syncAndAdvanceBusinessDay(restaurantId?: string) {
+    return this.restaurant.syncAndAdvanceBusinessDay(restaurantId);
+  }
+
   async getBusinessDayHistory(restaurantId?: string): Promise<BusinessDay[]> {
     return this.restaurant.getBusinessDayHistory(restaurantId);
   }
