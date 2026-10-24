@@ -775,7 +775,17 @@ export class RestaurantClient {
   }
 
   async updateRestaurantTheme(restaurantId: string, theme: ThemeConfig) {
-    await delay(100);
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId);
+    if (targetId) {
+      try {
+        const updated = await this.updateRestaurantDetails(targetId, { theme } as any);
+        if (updated && (updated as any).theme) {
+          return (updated as any).theme;
+        }
+      } catch (err) {
+        console.warn('Backend updateRestaurantTheme failed, falling back to local:', err);
+      }
+    }
     const rest = this.base.restaurants.find((r) => r.id === restaurantId);
     if (rest) {
       rest.theme = theme;

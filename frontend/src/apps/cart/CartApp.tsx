@@ -30,12 +30,20 @@ import {
   Layers,
   Edit2,
   Package,
+  Download,
+  Share2,
+  Palette,
+  Eye,
+  Menu as MenuIcon,
+  X as CloseIcon,
 } from 'lucide-react';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
-import { DinelyLogo, Button, QRCodeDisplay } from '../../packages/ui';
+import { DinelyLogo, Button } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../../packages/utils/tenantResolver';
+import { CART_THEMES, resolveCartTheme, CartTheme, CartThemeId } from './cartThemes';
 
 interface CartAppProps {
   business?: Restaurant | null;
@@ -94,6 +102,19 @@ export const CartApp: React.FC<CartAppProps> = ({
   const [newItemCategory, setNewItemCategory] = useState('Snacks');
   const [newItemPrice, setNewItemPrice] = useState(100);
   const [newItemStock, setNewItemStock] = useState(20);
+
+  // Responsive Mobile Navigation Drawer
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  // Active Theme & Customization State for Counter QR & Storefront
+  const [selectedThemeId, setSelectedThemeId] = useState<CartThemeId>('amber_street');
+  const [customAccent, setCustomAccent] = useState<string>('#f59e0b');
+  const [customTagline, setCustomTagline] = useState<string>('Instant QR Pickup • No App Needed');
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
+  const [themeSaveSuccess, setThemeSaveSuccess] = useState<string | null>(null);
+  const [qrCopied, setQrCopied] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const qrCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
 
   const cartId = currentCart?.id || api.getCurrentRestaurantId() || '';
 
@@ -388,6 +409,106 @@ export const CartApp: React.FC<CartAppProps> = ({
   const cartPublicSlug = currentCart?.publicSlug || currentCart?.slug || currentCart?.id || 'street-cart';
   const cartOrderingUrl = `https://${cartPublicSlug}.dinely.food`;
 
+  // Sync Theme from Business Profile
+  useEffect(() => {
+    if (currentCart?.theme) {
+      const resolved = resolveCartTheme(currentCart.theme);
+      setSelectedThemeId(resolved.id);
+      setCustomAccent(currentCart.theme.primaryColor || resolved.primaryColor);
+      if ((currentCart.theme as any).tagline) {
+        setCustomTagline((currentCart.theme as any).tagline);
+      }
+    }
+  }, [currentCart]);
+
+  const activeCartTheme = useMemo(() => {
+    const base = resolveCartTheme(selectedThemeId);
+    return {
+      ...base,
+      primaryColor: customAccent || base.primaryColor,
+      accentColor: customAccent || base.accentColor,
+    };
+  }, [selectedThemeId, customAccent]);
+
+  const handleCopyQrLink = () => {
+    navigator.clipboard?.writeText(cartOrderingUrl);
+    setQrCopied(true);
+    setTimeout(() => setQrCopied(false), 2000);
+  };
+
+  const handleDownloadQrPng = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas) return;
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = 700;
+    exportCanvas.height = 860;
+    const ctx = exportCanvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 700, 860);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(currentCart?.name || 'MAX KART', 350, 75);
+
+    ctx.fillStyle = '#475569';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('SCAN WITH CAMERA TO ORDER TAKEAWAY', 350, 110);
+
+    ctx.drawImage(canvas, 100, 140, 500, 500);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 22px monospace';
+    ctx.fillText(cartOrderingUrl, 350, 690);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '15px sans-serif';
+    ctx.fillText('Powered by Dinely Food Cart OS • No App Needed', 350, 735);
+
+    const link = document.createElement('a');
+    link.download = `${(currentCart?.name || 'max-kart').toLowerCase().replace(/\s+/g, '-')}-counter-qr.png`;
+    link.href = exportCanvas.toDataURL('image/png');
+    link.click();
+  };
+
+  const handleSaveTheme = async () => {
+    if (!cartId) return;
+    try {
+      setIsSavingTheme(true);
+      setThemeSaveSuccess(null);
+      const themeConfig = {
+        restaurantName: currentCart?.name || 'MAX KART',
+        primaryColor: activeCartTheme.primaryColor,
+        secondaryColor: activeCartTheme.accentColor,
+        accentColor: activeCartTheme.accentColor,
+        backgroundColor: activeCartTheme.backgroundColor,
+        textColor: activeCartTheme.textColor,
+        fontFamily: 'sans' as const,
+        borderRadius: 'lg' as const,
+        themeId: selectedThemeId,
+        id: selectedThemeId,
+        tagline: customTagline,
+      };
+
+      await api.updateRestaurantTheme(cartId, themeConfig as any);
+      if (currentCart) {
+        setCurrentCart({
+          ...currentCart,
+          theme: themeConfig as any,
+        });
+      }
+      setThemeSaveSuccess(`Theme "${activeCartTheme.name}" saved! Live customer menu updated.`);
+      setTimeout(() => setThemeSaveSuccess(null), 5000);
+    } catch (err: any) {
+      console.warn('Failed to save cart theme:', err);
+      alert('Failed to save theme: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingTheme(false);
+    }
+  };
+
   const navItems = [
     { id: 'pos' as CartTab, label: 'Quick-Counter POS', icon: ShoppingBag, badge: 'FAST' },
     { id: 'orders' as CartTab, label: 'Live Queue & Coupons', icon: Clock, badge: activeQueueCount > 0 ? `${activeQueueCount}` : undefined },
@@ -400,15 +521,36 @@ export const CartApp: React.FC<CartAppProps> = ({
 
   return (
     <div className="flex h-screen bg-[#07090e] text-slate-100 font-sans overflow-hidden">
+      {/* Mobile Drawer Backdrop */}
+      {isMobileNavOpen && (
+        <div
+          onClick={() => setIsMobileNavOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden"
+        />
+      )}
+
       {/* Small Cart OS Dedicated Sidebar */}
-      <aside className="w-64 bg-[#0b0e14] border-r border-[#1a1f2b] p-4 flex flex-col justify-between shrink-0">
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#0b0e14] border-r border-[#1a1f2b] p-4 flex flex-col justify-between shrink-0 transform transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${
+          isMobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
         <div className="space-y-4">
           {/* Logo & Product OS Tag */}
           <div className="flex items-center justify-between pb-3 border-b border-[#1a1f2b]">
             <DinelyLogo size="sm" />
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded">
-              Food Cart OS
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded">
+                Food Cart OS
+              </span>
+              <button
+                onClick={() => setIsMobileNavOpen(false)}
+                className="lg:hidden p-1 rounded-lg text-slate-400 hover:text-white"
+                aria-label="Close menu"
+              >
+                <CloseIcon className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Return to Central Business Hub Button */}
@@ -450,7 +592,10 @@ export const CartApp: React.FC<CartAppProps> = ({
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setIsMobileNavOpen(false);
+                  }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                     isActive
                       ? 'bg-sky-600 text-white font-bold shadow-md shadow-sky-900/20'
@@ -488,6 +633,33 @@ export const CartApp: React.FC<CartAppProps> = ({
 
       {/* Main Cart Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Mobile Header Bar */}
+        <div className="lg:hidden flex items-center justify-between p-3.5 bg-[#0b0e14] border-b border-[#1a1f2b] sticky top-0 z-30 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setIsMobileNavOpen(true)}
+              className="p-2 rounded-xl bg-[#11151e] border border-[#212737] text-slate-300 hover:text-white cursor-pointer"
+              aria-label="Open Navigation Menu"
+            >
+              <MenuIcon className="w-4 h-4" />
+            </button>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white truncate">{currentCart?.name || 'MAX KART'}</div>
+              <div className="text-[10px] text-sky-400 font-medium">
+                {navItems.find((n) => n.id === activeTab)?.label}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => window.open(cartOrderingUrl, '_blank')}
+            className="px-2.5 py-1 rounded-lg bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[11px] font-semibold flex items-center gap-1"
+          >
+            <QrCode className="w-3 h-3" />
+            <span>Customer QR</span>
+          </button>
+        </div>
+
         {/* Sub-View: Quick-Counter POS */}
         {activeTab === 'pos' && (
           <div className="flex-1 flex flex-col lg:flex-row h-full overflow-hidden">
@@ -1035,105 +1207,423 @@ export const CartApp: React.FC<CartAppProps> = ({
           </div>
         )}
 
-        {/* Sub-View: Single-Scan QR Setup & Counter Display */}
+        {/* Sub-View: Counter QR Code & Mobile Storefront Studio */}
         {activeTab === 'qr' && (
-          <div className="p-8 space-y-6 max-w-4xl mx-auto w-full">
-            <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-                <span>Single-Scan Cart QR Setup</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-bold">
-                  Zero App Required
-                </span>
-              </h1>
-              <p className="text-xs text-slate-400 mt-1">
-                Display this QR code at your cart counter. Customers scan with their phone camera to instantly browse and place orders.
-              </p>
+          <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                  <span>Counter QR Code & Mobile Storefront</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-bold uppercase">
+                    Zero App Required
+                  </span>
+                </h1>
+                <p className="text-xs text-slate-400 mt-1">
+                  Permanent business QR code and real-time customer storefront preview for {currentCart?.name || 'MAX KART'}.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition-all border border-slate-700 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Print Standee</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.open(cartOrderingUrl, '_blank')}
+                  className="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-md transition-all cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Customer URL</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-              {/* Standee Preview Card */}
-              <div className="p-6 rounded-3xl bg-gradient-to-b from-[#10141e] to-[#090c12] border border-[#1f2638] flex flex-col items-center text-center space-y-5 shadow-2xl">
-                <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-                  <Truck className="w-6 h-6" />
+            {/* Error Guard if cart configuration missing */}
+            {(!cartId || !cartPublicSlug) && (
+              <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span>
+                  Business configuration or ordering slug is unavailable. Please check cart tenant credentials.
+                </span>
+              </div>
+            )}
+
+            {/* Main Balanced Grid: Left (QR & Themes) | Right (Phone Mockup Preview) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start w-full">
+              {/* LEFT COLUMN: QR Code Card & Themes (lg:col-span-7 xl:col-span-8) */}
+              <div className="lg:col-span-7 xl:col-span-8 space-y-6 w-full min-w-0">
+                {/* 1. Dedicated Standalone Counter QR Card */}
+                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-b from-[#10141e] to-[#090c12] border border-[#1f2638] shadow-2xl space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1b2234]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
+                        <Truck className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-base font-bold text-white truncate">{currentCart?.name || 'MAX KART'}</h2>
+                        <p className="text-xs text-slate-400">Permanent Counter Standee QR Code</p>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold self-start sm:self-center shrink-0">
+                      ● Active Customer Link
+                    </span>
+                  </div>
+
+                  {/* QR Code and Actions in 2 inner columns */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
+                    {/* QR Code Container Badge */}
+                    <div className="flex flex-col items-center justify-center p-5 bg-white rounded-2xl shadow-xl border border-slate-200 text-center mx-auto sm:mx-0 w-full max-w-[240px]">
+                      <QRCodeSVG
+                        value={cartOrderingUrl}
+                        size={190}
+                        level="H"
+                        marginSize={2}
+                        className="w-full h-auto object-contain"
+                      />
+                      {/* Hidden canvas for high-res PNG export */}
+                      <div className="hidden">
+                        <QRCodeCanvas
+                          ref={qrCanvasRef}
+                          value={cartOrderingUrl}
+                          size={500}
+                          level="H"
+                          marginSize={2}
+                        />
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-900 mt-2 tracking-wide uppercase font-mono">
+                        Scan to Order Takeaway
+                      </p>
+                    </div>
+
+                    {/* QR Details and Buttons */}
+                    <div className="space-y-4 min-w-0">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                          Canonical Ordering URL
+                        </label>
+                        <div className="p-2.5 bg-[#07090e] rounded-xl border border-[#1b2234] flex items-center justify-between gap-2">
+                          <span className="text-xs font-mono text-sky-400 truncate">{cartOrderingUrl}</span>
+                          <button
+                            type="button"
+                            onClick={handleCopyQrLink}
+                            className="p-1.5 rounded-lg bg-[#151a26] hover:bg-[#1f2638] text-slate-300 hover:text-white transition-all shrink-0 cursor-pointer"
+                            title="Copy URL"
+                          >
+                            {qrCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                        {qrCopied && (
+                          <span className="text-[11px] text-emerald-400 font-medium">Copied to clipboard!</span>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={handleDownloadQrPng}
+                          className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all border border-slate-700/60 cursor-pointer"
+                        >
+                          <Download className="w-4 h-4 text-emerald-400" />
+                          <span>Download High-Res QR (PNG)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsPrintModalOpen(true)}
+                          className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all border border-slate-700/60 cursor-pointer"
+                        >
+                          <Printer className="w-4 h-4 text-sky-400" />
+                          <span>Print Counter Standee Sign</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-[#0a0d14] rounded-xl border border-[#171d2b] flex items-center gap-2 text-xs text-slate-400">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>
+                      Pointed permanently to your public customer storefront. Never redirects to POS or requires an app install.
+                    </span>
+                  </div>
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-extrabold text-white">{currentCart?.name || 'Street Food Express Cart'}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Scan to View Menu & Order Takeaway</p>
-                </div>
+                {/* 2. Choose Visual Theme (All 5 Themes) & Customization */}
+                <div className="p-5 sm:p-6 rounded-3xl bg-[#0c0f16] border border-[#1a1f2b] shadow-2xl space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#181d2a]">
+                    <div>
+                      <h2 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wide">
+                        <Palette className="w-4 h-4 text-rose-400" />
+                        <span>Choose Visual Theme</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Choose the visual palette for your customer storefront. Updates in real-time.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 self-start sm:self-center shrink-0">
+                      5 Curated Themes
+                    </span>
+                  </div>
 
-                <div className="p-4 bg-white rounded-2xl shadow-xl">
-                  <QRCodeDisplay
-                    value={cartOrderingUrl}
-                    size={200}
-                    tableNumber="COUNTER"
-                    restaurantName={currentCart?.name || 'Street Food Cart'}
-                    isPickup={true}
-                  />
-                </div>
+                  {/* 5 Themes Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {CART_THEMES.map((theme) => {
+                      const isSelected = selectedThemeId === theme.id;
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedThemeId(theme.id);
+                            setCustomAccent(theme.primaryColor);
+                          }}
+                          className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative overflow-hidden ${
+                            isSelected
+                              ? 'bg-slate-800/90 border-sky-400 ring-2 ring-sky-500/40 shadow-lg'
+                              : 'bg-[#080b10] border-[#181d2a] hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full mb-2">
+                            {/* Color Dot Swatches */}
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="w-4 h-4 rounded-full border border-white/20 shadow-sm"
+                                style={{ backgroundColor: theme.primaryColor }}
+                              />
+                              <span
+                                className="w-4 h-4 rounded-full border border-white/20 shadow-sm"
+                                style={{ backgroundColor: theme.backgroundColor }}
+                              />
+                            </div>
+                            {isSelected && (
+                              <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
 
-                <div className="space-y-1">
-                  <span className="text-[11px] font-mono font-bold text-amber-300 flex items-center justify-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Instant Confirmation Codes on Order</span>
-                  </span>
-                  <p className="text-[10px] text-slate-400">
-                    Direct web ordering • Fast UPI / Cash payments • Live ticket tracking
-                  </p>
+                          <div>
+                            <div className="text-xs font-bold text-white leading-snug">{theme.name}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">{theme.subtitle}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Additional Styling Controls */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-400 mb-1 block">
+                        Primary Accent Color
+                      </label>
+                      <div className="flex items-center gap-2.5 p-2 bg-[#080b10] border border-[#1a1f2b] rounded-xl">
+                        <input
+                          type="color"
+                          value={customAccent}
+                          onChange={(e) => setCustomAccent(e.target.value)}
+                          className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
+                        />
+                        <span className="text-xs font-mono text-slate-200">{customAccent}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-400 mb-1 block">
+                        Storefront Tagline
+                      </label>
+                      <input
+                        type="text"
+                        value={customTagline}
+                        onChange={(e) => setCustomTagline(e.target.value)}
+                        placeholder="e.g. Instant QR Pickup • No App Needed"
+                        className="w-full px-3 py-2 bg-[#080b10] border border-[#1a1f2b] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Save Theme Button */}
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    {themeSaveSuccess && (
+                      <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>{themeSaveSuccess}</span>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSaveTheme}
+                      disabled={isSavingTheme}
+                      className="w-full sm:w-auto ml-auto px-6 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingTheme ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Saving to Cloud...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Save Theme Settings</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Instructions & Actions */}
-              <div className="space-y-5">
-                <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b] space-y-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">Cart Ordering URL</h3>
-                  <div className="p-3 bg-[#07090e] rounded-xl border border-[#171c26] flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-sky-400 truncate">{cartOrderingUrl}</span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard?.writeText(cartOrderingUrl);
-                        alert('Copied ordering URL!');
-                      }}
-                      className="p-1.5 rounded-lg bg-[#161a25] hover:bg-[#202738] text-slate-300 cursor-pointer"
-                      title="Copy URL"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
+              {/* RIGHT COLUMN: Live Mobile Storefront Preview (lg:col-span-5 xl:col-span-4) */}
+              <div className="lg:col-span-5 xl:col-span-4 w-full flex flex-col items-center space-y-3 lg:sticky lg:top-6">
+                <div className="flex items-center justify-between w-full max-w-[340px] px-2 text-xs font-bold text-slate-400">
+                  <span className="flex items-center gap-1.5 text-sky-400">
+                    <Eye className="w-4 h-4" /> Live Mobile Preview
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">Real-time theme rendering</span>
+                </div>
+
+                {/* Smartphone Mockup Frame */}
+                <div className="w-full max-w-[340px] rounded-[44px] bg-[#000000] border-[8px] border-slate-800 shadow-2xl p-2.5 flex flex-col relative overflow-hidden transition-all">
+                  {/* Dynamic Island / Speaker Notch */}
+                  <div className="w-24 h-4 bg-slate-900 rounded-full mx-auto mb-2 flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-slate-800" />
                   </div>
-                  <p className="text-[11px] text-slate-400">
-                    Works on all smartphones without installing an app or registering an account.
-                  </p>
-                </div>
 
-                <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b] space-y-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">How the Single-Scan Flow Works</h3>
-                  <ul className="text-xs text-slate-300 space-y-2">
-                    <li className="flex items-start gap-2">
-                      <span className="text-sky-400 font-bold">1.</span>
-                      <span>Customer scans the QR code at your cart counter with their phone camera.</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-sky-400 font-bold">2.</span>
-                      <span>Your branded menu opens instantly showing prices, real-time stock, and modifiers.</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-sky-400 font-bold">3.</span>
-                      <span>Customer submits order and receives a unique pickup code (e.g. <b>#C-101</b>).</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-sky-400 font-bold">4.</span>
-                      <span>Order pops up on your screen. When ready, enter their code to redeem and complete.</span>
-                    </li>
-                  </ul>
-                </div>
+                  {/* Screen Content */}
+                  <div
+                    className="w-full rounded-[32px] overflow-hidden flex flex-col min-h-[560px] max-h-[620px] transition-colors duration-300 font-sans"
+                    style={{
+                      backgroundColor: activeCartTheme.backgroundColor,
+                      color: activeCartTheme.textColor,
+                    }}
+                  >
+                    {/* Simulated Mobile Header */}
+                    <div className="p-3.5 border-b border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shadow-inner"
+                          style={{
+                            backgroundColor: activeCartTheme.badgeBg,
+                            color: activeCartTheme.accentColor,
+                            borderColor: activeCartTheme.badgeBorder,
+                            borderWidth: 1,
+                          }}
+                        >
+                          <Truck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-extrabold leading-tight text-white">
+                            {currentCart?.name || 'MAX KART'}
+                          </div>
+                          <span
+                            className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded-full inline-block mt-0.5"
+                            style={{
+                              backgroundColor: activeCartTheme.badgeBg,
+                              color: activeCartTheme.badgeText,
+                              borderColor: activeCartTheme.badgeBorder,
+                              borderWidth: 1,
+                            }}
+                          >
+                            Open
+                          </span>
+                        </div>
+                      </div>
 
-                <button
-                  onClick={() => window.open(cartOrderingUrl, '_blank')}
-                  className="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>Preview Customer Mobile Menu</span>
-                </button>
+                      <span className="text-[9px] px-2 py-0.5 rounded bg-white/10 text-slate-300">
+                        Counter QR
+                      </span>
+                    </div>
+
+                    {/* Tagline */}
+                    <div className="px-3.5 pt-2">
+                      <p className="text-[10px] opacity-80 flex items-center gap-1 font-medium">
+                        <Sparkles className="w-3 h-3" style={{ color: activeCartTheme.accentColor }} />
+                        <span className="truncate">{customTagline}</span>
+                      </p>
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div className="px-3.5 py-2.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                      {['All Items', 'Pure Veg', 'Non-Veg'].map((cat, idx) => (
+                        <span
+                          key={cat}
+                          className="text-[10px] px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all"
+                          style={
+                            idx === 0
+                              ? {
+                                  backgroundColor: activeCartTheme.pillActiveBg,
+                                  color: activeCartTheme.pillActiveText,
+                                }
+                              : {
+                                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                  color: '#cbd5e1',
+                                }
+                          }
+                        >
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Real Menu Items List */}
+                    <div className="flex-1 px-3.5 py-1 space-y-2 overflow-y-auto max-h-[340px]">
+                      {menuItems.slice(0, 4).map((it) => (
+                        <div
+                          key={it.id}
+                          className="p-2.5 rounded-2xl border transition-all flex items-center justify-between gap-2"
+                          style={{
+                            backgroundColor: activeCartTheme.surfaceColor,
+                            borderColor: activeCartTheme.cardBorder,
+                          }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold text-white truncate">{it.name}</div>
+                            <div className="text-[10px] opacity-70 mt-0.5 font-mono">
+                              ₹{it.price}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                              style={{
+                                backgroundColor: activeCartTheme.badgeBg,
+                                color: activeCartTheme.badgeText,
+                              }}
+                            >
+                              {typeof it.stockQuantity === 'number' && it.stockQuantity > 0
+                                ? `${it.stockQuantity} left`
+                                : 'In Stock'}
+                            </span>
+                            <span
+                              className="text-[10px] font-bold px-2 py-1 rounded-lg shadow-sm"
+                              style={{
+                                backgroundColor: activeCartTheme.primaryColor,
+                                color: activeCartTheme.pillActiveText,
+                              }}
+                            >
+                              + Add
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Floating Bottom Bar Mockup */}
+                    <div className="p-3 border-t border-white/10 mt-auto">
+                      <div
+                        className={`w-full py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-between shadow-lg ${activeCartTheme.buttonGradient}`}
+                      >
+                        <span>1 Item Selected</span>
+                        <span>View Order • ₹150 →</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1222,6 +1712,98 @@ export const CartApp: React.FC<CartAppProps> = ({
               <div>
                 <label className="text-xs text-slate-400 block mb-1">Product Type</label>
                 <div className="text-xs font-mono text-sky-400">FOOD_CART / SMALL_CART OS (No table reservations required)</div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Modal: Print Counter Standee Sign */}
+        {isPrintModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-[#0f1420] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-6 shadow-2xl relative">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-sky-400" />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Print Counter Sign</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                >
+                  <CloseIcon className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* High-Contrast Print Standee Card Preview */}
+              <div
+                id="print-standee"
+                className="bg-white text-slate-950 p-6 rounded-2xl shadow-xl text-center space-y-3 border-2 border-slate-300 mx-auto max-w-xs"
+              >
+                <div className="space-y-0.5">
+                  <h2 className="text-xl font-black tracking-tight uppercase text-slate-950">
+                    {currentCart?.name || 'MAX KART'}
+                  </h2>
+                  <p className="text-[10px] font-bold text-slate-700 tracking-wider uppercase">
+                    Scan with Phone Camera to Order
+                  </p>
+                </div>
+
+                <div className="p-3 bg-white border-2 border-slate-950 rounded-xl inline-block shadow-sm">
+                  <QRCodeSVG
+                    value={cartOrderingUrl}
+                    size={180}
+                    level="H"
+                    marginSize={2}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs font-mono font-black text-slate-900">{cartOrderingUrl}</div>
+                  <p className="text-[10px] font-medium text-slate-500">
+                    Instant Pickup Coupon on Order • No App Needed
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const printContents = document.getElementById('print-standee')?.outerHTML;
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow && printContents) {
+                      printWindow.document.write(`
+                        <html>
+                          <head>
+                            <title>Counter QR Sign - ${currentCart?.name || 'MAX KART'}</title>
+                            <style>
+                              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #fff; }
+                              #print-standee { border: 2px solid #000; padding: 36px; text-align: center; max-width: 360px; border-radius: 16px; }
+                              h2 { font-size: 24px; margin: 0 0 6px 0; font-weight: 900; }
+                              p { margin: 4px 0; font-size: 12px; color: #334155; }
+                              .url { font-family: monospace; font-size: 14px; font-weight: bold; margin-top: 10px; }
+                            </style>
+                          </head>
+                          <body onload="window.print(); window.close();">
+                            ${printContents}
+                          </body>
+                        </html>
+                      `);
+                      printWindow.document.close();
+                    }
+                  }}
+                  className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Standee Now</span>
+                </button>
               </div>
             </div>
           </div>

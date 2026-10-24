@@ -31,6 +31,7 @@ import { DinelyLogo, Button } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
 
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
+import { resolveCartTheme } from './cartThemes';
 
 interface CartCustomerAppProps {
   business?: Restaurant | null;
@@ -66,6 +67,11 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   // Confirmed Order State
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Active Cart Theme
+  const activeTheme = useMemo(() => {
+    return resolveCartTheme(business?.theme);
+  }, [business?.theme]);
 
   // Load business & menu
   const targetRestId = business?.id || api.getCurrentRestaurantId() || '';
@@ -466,24 +472,49 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   // VIEW: MAIN CUSTOMER MOBILE STOREFRONT
   // -------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased selection:bg-amber-500 selection:text-black pb-28">
+    <div
+      className="min-h-screen text-slate-100 flex flex-col font-sans antialiased pb-28 transition-colors duration-300"
+      style={{ backgroundColor: activeTheme.backgroundColor }}
+    >
       {/* Top Banner / Navigation */}
-      <header className="sticky top-0 z-40 bg-[#07090e]/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
+      <header
+        className="sticky top-0 z-40 backdrop-blur-md border-b px-4 py-3 transition-colors duration-300"
+        style={{
+          backgroundColor: `${activeTheme.backgroundColor}ea`,
+          borderColor: activeTheme.cardBorder,
+        }}
+      >
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/20 font-black">
-              <Truck className="w-5 h-5 text-slate-950" />
+            <div
+              className="w-10 h-10 rounded-2xl flex items-center justify-center font-black shadow-lg"
+              style={{
+                backgroundColor: activeTheme.badgeBg,
+                color: activeTheme.accentColor,
+                borderColor: activeTheme.badgeBorder,
+                borderWidth: 1,
+              }}
+            >
+              <Truck className="w-5 h-5" style={{ color: activeTheme.accentColor }} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-extrabold text-white tracking-tight leading-tight">{cartName}</h1>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold uppercase tracking-wider">
+                <span
+                  className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
+                  style={{
+                    backgroundColor: activeTheme.badgeBg,
+                    color: activeTheme.badgeText,
+                    borderColor: activeTheme.badgeBorder,
+                    borderWidth: 1,
+                  }}
+                >
                   Open
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                <span>Instant QR Pickup • No App Needed</span>
+                <Sparkles className="w-3 h-3" style={{ color: activeTheme.accentColor }} />
+                <span>{((business?.theme as any)?.tagline) || 'Instant QR Pickup • No App Needed'}</span>
               </p>
             </div>
           </div>
@@ -726,7 +757,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           <div className="max-w-md mx-auto pointer-events-auto">
             <button
               onClick={() => setIsCheckoutOpen(true)}
-              className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-extrabold flex items-center justify-between shadow-2xl shadow-amber-500/30 hover:brightness-105 active:scale-[0.99] transition-all"
+              className={`w-full p-3.5 rounded-2xl ${activeTheme.buttonGradient} font-extrabold flex items-center justify-between shadow-2xl hover:brightness-105 active:scale-[0.99] transition-all`}
             >
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center text-xs font-mono font-bold">
@@ -907,7 +938,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting || basket.length === 0}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 disabled:opacity-50 hover:brightness-105 active:scale-[0.99] transition-all"
+                  className={`w-full py-3.5 px-4 rounded-2xl ${activeTheme.buttonGradient} font-black text-sm flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.99] transition-all`}
                 >
                   {isSubmitting ? (
                     <>
