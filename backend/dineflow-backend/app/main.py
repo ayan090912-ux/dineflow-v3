@@ -389,6 +389,13 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS unbilled_orders_amount FLOAT DEFAULT 0.0;",
         "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS requires_reconciliation BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE business_days ADD COLUMN IF NOT EXISTS is_auto_rolled BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_code VARCHAR(50);",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_status VARCHAR(50) DEFAULT 'UNCLAIMED';",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;",
+        "CREATE INDEX IF NOT EXISTS ix_orders_pickup_code ON orders (pickup_code);",
+        "CREATE INDEX IF NOT EXISTS ix_orders_pickup_status ON orders (pickup_status);",
+        "ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS stock_quantity INTEGER;",
+        "ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS track_inventory BOOLEAN DEFAULT FALSE;",
     ]
     for stmt in schema_patch_statements:
         try:

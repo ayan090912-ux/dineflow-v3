@@ -93,11 +93,12 @@ class TestAuthoritativeDayManagement:
         owner_email = f"owner_{uuid.uuid4().hex[:6]}@test.com"
         rest = await self._create_test_restaurant(db_session, f"ledger-{uuid.uuid4().hex[:6]}", owner_uid, owner_email)
 
-        # 1. Initialize business day
+        from app.modules.business_day.service import get_operational_business_date
+        cur_op_date = get_operational_business_date(None, rest)
         bday = BusinessDay(
             id=f"bday-{rest.id}-{uuid.uuid4().hex[:6]}",
             restaurant_id=rest.id,
-            business_date="23 Oct 2026",
+            business_date=cur_op_date,
             status="OPEN",
             opened_at=datetime.now(timezone.utc),
             opened_by=owner_email,

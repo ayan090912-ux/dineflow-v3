@@ -35,6 +35,7 @@ const WeddingLandingPage = lazy(() => import('./apps/wedding/WeddingLandingPage'
 const BusinessHub = lazy(() => import('./apps/hub/BusinessHub').then(m => ({ default: m.BusinessHub })));
 const BarApp = lazy(() => import('./apps/bar/BarApp').then(m => ({ default: m.BarApp })));
 const CartApp = lazy(() => import('./apps/cart/CartApp').then(m => ({ default: m.CartApp })));
+const CartCustomerApp = lazy(() => import('./apps/cart/CartCustomerApp').then(m => ({ default: m.CartCustomerApp })));
 
 function RouteLoadingFallback() {
   return (
@@ -652,6 +653,9 @@ function AppContent() {
         cleanPath.startsWith('/customer/') ||
         cleanPath === '/menu' ||
         cleanPath.startsWith('/menu/') ||
+        cleanPath === '/cart/menu' ||
+        cleanPath.startsWith('/cart/menu/') ||
+        (cleanPath.startsWith('/cart/') && cleanPath.endsWith('/menu')) ||
         cleanPath === '/table' ||
         cleanPath.startsWith('/table/') ||
         cleanPath === '/order' ||
@@ -816,6 +820,20 @@ function AppContent() {
                 </button>
               </div>
             </div>
+          );
+        }
+
+        const isCart = (
+          resolvedTenant.businessType === 'SMALL_CART' ||
+          resolvedTenant.businessType === 'FOOD_CART' ||
+          resolvedTenant.businessType === 'FOOD_TRUCK_STREET_FOOD'
+        );
+        if (isCart) {
+          return (
+            <CartCustomerApp
+              business={resolvedTenant}
+              onNavigateStaff={() => navigateTo('/cart')}
+            />
           );
         }
 
@@ -1771,11 +1789,24 @@ function AppContent() {
       );
     }
 
-    // 7.8. Dedicated Small Cart Operating System (Platform Domain)
+    // 7.7. Dedicated Small Cart Customer Ordering Storefront (e.g. /cart/:id/menu or /cart/menu)
+    if (
+      cleanPath === '/cart/menu' ||
+      cleanPath.startsWith('/cart/menu/') ||
+      (cleanPath.startsWith('/cart/') && cleanPath.endsWith('/menu'))
+    ) {
+      return (
+        <CartCustomerApp
+          business={currentRestaurant}
+          onNavigateStaff={() => navigateTo('/cart')}
+        />
+      );
+    }
+
+    // 7.8. Dedicated Small Cart Operating System (Staff POS & Management)
     if (
       cleanPath.startsWith('/cart/dashboard') ||
       cleanPath.startsWith('/cart/pos') ||
-      cleanPath.startsWith('/cart/menu') ||
       cleanPath.startsWith('/cart/settings') ||
       cleanPath.startsWith('/cart/orders') ||
       cleanPath === '/cart' ||

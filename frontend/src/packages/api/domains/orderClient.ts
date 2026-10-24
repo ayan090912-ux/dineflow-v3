@@ -164,9 +164,17 @@ export class OrderClient {
         })),
       };
 
+      const idempotencyKey = (orderData as any).idempotencyKey || orderData.id || `ord-idem-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      payload.idempotencyKey = idempotencyKey;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      };
+
       const res = await fetch(`${apiBase}/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -175,6 +183,7 @@ export class OrderClient {
         if (data && data.id) {
           const createdOrd: Order = {
             id: data.id,
+            displayOrderNumber: data.order_number || data.orderNumber || data.displayOrderNumber || (data.id ? `#ORD-${String(data.id).slice(-4)}` : '#ORD-1'),
             restaurantId: data.restaurant_id || restId,
             tableId: data.table_id || payload.tableId,
             tableNumber: data.table_number || payload.tableNumber,
@@ -187,6 +196,10 @@ export class OrderClient {
             orderType: data.order_type || data.orderType || payload.orderType,
             eventId: data.event_id || data.eventId || payload.eventId,
             eventName: data.event_name || data.eventName || payload.eventName,
+            pickupCode: data.pickup_code || data.pickupCode || (orderData as any).pickupCode,
+            pickupStatus: data.pickup_status || data.pickupStatus || 'UNCLAIMED',
+            claimedAt: data.claimed_at || data.claimedAt,
+            idempotencyKey: data.idempotency_key || data.idempotencyKey || idempotencyKey,
             items: (data.items || data.items_json || payload.items || []).map((i: any) => ({
               id: i.id || `oi-${data.id}`,
               menuItemId: i.menuItemId || i.menu_item_id || i.id,
@@ -967,5 +980,49 @@ export class OrderClient {
       peakBarHours: '8:00 PM - 11:00 PM',
     };
   }
+
+  async lookupOrderPickupCode(restaurantId: string, code: string): Promise<Order> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId);
+    const cleanCode = (code || '').trim().replace(/^#/, '');
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/orders/lookup-code/${encodeURIComponent(cleanCode)}?restaurantId=${encodeURIComponent(targetId)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Order with code '${code}' not found.`);
+    }
+    const data = await res.json();
+    return normalizeOrder(data);
+  }
+
+  async redeemOrderPickupCode(restaurantId: string, code: string, redeemedBy?: string): Promise<Order> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId);
+    const cleanCode = (code || '').trim().replace(/^#/, '');
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/orders/redeem-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: cleanCode,
+        restaurantId: targetId,
+        redeemedBy: redeemedBy || 'Counter Staff',
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to redeem coupon code '${code}'.`);
+    }
+    const data = await res.json();
+    const normalized = normalizeOrder(data);
+    this.base.orders = this.base.orders.map((o) => (o.id === normalized.id ? normalized : o));
+    this.base.saveDatabase();
+    realtimeBus.emit('OrderUpdated' as any, {
+      orderId: normalized.id,
+      restaurantId: normalized.restaurantId,
+      status: 'COMPLETED',
+      data: normalized,
+    });
+    return normalized;
+  }
 }
+
 

@@ -1,7 +1,7 @@
 import time
 from typing import Optional, List, Any, Dict
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
@@ -37,6 +37,7 @@ class CreateOrderSchema(BaseModel):
     id: Optional[str] = None
     idempotencyKey: Optional[str] = None
     clientOrderId: Optional[str] = None
+    pickupCode: Optional[str] = None
     tableId: Optional[str] = None
     tableNumber: Optional[str] = "Table 01"
     tableSessionId: Optional[str] = None
@@ -48,6 +49,11 @@ class CreateOrderSchema(BaseModel):
     eventName: Optional[str] = None
     ageConfirmed: Optional[bool] = None
     legalDrinkingAgeAffirmed: Optional[bool] = None
+
+class RedeemPickupCodeSchema(BaseModel):
+    code: str
+    restaurantId: Optional[str] = None
+    redeemedBy: Optional[str] = "Counter Staff"
 
 class UpdateOrderStatusSchema(BaseModel):
     status: Optional[str] = None
@@ -201,6 +207,14 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         "deliveryStatus": getattr(order, "delivery_status", None),
         "delivered_at": (order.delivered_at.isoformat() if getattr(order, "delivered_at", None) else None),
         "deliveredAt": (order.delivered_at.isoformat() if getattr(order, "delivered_at", None) else None),
+        "pickup_code": getattr(order, "pickup_code", None),
+        "pickupCode": getattr(order, "pickup_code", None),
+        "pickup_status": getattr(order, "pickup_status", "UNCLAIMED") or "UNCLAIMED",
+        "pickupStatus": getattr(order, "pickup_status", "UNCLAIMED") or "UNCLAIMED",
+        "claimed_at": (order.claimed_at.isoformat() if getattr(order, "claimed_at", None) else None),
+        "claimedAt": (order.claimed_at.isoformat() if getattr(order, "claimed_at", None) else None),
+        "idempotency_key": getattr(order, "idempotency_key", None),
+        "idempotencyKey": getattr(order, "idempotency_key", None),
         "created_at": created_at_val,
         "createdAt": created_at_val,
     }
@@ -258,6 +272,7 @@ _ORDER_DAILY_SEQ: dict = {}
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_order(
     payload: CreateOrderSchema,
+    idempotency_key_header: Optional[str] = Header(None, alias="Idempotency-Key"),
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
@@ -607,23 +622,39 @@ async def create_order(
         order_num = f"#ORD-{daily_seq}"
 
         now_utc = datetime.now(timezone.utc)
-        candidate_order_id = payload.id or payload.idempotencyKey or payload.clientOrderId
-        eff_idempotency_key = payload.idempotencyKey or payload.clientOrderId
+        eff_idempotency_key = (
+            idempotency_key_header
+            or payload.idempotencyKey
+            or payload.clientOrderId
+            or (payload.id if payload.id and not payload.id.startswith("ord-") else None)
+        )
 
-        if candidate_order_id:
+        if eff_idempotency_key:
             res_existing = await db.execute(
                 select(Order).where(
                     Order.restaurant_id == restaurant.id,
-                    (Order.id == candidate_order_id) | (Order.idempotency_key == candidate_order_id)
+                    (Order.id == eff_idempotency_key) | (Order.idempotency_key == eff_idempotency_key)
                 )
             )
             existing_ord = res_existing.scalar_one_or_none()
             if existing_ord:
-                print(f"[ORDER_IDEMPOTENCY_HIT] Returning existing order {existing_ord.id} for key {candidate_order_id}")
+                print(f"[ORDER_IDEMPOTENCY_HIT] Returning existing order {existing_ord.id} for idempotency key {eff_idempotency_key}")
                 return format_order_response(existing_ord, hide_financials=(is_wedding_event and not is_staff_caller))
-            order_id = candidate_order_id
-        else:
-            order_id = f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}"
+
+        if payload.id:
+            res_existing_id = await db.execute(
+                select(Order).where(
+                    Order.restaurant_id == restaurant.id,
+                    Order.id == payload.id
+                )
+            )
+            existing_id_ord = res_existing_id.scalar_one_or_none()
+            if existing_id_ord:
+                print(f"[ORDER_IDEMPOTENCY_HIT] Returning existing order {existing_id_ord.id} for id {payload.id}")
+                return format_order_response(existing_id_ord, hide_financials=(is_wedding_event and not is_staff_caller))
+
+        order_id = payload.id or (f"ord-{restaurant.id}-{eff_idempotency_key}" if eff_idempotency_key else f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}")
+        pickup_code = payload.pickupCode or f"C-{daily_seq:03d}"
 
         # Rapid-tap duplicate guard for event orders
         if payload.eventId and (tbl_id or tbl_num):
@@ -751,6 +782,8 @@ async def create_order(
             event_id=eff_event_id,
             event_name=eff_event_name,
             idempotency_key=eff_idempotency_key,
+            pickup_code=pickup_code,
+            pickup_status="UNCLAIMED",
             created_at=now_utc,
         )
         db.add(new_order)
@@ -810,9 +843,49 @@ async def create_order(
         except Exception as snap_err:
             print("[TAX_SNAPSHOT_NOTICE] Exception writing tax snapshots:", snap_err)
 
+        # Authoritative Inventory & Menu Item Stock Decrement
+        menu_stock_updated = False
+        for it_meta in items_list_dict:
+            qty_ordered = int(it_meta.get("quantity") or 1)
+            mid = it_meta.get("menuItemId") or it_meta.get("id")
+            m_name = (it_meta.get("name") or "").strip()
+
+            # 1. Decrement MenuItem stock if tracked
+            if mid and mid in menu_by_id:
+                m_obj = menu_by_id[mid]
+                if getattr(m_obj, "track_inventory", False) and getattr(m_obj, "stock_quantity", None) is not None:
+                    new_sq = max(0, int(m_obj.stock_quantity) - qty_ordered)
+                    m_obj.stock_quantity = new_sq
+                    if new_sq <= 0:
+                        m_obj.is_available = False
+                    menu_stock_updated = True
+
+            # 2. Decrement corresponding InventoryItemModel if exists
+            try:
+                from app.modules.inventory.models import InventoryItemModel
+                inv_res = await db.execute(
+                    select(InventoryItemModel).where(
+                        InventoryItemModel.restaurant_id == restaurant.id,
+                        func.lower(InventoryItemModel.name) == m_name.lower()
+                    )
+                )
+                inv_rec = inv_res.scalar_one_or_none()
+                if inv_rec:
+                    new_inv_q = max(0.0, float(inv_rec.quantity) - qty_ordered)
+                    inv_rec.quantity = new_inv_q
+                    if new_inv_q <= 0:
+                        inv_rec.status = "OUT_OF_STOCK"
+                    elif new_inv_q <= inv_rec.min_threshold:
+                        inv_rec.status = "LOW_STOCK"
+                    else:
+                        inv_rec.status = "IN_STOCK"
+            except Exception as inv_err:
+                print("[INVENTORY_SYNC_NOTICE] Inventory decrement handled:", inv_err)
+
         await db.commit()
         print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={restaurant.id} total={total}")
-        resp_data = format_order_response(new_order)
+        is_evt_order = bool(new_order.event_id) or (getattr(new_order, "order_type", "") in ["EVENT_ORDER", "WEDDING_EVENT"])
+        resp_data = format_order_response(new_order, hide_financials=is_evt_order)
 
         try:
             from app.modules.websocket.manager import ws_manager
@@ -1526,7 +1599,151 @@ async def update_order_eta(
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE]:", ws_err)
 
+@router.get("/restaurants/{restaurant_id}/orders/lookup-code/{code}")
+@router.get("/lookup-code/{code}")
+async def lookup_order_by_pickup_code(
+    code: str,
+    restaurant_id: Optional[str] = None,
+    restaurantId: Optional[str] = Query(None),
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    target_rest_id = restaurant_id or restaurantId
+    clean_code = (code or "").strip().upper()
+    stripped_code = clean_code.lstrip("#")
+
+    if not clean_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pickup code is required")
+
+    stmt = select(Order).where(
+        or_(
+            func.upper(Order.pickup_code) == clean_code,
+            func.upper(Order.pickup_code) == stripped_code,
+            func.upper(Order.pickup_code) == f"#{stripped_code}",
+            func.upper(Order.pickup_code) == f"C-{stripped_code}",
+            func.upper(Order.order_number) == clean_code,
+            func.upper(Order.order_number) == stripped_code,
+            func.upper(Order.order_number) == f"#{stripped_code}",
+            func.upper(Order.order_number) == f"#ORD-{stripped_code}",
+            Order.id == code.strip()
+        )
+    )
+
+    actual_rid = None
+    if target_rest_id:
+        res_rest = await db.execute(select(Restaurant).where(
+            or_(
+                Restaurant.id == target_rest_id,
+                Restaurant.slug == target_rest_id.lower(),
+                Restaurant.public_slug == target_rest_id.lower()
+            )
+        ))
+        r_obj = res_rest.scalar_one_or_none()
+        actual_rid = r_obj.id if r_obj else target_rest_id
+        stmt = stmt.where(Order.restaurant_id == actual_rid)
+
+    res = await db.execute(stmt.order_by(Order.created_at.desc()))
+    order = res.scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No order found matching code '{code}'")
+
+    if actual_rid and order.restaurant_id != actual_rid:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Pickup code belongs to another business.")
+
+    return format_order_response(order)
+
+
+@router.post("/restaurants/{restaurant_id}/orders/redeem-code")
+@router.post("/redeem-code")
+async def redeem_pickup_code(
+    payload: RedeemPickupCodeSchema,
+    restaurant_id: Optional[str] = None,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    target_rest_id = restaurant_id or payload.restaurantId
+    clean_code = (payload.code or "").strip().upper()
+    stripped_code = clean_code.lstrip("#")
+
+    if not clean_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pickup code is required")
+
+    stmt = select(Order).where(
+        or_(
+            func.upper(Order.pickup_code) == clean_code,
+            func.upper(Order.pickup_code) == stripped_code,
+            func.upper(Order.pickup_code) == f"#{stripped_code}",
+            func.upper(Order.pickup_code) == f"C-{stripped_code}",
+            func.upper(Order.order_number) == clean_code,
+            func.upper(Order.order_number) == stripped_code,
+            func.upper(Order.order_number) == f"#{stripped_code}",
+            func.upper(Order.order_number) == f"#ORD-{stripped_code}",
+            Order.id == payload.code.strip()
+        )
+    )
+
+    actual_rid = None
+    if target_rest_id:
+        res_rest = await db.execute(select(Restaurant).where(
+            or_(
+                Restaurant.id == target_rest_id,
+                Restaurant.slug == target_rest_id.lower(),
+                Restaurant.public_slug == target_rest_id.lower()
+            )
+        ))
+        r_obj = res_rest.scalar_one_or_none()
+        actual_rid = r_obj.id if r_obj else target_rest_id
+        stmt = stmt.where(Order.restaurant_id == actual_rid)
+
+    res = await db.execute(stmt.order_by(Order.created_at.desc()))
+    order = res.scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No order found matching code '{payload.code}'")
+
+    if actual_rid and order.restaurant_id != actual_rid:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot redeem pickup code for another business.")
+
+    if getattr(order, "pickup_status", None) == "REDEEMED":
+        claimed_str = str(order.claimed_at) if order.claimed_at else "earlier"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Pickup coupon '{payload.code}' has already been redeemed on {claimed_str}."
+        )
+
+    now_utc = datetime.now(timezone.utc)
+    order.pickup_status = "REDEEMED"
+    order.claimed_at = now_utc
+    order.claimed_by = payload.redeemedBy or "Counter Staff"
+    order.status = "COMPLETED"
+
+    await db.commit()
+    await db.refresh(order)
+
+    resp_data = format_order_response(order)
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_redeemed",
+            payload={
+                "orderId": order.id,
+                "pickupCode": order.pickup_code,
+                "pickupStatus": "REDEEMED",
+                "claimedAt": now_utc.isoformat(),
+                "claimedBy": order.claimed_by,
+                "status": "COMPLETED",
+                "data": resp_data,
+            },
+            target_audience=["CUSTOMER", "OWNER", "KITCHEN", "WAITER"]
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_REDEEM_NOTICE]:", ws_err)
+
     return resp_data
+
 
 @router.get("/{order_id}")
 async def get_order_by_id(
@@ -1534,7 +1751,15 @@ async def get_order_by_id(
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Order).where(Order.id == order_id)
+    query = select(Order).where(
+        or_(
+            Order.id == order_id,
+            Order.pickup_code == order_id,
+            Order.pickup_code == f"#{order_id}",
+            Order.pickup_code == order_id.upper(),
+            Order.order_number == order_id,
+        )
+    )
     result = await db.execute(query)
     order = result.scalar_one_or_none()
     if not order:

@@ -37,6 +37,9 @@ class Order(Base, TimestampMixin):
     claimed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     delivery_status: Mapped[Optional[str]] = mapped_column(String(50), default="PENDING", nullable=True)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    pickup_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    pickup_status: Mapped[Optional[str]] = mapped_column(String(50), default="UNCLAIMED", nullable=True, index=True)  # UNCLAIMED | REDEEMED
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class OrderItem(Base, TimestampMixin):

@@ -644,6 +644,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       const clientOrderId = `ord-cli-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const newOrd = await api.createOrder({
         id: clientOrderId,
+        idempotencyKey: clientOrderId,
         restaurantId: restId,
         tableId: currentTable?.id,
         tableNumber: isNoTable ? 'COUNTER' : selectedTableNum,
@@ -672,8 +673,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       addToast(
         'success',
-        'Order Transmitted',
-        `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${routedTo || 'Kitchen'}`.trim()
+        newOrd.pickupCode ? `Pickup Code: ${newOrd.pickupCode}` : 'Order Transmitted',
+        newOrd.pickupCode
+          ? `Order confirmed! Show code ${newOrd.pickupCode} at counter.`
+          : `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${routedTo || 'Kitchen'}`.trim()
       );
     } catch (err: any) {
       console.error('Order checkout failed:', err);

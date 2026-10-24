@@ -31,6 +31,10 @@ class CreateMenuItemSchema(BaseModel):
     dietaryType: Optional[str] = None
     prepTimeMinutes: Optional[int] = 15
     preparationTimeMinutes: Optional[int] = None
+    stockQuantity: Optional[int] = None
+    stock_quantity: Optional[int] = None
+    trackInventory: Optional[bool] = None
+    track_inventory: Optional[bool] = None
 
 class UpdateMenuItemSchema(BaseModel):
     name: Optional[str] = None
@@ -48,8 +52,14 @@ class UpdateMenuItemSchema(BaseModel):
     dietaryType: Optional[str] = None
     prepTimeMinutes: Optional[int] = None
     preparationTimeMinutes: Optional[int] = None
+    stockQuantity: Optional[int] = None
+    stock_quantity: Optional[int] = None
+    trackInventory: Optional[bool] = None
+    track_inventory: Optional[bool] = None
 
 def format_menu_item_response(item: MenuItem) -> dict:
+    stock_val = getattr(item, "stock_quantity", None)
+    track_val = bool(getattr(item, "track_inventory", False))
     return {
         "id": item.id,
         "restaurant_id": item.restaurant_id,
@@ -73,6 +83,10 @@ def format_menu_item_response(item: MenuItem) -> dict:
         "isAlcoholic": item.is_alcoholic,
         "preparation_time_minutes": item.preparation_time_minutes,
         "prepTimeMinutes": item.preparation_time_minutes,
+        "stock_quantity": stock_val,
+        "stockQuantity": stock_val,
+        "track_inventory": track_val,
+        "trackInventory": track_val,
     }
 
 from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -318,6 +332,9 @@ async def create_menu_item(
             detail="Menu item price must be greater than zero."
         )
 
+    stock_q = payload.stockQuantity if payload.stockQuantity is not None else payload.stock_quantity
+    track_inv = payload.trackInventory if payload.trackInventory is not None else (payload.track_inventory if payload.track_inventory is not None else (stock_q is not None))
+
     new_item = MenuItem(
         id=item_id,
         restaurant_id=target_rest_id,
@@ -326,12 +343,14 @@ async def create_menu_item(
         description=payload.description or "",
         price=float(payload.price),
         image_url=img,
-        is_available=payload.isAvailable if payload.isAvailable is not None else True,
+        is_available=payload.isAvailable if payload.isAvailable is not None else (stock_q > 0 if stock_q is not None else True),
         is_vegetarian=is_veg,
         dietary_type=diet_type,
         target_destination=dest,
         is_alcoholic=is_alc,
         preparation_time_minutes=prep_time,
+        stock_quantity=stock_q,
+        track_inventory=track_inv,
     )
     db.add(new_item)
     await db.commit()
@@ -427,6 +446,16 @@ async def update_menu_item(
         item.preparation_time_minutes = payload.preparationTimeMinutes
     elif payload.prepTimeMinutes is not None:
         item.preparation_time_minutes = payload.prepTimeMinutes
+    if payload.stockQuantity is not None or payload.stock_quantity is not None:
+        upd_sq = payload.stockQuantity if payload.stockQuantity is not None else payload.stock_quantity
+        item.stock_quantity = upd_sq
+        item.track_inventory = True
+        if upd_sq <= 0 and payload.isAvailable is None:
+            item.is_available = False
+        elif upd_sq > 0 and payload.isAvailable is None:
+            item.is_available = True
+    if payload.trackInventory is not None or payload.track_inventory is not None:
+        item.track_inventory = bool(payload.trackInventory if payload.trackInventory is not None else payload.track_inventory)
 
     await db.commit()
     await db.refresh(item)

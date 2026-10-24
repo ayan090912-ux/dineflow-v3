@@ -1453,6 +1453,8 @@ export class RestaurantClient {
             targetDestination: m.target_destination || m.targetDestination || 'KITCHEN',
             isAlcoholic: m.is_alcoholic || m.isAlcoholic || (m.target_destination === 'BAR'),
             prepTimeMinutes: m.prep_time_minutes || m.prepTimeMinutes || 15,
+            stockQuantity: m.stock_quantity ?? m.stockQuantity ?? undefined,
+            trackInventory: m.track_inventory ?? m.trackInventory ?? undefined,
           }));
         }
       } catch (e) {

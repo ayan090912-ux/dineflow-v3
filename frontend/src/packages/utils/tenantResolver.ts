@@ -146,7 +146,12 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     return 'HUB';
   }
 
-  // 3.2. Small Cart OS
+  // 3.2. Small Cart Customer Menu route (e.g. /cart/:cartId/menu or /cart/menu)
+  if (p === '/cart/menu' || p.startsWith('/cart/menu/') || (p.startsWith('/cart/') && p.endsWith('/menu'))) {
+    return 'CUSTOMER';
+  }
+
+  // 3.2. Small Cart OS Staff Terminal / POS
   if (p === '/cart' || p.startsWith('/cart/')) {
     return 'CART_OS';
   }
@@ -198,6 +203,8 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p === '/select-workspace' ||
     p === '/settings' ||
     p.startsWith('/settings/') ||
+    p === '/pos' ||
+    p.startsWith('/pos/') ||
     p === '/dashboard' ||
     p === '/restaurant' ||
     p.startsWith('/restaurant/') ||

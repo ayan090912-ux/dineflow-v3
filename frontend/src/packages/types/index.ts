@@ -317,6 +317,8 @@ export interface MenuItem {
   image?: string;
   imageUrl?: string;
   isAvailable: boolean;
+  stockQuantity?: number;
+  trackInventory?: boolean;
   isVeg?: boolean;
   isVegetarian?: boolean;
   dietaryType?: 'VEG' | 'NON_VEG';
@@ -919,6 +921,10 @@ export interface Order {
   deliveredAt?: string;
   claimedBy?: string;
   deliveryStatus?: 'PENDING' | 'CLAIMED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+  pickupCode?: string;
+  pickupStatus?: 'UNCLAIMED' | 'REDEEMED' | string;
+  claimedAt?: string;
+  idempotencyKey?: string;
   completedAt?: string;
   prepTimeMinutes?: number;
   deliveryTimeMinutes?: number;

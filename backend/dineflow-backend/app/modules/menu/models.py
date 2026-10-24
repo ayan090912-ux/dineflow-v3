@@ -31,6 +31,8 @@ class MenuItem(Base, TimestampMixin, SoftDeleteMixin):
     target_destination: Mapped[str] = mapped_column(String(20), default="KITCHEN", nullable=False)  # KITCHEN | BAR | HOOKAH
     is_alcoholic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     preparation_time_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    stock_quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    track_inventory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Global Library provenance & enhanced metadata
     catalogue_item_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
