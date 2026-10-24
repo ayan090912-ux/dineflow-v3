@@ -232,7 +232,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   }, [basket]);
 
   const handleAddToBasket = (item: MenuItem) => {
-    if (item.isAvailable === false || (typeof item.stockQuantity === 'number' && item.stockQuantity <= 0)) {
+    if (item.isAvailable === false) {
       return;
     }
     setBasket((prev) => {
@@ -666,8 +666,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             {filteredItems.map((item) => {
               const inBasket = basket.find((b) => b.item.id === item.id);
-              const isOutOfStock = item.isAvailable === false || (typeof item.stockQuantity === 'number' && item.stockQuantity <= 0);
-              const isLowStock = typeof item.stockQuantity === 'number' && item.stockQuantity > 0 && item.stockQuantity <= 5;
+              const isOutOfStock = item.isAvailable === false;
               const hasPhoto = Boolean(item.imageUrl || item.image);
 
               return (
@@ -725,19 +724,15 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                       </span>
                     </div>
 
-                    {/* Stock Status Badge */}
+                    {/* Availability Status Badge */}
                     <div className="absolute top-2.5 right-2.5 z-10">
                       {isOutOfStock ? (
                         <span className="text-[10px] font-bold text-rose-200 bg-rose-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-rose-400/40 shadow-sm">
                           Sold Out
                         </span>
-                      ) : isLowStock ? (
-                        <span className="text-[10px] font-bold text-amber-200 bg-amber-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-amber-400/40 shadow-sm">
-                          Only {item.stockQuantity} left
-                        </span>
                       ) : (
-                        <span className="text-[10px] font-medium text-emerald-200 bg-emerald-600/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-emerald-400/30 shadow-sm">
-                          In Stock
+                        <span className="text-[10px] font-semibold text-emerald-200 bg-emerald-600/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-emerald-400/30 shadow-sm">
+                          Available
                         </span>
                       )}
                     </div>
@@ -759,7 +754,9 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                       </span>
 
                       {isOutOfStock ? (
-                        <span className="text-xs text-slate-500 font-semibold py-1.5 px-3">Unavailable</span>
+                        <span className="text-xs font-bold text-rose-400/90 py-1 px-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                          Sold Out
+                        </span>
                       ) : inBasket ? (
                         <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-xl p-1">
                           <button

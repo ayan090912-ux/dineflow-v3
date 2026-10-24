@@ -41,13 +41,15 @@ import {
   UtensilsCrossed,
   Pencil,
   Trash2,
+  XCircle,
+  CheckCircle,
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
 import { DinelyLogo, Button } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
-import { getRestaurantCustomerUrl, getRestaurantPublicDomain } from '../../packages/utils/tenantResolver';
+import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl } from '../../packages/utils/tenantResolver';
 import { CART_THEMES, resolveCartTheme, CartTheme, CartThemeId } from './cartThemes';
 
 interface CartAppProps {
@@ -64,6 +66,9 @@ interface CartMenuItem {
   category: string;
   price: number;
   isAvailable: boolean;
+  description?: string;
+  imageUrl?: string;
+  image?: string;
   stockQuantity?: number;
   trackInventory?: boolean;
 }
@@ -107,7 +112,7 @@ export const CartApp: React.FC<CartAppProps> = ({
   const [itemFormName, setItemFormName] = useState('');
   const [itemFormCategory, setItemFormCategory] = useState('Snacks');
   const [itemFormPrice, setItemFormPrice] = useState(100);
-  const [itemFormStock, setItemFormStock] = useState(20);
+  const [itemFormIsAvailable, setItemFormIsAvailable] = useState(true);
   const [itemFormDescription, setItemFormDescription] = useState('');
   const [itemFormImageUrl, setItemFormImageUrl] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -156,8 +161,11 @@ export const CartApp: React.FC<CartAppProps> = ({
             name: i.name,
             category: (i as any).category || (i as any).categoryName || i.categoryId || 'Street Food',
             price: i.price,
+            description: i.description || '',
+            imageUrl: i.imageUrl || (i as any).image,
+            image: i.imageUrl || (i as any).image,
             isAvailable: i.isAvailable !== false,
-            stockQuantity: typeof i.stockQuantity === 'number' ? i.stockQuantity : 25,
+            stockQuantity: typeof i.stockQuantity === 'number' ? i.stockQuantity : undefined,
             trackInventory: i.trackInventory !== false,
           }))
         );
@@ -348,7 +356,7 @@ export const CartApp: React.FC<CartAppProps> = ({
     );
 
     try {
-      await api.updateMenuItem(itemId, { isAvailable: nextAvail });
+      await api.updateMenuItem(itemId, { restaurantId: cartId, isAvailable: nextAvail });
     } catch (err) {
       console.warn('Failed to toggle availability:', err);
     }
@@ -359,21 +367,21 @@ export const CartApp: React.FC<CartAppProps> = ({
     setItemFormName('');
     setItemFormCategory('Snacks');
     setItemFormPrice(100);
-    setItemFormStock(20);
+    setItemFormIsAvailable(true);
     setItemFormDescription('');
     setItemFormImageUrl('');
     setImageUploadError(null);
     setIsItemModalOpen(true);
   };
 
-  const openEditItemModal = (item: MenuItem) => {
-    setEditingItem(item);
+  const openEditItemModal = (item: MenuItem | CartMenuItem) => {
+    setEditingItem(item as MenuItem);
     setItemFormName(item.name);
-    setItemFormCategory((item as any).category || (item as any).categoryName || item.categoryId || 'Snacks');
+    setItemFormCategory((item as any).category || (item as any).categoryName || (item as any).categoryId || 'Snacks');
     setItemFormPrice(item.price);
-    setItemFormStock(typeof item.stockQuantity === 'number' ? item.stockQuantity : 20);
+    setItemFormIsAvailable(item.isAvailable !== false);
     setItemFormDescription(item.description || '');
-    setItemFormImageUrl(item.imageUrl || item.image || '');
+    setItemFormImageUrl((item as any).imageUrl || (item as any).image || '');
     setImageUploadError(null);
     setIsItemModalOpen(true);
   };
@@ -422,12 +430,10 @@ export const CartApp: React.FC<CartAppProps> = ({
           name: itemFormName.trim(),
           categoryId: itemFormCategory,
           price: itemFormPrice,
-          stockQuantity: itemFormStock,
-          trackInventory: true,
+          isAvailable: itemFormIsAvailable,
           description: itemFormDescription.trim(),
           imageUrl: itemFormImageUrl,
           image: itemFormImageUrl,
-          isAvailable: itemFormStock > 0,
         });
 
         setMenuItems((prev) =>
@@ -436,11 +442,13 @@ export const CartApp: React.FC<CartAppProps> = ({
               ? {
                   ...it,
                   ...updated,
+                  name: itemFormName.trim(),
                   category: itemFormCategory,
+                  price: itemFormPrice,
                   imageUrl: itemFormImageUrl,
                   image: itemFormImageUrl,
-                  stockQuantity: itemFormStock,
-                  isAvailable: itemFormStock > 0,
+                  isAvailable: itemFormIsAvailable,
+                  description: itemFormDescription.trim(),
                 }
               : it
           )
@@ -451,12 +459,10 @@ export const CartApp: React.FC<CartAppProps> = ({
           name: itemFormName.trim(),
           categoryId: itemFormCategory,
           price: itemFormPrice,
-          stockQuantity: itemFormStock,
-          trackInventory: true,
+          isAvailable: itemFormIsAvailable,
           description: itemFormDescription.trim(),
           imageUrl: itemFormImageUrl || undefined,
           image: itemFormImageUrl || undefined,
-          isAvailable: itemFormStock > 0,
         } as any);
 
         setMenuItems((prev) => [
@@ -466,12 +472,10 @@ export const CartApp: React.FC<CartAppProps> = ({
             name: created.name,
             category: itemFormCategory,
             price: created.price,
-            stockQuantity: itemFormStock,
-            trackInventory: true,
+            isAvailable: itemFormIsAvailable,
             description: itemFormDescription.trim(),
             imageUrl: itemFormImageUrl || undefined,
             image: itemFormImageUrl || undefined,
-            isAvailable: itemFormStock > 0,
           },
         ]);
       }
@@ -508,9 +512,9 @@ export const CartApp: React.FC<CartAppProps> = ({
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   const activeQueueCount = liveOrders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY').length;
 
-  // Single-Scan QR Target URL
-  const cartPublicSlug = currentCart?.publicSlug || currentCart?.slug || currentCart?.id || 'street-cart';
-  const cartOrderingUrl = `https://${cartPublicSlug}.dinely.food`;
+  // Single-Scan QR Canonical URL (dynamic for every cart tenant)
+  const cartPublicSlug = currentCart?.publicSlug || currentCart?.slug || currentCart?.id || '';
+  const cartOrderingUrl = getTenantUrl(currentCart);
 
   // Sync Theme from Business Profile
   useEffect(() => {
@@ -841,7 +845,7 @@ export const CartApp: React.FC<CartAppProps> = ({
               {/* Fast Item Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
                 {menuItems.map((it) => {
-                  const isSoldOut = !it.isAvailable || (it.trackInventory && it.stockQuantity === 0);
+                  const isSoldOut = it.isAvailable === false;
                   return (
                     <button
                       key={it.id}
@@ -856,17 +860,13 @@ export const CartApp: React.FC<CartAppProps> = ({
                       <div>
                         <div className="flex items-center justify-between">
                           <span className="text-[9px] font-mono uppercase text-slate-400">{it.category}</span>
-                          {it.trackInventory && (
-                            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
-                              isSoldOut
-                                ? 'bg-rose-500/20 text-rose-300'
-                                : (it.stockQuantity || 0) <= 5
-                                ? 'bg-amber-500/20 text-amber-300'
-                                : 'bg-slate-800 text-slate-300'
-                            }`}>
-                              {isSoldOut ? 'SOLD OUT' : `${it.stockQuantity} left`}
-                            </span>
-                          )}
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                            isSoldOut
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          }`}>
+                            {isSoldOut ? 'SOLD OUT' : 'AVAILABLE'}
+                          </span>
                         </div>
                         <div className="text-xs font-bold text-white mt-1 leading-snug">{it.name}</div>
                       </div>
@@ -1213,18 +1213,17 @@ export const CartApp: React.FC<CartAppProps> = ({
                         </div>
                       </div>
 
-                      {/* Action buttons: Edit & Availability */}
+                      {/* Action buttons: Status badge & Edit */}
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        <button
-                          onClick={() => handleToggleAvailability(item.id)}
-                          className={`px-2.5 py-1 rounded-full text-[9px] font-mono font-bold cursor-pointer transition-all ${
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
                             item.isAvailable
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                           }`}
                         >
-                          {item.isAvailable ? 'AVAILABLE' : 'OFFLINE'}
-                        </button>
+                          {item.isAvailable ? 'AVAILABLE' : 'SOLD OUT'}
+                        </span>
                         <button
                           onClick={() => openEditItemModal(item)}
                           className="px-2.5 py-1 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-300 hover:text-white border border-[#212737] flex items-center gap-1 text-[10px] font-semibold cursor-pointer transition-all"
@@ -1236,42 +1235,49 @@ export const CartApp: React.FC<CartAppProps> = ({
                       </div>
                     </div>
 
-                    {/* Stock Adjustment Controls */}
-                    <div className="p-3 bg-[#080a0e] rounded-xl border border-[#161a25] flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] text-slate-400 uppercase font-mono">Current Stock</div>
-                        <div className="text-lg font-mono font-bold text-white mt-0.5">
-                          {item.stockQuantity !== undefined ? item.stockQuantity : 'Unlimited'}
+                    {/* 1-Click Availability Control (Replaces manual stock counters) */}
+                    <div className="p-3 bg-[#080a0e] rounded-xl border border-[#161a25] flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            item.isAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
+                          }`}
+                        />
+                        <div>
+                          <div className="text-[10px] text-slate-400 uppercase font-mono font-semibold">Storefront Status</div>
+                          <div className={`text-xs font-mono font-bold ${item.isAvailable ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {item.isAvailable ? 'Available for Customers' : 'Marked as Sold Out'}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => handleStockAdjust(item.id, -1)}
-                          className="w-7 h-7 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer transition-all"
-                          title="Reduce 1"
-                        >
-                          -1
-                        </button>
-                        <button
-                          onClick={() => handleStockAdjust(item.id, 5)}
-                          className="px-2.5 h-7 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer transition-all"
-                          title="Add 5"
-                        >
-                          +5
-                        </button>
-                        <button
-                          onClick={() => handleStockAdjust(item.id, 20)}
-                          className="px-2.5 h-7 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center justify-center font-bold text-xs cursor-pointer transition-all"
-                          title="Restock 20"
-                        >
-                          +20
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleToggleAvailability(item.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                          item.isAvailable
+                            ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30'
+                            : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
+                        }`}
+                        title={item.isAvailable ? 'Mark item Sold Out' : 'Mark item Available'}
+                      >
+                        {item.isAvailable ? (
+                          <>
+                            <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                            <span>Mark Sold Out</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Mark Available</span>
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-[#1a1f2b]">
-                      <span className="text-[10px] text-slate-500">Auto-disables at 0 stock</span>
+                      <span className="text-[10px] text-slate-500">
+                        {item.isAvailable ? 'Visible & orderable on customer QR menu' : 'Customers cannot add this item'}
+                      </span>
                       {photoUrl ? (
                         <span className="text-[10px] text-emerald-400/90 flex items-center gap-1 font-medium">
                           <Check className="w-3 h-3" /> Photo Attached
@@ -1365,16 +1371,40 @@ export const CartApp: React.FC<CartAppProps> = ({
                       />
                     </div>
 
-                    {/* Starting Stock Count */}
+                    {/* Availability Status Selector (Replaces manual stock input) */}
                     <div>
-                      <label className="text-xs font-medium text-slate-400 block mb-1">Stock Count</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={itemFormStock}
-                        onChange={(e) => setItemFormStock(parseInt(e.target.value) || 0)}
-                        className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
-                      />
+                      <label className="text-xs font-medium text-slate-400 block mb-1">Item Availability</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setItemFormIsAvailable(true)}
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                            itemFormIsAvailable
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                              : 'bg-[#141822] text-slate-400 border-[#212737] hover:bg-[#1a202c]'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Available (In Stock)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setItemFormIsAvailable(false)}
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                            !itemFormIsAvailable
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-sm'
+                              : 'bg-[#141822] text-slate-400 border-[#212737] hover:bg-[#1a202c]'
+                          }`}
+                        >
+                          <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Sold Out</span>
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {itemFormIsAvailable
+                          ? 'Item is available for instant mobile ordering by customers.'
+                          : 'Item is marked sold out on the QR menu. Customers cannot order it.'}
+                      </p>
                     </div>
 
                     {/* Dish Photo Upload Control */}
@@ -1883,22 +1913,22 @@ export const CartApp: React.FC<CartAppProps> = ({
                             <span
                               className="text-[9px] font-bold px-1.5 py-0.5 rounded"
                               style={{
-                                backgroundColor: activeCartTheme.badgeBg,
-                                color: activeCartTheme.badgeText,
+                                backgroundColor: it.isAvailable === false ? 'rgba(239, 68, 68, 0.2)' : activeCartTheme.badgeBg,
+                                color: it.isAvailable === false ? '#f87171' : activeCartTheme.badgeText,
                               }}
                             >
-                              {typeof it.stockQuantity === 'number' && it.stockQuantity > 0
-                                ? `${it.stockQuantity} left`
-                                : 'In Stock'}
+                              {it.isAvailable === false ? 'Sold Out' : 'Available'}
                             </span>
                             <span
-                              className="text-[10px] font-bold px-2 py-1 rounded-lg shadow-sm"
+                              className={`text-[10px] font-bold px-2 py-1 rounded-lg shadow-sm ${
+                                it.isAvailable === false ? 'opacity-40 cursor-not-allowed' : ''
+                              }`}
                               style={{
-                                backgroundColor: activeCartTheme.primaryColor,
-                                color: activeCartTheme.pillActiveText,
+                                backgroundColor: it.isAvailable === false ? '#334155' : activeCartTheme.primaryColor,
+                                color: it.isAvailable === false ? '#94a3b8' : activeCartTheme.pillActiveText,
                               }}
                             >
-                              + Add
+                              {it.isAvailable === false ? 'Sold Out' : '+ Add'}
                             </span>
                           </div>
                         </div>
