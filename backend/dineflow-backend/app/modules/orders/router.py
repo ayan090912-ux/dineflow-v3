@@ -31,6 +31,8 @@ class OrderItemInputSchema(BaseModel):
     isAlcoholic: Optional[bool] = False
     category: Optional[str] = None
     categoryId: Optional[str] = None
+    imageUrl: Optional[str] = None
+    image: Optional[str] = None
 
 class CreateOrderSchema(BaseModel):
     restaurantId: str
@@ -57,6 +59,7 @@ class RedeemPickupCodeSchema(BaseModel):
     code: str
     restaurantId: Optional[str] = None
     redeemedBy: Optional[str] = "Counter Staff"
+    force: Optional[bool] = False
 
 class UpdateOrderStatusSchema(BaseModel):
     status: Optional[str] = None
@@ -67,6 +70,8 @@ class UpdateOrderStatusSchema(BaseModel):
     etaTargetTimestamp: Optional[str] = None
     claimedBy: Optional[str] = None
     deliveryStatus: Optional[str] = None
+    paymentStatus: Optional[str] = None
+    paymentMethod: Optional[str] = None
 
 class UpdateOrderETASchema(BaseModel):
     deltaMinutes: Optional[int] = None
@@ -563,6 +568,10 @@ async def create_order(
             d["menuItemId"] = item_mid
             d["name"] = auth_name
             d["price"] = auth_price
+            img_url = (getattr(m_rec, "image_url", None) if m_rec else None) or i.imageUrl or i.image
+            if img_url:
+                d["imageUrl"] = img_url
+                d["image"] = img_url
             eff_station = station if m_rec else resolve_item_station(d)
             d["targetDestination"] = eff_station
             d["target_destination"] = eff_station
@@ -1380,8 +1389,10 @@ async def update_order_status(
             order.status = "COMPLETED"
         elif k_ready and b_ready and h_ready:
             order.status = "READY"
-        elif (has_k_items and order.kitchen_status in ["PREPARING", "ACCEPTED", "READY"]) or (has_b_items and order.bar_status in ["PREPARING", "ACCEPTED", "READY"]) or (has_h_items and order.hookah_status in ["PREPARING", "ACCEPTED", "READY"]):
+        elif (has_k_items and order.kitchen_status in ["PREPARING", "READY"]) or (has_b_items and order.bar_status in ["PREPARING", "READY"]) or (has_h_items and order.hookah_status in ["PREPARING", "READY"]):
             order.status = "PREPARING"
+        elif (has_k_items and order.kitchen_status == "ACCEPTED") or (has_b_items and order.bar_status == "ACCEPTED") or (has_h_items and order.hookah_status == "ACCEPTED") or target_status == "ACCEPTED":
+            order.status = "ACCEPTED"
         elif target_status and target_status not in ["READY", "COMPLETED"]:
             order.status = target_status
 
@@ -1406,8 +1417,13 @@ async def update_order_status(
         except Exception:
             pass
 
+    if payload.paymentStatus:
+        order.payment_status = payload.paymentStatus.upper()
+    if payload.paymentMethod:
+        order.payment_method = payload.paymentMethod.upper()
+
     await db.commit()
-    print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status} bar_status={order.bar_status} hookah_status={order.hookah_status}")
+    print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status} bar_status={order.bar_status} hookah_status={order.hookah_status} payment_status={order.payment_status}")
     await db.refresh(order)
     resp_data = format_order_response(order)
 
@@ -1719,6 +1735,18 @@ async def redeem_pickup_code(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Pickup coupon '{payload.code}' has already been redeemed on {claimed_str}."
+        )
+
+    if order.status == "CANCELLED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order '{payload.code}' was CANCELLED and cannot be redeemed."
+        )
+
+    if order.status in ["PENDING", "ACCEPTED", "PREPARING"] and not payload.force:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order '{payload.code}' is currently {order.status} and not yet Ready for pickup."
         )
 
     now_utc = datetime.now(timezone.utc)

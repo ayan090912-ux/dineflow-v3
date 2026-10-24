@@ -91,11 +91,20 @@ async def test_cart_qr_ordering_pickup_code_and_redemption():
         assert lookup_data["pickupCode"] == pickup_code
         assert lookup_data.get("pickupStatus") == "UNCLAIMED"
 
-        # 4. Redeem pickup coupon
-        redeem_res = await ac.post("/api/v1/orders/redeem-code", json={
+        # 4. Redeem pickup coupon (verifies readiness enforcement and authorized handover)
+        not_ready = await ac.post("/api/v1/orders/redeem-code", json={
             "restaurantId": rest_id,
             "code": pickup_code,
             "redeemedBy": "Counter Cashier 1"
+        })
+        assert not_ready.status_code == 400
+        assert "not yet Ready for pickup" in not_ready.json().get("detail", "")
+
+        redeem_res = await ac.post("/api/v1/orders/redeem-code", json={
+            "restaurantId": rest_id,
+            "code": pickup_code,
+            "redeemedBy": "Counter Cashier 1",
+            "force": True
         })
         assert redeem_res.status_code == 200, redeem_res.text
         redeemed_data = redeem_res.json()

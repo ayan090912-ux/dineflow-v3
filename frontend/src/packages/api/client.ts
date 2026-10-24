@@ -866,8 +866,8 @@ export class DinelyApiClient extends BaseApiClient {
     return this.orderClient.lookupOrderPickupCode(restaurantId, code);
   }
 
-  async redeemOrderPickupCode(restaurantId: string, code: string, redeemedBy?: string): Promise<Order> {
-    return this.orderClient.redeemOrderPickupCode(restaurantId, code, redeemedBy);
+  async redeemOrderPickupCode(restaurantId: string, code: string, redeemedBy?: string, force?: boolean): Promise<Order> {
+    return this.orderClient.redeemOrderPickupCode(restaurantId, code, redeemedBy, force);
   }
 
   async createCustomerOrder(orderData: any) {

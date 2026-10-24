@@ -43,6 +43,12 @@ import {
   Trash2,
   XCircle,
   CheckCircle,
+  BellRing,
+  ChefHat,
+  Volume2,
+  VolumeX,
+  CheckCheck,
+  Filter,
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
@@ -58,7 +64,7 @@ interface CartAppProps {
   onLogout?: () => void;
 }
 
-type CartTab = 'pos' | 'orders' | 'menu' | 'qr' | 'billing' | 'overview' | 'settings';
+type CartTab = 'terminal' | 'pos' | 'orders' | 'menu' | 'qr' | 'billing' | 'overview' | 'settings';
 
 interface CartMenuItem {
   id: string;
@@ -78,10 +84,24 @@ export const CartApp: React.FC<CartAppProps> = ({
   onNavigate,
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState<CartTab>('pos');
+  const [activeTab, setActiveTab] = useState<CartTab>('terminal');
   const [currentCart, setCurrentCart] = useState<Restaurant | null>(business || null);
   const [liveOrders, setLiveOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
+  // Order Receiving Terminal State
+  const [terminalFilter, setTerminalFilter] = useState<'ACTIVE' | 'NEW' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED'>('ACTIVE');
+  const [soundAlertEnabled, setSoundAlertEnabled] = useState(true);
+  const [isLiveConnected, setIsLiveConnected] = useState(true);
+  const [selectedOrderForHandover, setSelectedOrderForHandover] = useState<Order | null>(null);
+  const [handoverInputCode, setHandoverInputCode] = useState('');
+  const [handoverError, setHandoverError] = useState<string | null>(null);
+  const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
+  const [walkInBasket, setWalkInBasket] = useState<Array<{ item: CartMenuItem; quantity: number }>>([]);
+  const [walkInPaymentMode, setWalkInPaymentMode] = useState<'CASH' | 'UPI'>('CASH');
+  const [walkInCustomerNote, setWalkInCustomerNote] = useState('');
+  const [isSubmittingWalkIn, setIsSubmittingWalkIn] = useState(false);
+  const previousOrderCountRef = React.useRef<number>(0);
 
   // Cart Menu & Real-time Stock Items
   const [menuItems, setMenuItems] = useState<CartMenuItem[]>([
@@ -134,6 +154,28 @@ export const CartApp: React.FC<CartAppProps> = ({
 
   const cartId = currentCart?.id || api.getCurrentRestaurantId() || '';
 
+  const playAlertBeep = () => {
+    if (!soundAlertEnabled) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch {
+      // Audio autoplay restrictions catch
+    }
+  };
+
   // 1. Initial Load: Live Orders & Menu from Backend
   const fetchLiveOrders = async () => {
     if (!cartId) return;
@@ -142,9 +184,16 @@ export const CartApp: React.FC<CartAppProps> = ({
       const ords = await api.getOrders(cartId);
       if (Array.isArray(ords)) {
         setLiveOrders(ords);
+        setIsLiveConnected(true);
+        const newCount = ords.filter((o) => o.status === 'PENDING').length;
+        if (newCount > previousOrderCountRef.current && previousOrderCountRef.current > 0) {
+          playAlertBeep();
+        }
+        previousOrderCountRef.current = newCount;
       }
     } catch (err) {
       console.warn('Failed to load cart live orders:', err);
+      setIsLiveConnected(false);
     } finally {
       setIsLoadingOrders(false);
     }
@@ -178,6 +227,11 @@ export const CartApp: React.FC<CartAppProps> = ({
   useEffect(() => {
     fetchLiveOrders();
     fetchMenuItems();
+    // 5-second resilient polling fallback
+    const interval = setInterval(() => {
+      fetchLiveOrders();
+    }, 5000);
+    return () => clearInterval(interval);
   }, [cartId]);
 
   // 2. Real-Time Bus Subscription for Incoming QR Orders and Status Changes
@@ -188,6 +242,7 @@ export const CartApp: React.FC<CartAppProps> = ({
 
       if (!cartId || evtRestId === cartId) {
         if (evt.type === 'OrderCreated' || evt.type === 'order_created') {
+          playAlertBeep();
           fetchLiveOrders();
         } else if (evt.type === 'OrderUpdated' || evt.type === 'order_updated' || evt.type === 'order_redeemed') {
           fetchLiveOrders();
@@ -296,29 +351,168 @@ export const CartApp: React.FC<CartAppProps> = ({
       );
     } catch (err: any) {
       console.error('Failed to update status:', err);
+      alert('Status transition failed: ' + (err?.message || 'Error'));
+    }
+  };
+
+  // Mark Counter Payment
+  const handleMarkPaid = async (orderId: string, method: 'CASH' | 'UPI') => {
+    try {
+      await api.updateOrderStatus(orderId, {
+        paymentStatus: 'PAID',
+        paymentMethod: method,
+      });
+      setLiveOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, paymentStatus: 'PAID' as any, paymentMethod: method as any } : o
+        )
+      );
+      setCheckoutSuccess(`Order payment updated to PAID via ${method}!`);
+      setTimeout(() => setCheckoutSuccess(null), 4000);
+    } catch (err: any) {
+      alert('Failed to update payment: ' + (err?.message || 'Error'));
     }
   };
 
   // Pickup Code Redemption Workflow
-  const handleRedeemCode = async (codeToRedeem: string) => {
+  const handleRedeemCode = async (codeToRedeem: string, force?: boolean) => {
     if (!codeToRedeem.trim()) return;
     try {
       setIsRedeeming(true);
       setRedemptionError(null);
       setRedemptionSuccess(null);
+      setHandoverError(null);
 
-      const redeemed = await api.redeemOrderPickupCode(cartId, codeToRedeem.trim(), 'Cart Cashier');
+      const redeemed = await api.redeemOrderPickupCode(cartId, codeToRedeem.trim(), 'Terminal Staff', force);
       setLiveOrders((prev) =>
         prev.map((o) => (o.id === redeemed.id ? redeemed : o))
       );
       setRedemptionSuccess(`Pickup Coupon ${redeemed.pickupCode || codeToRedeem} Verified & Completed! Hand over food to customer.`);
       setLookupQuery('');
+      setSelectedOrderForHandover(null);
       setTimeout(() => setRedemptionSuccess(null), 5000);
     } catch (err: any) {
-      setRedemptionError(err?.message || `Failed to redeem code '${codeToRedeem}'.`);
+      const errMsg = err?.message || `Failed to redeem code '${codeToRedeem}'.`;
+      setRedemptionError(errMsg);
+      setHandoverError(errMsg);
       setTimeout(() => setRedemptionError(null), 6000);
     } finally {
       setIsRedeeming(false);
+    }
+  };
+
+  const handleLookupAndVerify = (code: string) => {
+    const clean = code.trim().toUpperCase().replace(/^#/, '');
+    if (!clean) return;
+    const found = liveOrders.find((o) => {
+      const pCode = (o.pickupCode || '').toUpperCase().replace(/^#/, '');
+      const ordNum = (o.displayOrderNumber || '').toUpperCase().replace(/^#/, '');
+      const idMatch = o.id.toUpperCase();
+      return pCode === clean || ordNum === clean || idMatch === clean;
+    });
+
+    if (found) {
+      setSelectedOrderForHandover(found);
+      setHandoverInputCode(found.pickupCode || clean);
+      setHandoverError(null);
+    } else {
+      handleRedeemCode(clean);
+    }
+  };
+
+  const formatOrderTime = (isoString?: string) => {
+    if (!isoString) return 'Just now';
+    try {
+      const date = new Date(isoString);
+      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const elapsedMins = Math.floor((Date.now() - date.getTime()) / 60000);
+      if (elapsedMins < 1) return `${timeStr} • Just now`;
+      if (elapsedMins === 1) return `${timeStr} • 1m ago`;
+      return `${timeStr} • ${elapsedMins}m ago`;
+    } catch {
+      return 'Recent';
+    }
+  };
+
+  const getDishThumbnail = (item: any) => {
+    if (item.imageUrl) return item.imageUrl;
+    if (item.image) return item.image;
+    const match = menuItems.find(
+      (m) => m.id === item.menuItemId || m.name.toLowerCase() === (item.name || '').toLowerCase()
+    );
+    return match?.imageUrl || match?.image || null;
+  };
+
+  // Walk-In Counter Order Handlers
+  const handleAddWalkInItem = (item: CartMenuItem) => {
+    if (!item.isAvailable) return;
+    setWalkInBasket((prev) => {
+      const existing = prev.find((i) => i.item.id === item.id);
+      if (existing) {
+        return prev.map((i) =>
+          i.item.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+        );
+      }
+      return [...prev, { item, quantity: 1 }];
+    });
+  };
+
+  const handleUpdateWalkInQuantity = (itemId: string, delta: number) => {
+    setWalkInBasket((prev) =>
+      prev
+        .map((i) => {
+          if (i.item.id === itemId) {
+            const nextQ = i.quantity + delta;
+            return nextQ > 0 ? { ...i, quantity: nextQ } : null;
+          }
+          return i;
+        })
+        .filter(Boolean) as Array<{ item: CartMenuItem; quantity: number }>
+    );
+  };
+
+  const walkInSubtotal = walkInBasket.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
+
+  const handleSubmitWalkInOrder = async () => {
+    if (walkInBasket.length === 0 || isSubmittingWalkIn) return;
+    try {
+      setIsSubmittingWalkIn(true);
+      const clientOrderId = `ord-walkin-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const orderPayload: Partial<Order> = {
+        id: clientOrderId,
+        restaurantId: cartId,
+        tableNumber: 'COUNTER',
+        orderType: 'COUNTER_WALK_IN',
+        customerName: 'Walk-In Customer',
+        notes: walkInCustomerNote.trim() || undefined,
+        paymentStatus: 'PAID',
+        paymentMethod: walkInPaymentMode as any,
+        totalAmount: walkInSubtotal,
+        items: walkInBasket.map((b) => ({
+          id: `oi-${b.item.id}`,
+          menuItemId: b.item.id,
+          name: b.item.name,
+          quantity: b.quantity,
+          price: b.item.price,
+          targetDestination: 'KITCHEN',
+          imageUrl: b.item.imageUrl || b.item.image,
+          image: b.item.imageUrl || b.item.image,
+        })),
+        idempotencyKey: clientOrderId,
+      };
+
+      const created = await api.createOrder(orderPayload);
+      setLiveOrders((prev) => [created, ...prev.filter((o) => o.id !== created.id)]);
+      setWalkInBasket([]);
+      setWalkInCustomerNote('');
+      setIsWalkInModalOpen(false);
+      setCheckoutSuccess(`Walk-In Order ${created.pickupCode || created.displayOrderNumber || '#' + created.id} created!`);
+      setTimeout(() => setCheckoutSuccess(null), 4000);
+    } catch (err: any) {
+      console.error('Walk-in order creation failed:', err);
+      alert(err?.message || 'Failed to submit walk-in order.');
+    } finally {
+      setIsSubmittingWalkIn(false);
     }
   };
 
@@ -510,7 +704,6 @@ export const CartApp: React.FC<CartAppProps> = ({
   const cashSales = liveOrders
     .filter((o) => o.status !== 'CANCELLED' && (o.paymentMethod === 'CASH' || !o.paymentMethod))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const activeQueueCount = liveOrders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY').length;
 
   // Single-Scan QR Canonical URL (dynamic for every cart tenant)
   const cartPublicSlug = currentCart?.publicSlug || currentCart?.slug || currentCart?.id || '';
@@ -616,9 +809,45 @@ export const CartApp: React.FC<CartAppProps> = ({
     }
   };
 
+  const newOrdersCount = liveOrders.filter((o) => o.status === 'PENDING').length;
+  const preparingOrdersCount = liveOrders.filter((o) => o.status === 'ACCEPTED' || o.status === 'PREPARING').length;
+  const readyOrdersCount = liveOrders.filter((o) => o.status === 'READY' && o.pickupStatus !== 'REDEEMED' && o.status !== 'COMPLETED').length;
+  const completedOrdersCount = liveOrders.filter((o) => o.status === 'COMPLETED' || o.pickupStatus === 'REDEEMED').length;
+  const cancelledOrdersCount = liveOrders.filter((o) => o.status === 'CANCELLED').length;
+  const activeQueueCount = newOrdersCount + preparingOrdersCount + readyOrdersCount;
+
+  const displayedTerminalOrders = useMemo(() => {
+    return liveOrders.filter((ord) => {
+      const isRedeemed = ord.pickupStatus === 'REDEEMED' || ord.status === 'COMPLETED';
+      const isCancelled = ord.status === 'CANCELLED';
+      if (terminalFilter === 'NEW') return ord.status === 'PENDING';
+      if (terminalFilter === 'PREPARING') return ord.status === 'ACCEPTED' || ord.status === 'PREPARING';
+      if (terminalFilter === 'READY') return ord.status === 'READY' && !isRedeemed;
+      if (terminalFilter === 'COMPLETED') return isRedeemed;
+      if (terminalFilter === 'CANCELLED') return isCancelled;
+      return !isRedeemed && !isCancelled;
+    }).sort((a, b) => {
+      const statusWeight: Record<string, number> = {
+        READY: 3,
+        PREPARING: 2,
+        ACCEPTED: 2,
+        PENDING: 1,
+        COMPLETED: 0,
+        CANCELLED: -1,
+      };
+      const diff = (statusWeight[b.status] || 0) - (statusWeight[a.status] || 0);
+      if (diff !== 0) return diff;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+  }, [liveOrders, terminalFilter]);
+
   const navItems = [
-    { id: 'pos' as CartTab, label: 'Quick-Counter POS', icon: ShoppingBag, badge: 'FAST' },
-    { id: 'orders' as CartTab, label: 'Live Queue & Coupons', icon: Clock, badge: activeQueueCount > 0 ? `${activeQueueCount}` : undefined },
+    {
+      id: 'terminal' as CartTab,
+      label: 'Order Receiving Terminal',
+      icon: BellRing,
+      badge: newOrdersCount > 0 ? `${newOrdersCount} NEW` : (activeQueueCount > 0 ? `${activeQueueCount}` : undefined),
+    },
     { id: 'menu' as CartTab, label: 'Menu & Stock Sync', icon: Package },
     { id: 'qr' as CartTab, label: 'Counter QR Code', icon: QrCode, badge: 'SCAN' },
     { id: 'billing' as CartTab, label: 'Daily Settlement', icon: Receipt },
@@ -767,376 +996,691 @@ export const CartApp: React.FC<CartAppProps> = ({
           </button>
         </div>
 
-        {/* Sub-View: Quick-Counter POS */}
-        {activeTab === 'pos' && (
-          <div className="flex-1 flex flex-col lg:flex-row h-full overflow-hidden">
-            {/* Left: Quick Tap Menu Grid */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <span>Quick-Counter POS</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      High-Velocity Mode
-                    </span>
-                  </h1>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Tap any item to add. Stock decrements automatically upon order dispatch.
-                  </p>
-                </div>
-
-                {/* Counter Pickup Code Fast Redemption Mini-Bar & Customer Storefront Link */}
-                <div className="flex items-center gap-2">
-                  <a
-                    href={cartOrderingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 font-bold text-xs flex items-center gap-1.5 transition-all"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Customer QR Menu</span>
-                  </a>
-
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Enter Pickup Code (e.g. C-101)..."
-                      value={lookupQuery}
-                      onChange={(e) => setLookupQuery(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRedeemCode(lookupQuery);
-                      }}
-                      className="px-3 py-1.5 pl-8 rounded-xl bg-[#111622] border border-[#21293a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 w-52"
-                    />
-                    <Ticket className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                  </div>
-                  <button
-                    onClick={() => handleRedeemCode(lookupQuery)}
-                    disabled={!lookupQuery.trim() || isRedeeming}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Redeem Code</span>
-                  </button>
-                </div>
-              </div>
-
-              {checkoutSuccess && (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span className="font-semibold">{checkoutSuccess}</span>
-                </div>
-              )}
-
-              {redemptionSuccess && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
-                  <Ticket className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span className="font-semibold">{redemptionSuccess}</span>
-                </div>
-              )}
-
-              {redemptionError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                  <span>{redemptionError}</span>
-                </div>
-              )}
-
-              {/* Fast Item Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                {menuItems.map((it) => {
-                  const isSoldOut = it.isAvailable === false;
-                  return (
-                    <button
-                      key={it.id}
-                      onClick={() => addToBasket(it)}
-                      disabled={isSoldOut}
-                      className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between space-y-2 cursor-pointer ${
-                        !isSoldOut
-                          ? 'bg-[#0e121a] border-[#1d2331] hover:border-sky-500 hover:bg-[#131822]'
-                          : 'bg-[#080a0e] border-[#141822] opacity-50 cursor-not-allowed'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-mono uppercase text-slate-400">{it.category}</span>
-                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                            isSoldOut
-                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          }`}>
-                            {isSoldOut ? 'SOLD OUT' : 'AVAILABLE'}
-                          </span>
-                        </div>
-                        <div className="text-xs font-bold text-white mt-1 leading-snug">{it.name}</div>
-                      </div>
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-xs font-mono font-bold text-sky-400">₹{it.price}</span>
-                        <span className={`p-1 rounded ${isSoldOut ? 'bg-slate-900 text-slate-600' : 'bg-[#1a202c] text-slate-300'}`}>
-                          <Plus className="w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right: Rapid Checkout Basket */}
-            <div className="w-full lg:w-80 bg-[#0c0f16] border-t lg:border-t-0 lg:border-l border-[#1a1f2b] p-5 flex flex-col justify-between shrink-0">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-[#1a1f2b]">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">Current Counter Ticket</span>
-                  <span className="text-xs font-mono text-slate-400">{basket.length} items</span>
-                </div>
-
-                {basket.length === 0 ? (
-                  <div className="py-12 text-center text-xs text-slate-500 space-y-2">
-                    <ShoppingBag className="w-8 h-8 mx-auto text-slate-600" />
-                    <p>Ticket is empty. Tap menu items to add.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                    {basket.map(({ item, quantity }) => (
-                      <div key={item.id} className="flex items-center justify-between p-2 rounded-lg bg-[#111620] border border-[#1b212e] text-xs">
-                        <div className="min-w-0 flex-1 pr-2">
-                          <div className="font-semibold text-white truncate">{item.name}</div>
-                          <div className="text-[10px] font-mono text-slate-400">₹{item.price} each</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => updateQuantity(item.id, -1)}
-                            className="w-5 h-5 rounded bg-[#1c2230] hover:bg-[#283247] flex items-center justify-center text-white cursor-pointer"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="font-mono font-bold text-white w-4 text-center">{quantity}</span>
-                          <button
-                            onClick={() => updateQuantity(item.id, 1)}
-                            className="w-5 h-5 rounded bg-[#1c2230] hover:bg-[#283247] flex items-center justify-center text-white cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Checkout Controls */}
-              <div className="space-y-4 pt-4 border-t border-[#1a1f2b]">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Total Payable:</span>
-                  <span className="text-xl font-mono font-bold text-white">₹{basketSubtotal}</span>
-                </div>
-
-                {/* Payment Mode Selector */}
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#111620] rounded-xl border border-[#1b212e]">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('UPI')}
-                    className={`py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-all ${
-                      paymentMode === 'UPI' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>UPI</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('CASH')}
-                    className={`py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-all ${
-                      paymentMode === 'CASH' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Banknote className="w-3.5 h-3.5" />
-                    <span>Cash</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('CARD')}
-                    className={`py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-all ${
-                      paymentMode === 'CARD' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>Card</span>
-                  </button>
-                </div>
-
-                {/* Instant Pay & Dispatch */}
-                <button
-                  onClick={handleQuickCheckout}
-                  disabled={basket.length === 0 || isSubmitting}
-                  className="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Dispatching...' : `Instant Pay & Dispatch (₹${basketSubtotal})`}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Sub-View: Live Queue & Coupon Verification */}
-        {activeTab === 'orders' && (
-          <div className="p-8 space-y-6 max-w-5xl mx-auto w-full">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Sub-View: Order Receiving Terminal (Standard Small Cart OS Primary Operational View) */}
+        {(activeTab === 'terminal' || activeTab === 'pos' || activeTab === 'orders') && (
+          <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full overflow-y-auto">
+            {/* Terminal Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#1a1f2b]">
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Live Cart Orders & Coupon Redemption</h1>
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                    <BellRing className="w-6 h-6 text-amber-400" />
+                    <span>Order Receiving Terminal</span>
+                  </h1>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    LIVE DISPATCH
+                  </span>
+                </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Customers present their confirmation code at pickup. Enter the code below to verify and fulfill.
+                  Incoming QR storefront & counter orders. Prepare items, verify customer pickup codes, and complete handovers.
                 </p>
               </div>
 
-              <button
-                onClick={fetchLiveOrders}
-                disabled={isLoadingOrders}
-                className="px-3 py-1.5 rounded-xl bg-[#111622] hover:bg-[#182030] border border-[#21293a] text-xs font-semibold text-slate-300 flex items-center gap-2 self-start cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingOrders ? 'animate-spin' : ''}`} />
-                <span>Refresh Stream</span>
-              </button>
+              {/* Status Controls, Walk-in Button & Live Connection Badge */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Live Feed Status Badge */}
+                <div className={`px-2.5 py-1.5 rounded-xl border text-xs font-mono font-semibold flex items-center gap-2 ${
+                  isLiveConnected
+                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${isLiveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <span>{isLiveConnected ? 'Live Feed Connected' : 'Reconnecting...'}</span>
+                </div>
+
+                {/* Audio Alert Toggle */}
+                <button
+                  onClick={() => setSoundAlertEnabled(!soundAlertEnabled)}
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all ${
+                    soundAlertEnabled
+                      ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                  title={soundAlertEnabled ? 'Mute incoming order alert sound' : 'Unmute incoming order alert sound'}
+                >
+                  {soundAlertEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                  <span>{soundAlertEnabled ? 'Sound ON' : 'Muted'}</span>
+                </button>
+
+                {/* Refresh Orders */}
+                <button
+                  onClick={fetchLiveOrders}
+                  disabled={isLoadingOrders}
+                  className="p-1.5 rounded-xl bg-[#11151e] border border-[#212737] text-slate-300 hover:text-white cursor-pointer disabled:opacity-50"
+                  title="Refresh Queue"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingOrders ? 'animate-spin text-sky-400' : ''}`} />
+                </button>
+
+                {/* Walk-in Counter Order Action */}
+                <button
+                  onClick={() => {
+                    setWalkInBasket([]);
+                    setIsWalkInModalOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-sky-900/30 cursor-pointer transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Walk-In Order</span>
+                </button>
+
+                {/* Customer QR Menu Link */}
+                <a
+                  href={cartOrderingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Customer QR Menu</span>
+                </a>
+              </div>
             </div>
 
-            {/* Quick Coupon Redemption Action Bar */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#111622] to-sky-500/10 border border-amber-500/20 flex flex-col sm:flex-row items-center gap-3">
+            {/* Quick Pickup Code Verification & Lookup Bar */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#111622] to-sky-500/10 border-2 border-amber-500/20 flex flex-col sm:flex-row items-center gap-3 shadow-md">
               <div className="flex items-center gap-2 text-amber-400 shrink-0">
-                <Ticket className="w-5 h-5" />
-                <span className="text-xs font-bold uppercase tracking-wider">Redeem Pickup Code</span>
+                <Ticket className="w-5 h-5 text-amber-400" />
+                <span className="text-xs font-black uppercase tracking-wider">Pickup Code Verification</span>
               </div>
               <div className="flex-1 w-full relative">
                 <input
                   type="text"
-                  placeholder="Enter or scan customer's code (e.g. C-101 or #C-101)..."
+                  placeholder="Enter or scan customer pickup code (e.g. K7P4, C-104, #ORD-1)..."
                   value={lookupQuery}
                   onChange={(e) => setLookupQuery(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRedeemCode(lookupQuery);
+                    if (e.key === 'Enter') handleLookupAndVerify(lookupQuery);
                   }}
-                  className="w-full px-4 py-2 pl-9 rounded-xl bg-[#090c12] border border-[#21293a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                  className="w-full px-4 py-2.5 pl-10 rounded-xl bg-[#080a0f] border border-[#21293a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono tracking-wider font-bold"
                 />
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
               </div>
               <button
-                onClick={() => handleRedeemCode(lookupQuery)}
+                onClick={() => handleLookupAndVerify(lookupQuery)}
                 disabled={!lookupQuery.trim() || isRedeeming}
-                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shrink-0 shadow-md shadow-amber-900/20"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shrink-0 shadow-lg shadow-amber-900/30"
               >
                 <Check className="w-4 h-4" />
-                <span>{isRedeeming ? 'Verifying...' : 'Verify & Hand Over'}</span>
+                <span>{isRedeeming ? 'Verifying...' : 'Lookup & Redeem Code'}</span>
               </button>
             </div>
 
+            {/* Notification & Feedback Banners */}
+            {checkoutSuccess && (
+              <div className="p-3.5 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2.5 shadow-sm">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span className="font-bold">{checkoutSuccess}</span>
+              </div>
+            )}
+
             {redemptionSuccess && (
-              <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-2xl text-emerald-300 text-xs flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
-                <span className="font-semibold">{redemptionSuccess}</span>
+              <div className="p-4 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-center gap-3 shadow-md">
+                <Ticket className="w-5 h-5 shrink-0 text-amber-400" />
+                <span className="font-bold">{redemptionSuccess}</span>
               </div>
             )}
 
             {redemptionError && (
-              <div className="p-4 bg-rose-500/15 border border-rose-500/30 rounded-2xl text-rose-300 text-xs flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+              <div className="p-4 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-3 shadow-md">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                 <span>{redemptionError}</span>
               </div>
             )}
 
-            {/* Orders Stream Cards */}
-            {filteredOrders.length === 0 ? (
-              <div className="p-12 text-center bg-[#0c0f16] border border-[#1a1f2b] rounded-2xl space-y-3">
-                <Clock className="w-10 h-10 text-slate-600 mx-auto" />
-                <h3 className="text-sm font-bold text-white">No Matching Orders in Queue</h3>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Orders placed by customers via QR code or counter POS will appear here in real time.
-                </p>
+            {/* Filter Section Tabs with Live Counts */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-[#1a1f2b] pb-3">
+              {[
+                { id: 'ACTIVE', label: 'All Active Queue', count: activeQueueCount },
+                { id: 'NEW', label: 'New Orders', count: newOrdersCount },
+                { id: 'PREPARING', label: 'Preparing', count: preparingOrdersCount },
+                { id: 'READY', label: 'Ready for Pickup', count: readyOrdersCount },
+                { id: 'COMPLETED', label: 'Completed / Recent', count: completedOrdersCount },
+                { id: 'CANCELLED', label: 'Cancelled', count: cancelledOrdersCount },
+              ].map((tab) => {
+                const isSelected = terminalFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setTerminalFilter(tab.id as any)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-900/20'
+                        : 'bg-[#0e121a] text-slate-400 hover:text-white hover:bg-[#131822] border border-[#1b2230]'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-md font-mono text-[10px] font-extrabold ${
+                      isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-300'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Orders Stream / Empty State */}
+            {displayedTerminalOrders.length === 0 ? (
+              <div className="p-12 text-center bg-[#0c0f16] border border-[#1a1f2b] rounded-2xl space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
+                  <BellRing className="w-7 h-7" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-white">
+                    {terminalFilter === 'ACTIVE'
+                      ? 'No Active Orders in Queue'
+                      : `No Orders in "${terminalFilter}" State`}
+                  </h3>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    When customers place orders via the Cart QR Storefront or staff dispatch walk-in counter orders, they will appear here instantly.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <a
+                    href={cartOrderingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open Customer Storefront</span>
+                  </a>
+                  <button
+                    onClick={() => {
+                      setWalkInBasket([]);
+                      setIsWalkInModalOpen(true);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Create Test Walk-In Order</span>
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredOrders.map((ord) => {
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {displayedTerminalOrders.map((ord) => {
                   const isRedeemed = ord.pickupStatus === 'REDEEMED' || ord.status === 'COMPLETED';
+                  const isCancelled = ord.status === 'CANCELLED';
+                  const isWalkIn = ord.orderType === 'COUNTER_WALK_IN' || ord.tableNumber === 'COUNTER';
                   const codeBadge = ord.pickupCode || ord.displayOrderNumber || `#${ord.id.slice(-4)}`;
 
                   return (
                     <div
                       key={ord.id}
-                      className={`p-5 rounded-2xl border transition-all space-y-4 ${
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
                         isRedeemed
-                          ? 'bg-[#090b10] border-[#151a24] opacity-75'
+                          ? 'bg-[#090b10] border-[#161c28] opacity-80'
+                          : isCancelled
+                          ? 'bg-[#0c090a] border-rose-950/40 opacity-70'
                           : ord.status === 'READY'
-                          ? 'bg-[#0d121c] border-emerald-500/30 shadow-lg shadow-emerald-950/20'
-                          : 'bg-[#0c0f16] border-[#1a1f2b]'
+                          ? 'bg-[#0d121c] border-emerald-500/40 shadow-xl shadow-emerald-950/20'
+                          : ord.status === 'PREPARING'
+                          ? 'bg-[#0c0f18] border-indigo-500/30 shadow-lg shadow-indigo-950/15'
+                          : 'bg-[#0c0f16] border-[#1d2433] hover:border-amber-500/30 shadow-md'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-base font-mono font-black text-amber-300 px-2.5 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                            {codeBadge}
-                          </span>
-                          <span className="text-xs text-slate-300 font-semibold">• {ord.customerName || 'Customer'}</span>
-                        </div>
-                        <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase font-bold ${
-                            isRedeemed
-                              ? 'bg-slate-800 text-slate-400 border-slate-700'
-                              : ord.status === 'READY'
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                          }`}
-                        >
-                          {isRedeemed ? '✓ REDEEMED' : ord.status}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1.5 text-xs text-slate-300 bg-[#07090e] p-3 rounded-xl border border-[#141924]">
-                        {(ord.items || []).map((it: any, i: number) => (
-                          <div key={i} className="flex justify-between items-center">
-                            <span>
-                              <b className="text-white">{it.quantity}x</b> {it.name}
+                      {/* Order Card Top Line */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-300">
+                              #{ord.displayOrderNumber || ord.id.slice(-4)}
                             </span>
-                            <span className="font-mono text-slate-400">₹{(it.price || 0) * (it.quantity || 1)}</span>
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                              {isWalkIn ? 'Walk-in Counter' : 'QR Storefront'}
+                            </span>
                           </div>
-                        ))}
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {formatOrderTime(ord.createdAt)}
+                          </span>
+                        </div>
+
+                        {/* Large High-Visibility Pickup Code Banner */}
+                        <div className={`p-3 rounded-xl border-2 flex items-center justify-between ${
+                          isRedeemed
+                            ? 'bg-slate-900/60 border-slate-800 text-slate-400'
+                            : ord.status === 'READY'
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                            : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                        }`}>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Pickup Coupon
+                            </div>
+                            <div className="text-xl sm:text-2xl font-black font-mono tracking-wider">
+                              {codeBadge}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-[10px] font-bold font-mono px-2 py-1 rounded-md border uppercase ${
+                              isRedeemed
+                                ? 'bg-slate-800 text-slate-400 border-slate-700'
+                                : ord.status === 'READY'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                : ord.status === 'PREPARING'
+                                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                                : ord.status === 'ACCEPTED'
+                                ? 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+                                : isCancelled
+                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                : 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                            }`}>
+                              {isRedeemed ? '✓ FULFILLED' : ord.status === 'PENDING' ? 'NEW ORDER' : ord.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Ordered Items List with Dish Photos */}
+                        <div className="space-y-2 py-1">
+                          {(ord.items || []).map((it: any, i: number) => {
+                            const dishImg = getDishThumbnail(it);
+                            return (
+                              <div
+                                key={i}
+                                className="flex items-center justify-between gap-2.5 p-2 rounded-xl bg-[#07090e] border border-[#141822]"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  {dishImg ? (
+                                    <img
+                                      src={dishImg}
+                                      alt={it.name}
+                                      className="w-10 h-10 rounded-lg object-cover shrink-0 border border-[#212737]"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-lg bg-[#141924] border border-[#212737] flex items-center justify-center text-slate-500 shrink-0">
+                                      <UtensilsCrossed className="w-4 h-4 text-slate-400" />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                                      <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono text-[10px] font-black shrink-0">
+                                        {it.quantity}x
+                                      </span>
+                                      <span className="truncate">{it.name}</span>
+                                    </div>
+                                    {it.notes && (
+                                      <div className="text-[10px] text-amber-300 italic truncate">
+                                        Note: {it.notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="font-mono text-xs font-bold text-slate-300 shrink-0">
+                                  ₹{(it.price || 0) * (it.quantity || 1)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Customer Cooking Instructions */}
+                        {ord.notes && (
+                          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 flex items-start gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <div className="text-[11px] leading-tight">
+                              <span className="font-bold text-amber-300">Instructions: </span>
+                              <span>{ord.notes}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="pt-2 border-t border-[#1a1f2b] flex items-center justify-between text-xs">
-                        <span className="text-slate-400">
-                          Total: <b className="text-white font-mono">₹{ord.totalAmount}</b> ({ord.paymentMethod || 'PAID'})
-                        </span>
-
-                        <div className="flex items-center gap-2">
-                          {!isRedeemed && (
-                            <>
-                              {ord.status === 'PENDING' || ord.status === 'PREPARING' ? (
+                      {/* Card Bottom: Total, Payment & Lifecycle Actions */}
+                      <div className="space-y-3 pt-3 border-t border-[#1a1f2b]">
+                        <div className="flex items-center justify-between text-xs">
+                          <div>
+                            <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Payable</div>
+                            <div className="text-sm font-black font-mono text-white">₹{ord.totalAmount}</div>
+                          </div>
+                          <div>
+                            {ord.paymentStatus === 'PAID' ? (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-[11px] flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>PAID • {ord.paymentMethod || 'CASH'}</span>
+                              </span>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-[10px]">
+                                  UNPAID
+                                </span>
                                 <button
-                                  onClick={() => updateOrderStatus(ord.id, 'READY')}
-                                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shadow-sm"
+                                  onClick={() => handleMarkPaid(ord.id, 'CASH')}
+                                  className="px-1.5 py-0.5 rounded bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[10px] font-bold border border-emerald-500/30 transition-all cursor-pointer"
+                                  title="Mark Paid via Cash"
                                 >
-                                  Mark Ready
+                                  Cash
                                 </button>
-                              ) : null}
+                                <button
+                                  onClick={() => handleMarkPaid(ord.id, 'UPI')}
+                                  className="px-1.5 py-0.5 rounded bg-sky-600/30 hover:bg-sky-600 text-sky-300 hover:text-white text-[10px] font-bold border border-sky-500/30 transition-all cursor-pointer"
+                                  title="Mark Paid via UPI"
+                                >
+                                  UPI
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
 
+                        {/* Operational Lifecycle Buttons */}
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          {ord.status === 'PENDING' && (
+                            <>
                               <button
-                                onClick={() => handleRedeemCode(ord.pickupCode || ord.id)}
-                                disabled={isRedeeming}
-                                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] cursor-pointer flex items-center gap-1 shadow-sm"
+                                onClick={() => updateOrderStatus(ord.id, 'CANCELLED')}
+                                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs cursor-pointer transition-all"
+                              >
+                                Reject
+                              </button>
+                              <button
+                                onClick={() => updateOrderStatus(ord.id, 'ACCEPTED')}
+                                className="px-4 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-sky-900/30 cursor-pointer transition-all"
                               >
                                 <Check className="w-3.5 h-3.5" />
-                                <span>Redeem Pickup</span>
+                                <span>Accept Order</span>
                               </button>
                             </>
                           )}
+
+                          {ord.status === 'ACCEPTED' && (
+                            <button
+                              onClick={() => updateOrderStatus(ord.id, 'PREPARING')}
+                              className="w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/30 cursor-pointer transition-all"
+                            >
+                              <ChefHat className="w-4 h-4" />
+                              <span>Start Preparing</span>
+                            </button>
+                          )}
+
+                          {ord.status === 'PREPARING' && (
+                            <button
+                              onClick={() => updateOrderStatus(ord.id, 'READY')}
+                              className="w-full px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer transition-all"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Ready for Pickup</span>
+                            </button>
+                          )}
+
+                          {ord.status === 'READY' && (
+                            <button
+                              onClick={() => {
+                                setSelectedOrderForHandover(ord);
+                                setHandoverInputCode(ord.pickupCode || ord.id);
+                                setHandoverError(null);
+                              }}
+                              className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-900/30 cursor-pointer transition-all"
+                            >
+                              <Ticket className="w-4 h-4" />
+                              <span>Verify Pickup Code & Hand Over</span>
+                            </button>
+                          )}
+
                           {isRedeemed && (
-                            <span className="text-[10px] font-mono text-slate-500">
-                              Fulfilled & Complete
-                            </span>
+                            <div className="w-full py-1 text-center font-mono text-[11px] text-slate-500 font-semibold flex items-center justify-center gap-1.5">
+                              <CheckCheck className="w-4 h-4 text-emerald-400" />
+                              <span>Fulfilled & Handed Over</span>
+                            </div>
+                          )}
+
+                          {isCancelled && (
+                            <div className="w-full py-1 text-center font-mono text-[11px] text-rose-500 font-semibold">
+                              Order Cancelled
+                            </div>
                           )}
                         </div>
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Handover & Code Verification Modal */}
+            {selectedOrderForHandover && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+                <div className="bg-[#0e121a] border border-[#212737] rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#1f2636]">
+                    <div className="flex items-center gap-2">
+                      <Ticket className="w-5 h-5 text-amber-400" />
+                      <h2 className="text-base font-bold text-white">Food Handover & Code Verification</h2>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedOrderForHandover(null);
+                        setHandoverError(null);
+                      }}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                    >
+                      <CloseIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Code Display */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-[#111622] to-sky-500/10 border-2 border-amber-500/30 text-center space-y-1">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-amber-400/90">Customer Pickup Code</div>
+                    <div className="text-3xl font-black font-mono tracking-widest text-amber-300">
+                      {selectedOrderForHandover.pickupCode || selectedOrderForHandover.id.slice(-4)}
+                    </div>
+                    <div className="text-xs text-slate-400 font-medium">
+                      Order #{selectedOrderForHandover.displayOrderNumber || selectedOrderForHandover.id.slice(-4)} • {selectedOrderForHandover.customerName || 'Customer'}
+                    </div>
+                  </div>
+
+                  {selectedOrderForHandover.status !== 'READY' && selectedOrderForHandover.status !== 'COMPLETED' && (
+                    <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2.5">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <span>
+                        <b>Notice:</b> This order is currently <b>{selectedOrderForHandover.status}</b> and not yet marked Ready. Please confirm food is physically prepared before handover.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Ordered Items Verification List */}
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Items in this Order</div>
+                    {(selectedOrderForHandover.items || []).map((it: any, idx: number) => {
+                      const dishImg = getDishThumbnail(it);
+                      return (
+                        <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-[#080a0f] border border-[#141822]">
+                          <div className="flex items-center gap-2.5">
+                            {dishImg ? (
+                              <img src={dishImg} alt={it.name} className="w-10 h-10 rounded-lg object-cover shrink-0 border border-[#212737]" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-[#141924] flex items-center justify-center text-slate-500 shrink-0">
+                                <UtensilsCrossed className="w-4 h-4" />
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-xs font-bold text-white">
+                                <span className="text-sky-400 font-mono mr-1.5">{it.quantity}x</span>
+                                {it.name}
+                              </div>
+                              {it.notes && <div className="text-[10px] text-amber-300 italic">{it.notes}</div>}
+                            </div>
+                          </div>
+                          <div className="font-mono text-xs font-bold text-slate-300">
+                            ₹{(it.price || 0) * (it.quantity || 1)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {handoverError && (
+                    <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                      <span>{handoverError}</span>
+                    </div>
+                  )}
+
+                  {/* Confirmation Actions */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      onClick={() => {
+                        setSelectedOrderForHandover(null);
+                        setHandoverError(null);
+                      }}
+                      className="flex-1 py-2.5 rounded-xl bg-[#141822] hover:bg-[#1a2130] text-slate-300 font-bold text-xs cursor-pointer border border-[#21293a]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleRedeemCode(selectedOrderForHandover.pickupCode || selectedOrderForHandover.id, true)}
+                      disabled={isRedeeming}
+                      className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-900/30 cursor-pointer disabled:opacity-50"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>{isRedeeming ? 'Redeeming...' : 'Confirm Handover & Complete'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Walk-In Counter Order Modal (Preserves Walk-in Cashier Capability) */}
+            {isWalkInModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+                <div className="bg-[#0e121a] border border-[#212737] rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col p-6 space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#1f2636]">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <span>New Walk-In Counter Order</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Counter Cashier
+                        </span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">Tap menu items to build the basket and generate an instant pickup code.</p>
+                    </div>
+                    <button
+                      onClick={() => setIsWalkInModalOpen(false)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                    >
+                      <CloseIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+                    {/* Menu item picker */}
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Cart Street Food Menu</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {menuItems.map((item) => {
+                          const isSoldOut = item.isAvailable === false;
+                          const photoUrl = item.imageUrl || item.image;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => handleAddWalkInItem(item)}
+                              disabled={isSoldOut}
+                              className={`p-3 rounded-xl border text-left flex flex-col justify-between space-y-1.5 transition-all ${
+                                !isSoldOut
+                                  ? 'bg-[#080a0f] border-[#181f2d] hover:border-sky-500 hover:bg-[#10141f] cursor-pointer'
+                                  : 'bg-[#080a0f] border-[#141822] opacity-50 cursor-not-allowed'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                {photoUrl ? (
+                                  <img src={photoUrl} alt={item.name} className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-lg bg-[#141924] flex items-center justify-center text-slate-500 shrink-0">
+                                    <UtensilsCrossed className="w-4 h-4" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-white truncate">{item.name}</div>
+                                  <div className="text-xs font-mono font-bold text-sky-400">₹{item.price}</div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Active basket & checkout */}
+                    <div className="w-full md:w-64 bg-[#080a0f] border border-[#181f2d] rounded-xl p-3.5 flex flex-col justify-between space-y-3 shrink-0">
+                      <div className="space-y-2 overflow-y-auto max-h-48 pr-1">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Basket ({walkInBasket.length})</div>
+                        {walkInBasket.length === 0 ? (
+                          <div className="text-xs text-slate-500 py-6 text-center">Tap items on the left to add</div>
+                        ) : (
+                          walkInBasket.map((b) => (
+                            <div key={b.item.id} className="flex items-center justify-between text-xs py-1 border-b border-[#141822]">
+                              <div className="truncate mr-2">
+                                <span className="font-bold text-white">{b.item.name}</span>
+                                <div className="text-[10px] font-mono text-slate-400">₹{b.item.price} each</div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  onClick={() => handleUpdateWalkInQuantity(b.item.id, -1)}
+                                  className="w-5 h-5 rounded bg-[#181f2d] hover:bg-[#252f44] flex items-center justify-center text-white cursor-pointer"
+                                >
+                                  -
+                                </button>
+                                <span className="font-mono font-bold text-white w-4 text-center">{b.quantity}</span>
+                                <button
+                                  onClick={() => handleUpdateWalkInQuantity(b.item.id, 1)}
+                                  className="w-5 h-5 rounded bg-[#181f2d] hover:bg-[#252f44] flex items-center justify-center text-white cursor-pointer"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="space-y-3 pt-2 border-t border-[#181f2d]">
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Optional customer note..."
+                            value={walkInCustomerNote}
+                            onChange={(e) => setWalkInCustomerNote(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#0e121a] border border-[#212737] text-xs text-white placeholder-slate-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-400">Payment:</span>
+                          <div className="flex gap-1">
+                            {(['CASH', 'UPI'] as const).map((m) => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setWalkInPaymentMode(m)}
+                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer ${
+                                  walkInPaymentMode === m
+                                    ? 'bg-sky-600 text-white'
+                                    : 'bg-[#121622] text-slate-400 border border-[#212737]'
+                                }`}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs font-bold text-white">
+                          <span>Total:</span>
+                          <span className="text-base font-mono font-black text-emerald-400">₹{walkInSubtotal}</span>
+                        </div>
+
+                        <button
+                          onClick={handleSubmitWalkInOrder}
+                          disabled={walkInBasket.length === 0 || isSubmittingWalkIn}
+                          className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md shadow-emerald-900/30"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{isSubmittingWalkIn ? 'Submitting...' : 'Dispatch Counter Order'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

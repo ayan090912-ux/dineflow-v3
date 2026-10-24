@@ -873,6 +873,8 @@ export interface OrderItem {
   isAlcoholic?: boolean;
   alcoholPercentage?: number;
   glassSize?: string;
+  imageUrl?: string;
+  image?: string;
 }
 
 export interface Order {

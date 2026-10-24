@@ -682,13 +682,14 @@ export class OrderClient {
     return order;
   }
 
-  async updateOrderStatus(orderId: string, status: any) {
+  async updateOrderStatus(orderId: string, statusOrPayload: any) {
+    const payload = typeof statusOrPayload === 'string' ? { status: statusOrPayload } : (statusOrPayload || {});
     try {
       await this.base.executeProtectedRequest<any>(
         `/orders/${encodeURIComponent(orderId)}/status`,
         {
           method: 'PUT',
-          body: JSON.stringify({ status }),
+          body: JSON.stringify(payload),
         }
       );
     } catch (e) {
@@ -697,7 +698,9 @@ export class OrderClient {
 
     const order = this.base.orders.find((o) => o.id === orderId);
     if (order) {
-      order.status = status;
+      if (payload.status) order.status = payload.status;
+      if (payload.paymentStatus) order.paymentStatus = payload.paymentStatus;
+      if (payload.paymentMethod) order.paymentMethod = payload.paymentMethod;
       this.base.saveDatabase();
     }
     return order;
@@ -994,7 +997,7 @@ export class OrderClient {
     return normalizeOrder(data);
   }
 
-  async redeemOrderPickupCode(restaurantId: string, code: string, redeemedBy?: string): Promise<Order> {
+  async redeemOrderPickupCode(restaurantId: string, code: string, redeemedBy?: string, force?: boolean): Promise<Order> {
     const targetId = this.base.resolveTenantRestaurantId(restaurantId);
     const cleanCode = (code || '').trim().replace(/^#/, '');
     const apiBase = getApiBaseUrl();
@@ -1005,6 +1008,7 @@ export class OrderClient {
         code: cleanCode,
         restaurantId: targetId,
         redeemedBy: redeemedBy || 'Counter Staff',
+        force: Boolean(force),
       }),
     });
     if (!res.ok) {

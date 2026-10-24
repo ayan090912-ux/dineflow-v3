@@ -160,6 +160,8 @@ export function normalizeOrder(raw: any): Order {
           targetDestination,
           isAlcoholic,
           category: i.category || i.categoryName || i.barCategory || undefined,
+          imageUrl: i.imageUrl || i.image || i.image_url || undefined,
+          image: i.imageUrl || i.image || i.image_url || undefined,
         };
       })
     : [];

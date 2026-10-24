@@ -383,19 +383,28 @@ async def test_pickup_code_single_use_redemption_and_tenant_isolation():
         )
         assert redeem_cross.status_code in (403, 404), redeem_cross.text
 
-        # 2. Cart A staff redeems coupon -> Success (200)
-        redeem_res = await ac.post(
+        # 2. Not yet ready order rejected without force -> Bad Request (400)
+        not_ready_res = await ac.post(
             f"/api/v1/orders/restaurants/{rest_a_id}/orders/redeem-code",
             json={"code": pickup_code, "redeemedBy": "Counter Staff"},
+            headers=OWNER_A_HEADER
+        )
+        assert not_ready_res.status_code == 400
+        assert "not yet Ready for pickup" in not_ready_res.json().get("detail", "")
+
+        # 3. Cart A staff redeems coupon with force=True -> Success (200)
+        redeem_res = await ac.post(
+            f"/api/v1/orders/restaurants/{rest_a_id}/orders/redeem-code",
+            json={"code": pickup_code, "redeemedBy": "Counter Staff", "force": True},
             headers=OWNER_A_HEADER
         )
         assert redeem_res.status_code == 200, redeem_res.text
         assert redeem_res.json().get("pickupStatus") == "REDEEMED"
 
-        # 3. Attempting second redemption -> Bad Request (400)
+        # 4. Attempting second redemption -> Bad Request (400)
         dup_redeem = await ac.post(
             f"/api/v1/orders/restaurants/{rest_a_id}/orders/redeem-code",
-            json={"code": pickup_code, "redeemedBy": "Counter Staff"},
+            json={"code": pickup_code, "redeemedBy": "Counter Staff", "force": True},
             headers=OWNER_A_HEADER
         )
         assert dup_redeem.status_code == 400, dup_redeem.text
