@@ -36,6 +36,11 @@ import {
   Eye,
   Menu as MenuIcon,
   X as CloseIcon,
+  Upload,
+  Image as ImageIcon,
+  UtensilsCrossed,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../packages/api/client';
@@ -96,12 +101,18 @@ export const CartApp: React.FC<CartAppProps> = ({
   const [redemptionError, setRedemptionError] = useState<string | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
 
-  // New Item Modal State
-  const [isNewItemModalOpen, setIsNewItemModalOpen] = useState(false);
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemCategory, setNewItemCategory] = useState('Snacks');
-  const [newItemPrice, setNewItemPrice] = useState(100);
-  const [newItemStock, setNewItemStock] = useState(20);
+  // Item Modal & Form State (Supports both Create and Edit with Photo Upload)
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [itemFormName, setItemFormName] = useState('');
+  const [itemFormCategory, setItemFormCategory] = useState('Snacks');
+  const [itemFormPrice, setItemFormPrice] = useState(100);
+  const [itemFormStock, setItemFormStock] = useState(20);
+  const [itemFormDescription, setItemFormDescription] = useState('');
+  const [itemFormImageUrl, setItemFormImageUrl] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Responsive Mobile Navigation Drawer
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -343,40 +354,132 @@ export const CartApp: React.FC<CartAppProps> = ({
     }
   };
 
-  const handleCreateNewItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newItemName.trim() || newItemPrice <= 0) return;
+  const openCreateItemModal = () => {
+    setEditingItem(null);
+    setItemFormName('');
+    setItemFormCategory('Snacks');
+    setItemFormPrice(100);
+    setItemFormStock(20);
+    setItemFormDescription('');
+    setItemFormImageUrl('');
+    setImageUploadError(null);
+    setIsItemModalOpen(true);
+  };
+
+  const openEditItemModal = (item: MenuItem) => {
+    setEditingItem(item);
+    setItemFormName(item.name);
+    setItemFormCategory((item as any).category || (item as any).categoryName || item.categoryId || 'Snacks');
+    setItemFormPrice(item.price);
+    setItemFormStock(typeof item.stockQuantity === 'number' ? item.stockQuantity : 20);
+    setItemFormDescription(item.description || '');
+    setItemFormImageUrl(item.imageUrl || item.image || '');
+    setImageUploadError(null);
+    setIsItemModalOpen(true);
+  };
+
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const validMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!validMimes.includes(file.type.toLowerCase())) {
+      setImageUploadError('Invalid image type. Please select a JPEG, PNG, or WebP photo.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setImageUploadError('Image size exceeds 5 MB. Please select a smaller photo under 5MB.');
+      return;
+    }
 
     try {
-      const created = await api.createMenuItem({
-        restaurantId: cartId,
-        name: newItemName.trim(),
-        categoryId: newItemCategory,
-        price: newItemPrice,
-        stockQuantity: newItemStock,
-        trackInventory: true,
-        isAvailable: newItemStock > 0,
-      } as any);
-
-      setMenuItems((prev) => [
-        ...prev,
-        {
-          id: created.id,
-          name: created.name,
-          category: newItemCategory,
-          price: created.price,
-          stockQuantity: newItemStock,
-          trackInventory: true,
-          isAvailable: newItemStock > 0,
-        },
-      ]);
-
-      setIsNewItemModalOpen(false);
-      setNewItemName('');
-      setNewItemPrice(100);
-      setNewItemStock(20);
+      setIsUploadingImage(true);
+      setImageUploadError(null);
+      const res = await api.uploadImage(cartId, file, 'menu');
+      if (res && res.url) {
+        setItemFormImageUrl(res.url);
+      } else {
+        throw new Error('Upload succeeded but no public URL was returned.');
+      }
     } catch (err: any) {
-      alert(err?.message || 'Failed to create menu item.');
+      console.error('Image upload failed:', err);
+      setImageUploadError(err?.message || 'Failed to upload photo. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleSaveItemForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemFormName.trim() || itemFormPrice <= 0) return;
+
+    try {
+      if (editingItem) {
+        const updated = await api.updateMenuItem(editingItem.id, {
+          restaurantId: cartId,
+          name: itemFormName.trim(),
+          categoryId: itemFormCategory,
+          price: itemFormPrice,
+          stockQuantity: itemFormStock,
+          trackInventory: true,
+          description: itemFormDescription.trim(),
+          imageUrl: itemFormImageUrl,
+          image: itemFormImageUrl,
+          isAvailable: itemFormStock > 0,
+        });
+
+        setMenuItems((prev) =>
+          prev.map((it) =>
+            it.id === editingItem.id
+              ? {
+                  ...it,
+                  ...updated,
+                  category: itemFormCategory,
+                  imageUrl: itemFormImageUrl,
+                  image: itemFormImageUrl,
+                  stockQuantity: itemFormStock,
+                  isAvailable: itemFormStock > 0,
+                }
+              : it
+          )
+        );
+      } else {
+        const created = await api.createMenuItem({
+          restaurantId: cartId,
+          name: itemFormName.trim(),
+          categoryId: itemFormCategory,
+          price: itemFormPrice,
+          stockQuantity: itemFormStock,
+          trackInventory: true,
+          description: itemFormDescription.trim(),
+          imageUrl: itemFormImageUrl || undefined,
+          image: itemFormImageUrl || undefined,
+          isAvailable: itemFormStock > 0,
+        } as any);
+
+        setMenuItems((prev) => [
+          ...prev,
+          {
+            id: created.id,
+            name: created.name,
+            category: itemFormCategory,
+            price: created.price,
+            stockQuantity: itemFormStock,
+            trackInventory: true,
+            description: itemFormDescription.trim(),
+            imageUrl: itemFormImageUrl || undefined,
+            image: itemFormImageUrl || undefined,
+            isAvailable: itemFormStock > 0,
+          },
+        ]);
+      }
+
+      setIsItemModalOpen(false);
+      setEditingItem(null);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to save menu item.');
     }
   };
 
@@ -1041,18 +1144,18 @@ export const CartApp: React.FC<CartAppProps> = ({
 
         {/* Sub-View: Menu & Real-Time Stock Sync */}
         {activeTab === 'menu' && (
-          <div className="p-8 space-y-6 max-w-5xl mx-auto w-full">
-            <div className="flex items-center justify-between">
+          <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-5xl mx-auto w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Menu & Real-Time Stock Management</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Menu & Real-Time Stock Management</h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  Adjust stock levels, pricing, or toggle availability. The customer mobile menu syncs immediately.
+                  Adjust stock levels, upload food photos, or edit pricing. The customer storefront syncs immediately.
                 </p>
               </div>
 
               <button
-                onClick={() => setIsNewItemModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
+                onClick={openCreateItemModal}
+                className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Street Food Item</span>
@@ -1060,144 +1163,319 @@ export const CartApp: React.FC<CartAppProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {menuItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b] space-y-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase text-slate-400">{item.category}</span>
-                      <h3 className="text-sm font-bold text-white mt-0.5">{item.name}</h3>
-                    </div>
-                    <button
-                      onClick={() => handleToggleAvailability(item.id)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-mono font-bold cursor-pointer transition-all ${
-                        item.isAvailable
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                      }`}
-                    >
-                      {item.isAvailable ? 'AVAILABLE' : 'OFFLINE'}
-                    </button>
-                  </div>
+              {menuItems.map((item) => {
+                const photoUrl = item.imageUrl || item.image;
+                return (
+                  <div
+                    key={item.id}
+                    className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b] space-y-4 hover:border-slate-700/60 transition-all shadow-sm"
+                  >
+                    {/* Top Row: Photo + Item Info + Edit & Availability Actions */}
+                    <div className="flex items-start gap-3.5">
+                      {/* Dish Photo or Clean Placeholder */}
+                      <div className="w-16 h-16 rounded-xl overflow-hidden bg-[#141822] border border-[#212737] shrink-0 relative">
+                        {photoUrl ? (
+                          <img
+                            src={photoUrl}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                              const parent = (e.currentTarget as HTMLElement).parentElement;
+                              if (parent) {
+                                const fb = parent.querySelector('.cart-photo-fallback');
+                                if (fb) (fb as HTMLElement).classList.remove('hidden');
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={`cart-photo-fallback absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-[#121622] ${
+                            photoUrl ? 'hidden' : 'flex'
+                          }`}
+                        >
+                          <UtensilsCrossed className="w-5 h-5 opacity-50" />
+                          <span className="text-[7px] font-bold text-slate-500 uppercase mt-0.5">No photo</span>
+                        </div>
+                      </div>
 
-                  <div className="p-3 bg-[#080a0e] rounded-xl border border-[#161a25] flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-slate-400 uppercase font-mono">Current Stock</div>
-                      <div className="text-lg font-mono font-bold text-white mt-0.5">
-                        {item.stockQuantity !== undefined ? item.stockQuantity : 'Unlimited'}
+                      {/* Title & Category */}
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] font-mono uppercase text-slate-400 tracking-wider">
+                          {(item as any).category || (item as any).categoryName || 'Food'}
+                        </span>
+                        <h3 className="text-sm font-bold text-white mt-0.5 leading-snug truncate">{item.name}</h3>
+                        {item.description && (
+                          <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{item.description}</p>
+                        )}
+                        <div className="text-xs font-mono font-bold text-sky-400 mt-1">
+                          ₹{item.price}
+                        </div>
+                      </div>
+
+                      {/* Action buttons: Edit & Availability */}
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <button
+                          onClick={() => handleToggleAvailability(item.id)}
+                          className={`px-2.5 py-1 rounded-full text-[9px] font-mono font-bold cursor-pointer transition-all ${
+                            item.isAvailable
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20'
+                          }`}
+                        >
+                          {item.isAvailable ? 'AVAILABLE' : 'OFFLINE'}
+                        </button>
+                        <button
+                          onClick={() => openEditItemModal(item)}
+                          className="px-2.5 py-1 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-300 hover:text-white border border-[#212737] flex items-center gap-1 text-[10px] font-semibold cursor-pointer transition-all"
+                          title="Edit Item & Photo"
+                        >
+                          <Pencil className="w-3 h-3 text-sky-400" />
+                          <span>Edit</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleStockAdjust(item.id, -1)}
-                        className="w-7 h-7 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer"
-                        title="Reduce 1"
-                      >
-                        -1
-                      </button>
-                      <button
-                        onClick={() => handleStockAdjust(item.id, 5)}
-                        className="px-2.5 h-7 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer"
-                        title="Add 5"
-                      >
-                        +5
-                      </button>
-                      <button
-                        onClick={() => handleStockAdjust(item.id, 20)}
-                        className="px-2.5 h-7 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center justify-center font-bold text-xs cursor-pointer"
-                        title="Restock 20"
-                      >
-                        +20
-                      </button>
+                    {/* Stock Adjustment Controls */}
+                    <div className="p-3 bg-[#080a0e] rounded-xl border border-[#161a25] flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] text-slate-400 uppercase font-mono">Current Stock</div>
+                        <div className="text-lg font-mono font-bold text-white mt-0.5">
+                          {item.stockQuantity !== undefined ? item.stockQuantity : 'Unlimited'}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleStockAdjust(item.id, -1)}
+                          className="w-7 h-7 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer transition-all"
+                          title="Reduce 1"
+                        >
+                          -1
+                        </button>
+                        <button
+                          onClick={() => handleStockAdjust(item.id, 5)}
+                          className="px-2.5 h-7 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer transition-all"
+                          title="Add 5"
+                        >
+                          +5
+                        </button>
+                        <button
+                          onClick={() => handleStockAdjust(item.id, 20)}
+                          className="px-2.5 h-7 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center justify-center font-bold text-xs cursor-pointer transition-all"
+                          title="Restock 20"
+                        >
+                          +20
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-[#1a1f2b]">
+                      <span className="text-[10px] text-slate-500">Auto-disables at 0 stock</span>
+                      {photoUrl ? (
+                        <span className="text-[10px] text-emerald-400/90 flex items-center gap-1 font-medium">
+                          <Check className="w-3 h-3" /> Photo Attached
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500">No Photo</span>
+                      )}
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-[#1a1f2b]">
-                    <span>Item Price: <b className="text-sky-400 font-mono">₹{item.price}</b></span>
-                    <span className="text-[10px] text-slate-500">Auto-disables at 0 stock</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* Modal: Add Cart Menu Item */}
-            {isNewItemModalOpen && (
-              <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-[#0e121a] border border-[#212737] rounded-2xl p-6 max-w-md w-full space-y-4">
+            {/* Modal: Add / Edit Cart Menu Item */}
+            {isItemModalOpen && (
+              <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#0e121a] border border-[#212737] rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl overflow-y-auto max-h-[90vh]">
                   <div className="flex items-center justify-between pb-3 border-b border-[#212737]">
-                    <h3 className="text-sm font-bold text-white">Add New Street Food Item</h3>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                        {editingItem ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">
+                          {editingItem ? 'Edit Street Food Item' : 'Add New Street Food Item'}
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          Configure item pricing, stock, and upload a dish photo.
+                        </p>
+                      </div>
+                    </div>
                     <button
-                      onClick={() => setIsNewItemModalOpen(false)}
-                      className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                      onClick={() => {
+                        setIsItemModalOpen(false);
+                        setEditingItem(null);
+                      }}
+                      className="text-slate-400 hover:text-white text-sm cursor-pointer p-1 rounded-lg hover:bg-white/5"
                     >
                       ✕
                     </button>
                   </div>
 
-                  <form onSubmit={handleCreateNewItem} className="space-y-3">
+                  <form onSubmit={handleSaveItemForm} className="space-y-4">
+                    {/* Item Name */}
                     <div>
-                      <label className="text-xs text-slate-400 block mb-1">Item Name</label>
+                      <label className="text-xs font-medium text-slate-400 block mb-1">Item Name *</label>
                       <input
                         type="text"
                         required
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                        placeholder="e.g. Masala Dosa Roll"
+                        value={itemFormName}
+                        onChange={(e) => setItemFormName(e.target.value)}
+                        placeholder="e.g. Spicy Paneer Tikka Roll"
                         className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
                       />
                     </div>
 
+                    {/* Category & Price */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs text-slate-400 block mb-1">Category</label>
+                        <label className="text-xs font-medium text-slate-400 block mb-1">Category</label>
                         <input
                           type="text"
-                          value={newItemCategory}
-                          onChange={(e) => setNewItemCategory(e.target.value)}
-                          placeholder="e.g. Snacks, Drinks"
+                          value={itemFormCategory}
+                          onChange={(e) => setItemFormCategory(e.target.value)}
+                          placeholder="e.g. Rolls, Snacks, Drinks"
                           className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white focus:outline-none focus:border-sky-500"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 block mb-1">Price (₹)</label>
+                        <label className="text-xs font-medium text-slate-400 block mb-1">Price (₹) *</label>
                         <input
                           type="number"
                           min="1"
                           required
-                          value={newItemPrice}
-                          onChange={(e) => setNewItemPrice(parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white focus:outline-none focus:border-sky-500"
+                          value={itemFormPrice}
+                          onChange={(e) => setItemFormPrice(parseFloat(e.target.value) || 0)}
+                          className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
                         />
                       </div>
                     </div>
 
+                    {/* Description */}
                     <div>
-                      <label className="text-xs text-slate-400 block mb-1">Starting Stock Count</label>
+                      <label className="text-xs font-medium text-slate-400 block mb-1">Description (Optional)</label>
                       <input
-                        type="number"
-                        min="0"
-                        value={newItemStock}
-                        onChange={(e) => setNewItemStock(parseInt(e.target.value) || 0)}
-                        className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white focus:outline-none focus:border-sky-500"
+                        type="text"
+                        value={itemFormDescription}
+                        onChange={(e) => setItemFormDescription(e.target.value)}
+                        placeholder="e.g. Freshly rolled paratha with spicy grilled cottage cheese"
+                        className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
                       />
                     </div>
 
-                    <div className="pt-3 flex gap-2">
+                    {/* Starting Stock Count */}
+                    <div>
+                      <label className="text-xs font-medium text-slate-400 block mb-1">Stock Count</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={itemFormStock}
+                        onChange={(e) => setItemFormStock(parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 rounded-xl bg-[#141822] border border-[#212737] text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                      />
+                    </div>
+
+                    {/* Dish Photo Upload Control */}
+                    <div className="space-y-2 pt-1 border-t border-[#212737]">
+                      <label className="text-xs font-medium text-slate-300 block">
+                        Food / Drink Photo (JPEG, PNG, WebP up to 5MB)
+                      </label>
+
+                      {/* Hidden File Input */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleImageFileSelect}
+                        className="hidden"
+                      />
+
+                      {/* Image Preview with Replace / Remove Actions */}
+                      {itemFormImageUrl ? (
+                        <div className="space-y-2.5">
+                          <div className="relative w-full h-40 rounded-2xl overflow-hidden border border-[#212737] bg-[#141822]">
+                            <img
+                              src={itemFormImageUrl}
+                              alt="Dish Preview"
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute top-2 right-2 bg-emerald-500 text-slate-950 font-bold text-[10px] px-2 py-0.5 rounded-full shadow-md">
+                              Photo Attached
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={isUploadingImage}
+                              className="flex-1 py-2 px-3 rounded-xl bg-[#141822] hover:bg-[#1a202c] border border-slate-700/80 text-xs font-semibold text-sky-400 hover:text-sky-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Replace Photo</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setItemFormImageUrl('')}
+                              className="py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-xs font-semibold text-rose-400 flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full p-6 rounded-2xl border-2 border-dashed border-[#262e42] hover:border-sky-500/50 bg-[#141822]/50 hover:bg-[#141822] flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group"
+                        >
+                          <div className="w-10 h-10 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-all">
+                            <Upload className="w-5 h-5" />
+                          </div>
+                          <div className="text-center">
+                            <span className="text-xs font-bold text-white block">Click to upload dish photo</span>
+                            <span className="text-[10px] text-slate-500">Supports JPEG, PNG, WebP (Max 5MB)</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Upload Loading State */}
+                      {isUploadingImage && (
+                        <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                          <span>Uploading image to persistent storage...</span>
+                        </div>
+                      )}
+
+                      {/* Upload Error Alert */}
+                      {imageUploadError && (
+                        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>{imageUploadError}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Modal Action Buttons */}
+                    <div className="pt-2 flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setIsNewItemModalOpen(false)}
-                        className="flex-1 py-2 rounded-xl bg-[#141822] hover:bg-[#1a202c] text-slate-300 text-xs font-semibold cursor-pointer"
+                        onClick={() => {
+                          setIsItemModalOpen(false);
+                          setEditingItem(null);
+                        }}
+                        className="flex-1 py-2.5 rounded-xl bg-[#141822] hover:bg-[#1a202c] text-slate-300 text-xs font-semibold cursor-pointer transition-all"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold cursor-pointer"
+                        disabled={isUploadingImage}
+                        className="flex-1 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold cursor-pointer transition-all disabled:opacity-50 shadow-md"
                       >
-                        Add to Cart Menu
+                        {isUploadingImage ? 'Uploading Image...' : editingItem ? 'Save Changes' : 'Add to Cart Menu'}
                       </button>
                     </div>
                   </form>
@@ -1574,12 +1852,26 @@ export const CartApp: React.FC<CartAppProps> = ({
                       {menuItems.slice(0, 4).map((it) => (
                         <div
                           key={it.id}
-                          className="p-2.5 rounded-2xl border transition-all flex items-center justify-between gap-2"
+                          className="p-2 rounded-2xl border transition-all flex items-center gap-2.5"
                           style={{
                             backgroundColor: activeCartTheme.surfaceColor,
                             borderColor: activeCartTheme.cardBorder,
                           }}
                         >
+                          {/* Dish Thumbnail or Neutral Icon */}
+                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10 shrink-0 flex items-center justify-center">
+                            {it.imageUrl ? (
+                              <img
+                                src={it.imageUrl}
+                                alt={it.name}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <UtensilsCrossed className="w-4 h-4 opacity-40 text-slate-400" />
+                            )}
+                          </div>
+
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-bold text-white truncate">{it.name}</div>
                             <div className="text-[10px] opacity-70 mt-0.5 font-mono">
@@ -1587,7 +1879,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <span
                               className="text-[9px] font-bold px-1.5 py-0.5 rounded"
                               style={{

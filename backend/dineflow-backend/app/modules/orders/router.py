@@ -45,6 +45,9 @@ class CreateOrderSchema(BaseModel):
     customerName: Optional[str] = "Guest"
     notes: Optional[str] = ""
     orderType: Optional[str] = "DINE_IN"
+    paymentMethod: Optional[str] = "CASH"
+    payment_method: Optional[str] = None
+    total: Optional[float] = None
     eventId: Optional[str] = None
     eventName: Optional[str] = None
     ageConfirmed: Optional[bool] = None
@@ -211,6 +214,10 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         "pickupCode": getattr(order, "pickup_code", None),
         "pickup_status": getattr(order, "pickup_status", "UNCLAIMED") or "UNCLAIMED",
         "pickupStatus": getattr(order, "pickup_status", "UNCLAIMED") or "UNCLAIMED",
+        "payment_status": getattr(order, "payment_status", "UNPAID") or "UNPAID",
+        "paymentStatus": getattr(order, "payment_status", "UNPAID") or "UNPAID",
+        "payment_method": getattr(order, "payment_method", "CASH") or "CASH",
+        "paymentMethod": getattr(order, "payment_method", "CASH") or "CASH",
         "claimed_at": (order.claimed_at.isoformat() if getattr(order, "claimed_at", None) else None),
         "claimedAt": (order.claimed_at.isoformat() if getattr(order, "claimed_at", None) else None),
         "idempotency_key": getattr(order, "idempotency_key", None),
@@ -784,6 +791,8 @@ async def create_order(
             idempotency_key=eff_idempotency_key,
             pickup_code=pickup_code,
             pickup_status="UNCLAIMED",
+            payment_status="UNPAID",
+            payment_method=payload.paymentMethod or payload.payment_method or "CASH",
             created_at=now_utc,
         )
         db.add(new_order)

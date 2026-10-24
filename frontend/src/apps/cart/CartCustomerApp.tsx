@@ -24,6 +24,8 @@ import {
   Check,
   Flame,
   Leaf,
+  UtensilsCrossed,
+  ChevronDown,
 } from 'lucide-react';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
@@ -63,6 +65,8 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'UPI'>('CASH');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showCustomization, setShowCustomization] = useState(false);
+  const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState<string | null>(null);
 
   // Confirmed Order State
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
@@ -257,30 +261,30 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   };
 
   // Submit Order via real backend API
-  const handleSubmitOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmitOrder = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (basket.length === 0 || isSubmitting) return;
-
-    if (!customerName.trim()) {
-      setSubmitError('Please enter your name for pickup identification.');
-      return;
-    }
 
     try {
       setIsSubmitting(true);
       setSubmitError(null);
 
-      const clientOrderId = `ord-cart-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      // Stable idempotency key across double-taps or network retry
+      const clientOrderId = checkoutIdempotencyKey || `ord-cart-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      if (!checkoutIdempotencyKey) {
+        setCheckoutIdempotencyKey(clientOrderId);
+      }
+
       const orderPayload: Partial<Order> = {
         id: clientOrderId,
         restaurantId: targetRestId,
         tableNumber: 'PICKUP',
         orderType: 'TAKEAWAY',
-        customerName: customerName.trim(),
+        customerName: customerName.trim() || 'Cart Guest',
         customerPhone: customerPhone.trim() || undefined,
         notes: orderNotes.trim() || undefined,
         paymentStatus: 'UNPAID',
-        paymentMethod: paymentMethod,
+        paymentMethod: 'CASH',
         totalAmount: basketTotal,
         items: basket.map((b) => ({
           id: `oi-${b.item.id}-${Date.now()}`,
@@ -298,6 +302,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
       setConfirmedOrder(created);
       setBasket([]);
       setIsCheckoutOpen(false);
+      setCheckoutIdempotencyKey(null);
     } catch (err: any) {
       console.error('Order submission error:', err);
       setSubmitError(err?.message || 'Failed to submit order. Please try again or ask counter staff.');
@@ -456,6 +461,18 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 <span className="text-slate-500">Payment:</span>{' '}
                 <span className="text-amber-300 font-medium">{confirmedOrder.paymentMethod || paymentMethod} (Pay at Pickup)</span>
               </div>
+            </div>
+
+            {/* Return to Menu Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmedOrder(null)}
+                className="w-full py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 border border-slate-700/80 transition-all cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Return to Menu • Order More</span>
+              </button>
             </div>
           </div>
         </main>
@@ -644,97 +661,133 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           </div>
         )}
 
-        {/* Menu Grid: Large card-style item layout */}
+        {/* Menu Grid: Image-led card-style item layout */}
         {!isLoadingMenu && !menuError && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             {filteredItems.map((item) => {
               const inBasket = basket.find((b) => b.item.id === item.id);
               const isOutOfStock = item.isAvailable === false || (typeof item.stockQuantity === 'number' && item.stockQuantity <= 0);
               const isLowStock = typeof item.stockQuantity === 'number' && item.stockQuantity > 0 && item.stockQuantity <= 5;
+              const hasPhoto = Boolean(item.imageUrl || item.image);
 
               return (
                 <div
                   key={item.id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                  className={`rounded-3xl border transition-all flex flex-col justify-between overflow-hidden shadow-lg ${
                     isOutOfStock
                       ? 'bg-[#0b0e14]/50 border-slate-800/40 opacity-60'
-                      : 'bg-gradient-to-b from-[#10141d] to-[#0a0d14] border-slate-800/80 hover:border-slate-700/80 shadow-md'
+                      : 'bg-gradient-to-b from-[#111622] to-[#0a0d14] border-slate-800/80 hover:border-slate-700/80'
                   }`}
                 >
-                  <div className="space-y-1.5">
-                    {/* Top Row: Veg indicator & Category */}
-                    <div className="flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`w-3 h-3 rounded-md border flex items-center justify-center p-0.5 ${
-                          item.isVegetarian !== false
-                            ? 'border-emerald-500 text-emerald-400'
-                            : 'border-rose-500 text-rose-400'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${item.isVegetarian !== false ? 'bg-emerald-400' : 'bg-rose-500'}`} />
-                        </span>
-                        <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                          {(item as any).categoryName || (item as any).category || 'Food'}
-                        </span>
-                      </div>
+                  {/* Dish Photo or Clean Food Cart Placeholder */}
+                  <div className="relative w-full h-40 bg-[#141925] overflow-hidden">
+                    {hasPhoto ? (
+                      <img
+                        src={item.imageUrl || item.image}
+                        alt={item.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                        onError={(e) => {
+                          // Gracefully fallback to neutral placeholder if broken URL
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                          const parent = (e.currentTarget as HTMLElement).parentElement;
+                          if (parent) {
+                            const fallback = parent.querySelector('.cart-dish-fallback');
+                            if (fallback) (fallback as HTMLElement).classList.remove('hidden');
+                          }
+                        }}
+                      />
+                    ) : null}
 
-                      {/* Stock badge */}
+                    {/* Neutral Food-Cart Placeholder (no fake random photos) */}
+                    <div
+                      className={`cart-dish-fallback absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-slate-500 bg-gradient-to-br from-[#131722] to-[#0d1017] ${
+                        hasPhoto ? 'hidden' : 'flex'
+                      }`}
+                    >
+                      <div className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shadow-inner">
+                        <UtensilsCrossed className="w-5 h-5 opacity-60" />
+                      </div>
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
+                        {(item as any).categoryName || (item as any).category || 'Street Food'}
+                      </span>
+                    </div>
+
+                    {/* Veg / Non-Veg Badge */}
+                    <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-white/10 text-[10px]">
+                      <span className={`w-2.5 h-2.5 rounded-sm border flex items-center justify-center p-0.5 ${
+                        item.isVegetarian !== false ? 'border-emerald-500' : 'border-rose-500'
+                      }`}>
+                        <span className={`w-1 h-1 rounded-full ${item.isVegetarian !== false ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+                      </span>
+                      <span className="text-slate-200 font-bold uppercase text-[9px] tracking-wider">
+                        {item.isVegetarian !== false ? 'VEG' : 'NON-VEG'}
+                      </span>
+                    </div>
+
+                    {/* Stock Status Badge */}
+                    <div className="absolute top-2.5 right-2.5 z-10">
                       {isOutOfStock ? (
-                        <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                        <span className="text-[10px] font-bold text-rose-200 bg-rose-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-rose-400/40 shadow-sm">
                           Sold Out
                         </span>
                       ) : isLowStock ? (
-                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        <span className="text-[10px] font-bold text-amber-200 bg-amber-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-amber-400/40 shadow-sm">
                           Only {item.stockQuantity} left
                         </span>
                       ) : (
-                        <span className="text-[10px] font-medium text-emerald-400/90 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-medium text-emerald-200 bg-emerald-600/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-emerald-400/30 shadow-sm">
                           In Stock
                         </span>
                       )}
                     </div>
-
-                    {/* Item Name & Description */}
-                    <h3 className="text-sm font-bold text-white tracking-tight pt-1 leading-snug">{item.name}</h3>
-                    {item.description && (
-                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{item.description}</p>
-                    )}
                   </div>
 
-                  {/* Bottom Row: Price & Add to Cart button */}
-                  <div className="pt-4 mt-2 border-t border-slate-800/60 flex items-center justify-between">
-                    <span className="text-base font-extrabold font-mono text-amber-400">
-                      ₹{item.price.toFixed(0)}
-                    </span>
+                  {/* Dish Info & Action Bar */}
+                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-white tracking-tight leading-snug">{item.name}</h3>
+                      {item.description ? (
+                        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed mt-1">{item.description}</p>
+                      ) : null}
+                    </div>
 
-                    {isOutOfStock ? (
-                      <span className="text-xs text-slate-500 font-semibold py-1.5 px-3">Unavailable</span>
-                    ) : inBasket ? (
-                      <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-xl p-1">
+                    {/* Price & Add to Cart button */}
+                    <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between">
+                      <span className="text-base font-extrabold font-mono text-amber-400">
+                        ₹{item.price.toFixed(0)}
+                      </span>
+
+                      {isOutOfStock ? (
+                        <span className="text-xs text-slate-500 font-semibold py-1.5 px-3">Unavailable</span>
+                      ) : inBasket ? (
+                        <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-xl p-1">
+                          <button
+                            onClick={() => handleUpdateQuantity(item.id, -1)}
+                            className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-200 transition-all cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="text-xs font-mono font-bold text-white w-5 text-center">
+                            {inBasket.quantity}
+                          </span>
+                          <button
+                            onClick={() => handleUpdateQuantity(item.id, 1)}
+                            className="w-7 h-7 rounded-lg bg-amber-500 hover:bg-amber-400 flex items-center justify-center text-slate-950 font-bold transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
                         <button
-                          onClick={() => handleUpdateQuantity(item.id, -1)}
-                          className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-200 transition-all"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="text-xs font-mono font-bold text-white w-5 text-center">
-                          {inBasket.quantity}
-                        </span>
-                        <button
-                          onClick={() => handleUpdateQuantity(item.id, 1)}
-                          className="w-7 h-7 rounded-lg bg-amber-500 hover:bg-amber-400 flex items-center justify-center text-slate-950 font-bold transition-all"
+                          onClick={() => handleAddToBasket(item)}
+                          className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10 cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleAddToBasket(item)}
-                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add</span>
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -826,103 +879,77 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 </div>
               </div>
 
-              {/* Customer Contact Details */}
-              <div className="space-y-3 pt-3 border-t border-slate-800/80">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pickup Details</span>
-                <div className="space-y-2">
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-400 mb-1 block">Your Name *</label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        required
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        placeholder="e.g. Rahul Sharma"
-                        className="w-full pl-9 pr-3 py-2 bg-[#121622] border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-400 mb-1 block">Mobile Number (Optional)</label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="tel"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        placeholder="e.g. 9876543210"
-                        className="w-full pl-9 pr-3 py-2 bg-[#121622] border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-400 mb-1 block">Cooking Notes / Requests</label>
-                    <input
-                      type="text"
-                      value={orderNotes}
-                      onChange={(e) => setOrderNotes(e.target.value)}
-                      placeholder="e.g. Extra spicy, no onions, pack separately"
-                      className="w-full px-3 py-2 bg-[#121622] border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
+              {/* Payment Notice: Clear Pay at Counter */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/25 rounded-2xl flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <Banknote className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-white">Pay at Counter</p>
+                  <p className="text-[11px] text-amber-300/80 leading-tight mt-0.5">
+                    Pay with Cash or UPI upon pickup. No online payment required now.
+                  </p>
                 </div>
               </div>
 
-              {/* Payment Mode Selection */}
-              <div className="space-y-2 pt-3 border-t border-slate-800/80">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Payment Method</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('CASH')}
-                    className={`p-3 rounded-xl border text-left flex items-center gap-2.5 transition-all ${
-                      paymentMethod === 'CASH'
-                        ? 'bg-amber-500/15 border-amber-500 text-amber-300 shadow-md'
-                        : 'bg-[#121622] border-slate-700/80 text-slate-400 hover:border-slate-600'
-                    }`}
-                  >
-                    <Banknote className="w-4 h-4 text-amber-400" />
-                    <div>
-                      <p className="text-xs font-bold leading-tight">Pay at Counter</p>
-                      <span className="text-[10px] text-slate-400">Cash / UPI on pickup</span>
-                    </div>
-                  </button>
+              {/* Optional Customization: Collapsed by Default */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomization((prev) => !prev)}
+                  className="w-full py-2 px-3 rounded-xl bg-[#121622] hover:bg-[#181d2c] border border-slate-800 text-[11px] font-medium text-slate-400 hover:text-slate-200 flex items-center justify-between transition-all cursor-pointer"
+                >
+                  <span>{showCustomization ? 'Hide optional requests' : '+ Add optional cooking note or mobile number'}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showCustomization ? 'rotate-180' : ''}`} />
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('UPI')}
-                    className={`p-3 rounded-xl border text-left flex items-center gap-2.5 transition-all ${
-                      paymentMethod === 'UPI'
-                        ? 'bg-amber-500/15 border-amber-500 text-amber-300 shadow-md'
-                        : 'bg-[#121622] border-slate-700/80 text-slate-400 hover:border-slate-600'
-                    }`}
-                  >
-                    <Smartphone className="w-4 h-4 text-amber-400" />
+                {showCustomization && (
+                  <div className="mt-2.5 p-3 rounded-2xl bg-[#0f131d] border border-slate-800/80 space-y-2.5 animate-fadeIn">
                     <div>
-                      <p className="text-xs font-bold leading-tight">Counter UPI</p>
-                      <span className="text-[10px] text-slate-400">Scan QR at window</span>
+                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                        Mobile Number (Optional notification)
+                      </label>
+                      <div className="relative">
+                        <Phone className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="tel"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          placeholder="e.g. 9876543210"
+                          className="w-full pl-8 pr-3 py-1.5 bg-[#141926] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
                     </div>
-                  </button>
-                </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                        Cooking Notes / Special Request
+                      </label>
+                      <input
+                        type="text"
+                        value={orderNotes}
+                        onChange={(e) => setOrderNotes(e.target.value)}
+                        placeholder="e.g. Extra spicy, no onions, pack separately"
+                        className="w-full px-3 py-1.5 bg-[#141926] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Price Breakdown */}
               <div className="p-3 bg-slate-900/60 rounded-2xl border border-slate-800/80 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-400">
                   <span>Subtotal ({basketCount} items)</span>
-                  <span className="font-mono">₹{basketTotal.toFixed(0)}</span>
+                  <span className="font-mono text-slate-200">₹{basketTotal.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Cart Packaging & Pickup</span>
                   <span className="text-emerald-400 font-bold uppercase text-[10px]">Free</span>
                 </div>
                 <div className="pt-2 border-t border-slate-800 flex justify-between font-bold text-sm text-white">
-                  <span>Total Payable</span>
-                  <span className="text-amber-400 font-mono">₹{basketTotal.toFixed(0)}</span>
+                  <span>Total Payable at Counter</span>
+                  <span className="text-amber-400 font-mono text-base">₹{basketTotal.toFixed(0)}</span>
                 </div>
               </div>
 
@@ -933,12 +960,12 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 </div>
               )}
 
-              {/* Submit Button */}
-              <div className="pt-2">
+              {/* One Prominent Place Order Button */}
+              <div className="pt-1">
                 <button
                   type="submit"
                   disabled={isSubmitting || basket.length === 0}
-                  className={`w-full py-3.5 px-4 rounded-2xl ${activeTheme.buttonGradient} font-black text-sm flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.99] transition-all`}
+                  className={`w-full py-3.5 px-4 rounded-2xl ${activeTheme.buttonGradient} font-black text-sm flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer`}
                 >
                   {isSubmitting ? (
                     <>
@@ -948,7 +975,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                   ) : (
                     <>
                       <Ticket className="w-4 h-4" />
-                      <span>Confirm Order • Get Pickup Code</span>
+                      <span>Place Order • ₹{basketTotal.toFixed(0)}</span>
                     </>
                   )}
                 </button>

@@ -40,6 +40,8 @@ class Order(Base, TimestampMixin):
     pickup_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     pickup_status: Mapped[Optional[str]] = mapped_column(String(50), default="UNCLAIMED", nullable=True, index=True)  # UNCLAIMED | REDEEMED
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_status: Mapped[Optional[str]] = mapped_column(String(40), default="UNPAID", nullable=True)  # UNPAID | PAID
+    payment_method: Mapped[Optional[str]] = mapped_column(String(50), default="CASH", nullable=True)
 
 
 class OrderItem(Base, TimestampMixin):

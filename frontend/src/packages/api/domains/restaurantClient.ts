@@ -1499,6 +1499,8 @@ export class RestaurantClient {
       targetDestination: dest,
       isAlcoholic: itemData.isAlcoholic || dest === 'BAR',
       prepTimeMinutes: itemData.prepTimeMinutes || 15,
+      stockQuantity: itemData.stockQuantity,
+      trackInventory: itemData.trackInventory !== undefined ? itemData.trackInventory : (itemData.stockQuantity !== undefined),
     };
 
     const m = await this.base.executeProtectedRequest<any>(
@@ -1525,6 +1527,8 @@ export class RestaurantClient {
       targetDestination: m.target_destination || m.targetDestination || payload.targetDestination,
       isAlcoholic: m.is_alcoholic !== undefined ? m.is_alcoholic : payload.isAlcoholic,
       prepTimeMinutes: m.preparation_time_minutes || m.prepTimeMinutes || payload.prepTimeMinutes,
+      stockQuantity: m.stock_quantity !== undefined ? m.stock_quantity : itemData.stockQuantity,
+      trackInventory: m.track_inventory !== undefined ? m.track_inventory : itemData.trackInventory,
     };
     this.base.invalidateQueryCache('menu:');
     this.base.invalidateQueryCache('categories:');
@@ -1664,13 +1668,16 @@ export class RestaurantClient {
     if (updates.description !== undefined) payload.description = updates.description;
     if (updates.price !== undefined) payload.price = typeof updates.price === 'number' ? updates.price : parseFloat(updates.price as any) || 0;
     if (updates.categoryId !== undefined) payload.categoryId = updates.categoryId;
-    if (updates.imageUrl !== undefined || updates.image !== undefined) payload.imageUrl = updates.imageUrl || updates.image;
+    if (updates.imageUrl !== undefined) payload.imageUrl = updates.imageUrl;
+    else if (updates.image !== undefined) payload.imageUrl = updates.image;
     if (updates.isAvailable !== undefined) payload.isAvailable = updates.isAvailable;
     if (updates.isVegetarian !== undefined) payload.isVegetarian = updates.isVegetarian;
     if (updates.dietaryType !== undefined) payload.dietaryType = updates.dietaryType;
     if (updates.targetDestination !== undefined) payload.targetDestination = updates.targetDestination;
     if (updates.isAlcoholic !== undefined) payload.isAlcoholic = updates.isAlcoholic;
     if (updates.prepTimeMinutes !== undefined) payload.prepTimeMinutes = updates.prepTimeMinutes;
+    if (updates.stockQuantity !== undefined) payload.stockQuantity = updates.stockQuantity;
+    if (updates.trackInventory !== undefined) payload.trackInventory = updates.trackInventory;
 
     const m = await this.base.executeProtectedRequest<any>(
       `/restaurants/${encodeURIComponent(restId)}/menu/${encodeURIComponent(itemId)}`,
@@ -1688,18 +1695,42 @@ export class RestaurantClient {
       name: m.name || updates.name,
       description: m.description !== undefined ? m.description : (updates.description || ''),
       price: typeof m.price === 'number' ? m.price : (updates.price !== undefined ? parseFloat(updates.price as any) : 0),
-      imageUrl: m.image_url || m.imageUrl || updates.imageUrl || updates.image,
-      image: m.image_url || m.imageUrl || updates.imageUrl || updates.image,
+      imageUrl: m.image_url !== undefined ? m.image_url : (updates.imageUrl !== undefined ? updates.imageUrl : updates.image),
+      image: m.image_url !== undefined ? m.image_url : (updates.imageUrl !== undefined ? updates.imageUrl : updates.image),
       isAvailable: m.is_available !== undefined ? m.is_available : (updates.isAvailable !== false),
       isVegetarian: m.is_vegetarian !== undefined ? m.is_vegetarian : (updates.isVegetarian !== false),
       dietaryType: m.dietary_type || m.dietaryType || updates.dietaryType || 'VEG',
       targetDestination: m.target_destination || m.targetDestination || updates.targetDestination || 'KITCHEN',
       isAlcoholic: m.is_alcoholic !== undefined ? m.is_alcoholic : updates.isAlcoholic,
       prepTimeMinutes: m.preparation_time_minutes || m.prepTimeMinutes || updates.prepTimeMinutes,
+      stockQuantity: m.stock_quantity !== undefined ? m.stock_quantity : updates.stockQuantity,
+      trackInventory: m.track_inventory !== undefined ? m.track_inventory : updates.trackInventory,
     };
     this.base.invalidateQueryCache('menu:');
     realtimeBus.emit('MenuItemUpdated' as any, { menuItemId: itemId, restaurantId: restId, data: updatedItem });
     return updatedItem;
+  }
+
+  async uploadImage(
+    restaurantId: string,
+    file: File | Blob,
+    category: 'menu' | 'branding' | 'cover' = 'menu'
+  ): Promise<{ status: string; url: string; filename: string; restaurant_id?: string }> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
+    if (!restId) throw new Error("No active restaurant selected");
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await this.base.executeProtectedRequest<any>(
+      `/restaurants/${encodeURIComponent(restId)}/upload-image?category=${encodeURIComponent(category)}`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+      'OWNER'
+    );
+    return res;
   }
 
   async deleteMenuItem(itemId: string, restaurantId?: string) {

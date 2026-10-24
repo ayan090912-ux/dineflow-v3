@@ -314,7 +314,7 @@ async def create_menu_item(
 
     now_utc = datetime.now(timezone.utc)
     item_id = payload.id or f"item-{target_rest_id}-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
-    img = payload.imageUrl or payload.image or "https://images.unsplash.com/photo-1544025162-d76694265947?w=600"
+    img = payload.imageUrl or payload.image or None
 
     # Strict explicit routing only: item destination is NOT decided by arbitrary name substrings
     dest = (payload.targetDestination or "KITCHEN").upper()
@@ -427,8 +427,9 @@ async def update_menu_item(
             item.category_id = upd_cat_obj.id
         else:
             item.category_id = raw_cat_upd
-    if payload.imageUrl or payload.image:
-        item.image_url = payload.imageUrl or payload.image
+    if payload.imageUrl is not None or payload.image is not None:
+        raw_img = payload.imageUrl if payload.imageUrl is not None else payload.image
+        item.image_url = raw_img.strip() if (raw_img and raw_img.strip()) else None
     if payload.isAvailable is not None:
         item.is_available = payload.isAvailable
     if payload.isVegetarian is not None:

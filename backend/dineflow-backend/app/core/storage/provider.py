@@ -49,14 +49,27 @@ class LocalStorage(StorageProvider):
         os.makedirs(base_path, exist_ok=True)
 
     async def upload(self, file_data: bytes, filename: str, folder: str = "") -> str:
+        import base64
         path = os.path.join(self.base_path, folder, filename)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(file_data)
-        return f"file://{path}"
+        
+        # Determine MIME type for instant browser rendering
+        ext = os.path.splitext(filename)[1].lower()
+        mime_type = "image/jpeg"
+        if ext == ".png":
+            mime_type = "image/png"
+        elif ext == ".webp":
+            mime_type = "image/webp"
+        
+        b64_content = base64.b64encode(file_data).decode("ascii")
+        return f"data:{mime_type};base64,{b64_content}"
 
     async def delete(self, public_id: str) -> bool:
         try:
+            if public_id.startswith("data:"):
+                return True
             os.remove(public_id.replace("file://", ""))
             return True
         except OSError:
@@ -89,17 +102,22 @@ class S3Storage(StorageProvider):
         elif filename.endswith(".svg"):
             content_type = "image/svg+xml"
 
-        # Boto3 upload (sync run via standard call, lightweight for images)
-        self.s3_client.put_object(
-            Bucket=self.bucket,
-            Key=key,
-            Body=file_data,
-            ContentType=content_type
-        )
+        try:
+            # Boto3 upload (sync run via standard call, lightweight for images)
+            self.s3_client.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=file_data,
+                ContentType=content_type
+            )
 
-        if self.custom_domain:
-            return f"https://{self.custom_domain}/{key}"
-        return f"https://{self.bucket}.s3.{self.region}.amazonaws.com/{key}"
+            if self.custom_domain:
+                return f"https://{self.custom_domain}/{key}"
+            return f"https://{self.bucket}.s3.{self.region}.amazonaws.com/{key}"
+        except Exception as s3_err:
+            print(f"[STORAGE WARNING] S3 upload failed ({s3_err}), falling back to local storage provider")
+            local_fallback = LocalStorage()
+            return await local_fallback.upload(file_data=file_data, filename=filename, folder=folder)
 
     async def delete(self, public_id: str) -> bool:
         try:

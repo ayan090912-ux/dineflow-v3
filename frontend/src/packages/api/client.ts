@@ -663,6 +663,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.duplicateMenuItem(itemId);
   }
 
+  async uploadImage(restaurantId: string, file: File | Blob, category: 'menu' | 'branding' | 'cover' = 'menu') {
+    return this.restaurant.uploadImage(restaurantId, file, category);
+  }
+
   async toggleMenuItemAvailability(itemId: string, restaurantId?: string, currentStatus?: boolean) {
     return this.restaurant.toggleMenuItemAvailability(itemId, restaurantId, currentStatus);
   }
