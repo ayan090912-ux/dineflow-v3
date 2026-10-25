@@ -68,8 +68,9 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   const [showCustomization, setShowCustomization] = useState(false);
   const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState<string | null>(null);
 
-  // Confirmed Order State
+  // Confirmed Order State & Navigation Persistence
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [isViewingMenu, setIsViewingMenu] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
   // Active Cart Theme
@@ -129,6 +130,68 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     init();
   }, [business?.id, fetchMenu]);
 
+  // Restore active order from URL (?trackOrder=...) or localStorage
+  useEffect(() => {
+    if (!targetRestId) return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const trackParam = searchParams.get('trackOrder');
+
+    let codeToLookup = trackParam;
+    if (!codeToLookup) {
+      try {
+        const stored = localStorage.getItem(`dinely_active_cart_order_${targetRestId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          codeToLookup = parsed.pickupCode || parsed.id;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (codeToLookup) {
+      api.lookupOrderPickupCode(targetRestId, codeToLookup)
+        .then((ord) => {
+          if (ord) {
+            setConfirmedOrder(ord);
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not restore tracked order:', err);
+        });
+    }
+  }, [targetRestId]);
+
+  // Sync confirmedOrder to localStorage
+  useEffect(() => {
+    if (!targetRestId) return;
+    if (confirmedOrder) {
+      try {
+        localStorage.setItem(
+          `dinely_active_cart_order_${targetRestId}`,
+          JSON.stringify({ id: confirmedOrder.id, pickupCode: confirmedOrder.pickupCode })
+        );
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [confirmedOrder, targetRestId]);
+
+  const handleClearActiveOrder = () => {
+    if (targetRestId) {
+      try {
+        localStorage.removeItem(`dinely_active_cart_order_${targetRestId}`);
+      } catch (e) {
+        // ignore
+      }
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('trackOrder');
+    window.history.replaceState({}, '', url.toString());
+    setConfirmedOrder(null);
+    setIsViewingMenu(false);
+  };
+
   // Subscribe to realtime updates for stock and live order status
   useEffect(() => {
     if (!targetRestId) return;
@@ -170,9 +233,9 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     return () => unsubscribe();
   }, [targetRestId, confirmedOrder, fetchMenu]);
 
-  // Polling fallback when an order is actively waiting for pickup
+  // Polling fallback when an order is actively waiting for pickup (every 3 seconds)
   useEffect(() => {
-    if (!confirmedOrder || !targetRestId || confirmedOrder.pickupStatus === 'REDEEMED') return;
+    if (!confirmedOrder || !targetRestId || confirmedOrder.pickupStatus === 'REDEEMED' || confirmedOrder.status === 'COMPLETED') return;
 
     const interval = setInterval(async () => {
       try {
@@ -183,10 +246,10 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
       } catch (e) {
         // Silent catch for background poll
       }
-    }, 4000);
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [confirmedOrder?.id, confirmedOrder?.pickupStatus, targetRestId]);
+  }, [confirmedOrder?.id, confirmedOrder?.pickupStatus, confirmedOrder?.status, targetRestId]);
 
   // Distinct categories
   const categories = useMemo(() => {
@@ -300,9 +363,25 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
 
       const created = await api.createOrder(orderPayload);
       setConfirmedOrder(created);
+      setIsViewingMenu(false);
       setBasket([]);
       setIsCheckoutOpen(false);
       setCheckoutIdempotencyKey(null);
+
+      // Save to localStorage and URL for instant persistence across reload
+      if (targetRestId) {
+        try {
+          localStorage.setItem(
+            `dinely_active_cart_order_${targetRestId}`,
+            JSON.stringify({ id: created.id, pickupCode: created.pickupCode })
+          );
+        } catch (e) {
+          // ignore
+        }
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set('trackOrder', created.pickupCode || created.id);
+      window.history.replaceState({}, '', url.toString());
     } catch (err: any) {
       console.error('Order submission error:', err);
       setSubmitError(err?.message || 'Failed to submit order. Please try again or ask counter staff.');
@@ -323,9 +402,12 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   // -------------------------------------------------------------
   // VIEW: CONFIRMATION / PICKUP COUPON VOUCHER SCREEN
   // -------------------------------------------------------------
-  if (confirmedOrder) {
+  if (confirmedOrder && !isViewingMenu) {
     const isRedeemed = confirmedOrder.pickupStatus === 'REDEEMED' || confirmedOrder.status === 'COMPLETED';
+    const isReady = confirmedOrder.status === 'READY';
+    const isPreparing = confirmedOrder.status === 'PREPARING';
     const pickupCode = confirmedOrder.pickupCode || confirmedOrder.displayOrderNumber || `#${confirmedOrder.id.slice(-4).toUpperCase()}`;
+    const prepMinutes = confirmedOrder.estimatedPrepTimeMinutes || (confirmedOrder as any).estimated_prep_time_minutes || 15;
 
     return (
       <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col justify-between p-4 sm:p-6 font-sans antialiased selection:bg-amber-500 selection:text-black">
@@ -338,20 +420,34 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             <div>
               <h1 className="text-sm font-bold text-white tracking-wide">{cartName}</h1>
               <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Digital Pickup Ticket
+                <Sparkles className="w-3 h-3" /> Live Pickup Voucher
               </span>
             </div>
           </div>
           <button
-            onClick={() => setConfirmedOrder(null)}
-            className="text-xs px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 transition-all font-medium border border-slate-700/50"
+            onClick={() => setIsViewingMenu(true)}
+            className="text-xs px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 transition-all font-medium border border-slate-700/50 flex items-center gap-1 cursor-pointer"
           >
-            New Order
+            <span>Menu</span>
+            <ChevronRight className="w-3 h-3" />
           </button>
         </header>
 
         {/* Main Content */}
-        <main className="max-w-md w-full mx-auto my-auto py-6 space-y-6">
+        <main className="max-w-md w-full mx-auto my-auto py-6 space-y-5">
+          {/* HIGH VISIBILITY BANNER: READY FOR PICKUP */}
+          {isReady && (
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-500/25 via-emerald-600/30 to-emerald-500/25 border-2 border-emerald-400/80 text-emerald-200 shadow-2xl shadow-emerald-950/50 animate-pulse text-center space-y-1">
+              <div className="flex items-center justify-center gap-2 text-white font-black text-base sm:text-lg">
+                <Sparkles className="w-5 h-5 text-emerald-300 animate-spin" />
+                <span>🎉 YOUR FOOD IS READY!</span>
+              </div>
+              <p className="text-xs text-emerald-300 font-medium">
+                Please collect your order at the cart counter. Show coupon <b>{pickupCode}</b> to staff.
+              </p>
+            </div>
+          )}
+
           {/* Coupon Ticket Box */}
           <div className="relative rounded-3xl bg-gradient-to-b from-[#131722] to-[#0c0f17] border border-amber-500/30 p-6 sm:p-8 text-center shadow-2xl overflow-hidden">
             {/* Background Glow */}
@@ -366,18 +462,35 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             </div>
 
             {/* Huge Prominent Voucher Code */}
-            <div className="my-5 p-5 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-amber-500/15 border-2 border-dashed border-amber-500/50 rounded-2xl relative">
-              <div className="text-4xl sm:text-5xl font-black tracking-widest font-mono text-amber-400 drop-shadow-md">
+            <div className={`my-5 p-5 rounded-2xl relative border-2 border-dashed ${
+              isReady
+                ? 'bg-emerald-500/15 border-emerald-400/80 shadow-lg shadow-emerald-950/30'
+                : 'bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-amber-500/15 border-amber-500/50'
+            }`}>
+              <div className={`text-4xl sm:text-5xl font-black tracking-widest font-mono drop-shadow-md ${
+                isReady ? 'text-emerald-300' : 'text-amber-400'
+              }`}>
                 {pickupCode}
               </div>
 
               <button
                 onClick={handleCopyCode}
-                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-all"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition-all cursor-pointer border border-slate-700/50"
               >
                 {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedCode ? 'Copied!' : 'Copy Code'}</span>
               </button>
+            </div>
+
+            {/* Estimated Prep Time Notice */}
+            <div className="mb-4 flex items-center justify-between text-xs text-slate-400 bg-slate-900/70 p-2.5 rounded-xl border border-slate-800/80">
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Est. Preparation Time:</span>
+              </div>
+              <span className="font-mono font-bold text-amber-400">
+                ~{prepMinutes} mins
+              </span>
             </div>
 
             {/* Status Indicator */}
@@ -385,7 +498,9 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               <div className={`p-3 rounded-2xl border text-xs font-semibold flex items-center justify-center gap-2 ${
                 isRedeemed
                   ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                  : confirmedOrder.status === 'PREPARING'
+                  : isReady
+                  ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-bold'
+                  : isPreparing
                   ? 'bg-sky-500/15 border-sky-500/40 text-sky-400 animate-pulse'
                   : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
               }`}>
@@ -394,7 +509,12 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     <span>Order Collected & Completed! Enjoy your meal.</span>
                   </>
-                ) : confirmedOrder.status === 'PREPARING' ? (
+                ) : isReady ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Ready for Pickup • Food is Packaged at Counter</span>
+                  </>
+                ) : isPreparing ? (
                   <>
                     <RefreshCw className="w-4 h-4 text-sky-400 animate-spin" />
                     <span>In Kitchen • Fresh Food Being Cooked</span>
@@ -402,32 +522,40 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 ) : (
                   <>
                     <Clock className="w-4 h-4 text-amber-400" />
-                    <span>Order Received • Waiting for Counter Pickup</span>
+                    <span>Order Received • Sent to Cart Kitchen</span>
                   </>
                 )}
               </div>
 
-              {/* Progress Stepper */}
-              <div className="grid grid-cols-3 gap-2 pt-2 text-[10px] text-center font-bold uppercase tracking-wider">
-                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 flex flex-col items-center gap-1">
+              {/* 4-Step Progress Stepper */}
+              <div className="grid grid-cols-4 gap-1.5 pt-2 text-[9px] sm:text-[10px] text-center font-bold uppercase tracking-wider">
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex flex-col items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Received</span>
                 </div>
                 <div className={`p-2 rounded-xl border flex flex-col items-center gap-1 ${
-                  isRedeemed || confirmedOrder.status === 'PREPARING'
+                  isRedeemed || isReady || isPreparing
                     ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
                     : 'bg-slate-800/40 text-slate-500 border-slate-700/30'
                 }`}>
-                  <RefreshCw className={`w-3.5 h-3.5 ${confirmedOrder.status === 'PREPARING' ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isPreparing ? 'animate-spin' : ''}`} />
                   <span>Cooking</span>
                 </div>
                 <div className={`p-2 rounded-xl border flex flex-col items-center gap-1 ${
-                  isRedeemed
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  isRedeemed || isReady
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-black'
                     : 'bg-slate-800/40 text-slate-500 border-slate-700/30'
                 }`}>
                   <Ticket className="w-3.5 h-3.5" />
-                  <span>{isRedeemed ? 'Claimed' : 'Pickup'}</span>
+                  <span>Ready</span>
+                </div>
+                <div className={`p-2 rounded-xl border flex flex-col items-center gap-1 ${
+                  isRedeemed
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    : 'bg-slate-800/40 text-slate-500 border-slate-700/30'
+                }`}>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Done</span>
                 </div>
               </div>
             </div>
@@ -463,16 +591,27 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               </div>
             </div>
 
-            {/* Return to Menu Button */}
-            <div className="pt-2">
+            {/* Action Buttons */}
+            <div className="pt-3 space-y-2">
               <button
                 type="button"
-                onClick={() => setConfirmedOrder(null)}
+                onClick={() => setIsViewingMenu(true)}
                 className="w-full py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 border border-slate-700/80 transition-all cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Return to Menu • Order More</span>
+                <span>Browse Menu • Order More</span>
               </button>
+
+              {isRedeemed && (
+                <button
+                  type="button"
+                  onClick={handleClearActiveOrder}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Start New Order</span>
+                </button>
+              )}
             </div>
           </div>
         </main>
@@ -493,9 +632,41 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
       className="min-h-screen text-slate-100 flex flex-col font-sans antialiased pb-28 transition-colors duration-300"
       style={{ backgroundColor: activeTheme.backgroundColor }}
     >
+      {/* Sticky Active Order Reminder Banner when customer is browsing menu */}
+      {confirmedOrder && isViewingMenu && (
+        <div
+          onClick={() => setIsViewingMenu(false)}
+          className="sticky top-0 z-50 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 text-slate-950 px-4 py-2.5 flex items-center justify-between shadow-xl cursor-pointer transition-all hover:brightness-105 border-b border-amber-600/50"
+        >
+          <div className="flex items-center gap-2 text-xs font-bold truncate">
+            <Ticket className="w-4 h-4 text-slate-950 shrink-0 animate-bounce" />
+            <span className="truncate">
+              Active Ticket: <strong className="font-mono text-sm underline">{confirmedOrder.pickupCode || confirmedOrder.id.slice(-4)}</strong>
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ${
+              confirmedOrder.status === 'READY'
+                ? 'bg-emerald-950 text-emerald-300 animate-pulse'
+                : 'bg-slate-950/20 text-slate-950'
+            }`}>
+              {confirmedOrder.status === 'READY'
+                ? '🎉 FOOD READY!'
+                : confirmedOrder.status === 'PREPARING'
+                ? 'Cooking...'
+                : confirmedOrder.status === 'COMPLETED'
+                ? '✓ Completed'
+                : 'Received'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-xs font-black shrink-0 ml-2">
+            <span>View Ticket</span>
+            <ChevronRight className="w-4 h-4" />
+          </div>
+        </div>
+      )}
+
       {/* Top Banner / Navigation */}
       <header
-        className="sticky top-0 z-40 backdrop-blur-md border-b px-4 py-3 transition-colors duration-300"
+        className={`sticky ${confirmedOrder && isViewingMenu ? 'top-10' : 'top-0'} z-40 backdrop-blur-md border-b px-4 py-3 transition-colors duration-300`}
         style={{
           backgroundColor: `${activeTheme.backgroundColor}ea`,
           borderColor: activeTheme.cardBorder,

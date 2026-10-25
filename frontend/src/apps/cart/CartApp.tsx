@@ -96,12 +96,7 @@ export const CartApp: React.FC<CartAppProps> = ({
   const [selectedOrderForHandover, setSelectedOrderForHandover] = useState<Order | null>(null);
   const [handoverInputCode, setHandoverInputCode] = useState('');
   const [handoverError, setHandoverError] = useState<string | null>(null);
-  const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
-  const [walkInBasket, setWalkInBasket] = useState<Array<{ item: CartMenuItem; quantity: number }>>([]);
-  const [walkInPaymentMode, setWalkInPaymentMode] = useState<'CASH' | 'UPI'>('CASH');
-  const [walkInCustomerNote, setWalkInCustomerNote] = useState('');
-  const [isSubmittingWalkIn, setIsSubmittingWalkIn] = useState(false);
-  const previousOrderCountRef = React.useRef<number>(0);
+  const seenOrderIdsRef = React.useRef<Set<string>>(new Set());
 
   // Cart Menu & Real-time Stock Items
   const [menuItems, setMenuItems] = useState<CartMenuItem[]>([
@@ -185,11 +180,22 @@ export const CartApp: React.FC<CartAppProps> = ({
       if (Array.isArray(ords)) {
         setLiveOrders(ords);
         setIsLiveConnected(true);
-        const newCount = ords.filter((o) => o.status === 'PENDING').length;
-        if (newCount > previousOrderCountRef.current && previousOrderCountRef.current > 0) {
-          playAlertBeep();
+        if (seenOrderIdsRef.current.size === 0) {
+          ords.forEach((o) => seenOrderIdsRef.current.add(o.id));
+        } else {
+          let hasNewPending = false;
+          ords.forEach((o) => {
+            if (!seenOrderIdsRef.current.has(o.id)) {
+              seenOrderIdsRef.current.add(o.id);
+              if (o.status === 'PENDING' || o.status === 'NEW') {
+                hasNewPending = true;
+              }
+            }
+          });
+          if (hasNewPending) {
+            playAlertBeep();
+          }
         }
-        previousOrderCountRef.current = newCount;
       }
     } catch (err) {
       console.warn('Failed to load cart live orders:', err);
@@ -242,7 +248,11 @@ export const CartApp: React.FC<CartAppProps> = ({
 
       if (!cartId || evtRestId === cartId) {
         if (evt.type === 'OrderCreated' || evt.type === 'order_created') {
-          playAlertBeep();
+          const newId = p.orderId || p.id || evt.orderId;
+          if (newId && !seenOrderIdsRef.current.has(newId)) {
+            seenOrderIdsRef.current.add(newId);
+            playAlertBeep();
+          }
           fetchLiveOrders();
         } else if (evt.type === 'OrderUpdated' || evt.type === 'order_updated' || evt.type === 'order_redeemed') {
           fetchLiveOrders();
@@ -443,78 +453,7 @@ export const CartApp: React.FC<CartAppProps> = ({
     return match?.imageUrl || match?.image || null;
   };
 
-  // Walk-In Counter Order Handlers
-  const handleAddWalkInItem = (item: CartMenuItem) => {
-    if (!item.isAvailable) return;
-    setWalkInBasket((prev) => {
-      const existing = prev.find((i) => i.item.id === item.id);
-      if (existing) {
-        return prev.map((i) =>
-          i.item.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      }
-      return [...prev, { item, quantity: 1 }];
-    });
-  };
 
-  const handleUpdateWalkInQuantity = (itemId: string, delta: number) => {
-    setWalkInBasket((prev) =>
-      prev
-        .map((i) => {
-          if (i.item.id === itemId) {
-            const nextQ = i.quantity + delta;
-            return nextQ > 0 ? { ...i, quantity: nextQ } : null;
-          }
-          return i;
-        })
-        .filter(Boolean) as Array<{ item: CartMenuItem; quantity: number }>
-    );
-  };
-
-  const walkInSubtotal = walkInBasket.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-
-  const handleSubmitWalkInOrder = async () => {
-    if (walkInBasket.length === 0 || isSubmittingWalkIn) return;
-    try {
-      setIsSubmittingWalkIn(true);
-      const clientOrderId = `ord-walkin-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      const orderPayload: Partial<Order> = {
-        id: clientOrderId,
-        restaurantId: cartId,
-        tableNumber: 'COUNTER',
-        orderType: 'COUNTER_WALK_IN',
-        customerName: 'Walk-In Customer',
-        notes: walkInCustomerNote.trim() || undefined,
-        paymentStatus: 'PAID',
-        paymentMethod: walkInPaymentMode as any,
-        totalAmount: walkInSubtotal,
-        items: walkInBasket.map((b) => ({
-          id: `oi-${b.item.id}`,
-          menuItemId: b.item.id,
-          name: b.item.name,
-          quantity: b.quantity,
-          price: b.item.price,
-          targetDestination: 'KITCHEN',
-          imageUrl: b.item.imageUrl || b.item.image,
-          image: b.item.imageUrl || b.item.image,
-        })),
-        idempotencyKey: clientOrderId,
-      };
-
-      const created = await api.createOrder(orderPayload);
-      setLiveOrders((prev) => [created, ...prev.filter((o) => o.id !== created.id)]);
-      setWalkInBasket([]);
-      setWalkInCustomerNote('');
-      setIsWalkInModalOpen(false);
-      setCheckoutSuccess(`Walk-In Order ${created.pickupCode || created.displayOrderNumber || '#' + created.id} created!`);
-      setTimeout(() => setCheckoutSuccess(null), 4000);
-    } catch (err: any) {
-      console.error('Walk-in order creation failed:', err);
-      alert(err?.message || 'Failed to submit walk-in order.');
-    } finally {
-      setIsSubmittingWalkIn(false);
-    }
-  };
 
   // Stock Adjustment Handler
   const handleStockAdjust = async (itemId: string, delta: number) => {
@@ -1052,17 +991,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                   <RefreshCw className={`w-4 h-4 ${isLoadingOrders ? 'animate-spin text-sky-400' : ''}`} />
                 </button>
 
-                {/* Walk-in Counter Order Action */}
-                <button
-                  onClick={() => {
-                    setWalkInBasket([]);
-                    setIsWalkInModalOpen(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-sky-900/30 cursor-pointer transition-all"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Walk-In Order</span>
-                </button>
+
 
                 {/* Customer QR Menu Link */}
                 <a
@@ -1173,7 +1102,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                       : `No Orders in "${terminalFilter}" State`}
                   </h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    When customers place orders via the Cart QR Storefront or staff dispatch walk-in counter orders, they will appear here instantly.
+                    When customers scan the QR code and place orders via the Cart Storefront, they will appear here instantly with live sound alerts and unique pickup coupons.
                   </p>
                 </div>
                 <div className="flex items-center justify-center gap-3 pt-2">
@@ -1181,21 +1110,11 @@ export const CartApp: React.FC<CartAppProps> = ({
                     href={cartOrderingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-900/30 transition-all"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     <span>Open Customer Storefront</span>
                   </a>
-                  <button
-                    onClick={() => {
-                      setWalkInBasket([]);
-                      setIsWalkInModalOpen(true);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Create Test Walk-In Order</span>
-                  </button>
                 </div>
               </div>
             ) : (
@@ -1228,13 +1147,19 @@ export const CartApp: React.FC<CartAppProps> = ({
                             <span className="font-mono font-bold text-slate-300">
                               #{ord.displayOrderNumber || ord.id.slice(-4)}
                             </span>
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                              {isWalkIn ? 'Walk-in Counter' : 'QR Storefront'}
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                              QR Storefront
                             </span>
                           </div>
-                          <span className="text-[11px] text-slate-400 font-mono">
-                            {formatOrderTime(ord.createdAt)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-amber-400" />
+                              <span>{formatOrderTime(ord.createdAt)}</span>
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                              ~{ord.estimatedPrepTimeMinutes || (ord as any).estimated_prep_time_minutes || 15}m prep
+                            </span>
+                          </div>
                         </div>
 
                         {/* Large High-Visibility Pickup Code Banner */}
@@ -1366,42 +1291,40 @@ export const CartApp: React.FC<CartAppProps> = ({
 
                         {/* Operational Lifecycle Buttons */}
                         <div className="flex items-center justify-end gap-2 pt-1">
-                          {ord.status === 'PENDING' && (
+                          {(ord.status === 'PENDING' || ord.status === 'NEW' || ord.status === 'ACCEPTED') && (
                             <>
                               <button
                                 onClick={() => updateOrderStatus(ord.id, 'CANCELLED')}
                                 className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs cursor-pointer transition-all"
                               >
-                                Reject
+                                Cancel Order
                               </button>
                               <button
-                                onClick={() => updateOrderStatus(ord.id, 'ACCEPTED')}
-                                className="px-4 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-sky-900/30 cursor-pointer transition-all"
+                                onClick={() => updateOrderStatus(ord.id, 'PREPARING')}
+                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/30 cursor-pointer transition-all flex-1"
                               >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Accept Order</span>
+                                <ChefHat className="w-4 h-4" />
+                                <span>Start Preparing</span>
                               </button>
                             </>
                           )}
 
-                          {ord.status === 'ACCEPTED' && (
-                            <button
-                              onClick={() => updateOrderStatus(ord.id, 'PREPARING')}
-                              className="w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/30 cursor-pointer transition-all"
-                            >
-                              <ChefHat className="w-4 h-4" />
-                              <span>Start Preparing</span>
-                            </button>
-                          )}
-
                           {ord.status === 'PREPARING' && (
-                            <button
-                              onClick={() => updateOrderStatus(ord.id, 'READY')}
-                              className="w-full px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer transition-all"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>Ready for Pickup</span>
-                            </button>
+                            <>
+                              <button
+                                onClick={() => updateOrderStatus(ord.id, 'CANCELLED')}
+                                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs cursor-pointer transition-all"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => updateOrderStatus(ord.id, 'READY')}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer transition-all flex-1"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Mark Ready for Pickup</span>
+                              </button>
+                            </>
                           )}
 
                           {ord.status === 'READY' && (
@@ -1419,15 +1342,15 @@ export const CartApp: React.FC<CartAppProps> = ({
                           )}
 
                           {isRedeemed && (
-                            <div className="w-full py-1 text-center font-mono text-[11px] text-slate-500 font-semibold flex items-center justify-center gap-1.5">
+                            <div className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5">
                               <CheckCheck className="w-4 h-4 text-emerald-400" />
-                              <span>Fulfilled & Handed Over</span>
+                              <span>✓ Handed Over & Completed</span>
                             </div>
                           )}
 
                           {isCancelled && (
-                            <div className="w-full py-1 text-center font-mono text-[11px] text-rose-500 font-semibold">
-                              Order Cancelled
+                            <div className="w-full py-2 px-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold text-xs flex items-center justify-center gap-1.5">
+                              <span>Order Cancelled</span>
                             </div>
                           )}
                         </div>
@@ -1540,149 +1463,7 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
             )}
 
-            {/* Walk-In Counter Order Modal (Preserves Walk-in Cashier Capability) */}
-            {isWalkInModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-                <div className="bg-[#0e121a] border border-[#212737] rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col p-6 space-y-4 shadow-2xl">
-                  <div className="flex items-center justify-between pb-3 border-b border-[#1f2636]">
-                    <div>
-                      <h2 className="text-base font-bold text-white flex items-center gap-2">
-                        <span>New Walk-In Counter Order</span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          Counter Cashier
-                        </span>
-                      </h2>
-                      <p className="text-xs text-slate-400 mt-0.5">Tap menu items to build the basket and generate an instant pickup code.</p>
-                    </div>
-                    <button
-                      onClick={() => setIsWalkInModalOpen(false)}
-                      className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
-                    >
-                      <CloseIcon className="w-4 h-4" />
-                    </button>
-                  </div>
 
-                  <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
-                    {/* Menu item picker */}
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Cart Street Food Menu</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {menuItems.map((item) => {
-                          const isSoldOut = item.isAvailable === false;
-                          const photoUrl = item.imageUrl || item.image;
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => handleAddWalkInItem(item)}
-                              disabled={isSoldOut}
-                              className={`p-3 rounded-xl border text-left flex flex-col justify-between space-y-1.5 transition-all ${
-                                !isSoldOut
-                                  ? 'bg-[#080a0f] border-[#181f2d] hover:border-sky-500 hover:bg-[#10141f] cursor-pointer'
-                                  : 'bg-[#080a0f] border-[#141822] opacity-50 cursor-not-allowed'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                {photoUrl ? (
-                                  <img src={photoUrl} alt={item.name} className="w-9 h-9 rounded-lg object-cover shrink-0" />
-                                ) : (
-                                  <div className="w-9 h-9 rounded-lg bg-[#141924] flex items-center justify-center text-slate-500 shrink-0">
-                                    <UtensilsCrossed className="w-4 h-4" />
-                                  </div>
-                                )}
-                                <div className="min-w-0">
-                                  <div className="text-xs font-bold text-white truncate">{item.name}</div>
-                                  <div className="text-xs font-mono font-bold text-sky-400">₹{item.price}</div>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Active basket & checkout */}
-                    <div className="w-full md:w-64 bg-[#080a0f] border border-[#181f2d] rounded-xl p-3.5 flex flex-col justify-between space-y-3 shrink-0">
-                      <div className="space-y-2 overflow-y-auto max-h-48 pr-1">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Basket ({walkInBasket.length})</div>
-                        {walkInBasket.length === 0 ? (
-                          <div className="text-xs text-slate-500 py-6 text-center">Tap items on the left to add</div>
-                        ) : (
-                          walkInBasket.map((b) => (
-                            <div key={b.item.id} className="flex items-center justify-between text-xs py-1 border-b border-[#141822]">
-                              <div className="truncate mr-2">
-                                <span className="font-bold text-white">{b.item.name}</span>
-                                <div className="text-[10px] font-mono text-slate-400">₹{b.item.price} each</div>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  onClick={() => handleUpdateWalkInQuantity(b.item.id, -1)}
-                                  className="w-5 h-5 rounded bg-[#181f2d] hover:bg-[#252f44] flex items-center justify-center text-white cursor-pointer"
-                                >
-                                  -
-                                </button>
-                                <span className="font-mono font-bold text-white w-4 text-center">{b.quantity}</span>
-                                <button
-                                  onClick={() => handleUpdateWalkInQuantity(b.item.id, 1)}
-                                  className="w-5 h-5 rounded bg-[#181f2d] hover:bg-[#252f44] flex items-center justify-center text-white cursor-pointer"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      <div className="space-y-3 pt-2 border-t border-[#181f2d]">
-                        <div>
-                          <input
-                            type="text"
-                            placeholder="Optional customer note..."
-                            value={walkInCustomerNote}
-                            onChange={(e) => setWalkInCustomerNote(e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#0e121a] border border-[#212737] text-xs text-white placeholder-slate-500"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-400">Payment:</span>
-                          <div className="flex gap-1">
-                            {(['CASH', 'UPI'] as const).map((m) => (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => setWalkInPaymentMode(m)}
-                                className={`px-2.5 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer ${
-                                  walkInPaymentMode === m
-                                    ? 'bg-sky-600 text-white'
-                                    : 'bg-[#121622] text-slate-400 border border-[#212737]'
-                                }`}
-                              >
-                                {m}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs font-bold text-white">
-                          <span>Total:</span>
-                          <span className="text-base font-mono font-black text-emerald-400">₹{walkInSubtotal}</span>
-                        </div>
-
-                        <button
-                          onClick={handleSubmitWalkInOrder}
-                          disabled={walkInBasket.length === 0 || isSubmittingWalkIn}
-                          className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md shadow-emerald-900/30"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>{isSubmittingWalkIn ? 'Submitting...' : 'Dispatch Counter Order'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 

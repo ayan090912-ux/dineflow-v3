@@ -54,6 +54,8 @@ class CreateOrderSchema(BaseModel):
     eventName: Optional[str] = None
     ageConfirmed: Optional[bool] = None
     legalDrinkingAgeAffirmed: Optional[bool] = None
+    estimatedPrepTimeMinutes: Optional[int] = None
+    estimated_prep_time_minutes: Optional[int] = None
 
 class RedeemPickupCodeSchema(BaseModel):
     code: str
@@ -670,11 +672,22 @@ async def create_order(
                 return format_order_response(existing_id_ord, hide_financials=(is_wedding_event and not is_staff_caller))
 
         order_id = payload.id or (f"ord-{restaurant.id}-{eff_idempotency_key}" if eff_idempotency_key else f"ord-{restaurant.id}-{int(now_utc.timestamp() * 1000)}")
-        pickup_code = payload.pickupCode or f"C-{daily_seq:03d}"
+        target_code = payload.pickupCode or f"C{daily_seq:04d}"
+        if not payload.pickupCode:
+            while True:
+                code_exists_stmt = select(Order.id).where(
+                    Order.restaurant_id == restaurant.id,
+                    Order.pickup_code == target_code
+                )
+                res_exists = await db.execute(code_exists_stmt)
+                if not res_exists.scalar_one_or_none():
+                    break
+                daily_seq += 1
+                target_code = f"C{daily_seq:04d}"
+        pickup_code = target_code
 
         # Rapid-tap duplicate guard for event orders
         if payload.eventId and (tbl_id or tbl_num):
-            from datetime import timedelta
             dup_cutoff = now_utc - timedelta(seconds=10)
             dup_stmt = select(Order).where(
                 Order.restaurant_id == restaurant.id,
@@ -790,8 +803,8 @@ async def create_order(
             tax_amount=tax_amount,
             total_amount=total,
             order_number=order_num,
-            estimated_prep_time_minutes=None,
-            eta_target_timestamp=None,
+            estimated_prep_time_minutes=payload.estimatedPrepTimeMinutes or 15,
+            eta_target_timestamp=now_utc + timedelta(minutes=(payload.estimatedPrepTimeMinutes or 15)),
             items_json=items_list_dict,
             tax_breakdown_json=tax_breakdown,
             order_type=eff_order_type,
@@ -1640,19 +1653,28 @@ async def lookup_order_by_pickup_code(
     if not clean_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pickup code is required")
 
-    stmt = select(Order).where(
-        or_(
-            func.upper(Order.pickup_code) == clean_code,
-            func.upper(Order.pickup_code) == stripped_code,
-            func.upper(Order.pickup_code) == f"#{stripped_code}",
-            func.upper(Order.pickup_code) == f"C-{stripped_code}",
-            func.upper(Order.order_number) == clean_code,
-            func.upper(Order.order_number) == stripped_code,
-            func.upper(Order.order_number) == f"#{stripped_code}",
-            func.upper(Order.order_number) == f"#ORD-{stripped_code}",
-            Order.id == code.strip()
-        )
-    )
+    digits_only = "".join(filter(str.isdigit, clean_code))
+    match_conditions = [
+        func.upper(Order.pickup_code) == clean_code,
+        func.upper(Order.pickup_code) == stripped_code,
+        func.upper(Order.pickup_code) == f"#{stripped_code}",
+        func.upper(Order.pickup_code) == f"C-{stripped_code}",
+        func.upper(Order.pickup_code) == f"C{stripped_code}",
+        func.upper(Order.order_number) == clean_code,
+        func.upper(Order.order_number) == stripped_code,
+        func.upper(Order.order_number) == f"#{stripped_code}",
+        func.upper(Order.order_number) == f"#ORD-{stripped_code}",
+        Order.id == code.strip()
+    ]
+    if digits_only:
+        match_conditions.extend([
+            func.upper(Order.pickup_code) == f"C{digits_only.zfill(4)}",
+            func.upper(Order.pickup_code) == f"C-{digits_only.zfill(3)}",
+            func.upper(Order.pickup_code) == f"C{digits_only}",
+            func.upper(Order.order_number) == f"#ORD-{int(digits_only)}",
+        ])
+
+    stmt = select(Order).where(or_(*match_conditions))
 
     actual_rid = None
     if target_rest_id:
@@ -1694,19 +1716,28 @@ async def redeem_pickup_code(
     if not clean_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pickup code is required")
 
-    stmt = select(Order).where(
-        or_(
-            func.upper(Order.pickup_code) == clean_code,
-            func.upper(Order.pickup_code) == stripped_code,
-            func.upper(Order.pickup_code) == f"#{stripped_code}",
-            func.upper(Order.pickup_code) == f"C-{stripped_code}",
-            func.upper(Order.order_number) == clean_code,
-            func.upper(Order.order_number) == stripped_code,
-            func.upper(Order.order_number) == f"#{stripped_code}",
-            func.upper(Order.order_number) == f"#ORD-{stripped_code}",
-            Order.id == payload.code.strip()
-        )
-    )
+    digits_only = "".join(filter(str.isdigit, clean_code))
+    match_conditions = [
+        func.upper(Order.pickup_code) == clean_code,
+        func.upper(Order.pickup_code) == stripped_code,
+        func.upper(Order.pickup_code) == f"#{stripped_code}",
+        func.upper(Order.pickup_code) == f"C-{stripped_code}",
+        func.upper(Order.pickup_code) == f"C{stripped_code}",
+        func.upper(Order.order_number) == clean_code,
+        func.upper(Order.order_number) == stripped_code,
+        func.upper(Order.order_number) == f"#{stripped_code}",
+        func.upper(Order.order_number) == f"#ORD-{stripped_code}",
+        Order.id == payload.code.strip()
+    ]
+    if digits_only:
+        match_conditions.extend([
+            func.upper(Order.pickup_code) == f"C{digits_only.zfill(4)}",
+            func.upper(Order.pickup_code) == f"C-{digits_only.zfill(3)}",
+            func.upper(Order.pickup_code) == f"C{digits_only}",
+            func.upper(Order.order_number) == f"#ORD-{int(digits_only)}",
+        ])
+
+    stmt = select(Order).where(or_(*match_conditions))
 
     actual_rid = None
     if target_rest_id:
