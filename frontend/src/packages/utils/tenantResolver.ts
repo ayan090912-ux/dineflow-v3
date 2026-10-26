@@ -146,8 +146,14 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     return 'HUB';
   }
 
-  // 3.2. Small Cart Customer Menu route (e.g. /cart/:cartId/menu or /cart/menu)
-  if (p === '/cart/menu' || p.startsWith('/cart/menu/') || (p.startsWith('/cart/') && p.endsWith('/menu'))) {
+  // 3.2. Small Cart Customer Menu / Storefront route (e.g. /cart/:cartId/menu, /cart/menu, /cart/storefront)
+  if (
+    p === '/cart/menu' ||
+    p.startsWith('/cart/menu/') ||
+    p === '/cart/storefront' ||
+    p.startsWith('/cart/storefront/') ||
+    (p.startsWith('/cart/') && (p.endsWith('/menu') || p.endsWith('/storefront')))
+  ) {
     return 'CUSTOMER';
   }
 
@@ -337,6 +343,17 @@ export function getTenantUrl(
   path: string = ''
 ): string {
   const base = getRestaurantPublicDomain(slugOrRest);
+  if (base === 'https://dinely.food' && slugOrRest) {
+    const rawId = typeof slugOrRest === 'object' ? (slugOrRest.id || slugOrRest.slug || slugOrRest.publicSlug) : slugOrRest;
+    if (rawId && !RESERVED_SUBDOMAINS.has(String(rawId).toLowerCase())) {
+      if (!path || path === '/' || path === '/customer') {
+        return `https://dinely.food/cart/menu?cartId=${encodeURIComponent(rawId)}`;
+      }
+      const cleanPath = path.startsWith('/') ? path : `/${path}`;
+      const sep = cleanPath.includes('?') ? '&' : '?';
+      return `https://dinely.food${cleanPath}${sep}cartId=${encodeURIComponent(rawId)}`;
+    }
+  }
   if (!path || path === '/') {
     return base;
   }

@@ -758,7 +758,7 @@ function AppContent() {
       // 0.07. Dedicated Small Cart Operating System
       if (
         tenantApp === 'CART_OS' ||
-        ((resolvedTenant.businessType === 'SMALL_CART' || resolvedTenant.businessType === 'FOOD_CART') && (tenantApp === 'SETTINGS' || cleanPath.startsWith('/restaurant') || cleanPath === '/dashboard'))
+        ((resolvedTenant.businessType === 'SMALL_CART' || resolvedTenant.businessType === 'FOOD_CART' || resolvedTenant.businessType === 'FOOD_TRUCK' || (resolvedTenant as any).osType === 'CART_OS') && (tenantApp === 'SETTINGS' || cleanPath.startsWith('/restaurant') || cleanPath === '/dashboard'))
       ) {
         return (
           <CartApp
@@ -826,7 +826,9 @@ function AppContent() {
         const isCart = (
           resolvedTenant.businessType === 'SMALL_CART' ||
           resolvedTenant.businessType === 'FOOD_CART' ||
-          resolvedTenant.businessType === 'FOOD_TRUCK_STREET_FOOD'
+          resolvedTenant.businessType === 'FOOD_TRUCK' ||
+          resolvedTenant.businessType === 'FOOD_TRUCK_STREET_FOOD' ||
+          (resolvedTenant as any).osType === 'CART_OS'
         );
         if (isCart) {
           return (
@@ -1789,11 +1791,13 @@ function AppContent() {
       );
     }
 
-    // 7.7. Dedicated Small Cart Customer Ordering Storefront (e.g. /cart/:id/menu or /cart/menu)
+    // 7.7. Dedicated Small Cart Customer Ordering Storefront (e.g. /cart/:id/menu, /cart/menu, /cart/storefront)
     if (
       cleanPath === '/cart/menu' ||
       cleanPath.startsWith('/cart/menu/') ||
-      (cleanPath.startsWith('/cart/') && cleanPath.endsWith('/menu'))
+      cleanPath === '/cart/storefront' ||
+      cleanPath.startsWith('/cart/storefront/') ||
+      (cleanPath.startsWith('/cart/') && (cleanPath.endsWith('/menu') || cleanPath.endsWith('/storefront')))
     ) {
       return (
         <CartCustomerApp

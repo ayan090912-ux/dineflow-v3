@@ -1045,14 +1045,14 @@ async def get_restaurant_orders(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        target_rest_id = caller.restaurant_id or restaurant_id
+        target_rest_id = restaurant_id or caller.restaurant_id
         try:
             from app.core.tenant.resolver import resolve_canonical_restaurant_id
             target_rest_id = await resolve_canonical_restaurant_id(target_rest_id, db)
         except Exception:
             pass
 
-        if caller.restaurant_id:
+        if caller.restaurant_id and caller.restaurant_id != target_rest_id:
             caller_canon = caller.restaurant_id
             try:
                 from app.core.tenant.resolver import resolve_canonical_restaurant_id
@@ -1123,7 +1123,8 @@ async def get_restaurant_orders(
                         else:
                             query = query.where(
                                 (Order.event_id.isnot(None)) |
-                                (Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER"]))
+                                (Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER", "TAKEAWAY", "COUNTER_WALK_IN"])) |
+                                (Order.status.in_(["PENDING", "PREPARING", "READY"]))
                             )
                     else:
                         query = query.where(Order.status.in_(["PENDING", "PREPARING", "READY"]))

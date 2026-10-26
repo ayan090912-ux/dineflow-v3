@@ -171,6 +171,67 @@ export const CartApp: React.FC<CartAppProps> = ({
     }
   };
 
+  // Sync business prop
+  useEffect(() => {
+    if (business) {
+      setCurrentCart(business);
+      api.setCurrentRestaurantId(business.id);
+    }
+  }, [business]);
+
+  // Asynchronous fallback resolution if business prop was not immediately provided
+  useEffect(() => {
+    async function resolveCart() {
+      if (!currentCart) {
+        try {
+          const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+          const queryCartId = searchParams.get('cartId') || searchParams.get('restaurantId') || searchParams.get('cart') || searchParams.get('slug');
+
+          const pathSegments = typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean) : [];
+          let pathCartId: string | undefined;
+          if (pathSegments[0] === 'cart' && pathSegments.length >= 2 && !['dashboard', 'orders', 'menu', 'qr', 'pos', 'settings', 'terminal', 'billing'].includes(pathSegments[1])) {
+            pathCartId = pathSegments[1];
+          }
+
+          const targetLookup = queryCartId || pathCartId;
+          if (targetLookup) {
+            let r = await api.getRestaurantDetails(targetLookup).catch(() => null);
+            if (!r) {
+              r = await api.resolveRestaurantBySlug(targetLookup).catch(() => null);
+            }
+            if (r) {
+              setCurrentCart(r);
+              api.setCurrentRestaurantId(r.id);
+              return;
+            }
+          }
+
+          const domainRes = getTenantFromHostname();
+          if (domainRes.isTenantSubdomain && domainRes.slug) {
+            const r = await api.resolveRestaurantBySlug(domainRes.slug).catch(() => null);
+            if (r) {
+              setCurrentCart(r);
+              api.setCurrentRestaurantId(r.id);
+              return;
+            }
+          }
+
+          const currId = api.getCurrentRestaurantId();
+          if (currId) {
+            const r = await api.getRestaurantDetails(currId).catch(() => null);
+            if (r) {
+              setCurrentCart(r);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('[CartApp] Cart resolution notice:', err);
+        }
+      }
+    }
+    resolveCart();
+  }, [currentCart]);
+
   // 1. Initial Load: Live Orders & Menu from Backend
   const fetchLiveOrders = async () => {
     if (!cartId) return;
@@ -242,11 +303,16 @@ export const CartApp: React.FC<CartAppProps> = ({
 
   // 2. Real-Time Bus Subscription for Incoming QR Orders and Status Changes
   useEffect(() => {
+    if (!cartId) return;
+
+    // Authoritatively connect to real-time WebSocket room as OWNER for this tenant
+    realtimeBus.connect(cartId, 'OWNER');
+
     const unsub = realtimeBus.subscribe((evt: any) => {
       const p = evt.payload || evt.data || evt;
       const evtRestId = p.restaurantId || p.restaurant_id || evt.restaurantId;
 
-      if (!cartId || evtRestId === cartId) {
+      if (!cartId || !evtRestId || evtRestId === cartId) {
         if (evt.type === 'OrderCreated' || evt.type === 'order_created') {
           const newId = p.orderId || p.id || evt.orderId;
           if (newId && !seenOrderIdsRef.current.has(newId)) {
@@ -254,7 +320,14 @@ export const CartApp: React.FC<CartAppProps> = ({
             playAlertBeep();
           }
           fetchLiveOrders();
-        } else if (evt.type === 'OrderUpdated' || evt.type === 'order_updated' || evt.type === 'order_redeemed') {
+        } else if (
+          evt.type === 'OrderUpdated' ||
+          evt.type === 'order_updated' ||
+          evt.type === 'order_redeemed' ||
+          evt.type === 'order_status_updated' ||
+          evt.type === 'order_ready' ||
+          evt.type === 'order_delivered'
+        ) {
           fetchLiveOrders();
         } else if (evt.type === 'MenuItemCreated' || evt.type === 'menu_item_created' || evt.type === 'menu_item_updated') {
           fetchMenuItems();
@@ -646,7 +719,14 @@ export const CartApp: React.FC<CartAppProps> = ({
 
   // Single-Scan QR Canonical URL (dynamic for every cart tenant)
   const cartPublicSlug = currentCart?.publicSlug || currentCart?.slug || currentCart?.id || '';
-  const cartOrderingUrl = getTenantUrl(currentCart);
+  const cartOrderingUrl = useMemo(() => {
+    if (!currentCart) return getTenantUrl(null, '/cart/menu');
+    const base = getRestaurantPublicDomain(currentCart);
+    if (base && !base.includes('://dinely.food')) {
+      return base;
+    }
+    return `https://dinely.food/cart/menu?cartId=${encodeURIComponent(currentCart.id)}`;
+  }, [currentCart]);
 
   // Sync Theme from Business Profile
   useEffect(() => {

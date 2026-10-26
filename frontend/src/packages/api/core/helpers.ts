@@ -81,7 +81,17 @@ export function getPortalScopeFromPath(pathname?: string): PortalScope {
   if (p.startsWith('/inventory')) {
     return 'INVENTORY';
   }
-  if (p.startsWith('/customer') || p.startsWith('/order') || p.startsWith('/qr')) {
+  if (
+    p.startsWith('/customer') ||
+    p.startsWith('/order') ||
+    p.startsWith('/qr') ||
+    p.startsWith('/cart/menu') ||
+    p.startsWith('/cart/storefront') ||
+    (p.startsWith('/cart/') && (p.endsWith('/menu') || p.endsWith('/storefront'))) ||
+    p.startsWith('/event') ||
+    p.startsWith('/events') ||
+    p.startsWith('/wedding/guest')
+  ) {
     return 'CUSTOMER';
   }
   return 'OWNER';

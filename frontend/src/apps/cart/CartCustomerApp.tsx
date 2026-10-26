@@ -99,9 +99,39 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   }, []);
 
   useEffect(() => {
+    if (propBusiness) {
+      setBusiness(propBusiness);
+      fetchMenu(propBusiness.id);
+    }
+  }, [propBusiness, fetchMenu]);
+
+  useEffect(() => {
     async function init() {
       if (!business) {
         try {
+          const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+          const queryCartId = searchParams.get('cartId') || searchParams.get('restaurantId') || searchParams.get('cart') || searchParams.get('slug');
+
+          // Check path pattern: /cart/:id/menu or /cart/:id/storefront
+          const pathSegments = typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean) : [];
+          let pathCartId: string | undefined;
+          if (pathSegments[0] === 'cart' && pathSegments.length >= 3 && (pathSegments[2] === 'menu' || pathSegments[2] === 'storefront')) {
+            pathCartId = pathSegments[1];
+          }
+
+          const targetLookup = queryCartId || pathCartId;
+          if (targetLookup) {
+            let r = await api.getRestaurantDetails(targetLookup).catch(() => null);
+            if (!r) {
+              r = await api.resolveRestaurantBySlug(targetLookup).catch(() => null);
+            }
+            if (r) {
+              setBusiness(r);
+              fetchMenu(r.id);
+              return;
+            }
+          }
+
           const domainRes = getTenantFromHostname();
           if (domainRes.isTenantSubdomain && domainRes.slug) {
             const r = await api.resolveRestaurantBySlug(domainRes.slug);
