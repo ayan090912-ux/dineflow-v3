@@ -97,8 +97,20 @@ const playKitchenChime = (type: 'NEW_ORDER' | 'OVERDUE' | 'BUMP') => {
   }
 };
 
+export const calculateElapsedTime = (timestamp?: string) => {
+  if (!timestamp) return 'Just now';
+  const diff = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000));
+  const mins = Math.floor(diff / 60);
+  const secs = diff % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+};
+
 export const calculateRemainingTime = (order: Order) => {
-  if (!order.etaTargetTimestamp) return { formatted: '--:--', isOverdue: false, secondsLeft: 0, progressPct: 100 };
+  if (!order.etaTargetTimestamp) {
+    const elapsed = calculateElapsedTime(order.createdAt);
+    return { formatted: `Elapsed: ${elapsed}`, isOverdue: false, secondsLeft: 0, progressPct: 100, hasEta: false };
+  }
   const target = new Date(order.etaTargetTimestamp).getTime();
   const now = Date.now();
   const diff = Math.floor((target - now) / 1000);
@@ -112,6 +124,7 @@ export const calculateRemainingTime = (order: Order) => {
       isOverdue: true,
       secondsLeft: diff,
       progressPct: 100,
+      hasEta: true,
     };
   } else {
     const mins = Math.floor(diff / 60);
@@ -125,6 +138,7 @@ export const calculateRemainingTime = (order: Order) => {
       isOverdue: false,
       secondsLeft: diff,
       progressPct,
+      hasEta: true,
     };
   }
 };
@@ -153,11 +167,12 @@ const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, o
       <div className="p-2.5 bg-[#0c0e14] rounded-lg border border-[#1e232e] flex items-center justify-between">
         <div>
           <span className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1">
-            <Clock className="w-3 h-3 text-orange-400" /> Prep Countdown
+            {timerData.hasEta ? <Clock className="w-3 h-3 text-orange-400" /> : <Flame className="w-3 h-3 text-sky-400" />}
+            {timerData.hasEta ? 'Prep Countdown' : 'Kitchen Active'}
           </span>
           <div
-            className={`font-mono text-xl font-bold tracking-tight ${
-              timerData.isOverdue ? 'text-rose-400' : 'text-emerald-400'
+            className={`font-mono ${timerData.hasEta ? 'text-xl font-bold tracking-tight' : 'text-sm font-semibold'} ${
+              timerData.isOverdue ? 'text-rose-400' : timerData.hasEta ? 'text-emerald-400' : 'text-sky-300'
             }`}
           >
             {timerData.formatted}
@@ -165,35 +180,39 @@ const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, o
         </div>
 
         <div className="flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="p-1.5 text-slate-400 hover:text-white bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
-            onClick={() => onToggleTimer(order.id)}
-            title={order.isTimerPaused ? 'Resume Timer' : 'Pause Timer'}
-          >
-            {order.isTimerPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-400" />}
-          </Button>
+          {timerData.hasEta && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-1.5 text-slate-400 hover:text-white bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
+              onClick={() => onToggleTimer(order.id)}
+              title={order.isTimerPaused ? 'Resume Timer' : 'Pause Timer'}
+            >
+              {order.isTimerPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-400" />}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
             className="p-1.5 text-slate-400 hover:text-sky-300 bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
             onClick={() => onOpenHistory(order)}
-            title="View ETA Audit History"
+            title="View Ticket History"
           >
             <History className="w-3.5 h-3.5 text-sky-400" />
           </Button>
         </div>
       </div>
 
-      <div className="w-full bg-[#0c0e14] h-1.5 rounded-full overflow-hidden border border-[#1e232e]">
-        <div
-          className={`h-full transition-all duration-1000 ${
-            timerData.isOverdue ? 'bg-rose-500' : 'bg-emerald-500'
-          }`}
-          style={{ width: `${timerData.progressPct}%` }}
-        />
-      </div>
+      {timerData.hasEta && (
+        <div className="w-full bg-[#0c0e14] h-1.5 rounded-full overflow-hidden border border-[#1e232e]">
+          <div
+            className={`h-full transition-all duration-1000 ${
+              timerData.isOverdue ? 'bg-rose-500' : 'bg-emerald-500'
+            }`}
+            style={{ width: `${timerData.progressPct}%` }}
+          />
+        </div>
+      )}
     </>
   );
 });
@@ -454,40 +473,77 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   }, []); // Empty deps — mute/unmute managed via isMutedRef, not re-registration
 
 
-  // Handlers
-  const handleOpenAcceptModal = async (order: Order) => {
-    setSelectedOrderToAccept(order);
-    const rec = await api.getSmartETARecommendation(order.id);
-    setSmartEtaData(rec);
-    setChosenPrepTime(rec.recommendedMinutes);
-    setCustomPrepInput(String(rec.recommendedMinutes));
-  };
+  const [processingOrderIds, setProcessingOrderIds] = useState<Set<string>>(new Set());
 
-  const handleConfirmAcceptOrder = async () => {
-    if (!selectedOrderToAccept) return;
-    const finalMins = parseInt(customPrepInput, 10) || chosenPrepTime || 15;
-    const targetTimestamp = new Date(Date.now() + finalMins * 60000).toISOString();
+  // Direct 1-Click Start Preparing (Simplified Kitchen Workflow)
+  const handleStartPreparing = async (order: Order, optionalMins?: number) => {
+    if (processingOrderIds.has(order.id)) return;
+    setProcessingOrderIds((prev) => new Set(prev).add(order.id));
+
+    const targetTimestamp = optionalMins ? new Date(Date.now() + optionalMins * 60000).toISOString() : undefined;
 
     // Optimistic local state update
     setOrders((prev) =>
       prev.map((o) =>
-        o.id === selectedOrderToAccept.id
+        o.id === order.id
           ? {
               ...o,
               kitchenStatus: 'PREPARING',
               status: 'PREPARING',
-              estimatedPrepTimeMinutes: finalMins,
+              estimatedPrepTimeMinutes: optionalMins,
               etaTargetTimestamp: targetTimestamp,
             }
           : o
       )
     );
 
-    await api.updateFulfillmentTicketStatus(selectedOrderToAccept.id, 'PREPARING', 'KITCHEN');
-    await api.updateKitchenStatus(selectedOrderToAccept.id, 'PREPARING');
-    await api.acceptOrder(selectedOrderToAccept.id, finalMins);
-    if (!isMuted) playKitchenChime('BUMP');
-    showToast(`Order #${selectedOrderToAccept.id} Kitchen Ticket Accepted! Timer set to ${finalMins} mins.`, 'success');
+    try {
+      await api.updateFulfillmentTicketStatus(order.id, 'PREPARING', 'KITCHEN');
+      await api.updateKitchenStatus(order.id, 'PREPARING', undefined, {
+        estimatedPrepTimeMinutes: optionalMins,
+        etaTargetTimestamp: targetTimestamp,
+      });
+      if (optionalMins) {
+        try {
+          await api.acceptOrder(order.id, optionalMins);
+        } catch (_) {}
+      }
+      if (!isMuted) playKitchenChime('BUMP');
+      showToast(
+        `Order #${order.id.slice(-4)} started cooking!${optionalMins ? ` (ETA: ${optionalMins}m)` : ''}`,
+        'success'
+      );
+      onRefreshOrdersRef.current?.();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to start cooking', 'warning');
+      onRefreshOrdersRef.current?.();
+    } finally {
+      setProcessingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
+    }
+  };
+
+  // Handlers
+  const handleOpenAcceptModal = async (order: Order) => {
+    setSelectedOrderToAccept(order);
+    try {
+      const rec = await api.getSmartETARecommendation(order.id);
+      setSmartEtaData(rec);
+      setChosenPrepTime(rec.recommendedMinutes || 15);
+      setCustomPrepInput(String(rec.recommendedMinutes || 15));
+    } catch (_) {
+      setChosenPrepTime(15);
+      setCustomPrepInput('15');
+    }
+  };
+
+  const handleConfirmAcceptOrder = async () => {
+    if (!selectedOrderToAccept) return;
+    const finalMins = parseInt(customPrepInput, 10) || chosenPrepTime || 15;
+    await handleStartPreparing(selectedOrderToAccept, finalMins);
     setSelectedOrderToAccept(null);
   };
 
@@ -560,12 +616,25 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   };
 
   const handleMarkReady = async (order: Order) => {
-    await api.updateFulfillmentTicketStatus(order.id, 'READY', 'KITCHEN');
-    await api.updateKitchenStatus(order.id, 'READY');
-    setBumpedHistory((prev) => [order, ...prev.slice(0, 19)]);
-    if (!isMuted) playKitchenChime('BUMP');
-    showToast(`Order #${order.id} Kitchen Ticket Plated & Ready! ✨`, 'success');
-    onRefreshOrdersRef.current?.();
+    if (processingOrderIds.has(order.id)) return;
+    setProcessingOrderIds((prev) => new Set(prev).add(order.id));
+    try {
+      await api.updateFulfillmentTicketStatus(order.id, 'READY', 'KITCHEN');
+      await api.updateKitchenStatus(order.id, 'READY');
+      setBumpedHistory((prev) => [order, ...prev.slice(0, 19)]);
+      if (!isMuted) playKitchenChime('BUMP');
+      showToast(`Order #${order.id.slice(-4)} plated & ready for pass! ✨`, 'success');
+      onRefreshOrdersRef.current?.();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to mark ready', 'warning');
+      onRefreshOrdersRef.current?.();
+    } finally {
+      setProcessingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
+    }
   };
 
 
@@ -908,16 +977,29 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       )}
                     </div>
 
-                    {/* Primary Bump Action */}
-                    <Button
-                      variant="brand"
-                      size="sm"
-                      className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-xs"
-                      onClick={() => handleOpenAcceptModal(order)}
-                      icon={<Clock className="w-3.5 h-3.5" />}
-                    >
-                      Accept Ticket & Set ETA
-                    </Button>
+                    {/* Simplified Kitchen Actions: 1-Click Start Preparing + Optional ETA */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        variant="brand"
+                        size="sm"
+                        disabled={processingOrderIds.has(order.id)}
+                        className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-all shadow-xs"
+                        onClick={() => handleStartPreparing(order)}
+                        icon={<Flame className="w-3.5 h-3.5" />}
+                      >
+                        {processingOrderIds.has(order.id) ? 'Starting...' : 'Start Preparing'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white hover:border-[#2d3748] px-2.5 py-2 text-xs rounded-lg flex items-center gap-1"
+                        onClick={() => handleOpenAcceptModal(order)}
+                        title="Set Optional Estimated Prep Time"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="hidden sm:inline text-[11px]">ETA</span>
+                      </Button>
+                    </div>
                   </div>
                 ))
               )}
@@ -1039,15 +1121,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         })}
                       </div>
 
-                      {/* Primary Bump Action */}
+                      {/* Primary Bump Action: Mark Ready */}
                       <Button
                         variant="brand"
                         size="sm"
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-xs"
+                        disabled={processingOrderIds.has(order.id)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-xs transition-colors"
                         onClick={() => handleMarkReady(order)}
                         icon={<CheckCircle2 className="w-3.5 h-3.5" />}
                       >
-                        Bump to Waiter Pass
+                        {processingOrderIds.has(order.id) ? 'Marking Ready...' : 'Mark Ready (Pass to Waiter)'}
                       </Button>
                     </div>
                   );

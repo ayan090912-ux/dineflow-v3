@@ -400,19 +400,17 @@ export class OrderClient {
         const updateBody: any = {};
         if (ticket.station === 'KITCHEN') {
           updateBody.kitchenStatus = status;
-          if (status === 'PREPARING' || status === 'ACCEPTED') updateBody.status = 'IN_KITCHEN';
-          if (status === 'READY') updateBody.status = 'READY';
-          if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
         } else if (ticket.station === 'BAR') {
           updateBody.barStatus = status;
-          if (status === 'READY') updateBody.status = 'READY';
-          if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
         } else if (ticket.station === 'HOOKAH') {
           updateBody.hookahStatus = status;
-          if (status === 'READY') updateBody.status = 'READY';
-          if (status === 'COMPLETED') updateBody.status = 'COMPLETED';
-        } else {
-          updateBody.status = status;
+        }
+        if (allCompleted) {
+          updateBody.status = 'COMPLETED';
+        } else if (allReady) {
+          updateBody.status = 'READY';
+        } else if (status === 'PREPARING' || status === 'ACCEPTED') {
+          updateBody.status = 'PREPARING';
         }
 
         const apiBase = getApiBaseUrl();
@@ -706,27 +704,46 @@ export class OrderClient {
     return order;
   }
 
-  async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
+  async updateKitchenStatus(
+    orderId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
+    scope?: any,
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) {
     const order = this.base.orders.find((o) => o.id === orderId);
     const barReady = !order?.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
     const hookahReady = !order?.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
     const isParentReady = (status === 'READY' && barReady && hookahReady);
     const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
+    const bodyPayload: any = {
+      status: isParentReady ? 'READY' : (order?.status || orderStatus),
+      kitchenStatus: status,
+    };
+    if (options?.estimatedPrepTimeMinutes !== undefined) {
+      bodyPayload.estimatedPrepTimeMinutes = options.estimatedPrepTimeMinutes;
+    }
+    if (options?.etaTargetTimestamp !== undefined) {
+      bodyPayload.etaTargetTimestamp = options.etaTargetTimestamp;
+    }
+
     await this.base.executeProtectedRequest<any>(
       `/orders/${encodeURIComponent(orderId)}/status`,
       {
         method: 'PUT',
-        body: JSON.stringify({
-          status: isParentReady ? 'READY' : (order?.status || orderStatus),
-          kitchenStatus: status,
-        }),
+        body: JSON.stringify(bodyPayload),
       },
       scope
     );
 
     if (order) {
       order.kitchenStatus = status;
+      if (options?.estimatedPrepTimeMinutes !== undefined) {
+        order.estimatedPrepTimeMinutes = options.estimatedPrepTimeMinutes;
+      }
+      if (options?.etaTargetTimestamp !== undefined) {
+        order.etaTargetTimestamp = options.etaTargetTimestamp;
+      }
       if (status === 'COMPLETED') {
         order.kitchenCompletedAt = new Date().toISOString();
       }
@@ -763,27 +780,46 @@ export class OrderClient {
     return order;
   }
 
-  async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
+  async updateBarStatus(
+    orderId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
+    scope?: any,
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) {
     const order = this.base.orders.find((o) => o.id === orderId);
     const kitchenReady = !order?.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
     const hookahReady = !order?.hookahStatus || order.hookahStatus === 'READY' || order.hookahStatus === 'COMPLETED';
     const isParentReady = (status === 'READY' && kitchenReady && hookahReady);
     const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
+    const bodyPayload: any = {
+      status: isParentReady ? 'READY' : (order?.status || orderStatus),
+      barStatus: status,
+    };
+    if (options?.estimatedPrepTimeMinutes !== undefined) {
+      bodyPayload.estimatedPrepTimeMinutes = options.estimatedPrepTimeMinutes;
+    }
+    if (options?.etaTargetTimestamp !== undefined) {
+      bodyPayload.etaTargetTimestamp = options.etaTargetTimestamp;
+    }
+
     await this.base.executeProtectedRequest<any>(
       `/orders/${encodeURIComponent(orderId)}/status`,
       {
         method: 'PUT',
-        body: JSON.stringify({
-          status: isParentReady ? 'READY' : (order?.status || orderStatus),
-          barStatus: status,
-        }),
+        body: JSON.stringify(bodyPayload),
       },
       scope
     );
 
     if (order) {
       order.barStatus = status;
+      if (options?.estimatedPrepTimeMinutes !== undefined) {
+        order.estimatedPrepTimeMinutes = options.estimatedPrepTimeMinutes;
+      }
+      if (options?.etaTargetTimestamp !== undefined) {
+        order.etaTargetTimestamp = options.etaTargetTimestamp;
+      }
       if (status === 'COMPLETED') {
         order.barCompletedAt = new Date().toISOString();
       }
@@ -820,27 +856,46 @@ export class OrderClient {
     return order;
   }
 
-  async updateHookahStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED', scope?: any) {
+  async updateHookahStatus(
+    orderId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
+    scope?: any,
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) {
     const order = this.base.orders.find((o) => o.id === orderId);
     const kitchenReady = !order?.kitchenStatus || order.kitchenStatus === 'READY' || order.kitchenStatus === 'COMPLETED';
     const barReady = !order?.barStatus || order.barStatus === 'READY' || order.barStatus === 'COMPLETED';
     const isParentReady = (status === 'READY' && kitchenReady && barReady);
     const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
+    const bodyPayload: any = {
+      status: isParentReady ? 'READY' : (order?.status || orderStatus),
+      hookahStatus: status,
+    };
+    if (options?.estimatedPrepTimeMinutes !== undefined) {
+      bodyPayload.estimatedPrepTimeMinutes = options.estimatedPrepTimeMinutes;
+    }
+    if (options?.etaTargetTimestamp !== undefined) {
+      bodyPayload.etaTargetTimestamp = options.etaTargetTimestamp;
+    }
+
     await this.base.executeProtectedRequest<any>(
       `/orders/${encodeURIComponent(orderId)}/status`,
       {
         method: 'PUT',
-        body: JSON.stringify({
-          status: isParentReady ? 'READY' : (order?.status || orderStatus),
-          hookahStatus: status,
-        }),
+        body: JSON.stringify(bodyPayload),
       },
       scope
     );
 
     if (order) {
       order.hookahStatus = status;
+      if (options?.estimatedPrepTimeMinutes !== undefined) {
+        order.estimatedPrepTimeMinutes = options.estimatedPrepTimeMinutes;
+      }
+      if (options?.etaTargetTimestamp !== undefined) {
+        order.etaTargetTimestamp = options.etaTargetTimestamp;
+      }
       if (status === 'COMPLETED') {
         order.hookahCompletedAt = new Date().toISOString();
       }

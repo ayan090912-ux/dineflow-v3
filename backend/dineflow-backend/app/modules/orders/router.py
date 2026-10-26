@@ -1415,16 +1415,12 @@ async def update_order_status(
         or getattr(order, "event_id", None) is not None
     )
 
-    if not is_evt_order and (payload.kitchenStatus == "PREPARING" or order.status == "PREPARING") and not order.eta_target_timestamp:
-        prep_mins = payload.estimatedPrepTimeMinutes or order.estimated_prep_time_minutes or 15
-        order.estimated_prep_time_minutes = prep_mins
-        order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=prep_mins)
-
+    # Optional ETA handling: Staff may set an ETA, but it must not be mandatory.
+    # When staff do not set an ETA, do not invent a default completion time.
     if payload.estimatedPrepTimeMinutes is not None and not is_evt_order:
-        order.estimated_prep_time_minutes = payload.estimatedPrepTimeMinutes
-        if not order.eta_target_timestamp:
-            order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=payload.estimatedPrepTimeMinutes)
-    if payload.etaTargetTimestamp is not None:
+        order.estimated_prep_time_minutes = max(1, payload.estimatedPrepTimeMinutes)
+        order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=order.estimated_prep_time_minutes)
+    elif payload.etaTargetTimestamp is not None:
         try:
             dt_val = datetime.fromisoformat(payload.etaTargetTimestamp.replace("Z", "+00:00"))
             order.eta_target_timestamp = dt_val

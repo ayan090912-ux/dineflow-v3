@@ -224,7 +224,22 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
+  const [processingOrderIds, setProcessingOrderIds] = useState<Set<string>>(new Set());
+  const [, setTick] = useState<number>(0);
+
+  // Live timer tick for real-time elapsed time calculation
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleUpdateStatus = async (
+    orderId: string,
+    newStatus: OrderStatus,
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) => {
+    if (processingOrderIds.has(orderId)) return;
+    setProcessingOrderIds((prev) => new Set(prev).add(orderId));
     setActionError('');
     try {
       const stationStatus =
@@ -234,7 +249,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
           ? 'PREPARING'
           : 'COMPLETED';
       await api.updateFulfillmentTicketStatus(orderId, stationStatus, 'BAR');
-      await api.updateBarStatus(orderId, stationStatus);
+      await api.updateBarStatus(orderId, stationStatus, undefined, options);
 
       if (stationStatus === 'COMPLETED' || newStatus === 'DELIVERED') {
         const completedOrd = orders.find((o) => o.id === orderId);
@@ -250,8 +265,25 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     } catch (err: any) {
       console.error('Failed to update drink order status:', err);
       setActionError(err?.message || 'Failed to update bar status. Please try again.');
+    } finally {
+      setProcessingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
   };
+
+  const handleQuickEta = async (orderId: string, currentOrder: Order, deltaMins: number) => {
+    const currentMins = currentOrder.estimatedPrepTimeMinutes || 10;
+    const newMins = Math.max(3, currentMins + deltaMins);
+    const newTarget = new Date(Date.now() + newMins * 60000).toISOString();
+    await handleUpdateStatus(orderId, 'PREPARING', {
+      estimatedPrepTimeMinutes: newMins,
+      etaTargetTimestamp: newTarget,
+    });
+  };
+
   // Divide orders into Bar Pipeline stages based strictly on authoritative station and order status
   const pendingOrders = orders.filter(
     (o) =>
@@ -439,9 +471,11 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                   key={ord.id}
                   order={ord}
                   currencySymbol={currencySymbol}
-                  actionLabel="Start Prep"
+                  actionLabel="Start Preparing"
                   actionVariant="primary"
+                  isProcessing={processingOrderIds.has(ord.id)}
                   onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
+                  onQuickEta={(delta) => handleQuickEta(ord.id, ord, delta)}
                 />
               ))}
               {pendingOrders.length === 0 && (
@@ -470,9 +504,11 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                   key={ord.id}
                   order={ord}
                   currencySymbol={currencySymbol}
-                  actionLabel="Mark as Ready"
+                  actionLabel="Mark Ready (To Pass)"
                   actionVariant="success"
+                  isProcessing={processingOrderIds.has(ord.id)}
                   onAction={() => handleUpdateStatus(ord.id, 'READY')}
+                  onQuickEta={(delta) => handleQuickEta(ord.id, ord, delta)}
                 />
               ))}
               {preparingOrders.length === 0 && (
@@ -501,9 +537,10 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                   key={ord.id}
                   order={ord}
                   currencySymbol={currencySymbol}
-                  actionLabel="Hand Over to Floor"
+                  actionLabel="Mark Dispatched / Served"
                   actionVariant="neutral"
-                  onAction={() => handleUpdateStatus(ord.id, 'DELIVERED')}
+                  isProcessing={processingOrderIds.has(ord.id)}
+                  onAction={() => handleUpdateStatus(ord.id, 'COMPLETED')}
                 />
               ))}
               {readyOrders.length === 0 && (
@@ -543,19 +580,58 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
   );
 };
 
+// Helper for elapsed time calculation
+const calculateElapsedTime = (timestamp?: string) => {
+  if (!timestamp) return 'Just now';
+  const diff = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000));
+  const mins = Math.floor(diff / 60);
+  const secs = diff % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+};
+
+// Helper for remaining ETA calculation (only when ETA is explicitly set)
+const calculateRemainingEta = (etaTimestamp?: string) => {
+  if (!etaTimestamp) return null;
+  const diff = Math.floor((new Date(etaTimestamp).getTime() - Date.now()) / 1000);
+  if (diff < 0) {
+    const overdue = Math.abs(diff);
+    const m = Math.floor(overdue / 60);
+    const s = overdue % 60;
+    return { formatted: `+${m}:${s.toString().padStart(2, '0')} LATE`, isLate: true };
+  }
+  const m = Math.floor(diff / 60);
+  const s = diff % 60;
+  return { formatted: `${m}:${s.toString().padStart(2, '0')}`, isLate: false };
+};
+
 // Bar Order Card Component
 const BarOrderCard: React.FC<{
   order: Order;
   actionLabel?: string;
   actionVariant?: 'primary' | 'success' | 'neutral';
   onAction?: () => void;
+  onQuickEta?: (deltaMins: number) => void;
+  isProcessing?: boolean;
   isCompleted?: boolean;
   currencySymbol?: string;
-}> = ({ order, actionLabel, actionVariant = 'primary', onAction, isCompleted, currencySymbol = '₹' }) => {
+}> = ({
+  order,
+  actionLabel,
+  actionVariant = 'primary',
+  onAction,
+  onQuickEta,
+  isProcessing = false,
+  isCompleted,
+  currencySymbol = '₹',
+}) => {
   const drinkItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
   if (drinkItems.length === 0) {
     return null;
   }
+
+  const elapsed = calculateElapsedTime(order.createdAt);
+  const remainingEta = calculateRemainingEta(order.etaTargetTimestamp);
 
   return (
     <motion.div
@@ -579,9 +655,14 @@ const BarOrderCard: React.FC<{
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
-            <Clock className="w-3 h-3 text-slate-500" />
-            <span>{order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ordered'}</span>
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span className="text-slate-400 flex items-center gap-1" title="Time elapsed since received">
+              <Clock className="w-3 h-3 text-slate-500" />
+              <span>{elapsed}</span>
+            </span>
+            <span className="text-slate-500 text-[10px]">
+              ({order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ordered'})
+            </span>
           </div>
         </div>
 
@@ -589,6 +670,21 @@ const BarOrderCard: React.FC<{
           <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
             <User className="w-3 h-3 text-slate-500" />
             <span>{order.customerName}</span>
+          </div>
+        )}
+
+        {/* ETA Display (Only displayed if staff explicitly set an ETA) */}
+        {remainingEta && !isCompleted && (
+          <div className={`px-2.5 py-1 rounded-lg border text-xs font-mono flex items-center justify-between ${
+            remainingEta.isLate
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              : 'bg-sky-500/10 border-sky-500/30 text-sky-300'
+          }`}>
+            <span className="flex items-center gap-1.5 text-[11px]">
+              <Clock className="w-3 h-3" />
+              <span>Prep ETA:</span>
+            </span>
+            <span className="font-bold">{remainingEta.formatted}</span>
           </div>
         )}
 
@@ -627,18 +723,52 @@ const BarOrderCard: React.FC<{
           </div>
         )}
 
+        {/* Quick ETA Controls (Optional, does not block 1-click workflows) */}
+        {!isCompleted && onQuickEta && (
+          <div className="flex items-center justify-between gap-1 pt-1 text-[11px] font-mono text-slate-400">
+            <span className="text-[10px] text-slate-500">Optional ETA:</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onQuickEta(5)}
+                disabled={isProcessing}
+                className="px-2 py-0.5 rounded bg-[#181d27] border border-[#2d3545] hover:border-sky-500 text-sky-400 text-[10px] transition-colors disabled:opacity-50"
+                title="Add 5 minutes to prep estimate"
+              >
+                +5m
+              </button>
+              <button
+                type="button"
+                onClick={() => onQuickEta(10)}
+                disabled={isProcessing}
+                className="px-2 py-0.5 rounded bg-[#181d27] border border-[#2d3545] hover:border-sky-500 text-sky-400 text-[10px] transition-colors disabled:opacity-50"
+                title="Add 10 minutes to prep estimate"
+              >
+                +10m
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Primary Action Button */}
         {!isCompleted && onAction && actionLabel && (
           <button
             onClick={onAction}
-            className={`w-full py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+            disabled={isProcessing}
+            className={`w-full py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${
               actionVariant === 'primary' || actionVariant === 'success'
                 ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-xs'
                 : 'bg-[#181d27] text-white hover:bg-[#222838] border border-[#2d3545]'
             }`}
           >
-            <span>{actionLabel}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            {isProcessing ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <>
+                <span>{actionLabel}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </>
+            )}
           </button>
         )}
       </div>

@@ -61,27 +61,57 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
 
   // Canonical lifecycle flags derived strictly from authoritative backend state
   const isOrderDelivered = currentOrder.status === 'DELIVERED' || currentOrder.status === 'COMPLETED';
-  const isOrderReady = isOrderDelivered || currentOrder.status === 'READY' || currentOrder.kitchenStatus === 'READY' || currentOrder.barStatus === 'READY';
-  const isOrderPreparing = isOrderReady || currentOrder.status === 'PREPARING' || currentOrder.status === 'IN_KITCHEN' || currentOrder.kitchenStatus === 'PREPARING' || currentOrder.barStatus === 'PREPARING';
+
+  // Multi-station independent progress tracking
+  const hasKitchenItems = Boolean(currentOrder.items && currentOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
+  const hasBarItems = Boolean(currentOrder.items && currentOrder.items.some((i) => getFulfillmentStation(i) === 'BAR'));
+  const hasHookahItems = Boolean(currentOrder.items && currentOrder.items.some((i) => getFulfillmentStation(i) === 'HOOKAH'));
+
+  const kReady = !hasKitchenItems || currentOrder.kitchenStatus === 'READY' || currentOrder.kitchenStatus === 'COMPLETED';
+  const bReady = !hasBarItems || currentOrder.barStatus === 'READY' || currentOrder.barStatus === 'COMPLETED';
+  const hReady = !hasHookahItems || currentOrder.hookahStatus === 'READY' || currentOrder.hookahStatus === 'COMPLETED';
+
+  // Overall order is ready ONLY when ALL active stations have finished preparing!
+  const isOrderReady = isOrderDelivered || (currentOrder.status === 'READY') || (kReady && bReady && hReady && (currentOrder.kitchenStatus === 'READY' || currentOrder.barStatus === 'READY' || currentOrder.hookahStatus === 'READY'));
+  const isOrderPreparing = isOrderReady || currentOrder.status === 'PREPARING' || currentOrder.kitchenStatus === 'PREPARING' || currentOrder.barStatus === 'PREPARING' || currentOrder.hookahStatus === 'PREPARING';
   const isOrderReceived = true;
 
-  // Live countdown timer derived strictly from server state
+  const [elapsedTimeStr, setElapsedTimeStr] = useState<string>('Just now');
+
+  // Live elapsed time & countdown timer derived strictly from server state
   useEffect(() => {
-    const calculateSecondsLeft = () => {
-      if (currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp) {
+    const updateTiming = () => {
+      // Calculate elapsed time
+      if (currentOrder.createdAt) {
+        const diff = Math.max(0, Math.floor((Date.now() - new Date(currentOrder.createdAt).getTime()) / 1000));
+        const m = Math.floor(diff / 60);
+        const s = diff % 60;
+        setElapsedTimeStr(m === 0 ? `${s}s` : `${m}m ${s}s`);
+      }
+
+      // If no ETA is set by station, show accurate status without inventing a completion time!
+      if (!currentOrder.etaTargetTimestamp) {
         setRemainingSeconds(0);
-        setEtaMessage('Order received • Queued for kitchen preparation');
+        if (isOrderDelivered) {
+          setEtaMessage('Served at your table • Enjoy your meal!');
+        } else if (isOrderReady) {
+          setEtaMessage('Plated & ready • Floor staff is bringing your order.');
+        } else if (isOrderPreparing) {
+          if (hasKitchenItems && currentOrder.kitchenStatus === 'READY' && hasBarItems && currentOrder.barStatus === 'PREPARING') {
+            setEtaMessage('Food ready at kitchen pass • Bar preparing drinks');
+          } else if (hasBarItems && currentOrder.barStatus === 'READY' && hasKitchenItems && currentOrder.kitchenStatus === 'PREPARING') {
+            setEtaMessage('Drinks ready at bar • Kitchen cooking food');
+          } else {
+            setEtaMessage('Active preparation in progress by restaurant staff.');
+          }
+        } else {
+          setEtaMessage('Order received • Queued for preparation');
+        }
         return;
       }
 
-      let target: number;
-      if (currentOrder.etaTargetTimestamp) {
-        target = new Date(currentOrder.etaTargetTimestamp).getTime();
-      } else {
-        const created = new Date(currentOrder.createdAt || Date.now()).getTime();
-        const prepMins = currentOrder.estimatedPrepTimeMinutes || 15;
-        target = created + prepMins * 60000;
-      }
+      // If ETA IS set by staff:
+      const target = new Date(currentOrder.etaTargetTimestamp).getTime();
       const now = Date.now();
       const diffSec = Math.max(0, Math.floor((target - now) / 1000));
       setRemainingSeconds(diffSec);
@@ -96,17 +126,17 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
         } else if (diffSec === 0) {
           setEtaMessage('Chef is adding final touches...');
         } else {
-          setEtaMessage('Active preparation in progress by kitchen & bar staff.');
+          setEtaMessage(`Estimated ready in ~${Math.ceil(diffSec / 60)} min`);
         }
       } else {
-        setEtaMessage('Order transmitted • Preparing to cook.');
+        setEtaMessage('Order received • Preparing to cook.');
       }
     };
 
-    calculateSecondsLeft();
-    const interval = setInterval(calculateSecondsLeft, 1000);
+    updateTiming();
+    const interval = setInterval(updateTiming, 1000);
     return () => clearInterval(interval);
-  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus, isOrderDelivered, isOrderReady, isOrderPreparing]);
+  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus, currentOrder.barStatus, isOrderDelivered, isOrderReady, isOrderPreparing, hasKitchenItems, hasBarItems]);
 
   const formatCountdown = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -212,25 +242,25 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
         <div className="p-4 bg-[#0b0d11] rounded-xl border border-white/[0.06] flex flex-col items-center justify-center text-center space-y-1">
           <span className="text-[11px] font-mono uppercase tracking-wider text-white/40 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>{isPendingServerAcceptance ? 'Status' : 'Estimated Time'}</span>
+            <span>{currentOrder.etaTargetTimestamp ? 'Estimated Time' : 'Preparation Status'}</span>
           </span>
 
-          {isPendingServerAcceptance ? (
-            <div className="py-2 text-center space-y-1">
-              <span className="text-sm font-medium text-amber-300 block">
-                Order Received • Awaiting Kitchen Acceptance
-              </span>
-              <span className="text-[11px] text-white/40 font-mono block">
-                Countdown timer begins upon ticket confirmation
-              </span>
-            </div>
-          ) : (
+          {currentOrder.etaTargetTimestamp ? (
             <div className="font-mono text-3xl font-semibold text-white tracking-widest my-1 flex items-baseline justify-center gap-2">
               <span className="text-amber-400">
                 {formatCountdown(remainingSeconds)}
               </span>
               <span className="text-xs text-white/40 font-sans font-normal">
                 (~{minutesRemaining} {minutesRemaining === 1 ? 'min' : 'mins'})
+              </span>
+            </div>
+          ) : (
+            <div className="py-2 text-center space-y-1">
+              <span className="text-sm font-semibold text-amber-300 block">
+                {isOrderReady ? 'Plated & Ready for Service!' : isOrderPreparing ? 'Active Preparation in Progress' : 'Order Received'}
+              </span>
+              <span className="text-[11px] text-white/50 font-mono block">
+                Elapsed time: <strong className="text-white/80">{elapsedTimeStr}</strong>
               </span>
             </div>
           )}

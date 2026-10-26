@@ -220,11 +220,26 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, newStationStatus: 'PREPARING' | 'READY' | 'COMPLETED') => {
+  const [processingOrderIds, setProcessingOrderIds] = useState<Set<string>>(new Set());
+  const [, setTick] = useState<number>(0);
+
+  // Live timer tick for real-time elapsed time calculation
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleUpdateStatus = async (
+    orderId: string,
+    newStationStatus: 'PREPARING' | 'READY' | 'COMPLETED',
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) => {
+    if (processingOrderIds.has(orderId)) return;
+    setProcessingOrderIds((prev) => new Set(prev).add(orderId));
     setActionError('');
     try {
       await api.updateFulfillmentTicketStatus(orderId, newStationStatus, 'HOOKAH');
-      await api.updateHookahStatus(orderId, newStationStatus);
+      await api.updateHookahStatus(orderId, newStationStatus, undefined, options);
 
       if (newStationStatus === 'COMPLETED') {
         const completedOrd = orders.find((o) => o.id === orderId);
@@ -240,7 +255,23 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     } catch (err: any) {
       console.error('Failed to update hookah order status:', err);
       setActionError(err.message || 'Failed to update order status. Please retry.');
+    } finally {
+      setProcessingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
+  };
+
+  const handleQuickEta = async (orderId: string, currentOrder: Order, deltaMins: number) => {
+    const currentMins = currentOrder.estimatedPrepTimeMinutes || 15;
+    const newMins = Math.max(5, currentMins + deltaMins);
+    const newTarget = new Date(Date.now() + newMins * 60000).toISOString();
+    await handleUpdateStatus(orderId, 'PREPARING', {
+      estimatedPrepTimeMinutes: newMins,
+      etaTargetTimestamp: newTarget,
+    });
   };
 
   // Divide orders into Hookah Pipeline stages: New -> Preparing -> Ready -> Completed
@@ -455,7 +486,9 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
                   currencySymbol={currencySymbol}
                   actionLabel="Start Preparing"
                   actionVariant="primary"
+                  isProcessing={processingOrderIds.has(ord.id)}
                   onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
+                  onQuickEta={(delta) => handleQuickEta(ord.id, ord, delta)}
                 />
               ))}
               {pendingOrders.length === 0 && (
@@ -486,7 +519,9 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
                   currencySymbol={currencySymbol}
                   actionLabel="Mark as Ready"
                   actionVariant="success"
+                  isProcessing={processingOrderIds.has(ord.id)}
                   onAction={() => handleUpdateStatus(ord.id, 'READY')}
+                  onQuickEta={(delta) => handleQuickEta(ord.id, ord, delta)}
                 />
               ))}
               {preparingOrders.length === 0 && (
@@ -517,6 +552,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
                   currencySymbol={currencySymbol}
                   actionLabel="Served to Table"
                   actionVariant="neutral"
+                  isProcessing={processingOrderIds.has(ord.id)}
                   onAction={() => handleUpdateStatus(ord.id, 'COMPLETED')}
                 />
               ))}
@@ -557,15 +593,51 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
   );
 };
 
-// Hookah Order Card Component - ZERO ETA
+// Helper for elapsed time calculation
+const calculateHookahElapsedTime = (timestamp?: string) => {
+  if (!timestamp) return 'Just now';
+  const diff = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000));
+  const mins = Math.floor(diff / 60);
+  const secs = diff % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+};
+
+// Helper for remaining ETA calculation (only when ETA is explicitly set)
+const calculateHookahRemainingEta = (etaTimestamp?: string) => {
+  if (!etaTimestamp) return null;
+  const diff = Math.floor((new Date(etaTimestamp).getTime() - Date.now()) / 1000);
+  if (diff < 0) {
+    const overdue = Math.abs(diff);
+    const m = Math.floor(overdue / 60);
+    const s = overdue % 60;
+    return { formatted: `+${m}:${s.toString().padStart(2, '0')} LATE`, isLate: true };
+  }
+  const m = Math.floor(diff / 60);
+  const s = diff % 60;
+  return { formatted: `${m}:${s.toString().padStart(2, '0')}`, isLate: false };
+};
+
+// Hookah Order Card Component - Clean 1-Click Operational Card
 const HookahOrderCard: React.FC<{
   order: Order;
   actionLabel?: string;
   actionVariant?: 'primary' | 'success' | 'neutral';
   onAction?: () => void;
+  onQuickEta?: (deltaMins: number) => void;
+  isProcessing?: boolean;
   isCompleted?: boolean;
   currencySymbol?: string;
-}> = ({ order, actionLabel, actionVariant = 'primary', onAction, isCompleted, currencySymbol = '₹' }) => {
+}> = ({
+  order,
+  actionLabel,
+  actionVariant = 'primary',
+  onAction,
+  onQuickEta,
+  isProcessing = false,
+  isCompleted,
+  currencySymbol = '₹',
+}) => {
   const hookahItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'HOOKAH');
   if (hookahItems.length === 0) {
     return null;
@@ -573,6 +645,8 @@ const HookahOrderCard: React.FC<{
 
   const isWeddingEvent = Boolean((order as any).eventName || (order as any).metadata?.eventName || (order as any).isEventOrder);
   const eventLabel = (order as any).eventName || (order as any).metadata?.eventName || 'Wedding Event';
+  const elapsed = calculateHookahElapsedTime(order.createdAt);
+  const remainingEta = calculateHookahRemainingEta(order.etaTargetTimestamp);
 
   return (
     <motion.div
@@ -595,10 +669,13 @@ const HookahOrderCard: React.FC<{
             </span>
             <span className="text-[11px] font-mono text-slate-400">#{order.id.slice(-4)}</span>
           </div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
-            <Clock className="w-3 h-3 text-slate-500" />
-            <span>
-              {order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ordered'}
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span className="text-slate-400 flex items-center gap-1" title="Time elapsed since received">
+              <Clock className="w-3 h-3 text-slate-500" />
+              <span>{elapsed}</span>
+            </span>
+            <span className="text-slate-500 text-[10px]">
+              ({order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ordered'})
             </span>
           </div>
         </div>
@@ -616,6 +693,21 @@ const HookahOrderCard: React.FC<{
           <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
             <User className="w-3 h-3 text-slate-500" />
             <span>{order.customerName}</span>
+          </div>
+        )}
+
+        {/* ETA Display (Only displayed if staff explicitly set an ETA) */}
+        {remainingEta && !isCompleted && (
+          <div className={`px-2.5 py-1 rounded-lg border text-xs font-mono flex items-center justify-between ${
+            remainingEta.isLate
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+          }`}>
+            <span className="flex items-center gap-1.5 text-[11px]">
+              <Clock className="w-3 h-3" />
+              <span>Prep ETA:</span>
+            </span>
+            <span className="font-bold">{remainingEta.formatted}</span>
           </div>
         )}
 
@@ -659,11 +751,39 @@ const HookahOrderCard: React.FC<{
           </div>
         )}
 
+        {/* Quick Optional ETA Adjusters */}
+        {!isCompleted && onQuickEta && (
+          <div className="flex items-center justify-between gap-1 pt-1 text-[11px] font-mono text-slate-400">
+            <span className="text-[10px] text-slate-500">Optional ETA:</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onQuickEta(5)}
+                disabled={isProcessing}
+                className="px-2 py-0.5 rounded bg-[#181d27] border border-[#2d3545] hover:border-amber-500 text-amber-400 text-[10px] transition-colors disabled:opacity-50"
+                title="Add 5 minutes to prep estimate"
+              >
+                +5m
+              </button>
+              <button
+                type="button"
+                onClick={() => onQuickEta(10)}
+                disabled={isProcessing}
+                className="px-2 py-0.5 rounded bg-[#181d27] border border-[#2d3545] hover:border-amber-500 text-amber-400 text-[10px] transition-colors disabled:opacity-50"
+                title="Add 10 minutes to prep estimate"
+              >
+                +10m
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Primary Action Button */}
         {!isCompleted && onAction && actionLabel && (
           <button
             onClick={onAction}
-            className={`w-full py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+            disabled={isProcessing}
+            className={`w-full py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${
               actionVariant === 'primary'
                 ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-xs font-bold'
                 : actionVariant === 'success'
@@ -671,8 +791,14 @@ const HookahOrderCard: React.FC<{
                 : 'bg-[#181d27] text-white hover:bg-[#222838] border border-[#2d3545]'
             }`}
           >
-            <span>{actionLabel}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            {isProcessing ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <>
+                <span>{actionLabel}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </>
+            )}
           </button>
         )}
       </div>

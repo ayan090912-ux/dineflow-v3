@@ -131,6 +131,14 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('CASH');
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
 
+  // Debounce protection and history view mode
+  const [deliveringOrderIds, setDeliveringOrderIds] = useState<Set<string>>(new Set());
+  const [completingRequestIds, setCompletingRequestIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
+  const [recentCompletedHistory, setRecentCompletedHistory] = useState<
+    Array<{ id: string; type: 'ORDER_DELIVERED' | 'REQUEST_FULFILLED'; title: string; time: string; details: string }>
+  >([]);
+
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<{
     title: string;
@@ -484,8 +492,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurantId]); // isAudioMuted intentionally excluded — managed via ref
 
-  // Request Actions with Instant Optimistic UI Response
+  // Request Actions with Instant Optimistic UI Response and Debounce Guard
   const handleAcceptRequest = async (requestId: string) => {
+    if (completingRequestIds.has(requestId)) return;
+    setCompletingRequestIds((prev) => new Set(prev).add(requestId));
     // Instant optimistic state update
     setRequests((prev) =>
       prev.map((r) =>
@@ -498,29 +508,71 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     } catch (err: any) {
       showToast('Error', err.message || 'Failed to accept request', 'warning');
       loadData(true);
+    } finally {
+      setCompletingRequestIds((prev) => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
     }
   };
 
   const handleCompleteRequest = async (requestId: string) => {
+    if (completingRequestIds.has(requestId)) return;
+    setCompletingRequestIds((prev) => new Set(prev).add(requestId));
+    const reqToComplete = requests.find((r) => r.id === requestId);
     // Instant optimistic state update
     setRequests((prev) =>
       prev.map((r) => (r.id === requestId ? { ...r, status: 'COMPLETED' } : r))
     );
-    showToast('Request Completed ✅', 'Request fulfilled and cleared.', 'success');
+    if (reqToComplete) {
+      setRecentCompletedHistory((prev) => [
+        {
+          id: requestId,
+          type: 'REQUEST_FULFILLED',
+          title: `Table ${reqToComplete.tableNumber} · ${reqToComplete.requestType} Completed`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          details: reqToComplete.customerNotes || reqToComplete.customTitle || 'Service request fulfilled',
+        },
+        ...prev,
+      ].slice(0, 25));
+    }
+    showToast('Request Completed ✅', 'Request fulfilled and cleared from live queue.', 'success');
     try {
       await api.updateCustomerRequest(requestId, 'COMPLETED', waiterName);
     } catch (err: any) {
       showToast('Error', err.message || 'Failed to complete request', 'warning');
       loadData(true);
+    } finally {
+      setCompletingRequestIds((prev) => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
     }
   };
 
   // Order Delivery Handler (Valid transition: READY -> DELIVERED)
   const handleDeliverOrder = async (orderId: string, tableNumber?: string) => {
+    if (deliveringOrderIds.has(orderId)) return;
+    setDeliveringOrderIds((prev) => new Set(prev).add(orderId));
+    const ordToDeliver = orders.find((o) => o.id === orderId);
     // Instant optimistic state update
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED' } : o))
+      prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
     );
+    if (ordToDeliver) {
+      setRecentCompletedHistory((prev) => [
+        {
+          id: orderId,
+          type: 'ORDER_DELIVERED',
+          title: `Table ${ordToDeliver.tableNumber || tableNumber} · Order #${orderId.slice(-4)} Delivered`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          details: (ordToDeliver.items || []).map((i) => `${i.quantity}x ${i.name}`).join(', '),
+        },
+        ...prev,
+      ].slice(0, 25));
+    }
     const tblFormatted = tableNumber ? (tableNumber.startsWith('Table') ? tableNumber : `Table ${tableNumber}`) : 'Table';
     showToast('Order Delivered 🎉', `Order delivered to ${tblFormatted}`, 'success');
     try {
@@ -528,6 +580,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     } catch (err: any) {
       showToast('Delivery Error ⚠️', err.message || 'Failed to deliver order', 'warning');
       loadData(true);
+    } finally {
+      setDeliveringOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
   };
 
@@ -678,9 +736,79 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     });
   }, [requests, searchQuery]);
 
+  const getOrderReadiness = (o: Order) => {
+    const allItems = o.items || [];
+    const kitchenItems = allItems.filter((i) => getFulfillmentStation(i) === 'KITCHEN');
+    const barItems = allItems.filter((i) => getFulfillmentStation(i) === 'BAR');
+    const hookahItems = allItems.filter((i) => getFulfillmentStation(i) === 'HOOKAH');
+
+    const hasKitchen = kitchenItems.length > 0;
+    const hasBar = barItems.length > 0;
+    const hasHookah = hookahItems.length > 0;
+
+    const isKitchenReady = !hasKitchen || o.kitchenStatus === 'READY' || o.kitchenStatus === 'COMPLETED';
+    const isBarReady = !hasBar || o.barStatus === 'READY' || o.barStatus === 'COMPLETED';
+    const isHookahReady = !hasHookah || o.hookahStatus === 'READY' || o.hookahStatus === 'COMPLETED';
+
+    const readyItems: Array<{ item: OrderItem; station: string }> = [];
+    const outstandingItems: Array<{ item: OrderItem; station: string; stationStatus: string }> = [];
+
+    if (hasKitchen) {
+      if (o.kitchenStatus === 'READY' || o.kitchenStatus === 'COMPLETED') {
+        kitchenItems.forEach((i) => readyItems.push({ item: i, station: 'Kitchen' }));
+      } else {
+        kitchenItems.forEach((i) =>
+          outstandingItems.push({ item: i, station: 'Kitchen', stationStatus: o.kitchenStatus || 'Cooking' })
+        );
+      }
+    }
+
+    if (hasBar) {
+      if (o.barStatus === 'READY' || o.barStatus === 'COMPLETED') {
+        barItems.forEach((i) => readyItems.push({ item: i, station: 'Bar' }));
+      } else {
+        barItems.forEach((i) =>
+          outstandingItems.push({ item: i, station: 'Bar', stationStatus: o.barStatus || 'Mixology' })
+        );
+      }
+    }
+
+    if (hasHookah) {
+      if (o.hookahStatus === 'READY' || o.hookahStatus === 'COMPLETED') {
+        hookahItems.forEach((i) => readyItems.push({ item: i, station: 'Hookah' }));
+      } else {
+        hookahItems.forEach((i) =>
+          outstandingItems.push({ item: i, station: 'Hookah', stationStatus: o.hookahStatus || 'Heating' })
+        );
+      }
+    }
+
+    // Fallback if no specific stations marked but order is marked READY
+    if (readyItems.length === 0 && o.status === 'READY') {
+      allItems.forEach((i) => readyItems.push({ item: i, station: getFulfillmentStation(i) }));
+    }
+
+    const isCompleteOrderReady = (hasKitchen || hasBar || hasHookah)
+      ? (isKitchenReady && isBarReady && isHookahReady)
+      : o.status === 'READY';
+
+    return {
+      readyItems,
+      outstandingItems,
+      isCompleteOrderReady,
+      hasKitchen,
+      hasBar,
+      hasHookah,
+    };
+  };
+
   const readyPlatesList = useMemo(() => {
     return orders.filter((o) => {
-      const isReady = (o.status === 'READY' || o.kitchenStatus === 'READY');
+      const isReady =
+        o.status === 'READY' ||
+        o.kitchenStatus === 'READY' ||
+        o.barStatus === 'READY' ||
+        o.hookahStatus === 'READY';
       const isDone = o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED';
       if (!isReady || isDone) return false;
 
@@ -1005,333 +1133,427 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             </div>
           </div>
 
-          {/* TAB 1: DASHBOARD OVERVIEW */}
+          {/* TAB 1: ONE-SCREEN UNIFIED OPERATIONAL FLOOR */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-6">
-              {/* Quick Section 1: Active Tables Preview */}
-              <div className="bg-[#12151b] border border-[#1e232e] p-5 space-y-4 rounded-xl">
-                <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
-                  <div className="flex items-center gap-2">
-                    <Utensils className="w-4 h-4 text-sky-400" />
-                    <h2 className="text-sm font-semibold text-white">Active Floor Tables</h2>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#161b24] text-sky-300 border border-[#222838]">
-                      {activeTablesList.length} Active
-                    </span>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => setActiveTab('active-tables')} className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-7">
-                    <span>View Floorplan</span>
-                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
+            <div className="space-y-4">
+              {/* Operational View Switcher & Live Queue Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0e1117] p-3 rounded-xl border border-[#1e232e]">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                    One-Screen Operational Floor
+                  </span>
+                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                    · Real-time ready dishes, drinks & customer requests
+                  </span>
                 </div>
 
-                {activeTablesList.length === 0 ? (
-                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1.5">
-                    <Utensils className="w-6 h-6 text-slate-600 mx-auto" />
-                    <p className="text-xs font-semibold text-slate-300">No active tables right now.</p>
-                    <p className="text-[11px] text-slate-400">Tables will appear when customer sessions begin or orders are placed.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                    {activeTablesList.slice(0, 6).map((table) => {
-                      const activeSession = activeSessions.find(
-                        (s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
-                      );
-                      const tableOrders = activeSession
-                        ? orders.filter(
-                            (o) => o.tableSessionId === activeSession.id && o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
-                          )
-                        : [];
-                      const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
-                      const sessionTotal = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-                      const latestOrder = tableOrders[0];
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setViewMode('active')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium font-mono transition-colors flex items-center gap-1.5 ${
+                      viewMode === 'active'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Live Queue ({readyPlatesList.length + pendingCallsList.length})</span>
+                  </button>
 
-                      return (
-                        <div
-                          key={table.id}
-                          className="bg-[#12151b] p-4 rounded-xl border border-[#1e232e] hover:border-[#2a3243] transition-colors space-y-3 flex flex-col justify-between"
-                        >
-                          <div className="space-y-2.5">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h3 className="text-base font-bold text-white font-mono tracking-tight">{table.tableNumber}</h3>
-                                <div className="mt-0.5">{getTableStatusBadge(table.status)}</div>
-                              </div>
-                              <span className="text-[11px] font-mono text-slate-300 bg-[#0c0e14] border border-[#1e232e] px-2 py-0.5 rounded flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-slate-400" />
-                                {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
-                              </span>
-                            </div>
-
-                            <div className="space-y-1 text-xs text-slate-300 bg-[#0c0e14] p-2.5 rounded-lg border border-[#1e232e]">
-                              <p className="font-medium text-white text-xs">
-                                {tableOrders.length > 1
-                                  ? `${tableOrders.length} Orders (${tableOrders.map((o) => `#${o.id}`).join(', ')})`
-                                  : latestOrder
-                                  ? `Order #${latestOrder.id}`
-                                  : 'No active order'}
-                              </p>
-                              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                                <span>Item count:</span>
-                                <span className="font-mono text-slate-200">{itemCount} items</span>
-                              </div>
-                              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                                <span>Session Total:</span>
-                                <span className="font-mono font-semibold text-emerald-400">₹{sessionTotal.toFixed(2)}</span>
-                              </div>
-                              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                                <span>Assigned Waiter:</span>
-                                <span className="text-slate-200">{table.assignedWaiterName || waiterName}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1e232e]">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full text-xs py-1.5 bg-[#141822] border-[#222838] hover:bg-[#1a202c] text-slate-200 h-8"
-                              onClick={() => setSelectedTableForView(table)}
-                            >
-                              View Details
-                            </Button>
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              className="w-full text-xs py-1.5 bg-rose-600 hover:bg-rose-500 text-white h-8"
-                              onClick={() => setSelectedTableForClose(table)}
-                            >
-                              Close Table
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                  <button
+                    onClick={() => setViewMode('history')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium font-mono transition-colors flex items-center gap-1.5 ${
+                      viewMode === 'history'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                    }`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Recent Completed ({recentCompletedHistory.length})</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Quick Section 2: Pending Calls Preview */}
-              <div className="bg-[#12151b] border border-[#1e232e] p-5 space-y-4 rounded-xl">
-                <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
-                  <div className="flex items-center gap-2">
-                    <PhoneCall className="w-4 h-4 text-amber-400" />
-                    <h2 className="text-sm font-semibold text-white">Pending Customer Requests</h2>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                      {pendingCallsList.length} Pending
-                    </span>
+              {viewMode === 'history' ? (
+                /* RECENT COMPLETED WORK HISTORY */
+                <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <h2 className="text-sm font-semibold text-white">Recent Completed Shift Work</h2>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#181d27] text-slate-300 border border-[#2d3545]">
+                        {recentCompletedHistory.length} Cleared Tasks
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setViewMode('active')}
+                      className="text-xs border-[#1e232e] bg-[#141822] text-slate-300 hover:text-white h-7"
+                    >
+                      ← Back to Live Queue
+                    </Button>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setActiveTab('pending-calls')} className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-7">
-                    <span>View Pending Calls</span>
-                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
-                </div>
 
-                {pendingCallsList.length === 0 ? (
-                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1.5">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
-                    <p className="text-xs font-semibold text-slate-300">No pending customer requests.</p>
-                    <p className="text-[11px] text-slate-400">All table requests have been handled.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {pendingCallsList.slice(0, 4).map((req) => {
-                      const isBillReq = req.requestType === 'BILL';
-                      const matchingBill = isBillReq ? getBillForRequest(req) : undefined;
-                      const billAmt = isBillReq ? getAmountForRequest(req, matchingBill) : 0;
-                      const payStatus = matchingBill?.paymentStatus || 'UNPAID';
-
-                      return (
+                  {recentCompletedHistory.length === 0 ? (
+                    <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1">
+                      <CheckSquare className="w-6 h-6 text-slate-600 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-300">No completed tasks recorded in this session yet.</p>
+                      <p className="text-[11px] text-slate-400">Delivered orders and resolved requests will appear here for audit.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {recentCompletedHistory.map((item) => (
                         <div
-                          key={req.id}
-                          className={`bg-[#0e1117] p-3.5 rounded-xl border transition-colors space-y-2.5 ${
-                            isBillReq
-                              ? 'border-amber-500/50 hover:border-amber-400 bg-amber-950/10'
-                              : 'border-amber-500/30 hover:border-amber-500/50'
-                          }`}
+                          key={item.id}
+                          className="bg-[#0e1117] p-3 rounded-lg border border-[#1e232e] flex items-center justify-between gap-3 text-xs"
                         >
-                          <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3">
+                            <span className={`w-2 h-2 rounded-full ${item.type === 'ORDER_DELIVERED' ? 'bg-emerald-400' : 'bg-sky-400'}`} />
                             <div>
-                              <span className="text-base font-bold text-white font-mono">{req.tableNumber}</span>
-                              <div className="mt-0.5">{getRequestBadge(req.requestType, req.customTitle)}</div>
+                              <p className="font-semibold text-white">{item.title}</p>
+                              <p className="text-[11px] text-slate-400">{item.details}</p>
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 bg-[#141822] px-2 py-0.5 rounded border border-[#1e232e]">
-                              {getTimeElapsed(req.requestedAt)}
-                            </span>
                           </div>
-
-                          {isBillReq ? (
-                            <div className="bg-[#12151b] p-2 rounded-lg border border-[#1e232e] flex justify-between items-center text-xs font-mono">
-                              <div>
-                                <span className="text-slate-400 block text-[10px]">BILL TOTAL</span>
-                                <span className="text-emerald-400 font-bold text-sm">₹{billAmt.toFixed(2)}</span>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-slate-400 block text-[10px]">PAYMENT</span>
-                                {payStatus === 'PAID' ? (
-                                  <span className="text-emerald-400 font-semibold text-[11px]">PAID</span>
-                                ) : payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
-                                  <span className="text-amber-300 font-semibold text-[11px] animate-pulse">AWAITING VERIFY</span>
-                                ) : (
-                                  <span className="text-rose-400 font-semibold text-[11px]">UNPAID</span>
-                                )}
-                              </div>
-                            </div>
-                          ) : req.customerNotes ? (
-                            <p className="text-xs text-slate-300 bg-[#12151b] p-2 rounded-lg border border-[#1e232e] italic">
-                              "{req.customerNotes}"
-                            </p>
-                          ) : null}
-
-                          <div className="flex items-center gap-2 pt-1">
-                            {isBillReq ? (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-1/2 text-xs font-medium border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-7"
-                                  onClick={() =>
-                                    openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
-                                  }
-                                >
-                                  View Bill
-                                </Button>
-                                {payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
-                                  <Button
-                                    variant="brand"
-                                    size="sm"
-                                    className="w-1/2 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-7"
-                                    onClick={() =>
-                                      openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
-                                    }
-                                  >
-                                    Verify Payment
-                                  </Button>
-                                ) : payStatus === 'PAID' ? (
-                                  <Button
-                                    variant="success"
-                                    size="sm"
-                                    className="w-1/2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
-                                    onClick={() => handleCompleteRequest(req.id)}
-                                  >
-                                    Done ✓
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="brand"
-                                    size="sm"
-                                    className="w-1/2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
-                                    onClick={() =>
-                                      openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)
-                                    }
-                                  >
-                                    Record Payment
-                                  </Button>
-                                )}
-                              </>
-                            ) : req.status === 'PENDING' ? (
-                              <Button
-                                variant="brand"
-                                size="sm"
-                                className="w-full text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 h-7"
-                                onClick={() => handleAcceptRequest(req.id)}
-                              >
-                                Accept Call
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="success"
-                                size="sm"
-                                className="w-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white h-7"
-                                onClick={() => handleCompleteRequest(req.id)}
-                              >
-                                Mark Completed
-                              </Button>
-                            )}
-                          </div>
+                          <span className="text-[11px] font-mono text-slate-400 shrink-0">{item.time}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Quick Section 3: Ready Plates Preview */}
-              <div className="bg-[#12151b] border border-[#1e232e] p-5 space-y-4 rounded-xl">
-                <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
-                  <div className="flex items-center gap-2">
-                    <Flame className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-sm font-semibold text-white">READY FOR DELIVERY</h2>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                      {readyPlatesList.length} Ready
-                    </span>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => setActiveTab('ready-plates')} className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-7">
-                    <span>View All Ready</span>
-                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-
-                {readyPlatesList.length === 0 ? (
-                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-1.5">
-                    <Coffee className="w-6 h-6 text-slate-500 mx-auto" />
-                    <p className="text-xs font-semibold text-slate-300">No ready plates right now.</p>
-                    <p className="text-[11px] text-slate-400">Kitchen staff will mark orders READY when prep completes.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {readyPlatesList.slice(0, 4).map((order) => (
-                      <div
-                        key={order.id}
-                        className="bg-[#0e1117] p-3.5 rounded-xl border border-emerald-500/30 hover:border-emerald-500/50 transition-colors space-y-2.5"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-base font-bold text-white font-mono">
-                                {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter'}
-                              </h3>
-                              <span className="text-[10px] font-mono text-emerald-400 font-semibold">
-                                #{order.id.length > 8 ? order.id.slice(-6) : order.id}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-300 mt-0.5">
-                              Guest: <span className="text-white font-medium">{order.customerName || 'Walk-in'}</span>
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-bold">
-                              Kitchen: READY
-                            </span>
-                            <span className="text-[10px] font-mono text-slate-400">
-                              {getTimeElapsed(order.readyAt || order.updatedAt)}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="bg-[#12151b] p-2.5 rounded-lg border border-[#1e232e] space-y-1">
-                          <p className="text-[10px] font-mono uppercase text-slate-400 border-b border-[#1e232e] pb-1">Items to Deliver:</p>
-                          {(order.items || []).map((item) => (
-                            <div key={item.id} className="flex justify-between items-center text-xs text-slate-200">
-                              <span>{item.name}</span>
-                              <span className="font-mono text-emerald-400 font-semibold">x{item.quantity}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <Button
-                          variant="success"
-                          size="sm"
-                          className="w-full text-xs font-semibold py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-8 flex items-center justify-center gap-1.5"
-                          onClick={() => handleDeliverOrder(order.id, order.tableNumber)}
-                        >
-                          <CheckSquare className="w-3.5 h-3.5" />
-                          <span>MARK DELIVERED</span>
-                        </Button>
+              ) : (
+                /* LIVE DUAL-SECTION OPERATIONAL FLOOR: Section A (Ready) & Section B (Requests) */
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                  {/* SECTION A: READY FOR SERVICE */}
+                  <div className="bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-emerald-400" />
+                        <h2 className="text-sm font-bold text-white uppercase tracking-tight">
+                          Section A: Ready for Service
+                        </h2>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-bold">
+                          {readyPlatesList.length} Ready
+                        </span>
                       </div>
-                    ))}
+                      <span className="text-[11px] font-mono text-slate-400">
+                        Kitchen & Bar Passes
+                      </span>
+                    </div>
+
+                    {readyPlatesList.length === 0 ? (
+                      <div className="p-10 text-center bg-[#0e1117] rounded-xl border border-dashed border-[#1e232e] space-y-2">
+                        <Coffee className="w-7 h-7 text-slate-600 mx-auto" />
+                        <p className="text-xs font-semibold text-slate-300">No ready tickets at the pass</p>
+                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                          Dishes and beverages will appear here instantly as soon as kitchen, bar, or hookah staff mark them ready.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3.5">
+                        {readyPlatesList.map((order) => {
+                          const readiness = getOrderReadiness(order);
+                          const isDelivering = deliveringOrderIds.has(order.id);
+                          const formattedTable = order.tableNumber && order.tableNumber !== 'COUNTER'
+                            ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`)
+                            : 'Counter';
+
+                          return (
+                            <div
+                              key={order.id}
+                              className={`p-4 rounded-xl border transition-colors space-y-3 shadow-xs ${
+                                readiness.isCompleteOrderReady
+                                  ? 'bg-[#0e1117] border-emerald-500/40 hover:border-emerald-500/60'
+                                  : 'bg-[#0e1117] border-amber-500/40 hover:border-amber-500/60'
+                              }`}
+                            >
+                              {/* Ticket Header */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="px-2.5 py-0.5 rounded bg-[#181d27] text-white border border-[#2d3545] text-xs font-mono font-bold">
+                                      {formattedTable}
+                                    </span>
+                                    <span className="text-[11px] font-mono text-slate-400">
+                                      #{order.id.slice(-4)}
+                                    </span>
+                                    {readiness.isCompleteOrderReady ? (
+                                      <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                        All Items Ready
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                                        <Clock className="w-3 h-3 text-amber-400" />
+                                        Partial · Other Items In Prep
+                                      </span>
+                                    )}
+                                  </div>
+                                  {order.customerName && (
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                      Guest: <span className="text-slate-200 font-medium">{order.customerName}</span>
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="text-right text-[11px] font-mono text-slate-400 shrink-0">
+                                  <span className="block text-slate-300 font-medium">
+                                    Ready: {getTimeElapsed(order.readyAt || order.updatedAt)}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500">
+                                    Ordered {order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Ready Items List with Station Breakdown */}
+                              <div className="bg-[#12151b] p-3 rounded-lg border border-[#1e232e] space-y-2">
+                                <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold border-b border-[#1e232e] pb-1.5">
+                                  <span>Ready for Collection:</span>
+                                  <span>{readiness.readyItems.length} items</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {readiness.readyItems.map((r, idx) => (
+                                    <div key={idx} className="flex items-center justify-between text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-bold text-emerald-400 text-xs">
+                                          {r.item.quantity}x
+                                        </span>
+                                        <span className="text-white font-medium">{r.item.name}</span>
+                                      </div>
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#181d27] text-slate-300 border border-[#2d3545]">
+                                        {r.station === 'BAR' ? '🍸 Bar' : r.station === 'HOOKAH' ? '💨 Hookah' : '🍳 Kitchen'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Outstanding Items List (if multi-station order still has dishes cooking) */}
+                              {readiness.outstandingItems.length > 0 && (
+                                <div className="bg-[#12151b]/70 p-3 rounded-lg border border-amber-500/20 space-y-1.5">
+                                  <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-amber-300 font-medium border-b border-[#1e232e] pb-1">
+                                    <span>Still In Preparation:</span>
+                                    <span className="text-amber-400">{readiness.outstandingItems.length} items pending</span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {readiness.outstandingItems.map((oItem, idx) => (
+                                      <div key={idx} className="flex items-center justify-between text-xs text-slate-400">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-mono text-slate-400">{oItem.item.quantity}x</span>
+                                          <span>{oItem.item.name}</span>
+                                        </div>
+                                        <span className="text-[10px] font-mono text-amber-300/80">
+                                          {oItem.station}: {oItem.stationStatus}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Special Customer Instructions */}
+                              {order.specialInstructions && (
+                                <div className="text-xs bg-rose-500/10 text-rose-300 p-2 rounded-lg border border-rose-500/20 flex items-start gap-1.5">
+                                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                                  <span>Note: {order.specialInstructions}</span>
+                                </div>
+                              )}
+
+                              {/* 1-Click Action: Mark Delivered */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeliverOrder(order.id, order.tableNumber)}
+                                disabled={isDelivering}
+                                className={`w-full py-2.5 px-4 rounded-lg text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 ${
+                                  readiness.isCompleteOrderReady
+                                    ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
+                                    : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                                }`}
+                              >
+                                {isDelivering ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <CheckSquare className="w-4 h-4" />
+                                    <span>
+                                      {readiness.isCompleteOrderReady
+                                        ? `Mark Delivered to ${formattedTable}`
+                                        : `Deliver Ready Portion to ${formattedTable}`}
+                                    </span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+
+                  {/* SECTION B: CUSTOMER REQUESTS */}
+                  <div className="bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
+                      <div className="flex items-center gap-2">
+                        <PhoneCall className="w-4 h-4 text-amber-400" />
+                        <h2 className="text-sm font-bold text-white uppercase tracking-tight">
+                          Section B: Customer Requests
+                        </h2>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 font-bold">
+                          {pendingCallsList.length} Active
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        Live Floor Assistance
+                      </span>
+                    </div>
+
+                    {pendingCallsList.length === 0 ? (
+                      <div className="p-10 text-center bg-[#0e1117] rounded-xl border border-dashed border-[#1e232e] space-y-2">
+                        <CheckCircle2 className="w-7 h-7 text-emerald-400 mx-auto" />
+                        <p className="text-xs font-semibold text-slate-300">All customer requests handled</p>
+                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                          Requests for water, napkins, cutlery, table assistance, or bill payments appear here with 1-click fulfillment.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3.5">
+                        {pendingCallsList.map((req) => {
+                          const isBillReq = req.requestType === 'BILL';
+                          const matchingBill = isBillReq ? getBillForRequest(req) : undefined;
+                          const billAmt = isBillReq ? getAmountForRequest(req, matchingBill) : 0;
+                          const payStatus = matchingBill?.paymentStatus || 'UNPAID';
+                          const isProcessing = completingRequestIds.has(req.id);
+                          const isPending = req.status === 'PENDING';
+
+                          return (
+                            <div
+                              key={req.id}
+                              className={`p-4 rounded-xl border transition-colors space-y-3 shadow-xs ${
+                                isBillReq
+                                  ? 'bg-amber-950/15 border-amber-500/50 hover:border-amber-400'
+                                  : isPending
+                                  ? 'bg-[#0e1117] border-amber-500/30 hover:border-amber-500/50'
+                                  : 'bg-[#0e1117] border-sky-500/30 hover:border-sky-500/50'
+                              }`}
+                            >
+                              {/* Request Header */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-base font-bold text-white font-mono">
+                                      {req.tableNumber}
+                                    </span>
+                                    {getRequestBadge(req.requestType, req.customTitle)}
+                                    <span
+                                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                                        isPending
+                                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                                          : 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                                      }`}
+                                    >
+                                      {req.status}
+                                    </span>
+                                  </div>
+                                  {req.assignedWaiterName && (
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                      Assigned: <span className="text-slate-200">{req.assignedWaiterName}</span>
+                                    </p>
+                                  )}
+                                </div>
+
+                                <span className="text-[11px] font-mono text-slate-400 bg-[#12151b] px-2 py-0.5 rounded border border-[#1e232e]">
+                                  {getTimeElapsed(req.requestedAt)}
+                                </span>
+                              </div>
+
+                              {/* Bill Context if applicable */}
+                              {isBillReq ? (
+                                <div className="bg-[#12151b] p-2.5 rounded-lg border border-[#1e232e] flex justify-between items-center text-xs font-mono">
+                                  <div>
+                                    <span className="text-slate-400 block text-[10px]">TOTAL PAYABLE</span>
+                                    <span className="text-emerald-400 font-bold text-sm">₹{billAmt.toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-slate-400 block text-[10px]">STATUS</span>
+                                    {payStatus === 'PAID' ? (
+                                      <span className="text-emerald-400 font-bold text-[11px]">PAID</span>
+                                    ) : payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
+                                      <span className="text-amber-300 font-bold text-[11px] animate-pulse">AWAITING VERIFY</span>
+                                    ) : (
+                                      <span className="text-rose-400 font-bold text-[11px]">UNPAID</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : req.customerNotes ? (
+                                <div className="text-xs bg-[#12151b] p-2.5 rounded-lg border border-[#1e232e] text-slate-300 italic">
+                                  "{req.customerNotes}"
+                                </div>
+                              ) : null}
+
+                              {/* Simple 1-Click Action Buttons */}
+                              <div className="flex items-center gap-2 pt-1">
+                                {isBillReq ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-1/2 text-xs border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-8"
+                                      onClick={() => openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)}
+                                    >
+                                      View Bill
+                                    </Button>
+                                    <Button
+                                      variant="brand"
+                                      size="sm"
+                                      disabled={isProcessing}
+                                      className="w-1/2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white h-8 font-semibold"
+                                      onClick={() => openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)}
+                                    >
+                                      {payStatus === 'PAID' ? 'Confirm & Close' : 'Collect Payment'}
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {isPending && (
+                                      <Button
+                                        variant="brand"
+                                        size="sm"
+                                        disabled={isProcessing}
+                                        className="w-1/2 text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold h-8"
+                                        onClick={() => handleAcceptRequest(req.id)}
+                                      >
+                                        Acknowledge
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="success"
+                                      size="sm"
+                                      disabled={isProcessing}
+                                      className={`${isPending ? 'w-1/2' : 'w-full'} text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold h-8 flex items-center justify-center gap-1.5`}
+                                      onClick={() => handleCompleteRequest(req.id)}
+                                    >
+                                      {isProcessing ? (
+                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <>
+                                          <Check className="w-3.5 h-3.5" />
+                                          <span>Mark Fulfilled</span>
+                                        </>
+                                      )}
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
