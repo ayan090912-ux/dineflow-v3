@@ -281,15 +281,26 @@ async def get_auth_me(
 
     # Resolve active/current restaurant context
     current_restaurant = None
-    req_host = request.headers.get("x-tenant-domain") or request.headers.get("x-forwarded-host") or request.headers.get("host")
-    req_slug = request.headers.get("x-tenant-slug")
-    if req_slug:
-        current_restaurant = next((r for r in restaurants_list if (r.get("slug") == req_slug or r.get("publicSlug") == req_slug or r.get("id") == req_slug)), None)
-    if not current_restaurant and req_host:
-        clean_h = req_host.split(":")[0].strip().lower()
-        if clean_h.endswith(".dinely.food"):
-            sub_slug = clean_h[:-len(".dinely.food")].strip()
-            current_restaurant = next((r for r in restaurants_list if (r.get("slug") == sub_slug or r.get("publicSlug") == sub_slug or r.get("id") == sub_slug)), None)
+    req_rest_id = request.headers.get("x-restaurant-id") or request.headers.get("x-tenant-id")
+    if req_rest_id:
+        current_restaurant = next((r for r in restaurants_list if (r.get("id") == req_rest_id or r.get("slug") == req_rest_id or r.get("publicSlug") == req_rest_id)), None)
+
+    if not current_restaurant:
+        req_slug = request.headers.get("x-tenant-slug")
+        if req_slug:
+            current_restaurant = next((r for r in restaurants_list if (r.get("slug") == req_slug or r.get("publicSlug") == req_slug or r.get("id") == req_slug)), None)
+
+    if not current_restaurant:
+        req_host = request.headers.get("x-tenant-domain") or request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if req_host:
+            clean_h = req_host.split(":")[0].strip().lower()
+            if clean_h.endswith(".dinely.food"):
+                sub_slug = clean_h[:-len(".dinely.food")].strip()
+                if sub_slug and sub_slug not in ("www", "app", "api", "platform", "hub"):
+                    current_restaurant = next((r for r in restaurants_list if (r.get("slug") == sub_slug or r.get("publicSlug") == sub_slug or r.get("id") == sub_slug)), None)
+
+    if not current_restaurant and caller.restaurant_id:
+        current_restaurant = next((r for r in restaurants_list if r.get("id") == caller.restaurant_id), None)
 
     if not current_restaurant and restaurants_list:
         current_restaurant = next((r for r in restaurants_list if r.get("lifecycleStatus") == "LIVE" or r.get("isApproved")), restaurants_list[0])

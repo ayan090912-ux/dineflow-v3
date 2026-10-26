@@ -7,7 +7,7 @@ import { realtimeBus } from './packages/api/realtime';
 import { canAccessWorkspace, isModuleEnabled, WorkspaceType, Restaurant, User } from './packages/types';
 import { navigate, getCleanPath, NavigationProvider } from './packages/router';
 import { firebaseAuth, signOutFirebase, authStateMachine, type AuthState, type AuthErrorDetails } from './packages/auth/firebase';
-import { getTenantFromHostname, resolveTenantAppFromPath, getTenantUrl } from './packages/utils/tenantResolver';
+import { getTenantFromHostname, resolveTenantAppFromPath, getTenantUrl, getSharedTenantCookie, setSharedTenantCookie } from './packages/utils/tenantResolver';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 // Lazy-loaded route bundles for optimal bundle size and instantaneous initial load
@@ -341,6 +341,49 @@ function AppContent() {
     };
   }, [syncLocation]);
 
+  // Synchronize cross-tenant handoff tokens, shared cookies, and active business identity
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryToken = searchParams.get('auth_token');
+    const cookieToken = getSharedTenantCookie('dinely_auth_token');
+    const effectiveToken = queryToken || cookieToken;
+
+    if (effectiveToken) {
+      if (!localStorage.getItem('dinely_auth_token')) {
+        localStorage.setItem('dinely_auth_token', effectiveToken);
+      }
+      if (!sessionStorage.getItem('dinely_auth_token')) {
+        sessionStorage.setItem('dinely_auth_token', effectiveToken);
+      }
+      api.setSessionTokens({
+        accessToken: effectiveToken,
+        refreshToken: effectiveToken,
+        expiresIn: 86400,
+        tokenType: 'Bearer',
+      });
+      setSharedTenantCookie('dinely_auth_token', effectiveToken);
+    }
+
+    const queryBizId = searchParams.get('bizId');
+    const cookieBizId = getSharedTenantCookie('dinely_active_restaurant_id');
+    const effectiveBizId = queryBizId || cookieBizId;
+    if (effectiveBizId) {
+      api.setCurrentRestaurantId(effectiveBizId);
+      localStorage.setItem('dinely_active_restaurant_id', effectiveBizId);
+      sessionStorage.setItem('dinely_active_restaurant_id', effectiveBizId);
+    }
+
+    // Clean up handoff tokens from browser address bar
+    if (queryToken || queryBizId) {
+      searchParams.delete('auth_token');
+      searchParams.delete('bizId');
+      const newQuery = searchParams.toString();
+      const cleanUrl = window.location.pathname + (newQuery ? `?${newQuery}` : '') + window.location.hash;
+      window.history.replaceState(null, '', cleanUrl);
+    }
+  }, []);
+
   // Firebase Auth Observer: synchronizes Firebase state with application session & state machine
   useEffect(() => {
     // Watchdog safety guard: 4000ms maximum to guarantee NEVER infinite loading
@@ -425,15 +468,17 @@ function AppContent() {
             api.fetchAuthMe(token).then((authMe) => {
               if (authMe?.restaurant) {
                 if (!appUser.restaurantId) {
-                  appUser.restaurantId = authMe.restaurant.id;
+                  appUser.restaurantId = (domainResolution.isTenantSubdomain && resolvedTenant?.id) ? resolvedTenant.id : authMe.restaurant.id;
                   api.setCurrentUser(appUser, effectiveScope);
                   setCurrentUser({ ...appUser });
                 }
                 // On tenant subdomains (e.g. the-start.dinely.food), the hostname is authoritative.
                 // Only hydrate global restaurant state if on platform domain (dinely.food)
                 if (!domainResolution.isTenantSubdomain) {
-                  setCurrentRestaurant(authMe.restaurant);
-                  api.setCurrentRestaurantId(authMe.restaurant.id);
+                  if (!api.getCurrentRestaurantId()) {
+                    setCurrentRestaurant(authMe.restaurant);
+                    api.setCurrentRestaurantId(authMe.restaurant.id);
+                  }
                 }
               }
             }).catch((err) => {

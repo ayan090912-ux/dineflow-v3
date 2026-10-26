@@ -644,6 +644,12 @@ export class BaseApiClient {
       'Authorization': `Bearer ${token}`,
     };
 
+    const activeRestId = this.getCurrentRestaurantId();
+    if (activeRestId) {
+      headers['X-Restaurant-Id'] = activeRestId;
+      headers['X-Tenant-Id'] = activeRestId;
+    }
+
     if (typeof window !== 'undefined') {
       const resolution = getTenantFromHostname();
       if (resolution.isTenantSubdomain && resolution.slug) {
@@ -666,7 +672,10 @@ export class BaseApiClient {
         }
         if (data && data.restaurant) {
           const mappedRest = this.mapBackendRestaurant(data.restaurant);
-          this.setCurrentRestaurantId(mappedRest.id);
+          const currentId = this.getCurrentRestaurantId();
+          if (!currentId || currentId === mappedRest.id) {
+            this.setCurrentRestaurantId(mappedRest.id);
+          }
           const exIdx = this.restaurants.findIndex((r) => r.id === mappedRest.id);
           if (exIdx >= 0) this.restaurants[exIdx] = mappedRest;
           else this.restaurants.unshift(mappedRest);

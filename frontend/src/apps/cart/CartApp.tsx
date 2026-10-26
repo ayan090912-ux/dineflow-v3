@@ -55,7 +55,7 @@ import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
 import { DinelyLogo, Button } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
-import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl } from '../../packages/utils/tenantResolver';
+import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl, getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { CART_THEMES, resolveCartTheme, CartTheme, CartThemeId } from './cartThemes';
 
 interface CartAppProps {
@@ -248,7 +248,7 @@ export const CartApp: React.FC<CartAppProps> = ({
           ords.forEach((o) => {
             if (!seenOrderIdsRef.current.has(o.id)) {
               seenOrderIdsRef.current.add(o.id);
-              if (o.status === 'PENDING' || o.status === 'NEW') {
+              if ((o.status as string) === 'PENDING' || (o.status as string) === 'NEW') {
                 hasNewPending = true;
               }
             }

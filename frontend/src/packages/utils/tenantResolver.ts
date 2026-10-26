@@ -55,6 +55,34 @@ const PLATFORM_DOMAINS = new Set([
   '0.0.0.0',
 ]);
 
+/**
+ * Set a cross-subdomain cookie on .dinely.food for seamless session and active-tenant handoffs.
+ */
+export function setSharedTenantCookie(name: string, value: string): void {
+  if (typeof document === 'undefined') return;
+  const hostname = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase().trim();
+  const isDinelyProd = hostname.endsWith('.dinely.food');
+  const domainPart = isDinelyProd ? '; Domain=.dinely.food' : '';
+  const securePart = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+  // 30 days max-age
+  document.cookie = `${name}=${encodeURIComponent(value)}${domainPart}; Path=/; Max-Age=2592000; SameSite=Lax${securePart}`;
+}
+
+export function getSharedTenantCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function clearSharedTenantCookie(name: string): void {
+  if (typeof document === 'undefined') return;
+  const hostname = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase().trim();
+  const isDinelyProd = hostname.endsWith('.dinely.food');
+  const domainPart = isDinelyProd ? '; Domain=.dinely.food' : '';
+  document.cookie = `${name}=; Domain=.dinely.food; Path=/; Max-Age=0; SameSite=Lax`;
+  document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
 export function getTenantFromHostname(customHostname?: string): TenantDomainResolution {
   const hostname = (
     customHostname ||
@@ -66,7 +94,30 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     return { isTenantSubdomain: false, slug: null, hostname: '' };
   }
 
-  // 1. Hostname is the public tenant identity - check subdomain FIRST
+  // 1. Explicit query parameter overrides (takes precedence for direct deep-linking, testing, and dev)
+  if (typeof window !== 'undefined' && window.location.search) {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryTenant =
+        searchParams.get('slug') ||
+        searchParams.get('tenant') ||
+        searchParams.get('restaurant_slug') ||
+        searchParams.get('restaurantId') ||
+        searchParams.get('cartId') ||
+        searchParams.get('bizId');
+      if (queryTenant && queryTenant.trim()) {
+        const cleanSlug = queryTenant.trim().toLowerCase();
+        if (!RESERVED_SUBDOMAINS.has(cleanSlug)) {
+          // If on platform domains, localhost, or explicit query override on a platform host
+          if (PLATFORM_DOMAINS.has(hostname) || hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+            return { isTenantSubdomain: true, isCustomDomain: false, slug: cleanSlug, hostname };
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 2. Hostname is the public tenant identity - check subdomain FIRST
   // https://<slug>.dinely.food
   if (hostname.endsWith('.dinely.food')) {
     const subdomain = hostname.slice(0, -'.dinely.food'.length).trim();
@@ -92,10 +143,16 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     }
   }
 
-  // 2. Query parameter fallback ONLY for platform domains or local dev testing
+  // 3. Query parameter fallback for platform domains or local dev testing
   if (PLATFORM_DOMAINS.has(hostname) || hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
     const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-    const queryTenant = searchParams.get('tenant') || searchParams.get('restaurant_slug');
+    const queryTenant =
+      searchParams.get('slug') ||
+      searchParams.get('tenant') ||
+      searchParams.get('restaurant_slug') ||
+      searchParams.get('restaurantId') ||
+      searchParams.get('cartId') ||
+      searchParams.get('bizId');
     if (queryTenant && queryTenant.trim()) {
       const slug = queryTenant.trim().toLowerCase();
       if (!RESERVED_SUBDOMAINS.has(slug)) {
@@ -105,7 +162,7 @@ export function getTenantFromHostname(customHostname?: string): TenantDomainReso
     return { isTenantSubdomain: false, slug: null, hostname };
   }
 
-  // 3. Custom Domain Resolution (e.g. www.thedunkrestaurant.com or thedunk.com)
+  // 4. Custom Domain Resolution (e.g. www.thedunkrestaurant.com or thedunk.com)
   // Any domain not in PLATFORM_DOMAINS that reaches this frontend router is a verified custom domain
   return {
     isTenantSubdomain: true,

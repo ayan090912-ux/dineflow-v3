@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { api, realtimeBus } from '../../packages/api/client';
 import { Restaurant, User, BusinessType } from '../../packages/types';
-import { getTenantUrl } from '../../packages/utils/tenantResolver';
+import { getTenantUrl, setSharedTenantCookie } from '../../packages/utils/tenantResolver';
 import { DinelyLogo, Button, Input } from '../../packages/ui';
 
 interface BusinessHubProps {
@@ -198,12 +198,57 @@ export const BusinessHub: React.FC<BusinessHubProps> = ({
     try {
       await api.switchActiveRestaurant(biz.id);
       api.setCurrentRestaurantId(biz.id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('dinely_active_restaurant_id', biz.id);
+        sessionStorage.setItem('dinely_active_restaurant_id', biz.id);
+      }
 
-      const targetRoute = biz.launchRoute || BUSINESS_TYPE_CONFIG[biz.businessType].route;
-      if (onNavigate) {
-        onNavigate(targetRoute);
+      const targetRoute = biz.launchRoute || BUSINESS_TYPE_CONFIG[biz.businessType]?.route || '/restaurant/dashboard';
+      const token =
+        (typeof window !== 'undefined'
+          ? localStorage.getItem('dinely_auth_token') || sessionStorage.getItem('dinely_auth_token')
+          : null) || ((api as any).base?.currentTokensByScope?.['OWNER']?.accessToken ?? null);
+
+      // Persist cross-subdomain shared cookie on .dinely.food
+      if (token) {
+        setSharedTenantCookie('dinely_auth_token', token);
+      }
+      setSharedTenantCookie('dinely_active_restaurant_id', biz.id);
+
+      // Determine canonical destination URL for this business
+      let targetUrl = getTenantUrl(biz, targetRoute);
+
+      // Attach auth handoff token and bizId
+      try {
+        const parsed = new URL(targetUrl, typeof window !== 'undefined' ? window.location.origin : 'https://dinely.food');
+        if (token) {
+          parsed.searchParams.set('auth_token', token);
+        }
+        parsed.searchParams.set('bizId', biz.id);
+        targetUrl = parsed.toString();
+      } catch (_) {
+        const sep = targetUrl.includes('?') ? '&' : '?';
+        targetUrl = `${targetUrl}${sep}bizId=${encodeURIComponent(biz.id)}${token ? `&auth_token=${encodeURIComponent(token)}` : ''}`;
+      }
+
+      // Check whether targetUrl is on a different hostname or if running in production
+      const currentHost = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+      let targetHost = currentHost;
+      try {
+        targetHost = (new URL(targetUrl, window.location.origin)).hostname.toLowerCase();
+      } catch (_) {}
+
+      if (currentHost !== targetHost || currentHost.endsWith('.dinely.food')) {
+        // ALWAYS do a full browser redirect when switching businesses or when on a tenant subdomain
+        window.location.href = targetUrl;
       } else {
-        window.location.href = targetRoute;
+        // Local dev on same host
+        if (onNavigate) {
+          const parsed = new URL(targetUrl, window.location.origin);
+          onNavigate(`${parsed.pathname}${parsed.search}`);
+        } else {
+          window.location.href = targetUrl;
+        }
       }
     } catch (e) {
       console.error('Failed to launch OS:', e);
@@ -530,7 +575,8 @@ export const BusinessHub: React.FC<BusinessHubProps> = ({
               return (
                 <div
                   key={biz.id}
-                  className="rounded-2xl border border-[#1b202c] hover:border-[#2b3346] bg-[#0d1017] p-5 flex flex-col justify-between space-y-5 transition-all shadow-md group relative overflow-hidden"
+                  onClick={() => handleLaunchOS(biz)}
+                  className="rounded-2xl border border-[#1b202c] hover:border-[#2b3346] bg-[#0d1017] p-5 flex flex-col justify-between space-y-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
                 >
                   <div className="space-y-4">
                     {/* Top Row: Type Badge & Status */}

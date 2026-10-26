@@ -16,6 +16,7 @@ import {
   authStateMachine,
 } from '../../auth/firebase';
 import { realtimeBus } from '../realtime';
+import { getTenantFromHostname } from '../../utils/tenantResolver';
 
 export class AuthClient {
   constructor(private base: BaseApiClient) {}
@@ -39,12 +40,14 @@ export class AuthClient {
     }
 
     if (normalizedEmail === 'ayanamity77@gmail.com') {
+      const tenantRes = getTenantFromHostname();
+      const targetRestId = this.base.getCurrentRestaurantId() || (tenantRes.isTenantSubdomain && tenantRes.slug ? tenantRes.slug : undefined);
       const ownerUser: User = {
         id: 'W45wtagVNccn438qLzKFpr047t63',
         name: 'Ayan',
         email: 'ayanamity77@gmail.com',
         role: 'RESTAURANT_OWNER',
-        restaurantId: 'rest-1790594544526-396022',
+        restaurantId: targetRestId,
       };
       const token = `df_owner_jwt_${Date.now()}`;
       const tokens: AuthTokens = {
@@ -54,12 +57,14 @@ export class AuthClient {
         tokenType: 'Bearer',
       };
       (ownerUser as any).scope = 'OWNER';
-      this.base.saveSession(ownerUser, tokens, 'rest-1790594544526-396022', 'OWNER');
+      this.base.saveSession(ownerUser, tokens, targetRestId, 'OWNER');
       if (typeof window !== 'undefined') {
         localStorage.setItem('dinely_active_scope', 'OWNER');
         localStorage.setItem('dinely_owner_token', token);
         localStorage.setItem('dinely_auth_token', token);
-        localStorage.setItem('dinely_active_restaurant_id', 'rest-1790594544526-396022');
+        if (targetRestId) {
+          localStorage.setItem('dinely_active_restaurant_id', targetRestId);
+        }
         localStorage.removeItem('dinely_staff_token');
         sessionStorage.removeItem('dinely_staff_token');
         ['staff', 'waiter', 'kitchen', 'bar', 'inventory'].forEach((role) => {
@@ -74,7 +79,7 @@ export class AuthClient {
       return {
         user: ownerUser,
         tokens,
-        restaurant: { id: 'rest-1790594544526-396022', name: 'THE START', slug: 'the-start' } as any,
+        restaurant: targetRestId ? ({ id: targetRestId, name: targetRestId, slug: targetRestId } as any) : undefined,
       };
     }
 
@@ -446,7 +451,8 @@ export class AuthClient {
 
   async loginStaffTerminal(role: 'KITCHEN' | 'WAITER' | 'BAR' | 'INVENTORY' | 'HOOKAH' | 'SHISHA', identifier: string, password?: string) {
     await delay(200);
-    const targetRestId = this.base.getCurrentRestaurantId() || 'the-start';
+    const tenantRes = getTenantFromHostname();
+    const targetRestId = this.base.getCurrentRestaurantId() || (tenantRes.isTenantSubdomain && tenantRes.slug ? tenantRes.slug : '');
     const roleKey = role.toLowerCase();
     let backendUser: any = null;
     let backendToken: string | null = null;
