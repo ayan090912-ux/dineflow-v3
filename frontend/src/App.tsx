@@ -211,7 +211,28 @@ function AppContent() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const p = typeof window !== 'undefined' ? window.location.pathname : '/';
-    return api.getCurrentUser(getPortalScopeFromPath(p));
+    const existing = api.getCurrentUser(getPortalScopeFromPath(p));
+    if (existing) return existing;
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const token = searchParams.get('auth_token') || getSharedTenantCookie('dinely_auth_token') || localStorage.getItem('dinely_auth_token');
+      if (token) {
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]));
+            const uid = payload.uid || payload.sub || payload.user_id;
+            const email = payload.email || '';
+            const role = (payload.role || 'RESTAURANT_OWNER').toUpperCase();
+            const name = payload.name || (email ? email.split('@')[0] : 'Operator');
+            const hydrated = { id: uid, email, name, role, scope: 'OWNER' } as any;
+            api.setCurrentUser(hydrated, 'OWNER');
+            return hydrated;
+          }
+        } catch (_) {}
+      }
+    }
+    return null;
   });
 
   const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
@@ -363,6 +384,31 @@ function AppContent() {
         tokenType: 'Bearer',
       });
       setSharedTenantCookie('dinely_auth_token', effectiveToken);
+
+      // Hydrate owner user from token claims immediately so protected workspace renders without flashing login
+      try {
+        const parts = effectiveToken.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          const uid = payload.uid || payload.sub || payload.user_id;
+          const email = payload.email || '';
+          const role = (payload.role || 'RESTAURANT_OWNER').toUpperCase();
+          const name = payload.name || (email ? email.split('@')[0] : 'Operator');
+          const ownerUser: User = {
+            id: uid,
+            email,
+            name,
+            role,
+          };
+          (ownerUser as any).scope = 'OWNER';
+          (ownerUser as any).googleUid = uid;
+          api.setCurrentUser(ownerUser, 'OWNER');
+          setCurrentUser(ownerUser);
+          authStateMachine.setAuthenticated(ownerUser, effectiveToken);
+        }
+      } catch (e) {
+        console.warn('[App] Could not decode token claims:', e);
+      }
     }
 
     const queryBizId = searchParams.get('bizId');
