@@ -741,19 +741,6 @@ function AppContent() {
         );
       }
 
-      // 0.06. Dedicated Bar Operating System
-      if (
-        tenantApp === 'BAR_OS' ||
-        (resolvedTenant.businessType === 'BAR' && (tenantApp === 'SETTINGS' || cleanPath.startsWith('/restaurant') || cleanPath === '/dashboard'))
-      ) {
-        return (
-          <BarApp
-            business={resolvedTenant}
-            onNavigate={navigateTo}
-            onLogout={() => handleLogout('/bar/login')}
-          />
-        );
-      }
 
       // 0.07. Dedicated Small Cart Operating System
       if (
@@ -1772,7 +1759,7 @@ function AppContent() {
       );
     }
 
-    // 7.7. Dedicated Bar Operating System (Platform Domain)
+    // 7.7. Bar Management inside Restaurant & Bar OS (Platform Domain)
     if (
       cleanPath.startsWith('/bar/dashboard') ||
       cleanPath.startsWith('/bar/menu') ||
@@ -1783,10 +1770,10 @@ function AppContent() {
       cleanPath.startsWith('/bar/reports')
     ) {
       return (
-        <BarApp
-          business={currentRestaurant}
+        <RestaurantApp
+          activeRestaurant={currentRestaurant}
+          onLogout={() => handleLogout('/login')}
           onNavigate={navigateTo}
-          onLogout={() => handleLogout('/bar/login')}
         />
       );
     }

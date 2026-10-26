@@ -790,10 +790,10 @@ async def get_hub_businesses(
             canonical_type = "WEDDING_EVENT"
             os_type = "WEDDINGS_OS"
             launch_route = "/weddings/dashboard"
-        elif raw_type == "BAR":
+        elif raw_type in ("BAR", "LOUNGE", "BAR_AND_LOUNGE"):
             canonical_type = "BAR"
-            os_type = "BAR_OS"
-            launch_route = "/bar/dashboard"
+            os_type = "RESTAURANT_OS"
+            launch_route = "/restaurant/dashboard"
         else:
             canonical_type = "RESTAURANT"
             os_type = "RESTAURANT_OS"

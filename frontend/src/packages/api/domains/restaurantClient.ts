@@ -2942,9 +2942,9 @@ export class RestaurantClient {
         osType = 'WEDDINGS_OS';
         launchRoute = '/weddings/dashboard';
         canonicalType = 'WEDDING_EVENT';
-      } else if (rawType === 'BAR') {
-        osType = 'BAR_OS';
-        launchRoute = '/bar/dashboard';
+      } else if (rawType === 'BAR' || rawType === 'LOUNGE') {
+        osType = 'RESTAURANT_OS';
+        launchRoute = '/restaurant/dashboard';
         canonicalType = 'BAR';
       }
       return {

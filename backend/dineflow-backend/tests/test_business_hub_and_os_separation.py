@@ -191,8 +191,8 @@ class TestBusinessHubAndOSSeparation:
         bar = biz_by_id.get(ctx["bar"].id)
         assert bar is not None
         assert bar["businessType"] == "BAR"
-        assert bar["osType"] == "BAR_OS"
-        assert bar["launchRoute"] == "/bar/dashboard"
+        assert bar["osType"] == "RESTAURANT_OS"
+        assert bar["launchRoute"] == "/restaurant/dashboard"
         assert "weddings" not in bar["enabledModules"]
 
         # Verify Small Cart

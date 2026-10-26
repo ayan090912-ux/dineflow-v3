@@ -162,7 +162,7 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     return 'CART_OS';
   }
 
-  // 3.3. Dedicated Bar OS Dashboard & Management
+  // 3.3. Bar Management inside Restaurant & Bar OS
   if (
     p === '/bar/dashboard' ||
     p.startsWith('/bar/dashboard/') ||
@@ -179,7 +179,7 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     p === '/bar/reports' ||
     p.startsWith('/bar/reports/')
   ) {
-    return 'BAR_OS';
+    return 'SETTINGS';
   }
 
   // 4. Bar Station Terminal (Inside Restaurant)

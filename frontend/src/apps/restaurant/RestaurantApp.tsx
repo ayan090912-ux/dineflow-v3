@@ -166,9 +166,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     if (rawType.includes('WEDDING') || rawType.includes('EVENT')) {
       if (onNavigate) onNavigate('/weddings/dashboard');
       else window.location.href = '/weddings/dashboard';
-    } else if (rawType === 'BAR') {
-      if (onNavigate) onNavigate('/bar/dashboard');
-      else window.location.href = '/bar/dashboard';
     } else if (rawType.includes('CART') || rawType.includes('TRUCK')) {
       if (onNavigate) onNavigate('/cart/dashboard');
       else window.location.href = '/cart/dashboard';
