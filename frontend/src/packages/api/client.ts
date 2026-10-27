@@ -422,7 +422,7 @@ export class DinelyApiClient extends BaseApiClient {
   }
 
   async closeTableSession(
-    arg1: string | { restaurantId?: string; tableId?: string; waiterName?: string; tableSessionId?: string },
+    arg1: string | { restaurantId?: string; tableId?: string; waiterName?: string; tableSessionId?: string; force?: boolean },
     arg2?: string,
     arg3?: string,
     arg4?: string

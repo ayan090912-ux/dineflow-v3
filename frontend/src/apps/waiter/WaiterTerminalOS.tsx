@@ -902,50 +902,50 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       )}
 
       {/* HEADER BAR */}
-      <header className="bg-[#0e1117] border-b border-[#1e232e] sticky top-0 z-40 px-4 lg:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <header className="bg-[#0e1117] border-b border-[#1e232e] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
         {/* Brand Header */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
-            <PhoneCall className="w-5 h-5 text-emerald-400" />
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
+            <PhoneCall className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
           </div>
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
               <DinelyLogo size="sm" />
-              <h1 className="text-base font-bold text-white tracking-tight uppercase">{restaurantName}</h1>
-              <Badge variant="brand">WAITER TERMINAL</Badge>
-              <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px] font-mono">{assignedTerminal}</Badge>
+              <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">{restaurantName}</h1>
+              <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5">WAITER</Badge>
+              <Badge variant="outline" className="hidden xs:inline-flex text-emerald-400 border-emerald-500/30 text-[9px] sm:text-[10px] font-mono">{assignedTerminal}</Badge>
               {wsStatus === 'CONNECTED' ? (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
                 </span>
               ) : wsStatus === 'RECONNECTING' ? (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 font-medium flex items-center gap-1.5">
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 font-medium flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Reconnecting
                 </span>
               ) : (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-medium flex items-center gap-1.5">
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-medium flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
               Floor service requests, active table sessions & dish delivery
             </p>
           </div>
         </div>
 
         {/* Authenticated Staff Info & Actions */}
-        <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-300">
-          <div className="flex items-center gap-2 bg-[#12151b] px-3 py-1.5 rounded-lg border border-[#1e232e]">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-[#12151b] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-[#1e232e]">
             <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" name={waiterName} size="sm" />
-            <div>
-              <p className="font-semibold text-white text-xs">{waiterName}</p>
-              <p className="text-[10px] text-emerald-400 font-mono">ON SHIFT</p>
+            <div className="hidden xs:block">
+              <p className="font-semibold text-white text-xs truncate max-w-[80px] sm:max-w-none">{waiterName}</p>
+              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono">ON SHIFT</p>
             </div>
           </div>
 
           {/* Clock */}
-          <div className="bg-[#12151b] px-2.5 py-1.5 rounded-lg border border-[#1e232e] flex items-center gap-1.5 font-mono text-slate-300 text-xs">
+          <div className="hidden md:flex bg-[#12151b] px-2.5 py-1.5 rounded-lg border border-[#1e232e] items-center gap-1.5 font-mono text-slate-300 text-xs">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span>{currentTime || '08:42 PM'}</span>
           </div>
@@ -953,7 +953,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
           {/* Audio Chime Toggle */}
           <button
             onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className="p-2 rounded-lg bg-[#12151b] hover:bg-[#181d27] text-slate-400 hover:text-white transition-colors border border-[#1e232e] h-8 w-8 flex items-center justify-center"
+            className="p-1.5 sm:p-2 rounded-lg bg-[#12151b] hover:bg-[#181d27] text-slate-400 hover:text-white transition-colors border border-[#1e232e] h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0"
             title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
           >
             {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
@@ -967,22 +967,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               if (onLogout) onLogout();
               else window.location.href = '/waiter/login';
             }}
-            className="text-xs bg-[#12151b] border-[#1e232e] hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 flex items-center gap-1.5 h-8"
+            className="text-xs bg-[#12151b] border-[#1e232e] hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span className="hidden xs:inline">Sign Out</span>
           </Button>
         </div>
       </header>
 
       {/* ERROR / RECONNECT BANNER */}
       {isErrorState && (
-        <div className="bg-rose-950/80 border-b border-rose-800 px-4 py-2.5 text-xs text-rose-200 flex items-center justify-between gap-3">
+        <div className="bg-rose-950/80 border-b border-rose-800 px-3 sm:px-4 py-2 text-xs text-rose-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>Unable to connect to restaurant server. Realtime events may be paused.</span>
+            <span className="truncate">Unable to connect to server. Realtime events may be paused.</span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => loadData()} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1 h-7">
+          <Button variant="outline" size="sm" onClick={() => loadData()} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1 h-6 px-2 shrink-0">
             <RefreshCw className="w-3 h-3" />
             <span>Retry</span>
           </Button>
@@ -990,20 +990,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       )}
 
       {/* ONE-SCREEN WAITER OPERATIONAL INTERFACE */}
-      <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-[#0b0d11]">
+      <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-3.5 sm:space-y-4 bg-[#0b0d11]">
         {/* TOP OPERATIONAL BAR: Stage Selector, Live Counts, Search & Refresh */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#0e1117] p-3 rounded-xl border border-[#1e232e]">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none no-scrollbar">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-[#0e1117] p-2.5 sm:p-3 rounded-xl border border-[#1e232e]">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setWaiterView('floor')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-mono font-bold uppercase transition-colors shrink-0 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-lg text-xs font-mono font-bold uppercase transition-colors shrink-0 touch-manipulation ${
                 waiterView === 'floor'
                   ? 'bg-emerald-500 text-slate-950 border border-emerald-400 shadow-sm'
                   : 'bg-[#12151b] text-slate-300 hover:text-white border border-[#1e232e]'
               }`}
             >
               <Activity className="w-3.5 h-3.5" />
-              <span>Live Service Floor</span>
+              <span>Live Floor</span>
               <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${waiterView === 'floor' ? 'bg-slate-950/20 text-slate-950' : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'}`}>
                 {readyPlatesList.length + pendingCallsList.length}
               </span>
@@ -1011,21 +1011,21 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
             <button
               onClick={() => setWaiterView('tables')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-mono font-bold uppercase transition-colors shrink-0 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-lg text-xs font-mono font-bold uppercase transition-colors shrink-0 touch-manipulation ${
                 waiterView === 'tables'
                   ? 'bg-sky-500 text-slate-950 border border-sky-400 shadow-sm'
                   : 'bg-[#12151b] text-slate-300 hover:text-white border border-[#1e232e]'
               }`}
             >
               <Utensils className="w-3.5 h-3.5" />
-              <span>Floor Tables & Sessions</span>
+              <span>Tables & Sessions</span>
               <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${waiterView === 'tables' ? 'bg-slate-950/20 text-slate-950' : 'bg-[#181d27] text-slate-300 border border-[#2d3545]'}`}>
                 {activeTablesList.length}
               </span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-1 max-w-xl justify-end">
+          <div className="flex items-center gap-2 flex-1 max-w-xl justify-end">
             <div className="flex-1">
               <SearchInput
                 value={searchQuery}
@@ -1042,7 +1042,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               className="text-xs bg-[#12151b] border-[#1e232e] hover:bg-[#181d27] text-slate-300 flex items-center gap-1.5 h-8 shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
         </div>
@@ -1585,7 +1585,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-full text-xs py-1.5 bg-[#141822] border-[#222838] hover:bg-[#1a202c] text-slate-200 h-8"
+                          className="w-full text-xs py-1.5 bg-[#141822] border-[#222838] hover:bg-[#1a202c] text-slate-200 h-9 font-medium touch-manipulation"
                           onClick={() => setSelectedTableForView(table)}
                         >
                           View Details
@@ -1593,7 +1593,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         <Button
                           variant="danger"
                           size="sm"
-                          className="w-full text-xs py-1.5 bg-rose-600 hover:bg-rose-500 text-white h-8"
+                          className="w-full text-xs py-1.5 bg-rose-600 hover:bg-rose-500 text-white h-9 font-bold touch-manipulation"
                           onClick={() => setSelectedTableForClose(table)}
                         >
                           Close Table
@@ -1964,11 +1964,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         >
           {(() => {
             const activeSession = activeSessions.find(
-              (s) => s.tableId === selectedTableForClose.id && s.status === 'ACTIVE'
+              (s) => (s.tableId === selectedTableForClose.id || matchTableNumber(s.tableNumber, selectedTableForClose.tableNumber)) && s.status !== 'CLOSED'
             );
             const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id) : [];
             const sessionTotal = sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-            const allPaid = sessionOrders.every((o) => o.paymentStatus === 'PAID' || o.status === 'COMPLETED');
+            const allPaid = sessionOrders.length === 0 || sessionOrders.every((o) => o.paymentStatus === 'PAID' || o.status === 'COMPLETED');
 
             return (
               <div className="space-y-4 font-sans text-slate-100">
@@ -1993,7 +1993,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   <div className="flex justify-between items-center py-1">
                     <span className="text-slate-400">Payment Status:</span>
                     <Badge variant={allPaid ? 'success' : 'warning'} className="text-[10px]">
-                      {allPaid ? 'PAID' : 'PAYMENT PENDING / UNPAID'}
+                      {allPaid ? 'PAID / ZERO BALANCE' : 'PAYMENT PENDING'}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-sm">
@@ -2019,13 +2019,14 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                       try {
                         const targetTbl = selectedTableForClose;
                         const activeSess = activeSessions.find(
-                          (s) => s.status === 'ACTIVE' && (s.tableId === targetTbl.id || matchTableNumber(s.tableNumber, targetTbl.tableNumber))
+                          (s) => s.status !== 'CLOSED' && (s.tableId === targetTbl.id || matchTableNumber(s.tableNumber, targetTbl.tableNumber))
                         );
                         await api.closeTableSession({
                           restaurantId: currentRestaurantId,
                           tableId: targetTbl.id,
                           waiterName: waiterName,
                           tableSessionId: activeSess?.id,
+                          force: true,
                         });
                         showToast('Table Session Closed 🧹', `${targetTbl.tableNumber} is now available for new guests`, 'success');
                         setSelectedTableForClose(null);

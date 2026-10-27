@@ -214,7 +214,7 @@ export class OrderClient {
             subtotal: isEventOrder ? 0 : (data.subtotal || 0),
             tipAmount: isEventOrder ? 0 : (data.tip_amount || orderData.tipAmount || 0),
             taxBreakdown: isEventOrder ? [] : (data.tax_breakdown || []),
-            estimatedPrepTimeMinutes: data.estimated_prep_time_minutes || 15,
+            estimatedPrepTimeMinutes: data.estimated_prep_time_minutes ?? data.estimatedPrepTimeMinutes ?? undefined,
             etaTargetTimestamp: data.eta_target_timestamp || undefined,
             paymentStatus: data.payment_status || 'UNPAID',
             createdAt: data.created_at || new Date().toISOString(),

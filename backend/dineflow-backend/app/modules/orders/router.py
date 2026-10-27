@@ -166,7 +166,7 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         eff_eta_val = None
     else:
         raw_prep = getattr(order, "estimated_prep_time_minutes", None)
-        prep_time_val = raw_prep if raw_prep is not None else 15
+        prep_time_val = raw_prep if raw_prep is not None else None
         eff_eta_val = eta_val
 
     return {
@@ -803,8 +803,8 @@ async def create_order(
             tax_amount=tax_amount,
             total_amount=total,
             order_number=order_num,
-            estimated_prep_time_minutes=payload.estimatedPrepTimeMinutes or 15,
-            eta_target_timestamp=now_utc + timedelta(minutes=(payload.estimatedPrepTimeMinutes or 15)),
+            estimated_prep_time_minutes=payload.estimatedPrepTimeMinutes if payload.estimatedPrepTimeMinutes is not None else None,
+            eta_target_timestamp=(now_utc + timedelta(minutes=payload.estimatedPrepTimeMinutes)) if payload.estimatedPrepTimeMinutes is not None else None,
             items_json=items_list_dict,
             tax_breakdown_json=tax_breakdown,
             order_type=eff_order_type,

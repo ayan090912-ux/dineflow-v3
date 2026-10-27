@@ -649,6 +649,7 @@ async def get_table(
 class CloseTableSessionSchema(BaseModel):
     table_session_id: Optional[str] = None
     waiter_name: Optional[str] = None
+    force: Optional[bool] = False
 
 @router.post("/{restaurant_id}/tables/{table_id}/close-session")
 @router.post("/{restaurant_id}/tables/{table_id}/close")
@@ -656,10 +657,13 @@ async def close_table_session(
     restaurant_id: str,
     table_id: str,
     table_session_id: Optional[str] = Query(None),
+    force: Optional[bool] = Query(False),
     payload: Optional[CloseTableSessionSchema] = None,
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
+    is_force = bool(force or (payload.force if payload else False))
+
     # 1. Strict Authentication Enforcement: Caller must be authenticated staff or owner
     if not caller.is_authenticated:
         raise HTTPException(
@@ -745,8 +749,16 @@ async def close_table_session(
             )
             res_unpaid = await db.execute(query_unpaid)
             unpaid_bills = res_unpaid.scalars().all()
-            if unpaid_bills:
-                ub = unpaid_bills[0]
+            
+            # Auto-void zero-amount bills (total <= 0) or close unpaid bills if force reset requested
+            for ub_item in unpaid_bills:
+                if (ub_item.grand_total or 0.0) <= 0.0 or is_force:
+                    ub_item.status = "VOID" if (ub_item.grand_total or 0.0) <= 0.0 else "CLOSED"
+                    ub_item.payment_status = "PAID"
+
+            real_unpaid = [b for b in unpaid_bills if (b.grand_total or 0.0) > 0.0 and not is_force]
+            if real_unpaid:
+                ub = real_unpaid[0]
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Cannot close table {tbl.table_number}: Bill #{ub.id} is unpaid (total: {ub.grand_total}, status: {ub.payment_status or ub.status}). Settle payment before closing table."

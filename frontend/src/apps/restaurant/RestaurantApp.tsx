@@ -59,6 +59,8 @@ import {
   Truck,
   Search,
   BookOpen,
+  Menu as MenuIcon,
+  X as XIcon,
 } from 'lucide-react';
 import {
   Button,
@@ -160,6 +162,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     }
     return 'dashboard';
   });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const rawType = (activeRestaurant?.businessType || '').toUpperCase();
@@ -1659,8 +1662,58 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
+      {/* Mobile Top Navigation Bar */}
+      <div className="md:hidden bg-[#0e1117] border-b border-[#1e232e] px-3.5 py-2.5 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-1.5 rounded-lg bg-[#151922] text-slate-300 hover:text-white border border-[#242b3b] focus:outline-none shrink-0"
+            aria-label="Toggle navigation menu"
+          >
+            {isMobileMenuOpen ? <XIcon className="w-4 h-4 text-rose-400" /> : <MenuIcon className="w-4 h-4 text-amber-400" />}
+          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            <img
+              src={theme.logo}
+              alt={theme.restaurantName}
+              className="w-6 h-6 rounded-md object-cover border border-[#2a3245] shrink-0"
+            />
+            <span className="text-xs font-bold text-white tracking-tight truncate max-w-[130px]">
+              {theme.restaurantName}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-mono uppercase bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-bold">
+            {activeTab.replace(/_/g, ' ')}
+          </span>
+          <button
+            onClick={() => {
+              if (onNavigate) onNavigate('/hub');
+              else window.location.href = '/hub';
+            }}
+            className="p-1.5 rounded-lg bg-[#151922] text-slate-400 hover:text-white border border-[#242b3b]"
+            title="Business Hub"
+          >
+            <Grid className="w-3.5 h-3.5 text-orange-400" />
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Backdrop Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-xs z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-[#0e1117] border-r border-[#1e232e] p-4 flex flex-col justify-between shrink-0">
+      <aside className={`
+        ${isMobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 w-72 flex' : 'hidden md:flex'}
+        md:static md:w-64 bg-[#0e1117] border-r border-[#1e232e] p-4 flex-col justify-between shrink-0 h-screen md:h-auto overflow-y-auto
+      `}>
         <div>
           {/* Platform Branding Header */}
           <div className="mb-4 px-2 flex items-center justify-between pb-3 border-b border-[#1e232e]">
@@ -1804,6 +1857,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           key={item.id}
                           onClick={() => {
                             setActiveTab(item.id as any);
+                            setIsMobileMenuOpen(false);
                           }}
                           className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                             activeTab === item.id

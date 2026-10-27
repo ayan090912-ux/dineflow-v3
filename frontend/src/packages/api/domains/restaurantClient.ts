@@ -1221,7 +1221,7 @@ export class RestaurantClient {
   }
 
   async closeTableSession(
-    arg1: string | { restaurantId?: string; tableId?: string; waiterName?: string; tableSessionId?: string },
+    arg1: string | { restaurantId?: string; tableId?: string; waiterName?: string; tableSessionId?: string; force?: boolean },
     arg2?: string,
     arg3?: string,
     arg4?: string
@@ -1230,12 +1230,14 @@ export class RestaurantClient {
     let tableId: string | undefined;
     let waiterName: string | undefined;
     let tableSessionId: string | undefined;
+    let force: boolean | undefined;
 
     if (typeof arg1 === 'object' && arg1 !== null) {
       restId = arg1.restaurantId;
       tableId = arg1.tableId;
       waiterName = arg1.waiterName;
       tableSessionId = arg1.tableSessionId;
+      force = arg1.force;
     } else if (typeof arg1 === 'string') {
       const str1 = arg1;
       if (arg4 !== undefined) {
@@ -1285,7 +1287,11 @@ export class RestaurantClient {
     }
 
     const targetScope = getPortalScopeFromPath();
-    const endpoint = `/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session${tableSessionId ? `?table_session_id=${encodeURIComponent(tableSessionId)}` : ''}`;
+    const queryParams: string[] = [];
+    if (tableSessionId) queryParams.push(`table_session_id=${encodeURIComponent(tableSessionId)}`);
+    if (force !== undefined) queryParams.push(`force=${force ? 'true' : 'false'}`);
+    const qs = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+    const endpoint = `/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session${qs}`;
 
     await this.base.executeProtectedRequest<any>(
       endpoint,
@@ -1294,6 +1300,7 @@ export class RestaurantClient {
         body: JSON.stringify({
           table_session_id: tableSessionId,
           waiter_name: waiterName || this.base.currentUser?.name || 'Staff',
+          force: force ?? true,
         }),
       },
       targetScope
