@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle2, ChefHat, BellRing, Utensils, Wine, Ticket, Copy, Check, Sparkles } from 'lucide-react';
+import { Clock, CheckCircle2, ChefHat, BellRing, Utensils, Wine, Sparkles } from 'lucide-react';
 import { Badge } from '../../packages/ui';
 import { Order, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
@@ -14,7 +14,6 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
   const [currentOrder, setCurrentOrder] = useState<Order>(order);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [etaMessage, setEtaMessage] = useState<string>('Preparing your order with care.');
-  const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
   // Sync prop changes
   useEffect(() => {
@@ -105,7 +104,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
             setEtaMessage('Active preparation in progress by restaurant staff.');
           }
         } else {
-          setEtaMessage('Order received • Queued for preparation');
+          setEtaMessage('Order received — preparing shortly.');
         }
         return;
       }
@@ -145,77 +144,9 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
   };
 
   const minutesRemaining = Math.ceil(remainingSeconds / 60);
-  const isPendingServerAcceptance = currentOrder.status === 'PENDING' && !currentOrder.etaTargetTimestamp;
-
-  const pickupCodeToDisplay = currentOrder.pickupCode || currentOrder.displayOrderNumber || (currentOrder.id ? `#${currentOrder.id.slice(-4)}` : '');
-  const isPickupFlow = currentOrder.orderType === 'PICKUP' || currentOrder.tableNumber === 'COUNTER' || Boolean(currentOrder.pickupCode);
-
-  const handleCopyCode = () => {
-    if (!pickupCodeToDisplay) return;
-    navigator.clipboard?.writeText(pickupCodeToDisplay.replace(/^#/, ''));
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2500);
-  };
 
   return (
     <div className="p-5 m-4 bg-[#12151b] border border-white/[0.08] rounded-2xl space-y-4 shadow-sm">
-      {/* UNIQUE CONFIRMATION CODE / PICKUP COUPON */}
-      {isPickupFlow && (
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-sky-500/10 to-emerald-500/15 border-2 border-amber-500/30 p-4 space-y-3 shadow-lg">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-amber-300 flex items-center gap-1.5">
-              <Ticket className="w-4 h-4 text-amber-400" />
-              <span>Your Pickup Code / Coupon</span>
-            </span>
-            <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold uppercase ${
-              currentOrder.pickupStatus === 'REDEEMED' || currentOrder.status === 'COMPLETED'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : isOrderReady
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse'
-                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-            }`}>
-              {currentOrder.pickupStatus === 'REDEEMED' || currentOrder.status === 'COMPLETED'
-                ? '✓ Redeemed'
-                : isOrderReady
-                ? 'Ready for Collection!'
-                : 'Unclaimed • In Prep'}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between bg-black/40 border border-white/10 rounded-xl p-3">
-            <div>
-              <div className="text-3xl font-mono font-black tracking-wider text-white drop-shadow-sm">
-                {pickupCodeToDisplay}
-              </div>
-              <div className="text-[11px] text-white/60 font-sans mt-0.5">
-                Show this code at the cart counter to collect
-              </div>
-            </div>
-
-            <button
-              onClick={handleCopyCode}
-              type="button"
-              className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              {copiedCode ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  <span>Copy Code</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <p className="text-[11px] text-white/50 text-center flex items-center justify-center gap-1">
-            <span>📷 Save this code or take a screenshot to collect your food</span>
-          </p>
-        </div>
-      )}
 
       {/* Header Info */}
       <div className="flex items-center justify-between">
@@ -257,7 +188,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
           ) : (
             <div className="py-2 text-center space-y-1">
               <span className="text-sm font-semibold text-amber-300 block">
-                {isOrderReady ? 'Plated & Ready for Service!' : isOrderPreparing ? 'Active Preparation in Progress' : 'Order Received'}
+                {isOrderReady ? 'Plated & Ready for Service!' : isOrderPreparing ? 'Active Preparation in Progress' : 'Order received — preparing shortly'}
               </span>
               <span className="text-[11px] text-white/50 font-mono block">
                 Elapsed time: <strong className="text-white/80">{elapsedTimeStr}</strong>
