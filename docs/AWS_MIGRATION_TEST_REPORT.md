@@ -2,7 +2,8 @@
 
 **Date:** October 27, 2026  
 **Target Environment:** AWS Production (Mumbai `ap-south-1`)  
-**Target Compute Origin:** `http://3.7.195.143` (EC2 Instance `i-0997b0b381dfb3fd0`)  
+**Target Origin:** `https://dinely.food` / `https://*.dinely.food` (Elastic IP `3.7.195.143`, EC2 `i-0997b0b381dfb3fd0`)  
+**SSL/TLS:** Let's Encrypt Wildcard (`CN=dinely.food`, `*.dinely.food`) on Native Port 443  
 **Database:** Amazon RDS PostgreSQL 16.9 (`dinely-db-mumbai`)  
 **Storage:** Amazon S3 (`dinely-storage-ap-south-1`)  
 **Overall Test Result:** **100% PASS (7/7 Suites Passed, 0 Failures)**  
