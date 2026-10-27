@@ -898,16 +898,31 @@ export class DinelyApiClient extends BaseApiClient {
     return this.orderClient.updateOrderStatus(orderId, status);
   }
 
-  async updateKitchenStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
-    return this.orderClient.updateKitchenStatus(orderId, status);
+  async updateKitchenStatus(
+    orderId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
+    scope?: any,
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) {
+    return this.orderClient.updateKitchenStatus(orderId, status, scope, options);
   }
 
-  async updateBarStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
-    return this.orderClient.updateBarStatus(orderId, status);
+  async updateBarStatus(
+    orderId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
+    scope?: any,
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) {
+    return this.orderClient.updateBarStatus(orderId, status, scope, options);
   }
 
-  async updateHookahStatus(orderId: string, status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED') {
-    return this.orderClient.updateHookahStatus(orderId, status);
+  async updateHookahStatus(
+    orderId: string,
+    status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
+    scope?: any,
+    options?: { estimatedPrepTimeMinutes?: number; etaTargetTimestamp?: string }
+  ) {
+    return this.orderClient.updateHookahStatus(orderId, status, scope, options);
   }
 
   async getKitchenAnalytics(restaurantId?: string) {

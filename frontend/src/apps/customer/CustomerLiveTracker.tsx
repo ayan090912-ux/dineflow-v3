@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle2, ChefHat, BellRing, Utensils, Wine, Ticket, Copy, Check, Sparkles } from 'lucide-react';
 import { Badge } from '../../packages/ui';
-import { Order } from '../../packages/types';
+import { Order, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
 import { formatCurrency } from '../../packages/utils/currency';
 

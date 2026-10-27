@@ -283,8 +283,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       const restaurants = await api.getOwnerRestaurants(user.email);
       setOwnerRestaurants(restaurants || []);
       if (restaurants && restaurants.length > 0 && !selectedCateringRestaurantId) {
-        setSelectedCateringRestaurantId(restaurants[0].id);
-        if (!restaurantName) setRestaurantName(restaurants[0].name);
+        if (!isCreateMode) {
+          setSelectedCateringRestaurantId(restaurants[0].id);
+          if (!restaurantName) setRestaurantName(restaurants[0].name);
+        } else {
+          setSelectedCateringRestaurantId('NEW');
+        }
       }
 
       if (isCreateMode) {
@@ -390,15 +394,22 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           return;
         }
         if (!isExisting) {
-          if (!restaurantName.trim()) {
-            setErrorMessage('Please enter your catering kitchen / restaurant name.');
+          if (!restaurantName.trim() && !weddingVenueName.trim()) {
+            setErrorMessage('Please enter your catering kitchen / venue name.');
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
           }
-          if (!country.trim() || !city.trim() || !address.trim()) {
-            setErrorMessage('Please enter catering kitchen country, city, and street address.');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
+          if (!restaurantName.trim() && weddingVenueName.trim()) {
+            setRestaurantName(weddingVenueName.trim());
+          }
+          if (!city.trim() && weddingVenueCity.trim()) {
+            setCity(weddingVenueCity.trim());
+          }
+          if (!country.trim()) {
+            setCountry('India');
+          }
+          if (!address.trim() && weddingVenueName.trim()) {
+            setAddress(weddingVenueName.trim());
           }
         }
         setCurrentStep(3);
@@ -466,83 +477,84 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
       // INTEGRATED WEDDING ORDERING SETUP SUBMISSION
       if (businessType === 'WEDDING_ORDERING') {
-        let cateringRestId = selectedCateringRestaurantId;
-        let fulfillingRestaurant = ownerRestaurants.find((r) => r.id === selectedCateringRestaurantId);
+        const weddingBizName = weddingName.trim() || restaurantName.trim() || 'Wedding & Event Banquet';
+        const venueAddress = [address, city, state, country, postalCode ? `PIN: ${postalCode}` : ''].filter(Boolean).join(', ') ||
+          `${weddingVenueName.trim()}, ${weddingVenueCity.trim() || city.trim() || 'Bengaluru'}`;
+        const finalTableCount = Math.max(1, weddingTableCount || 15);
+        const cateringRestId = (selectedCateringRestaurantId && selectedCateringRestaurantId !== 'NEW') ? selectedCateringRestaurantId : undefined;
 
-        // If user is registering a new catering kitchen or has no existing restaurant yet
-        if (!fulfillingRestaurant || selectedCateringRestaurantId === 'NEW') {
-          const fullAddress = [address, city, state, country, postalCode ? `PIN: ${postalCode}` : ''].filter(Boolean).join(', ');
-          const finalTableCount = Math.max(1, weddingTableCount || 15);
+        // Provision the dedicated Wedding & Events business record
+        const createdWeddingBiz = await api.createRestaurantForOwner({
+          name: weddingBizName,
+          businessType: 'WEDDING_EVENT' as any,
+          hasBar: enableBar !== false,
+          hasTables: true,
+          hasKitchen: true,
+          hasWaiter: true,
+          tableCount: finalTableCount,
+          address: venueAddress,
+          phone: phone.trim(),
+          email: user.email,
+          ownerName: user.name || user.firstName || user.email.split('@')[0],
+          ownerEmail: user.email,
+          ownerUid: user.id || (user as any).uid || (user as any).googleUid,
+          enabledModules: ['weddings', 'kitchen', 'bar', 'hookah', 'tables', 'billing'],
+        });
 
-          const createdCaterer = await api.createRestaurantForOwner({
-            name: restaurantName.trim() || 'Wedding Catering Kitchen',
-            businessType: 'RESTAURANT',
-            hasBar: enableBar,
-            hasTables: true,
-            hasKitchen: true,
-            hasWaiter: true,
-            tableCount: finalTableCount,
-            address: fullAddress,
-            phone: phone.trim(),
-            email: user.email,
-            ownerName: user.name || user.firstName || user.email.split('@')[0],
-            ownerEmail: user.email,
-            ownerUid: user.id || (user as any).uid || (user as any).googleUid,
-          });
-
-          await api.submitRestaurantLaunch({
-            id: createdCaterer.id,
-            restaurantName: restaurantName.trim() || 'Wedding Catering Kitchen',
-            businessType: 'RESTAURANT',
-            hasBar: enableBar,
-            hasTables: true,
-            hasKitchen: true,
-            hasWaiter: true,
-            hasInventory: true,
-            hasBilling: true,
-            enabledModules: ['kitchen', 'waiter', 'bar', 'inventory', 'billing', 'tables', 'weddings'],
-            address: fullAddress,
-            locality,
-            city,
-            state,
-            country,
-            postalCode,
-            latitude,
-            longitude,
-            placeId,
-            phone: phone.trim(),
-            email: user.email,
-            tables: { indoor: finalTableCount, outdoor: 0, vip: 0 },
-            totalTablesCount: finalTableCount,
-          });
-
-          cateringRestId = createdCaterer.id;
-          fulfillingRestaurant = createdCaterer;
-        }
+        await api.submitRestaurantLaunch({
+          id: createdWeddingBiz.id,
+          restaurantName: weddingBizName,
+          businessType: 'WEDDING_EVENT' as any,
+          hasBar: enableBar !== false,
+          hasTables: true,
+          hasKitchen: true,
+          hasWaiter: true,
+          hasInventory: true,
+          hasBilling: true,
+          enabledModules: ['weddings', 'kitchen', 'bar', 'hookah', 'tables', 'billing'],
+          address: venueAddress,
+          locality,
+          city: weddingVenueCity.trim() || city.trim() || 'Bengaluru',
+          state,
+          country: country.trim() || 'India',
+          postalCode,
+          latitude,
+          longitude,
+          placeId,
+          phone: phone.trim(),
+          email: user.email,
+          tables: { indoor: finalTableCount, outdoor: 0, vip: 0 },
+          totalTablesCount: finalTableCount,
+        });
 
         // Submit the persistent wedding setup request for Platform Admin review
         await api.submitWeddingRequest({
           applicantName: user.name || user.firstName || user.email.split('@')[0],
           applicantEmail: user.email,
           applicantPhone: phone.trim(),
-          weddingName: weddingName.trim(),
+          weddingName: weddingName.trim() || weddingBizName,
           eventType: 'WEDDING',
           eventDate: weddingDate,
-          venueName: weddingVenueName.trim(),
+          venueName: weddingVenueName.trim() || weddingBizName,
           venueCity: weddingVenueCity.trim() || city.trim() || 'Bengaluru',
           estimatedGuestCount: Number(weddingGuestCount) || 120,
-          cateringRestaurantId: cateringRestId,
+          cateringRestaurantId: cateringRestId || createdWeddingBiz.id,
           cateringNotes: weddingCateringNotes.trim(),
         });
 
         setIsSubmitting(false);
-        if (fulfillingRestaurant) {
-          await api.switchActiveRestaurant(fulfillingRestaurant.id);
-          api.setCurrentRestaurantId(fulfillingRestaurant.id);
-          onFinishSetup(fulfillingRestaurant);
-          if (onNavigate) {
-            onNavigate('/restaurant/dashboard?tab=weddings');
-          }
+        await api.switchActiveRestaurant(createdWeddingBiz.id);
+        api.setCurrentRestaurantId(createdWeddingBiz.id);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('dinely_active_restaurant_id', createdWeddingBiz.id);
+          sessionStorage.setItem('dinely_active_restaurant_id', createdWeddingBiz.id);
+          localStorage.setItem('dinely_wedding_workspace_id', createdWeddingBiz.id);
+        }
+        onFinishSetup(createdWeddingBiz);
+        if (onNavigate) {
+          onNavigate('/weddings/dashboard');
+        } else if (typeof window !== 'undefined') {
+          window.location.href = '/weddings/dashboard';
         }
         return;
       }

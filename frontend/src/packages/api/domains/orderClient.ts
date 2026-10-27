@@ -362,6 +362,8 @@ export class OrderClient {
       ticket.completedAt = new Date().toISOString();
     }
 
+    let allReady = false;
+    let allCompleted = false;
     const parentOrder = this.base.orders.find((o) => o.id === ticket.parentOrderId);
     if (parentOrder) {
       if (ticket.station === 'KITCHEN') {
@@ -376,8 +378,8 @@ export class OrderClient {
       }
 
       const orderTickets = this.base.fulfillmentTickets.filter((t) => t.parentOrderId === parentOrder.id);
-      const allReady = orderTickets.every((t) => t.status === 'READY' || t.status === 'COMPLETED');
-      const allCompleted = orderTickets.every((t) => t.status === 'COMPLETED');
+      allReady = orderTickets.every((t) => t.status === 'READY' || t.status === 'COMPLETED');
+      allCompleted = orderTickets.every((t) => t.status === 'COMPLETED');
 
       if (allCompleted) {
         parentOrder.status = 'COMPLETED';

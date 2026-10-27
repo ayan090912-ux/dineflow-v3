@@ -6,6 +6,7 @@ export interface ProductSwitcherProps {
   theme?: 'dark' | 'light' | 'auto';
   className?: string;
   compact?: boolean;
+  hideWeddings?: boolean;
   onSwitch?: (product: 'restaurants' | 'weddings') => void;
 }
 
@@ -14,13 +15,19 @@ export const ProductSwitcher: React.FC<ProductSwitcherProps> = ({
   theme = 'dark',
   className = '',
   compact = false,
+  hideWeddings = false,
   onSwitch,
 }) => {
   const handleSelect = (product: 'restaurants' | 'weddings') => {
-    if (product === activeProduct) return;
-
     if (onSwitch) {
       onSwitch(product);
+      return;
+    }
+
+    if (product === activeProduct) {
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       return;
     }
 
@@ -65,7 +72,7 @@ export const ProductSwitcher: React.FC<ProductSwitcherProps> = ({
             ? 'text-white/70 hover:text-white hover:bg-white/[0.08] border-transparent'
             : 'text-[#6b5c49] hover:text-[#2a241c] hover:bg-white/60 border-transparent'
         }`}
-        title="Switch to Dinely Restaurant Management Platform"
+        title="Dinely Restaurant Management Platform"
       >
         <Utensils className="w-3.5 h-3.5 shrink-0 opacity-80" />
         <span className={compact ? 'hidden sm:inline font-medium' : 'font-medium'}>
@@ -74,40 +81,42 @@ export const ProductSwitcher: React.FC<ProductSwitcherProps> = ({
       </button>
 
       {/* 2. Weddings & Events Platform Tab */}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeProduct === 'weddings'}
-        onClick={() => handleSelect('weddings')}
-        className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all cursor-pointer outline-none border ${
-          activeProduct === 'weddings'
-            ? isDark
-              ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-bold shadow-md shadow-amber-400/20 border-amber-300'
-              : 'bg-white text-[#8c6d1f] font-bold shadow-sm border-[#dacfc0]'
-            : isDark
-            ? 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-400/10 border-transparent'
-            : 'text-[#85651c] hover:text-[#5a4310] hover:bg-white/60 border-transparent'
-        }`}
-        title="Switch to Dinely Weddings & Events Ordering Platform"
-      >
-        <Sparkles className="w-3.5 h-3.5 shrink-0 opacity-90" />
-        <span className={compact ? 'hidden sm:inline font-medium' : 'font-medium'}>
-          Weddings & Events
-        </span>
-        <span
-          className={`text-[9px] uppercase px-1.5 py-0.2 rounded-full font-bold tracking-wider ${
+      {!hideWeddings && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeProduct === 'weddings'}
+          onClick={() => handleSelect('weddings')}
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all cursor-pointer outline-none border ${
             activeProduct === 'weddings'
               ? isDark
-                ? 'bg-slate-950/20 text-slate-900'
-                : 'bg-amber-500/15 text-[#8c6d1f]'
+                ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-bold shadow-md shadow-amber-400/20 border-amber-300'
+                : 'bg-white text-[#8c6d1f] font-bold shadow-sm border-[#dacfc0]'
               : isDark
-              ? 'bg-amber-400/20 text-amber-300'
-              : 'bg-amber-500/20 text-[#85651c]'
+              ? 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-400/10 border-transparent'
+              : 'text-[#85651c] hover:text-[#5a4310] hover:bg-white/60 border-transparent'
           }`}
+          title="Switch to Dinely Weddings & Events Ordering Platform"
         >
-          PREMIUM
-        </span>
-      </button>
+          <Sparkles className="w-3.5 h-3.5 shrink-0 opacity-90" />
+          <span className={compact ? 'hidden sm:inline font-medium' : 'font-medium'}>
+            Weddings & Events
+          </span>
+          <span
+            className={`text-[9px] uppercase px-1.5 py-0.2 rounded-full font-bold tracking-wider ${
+              activeProduct === 'weddings'
+                ? isDark
+                  ? 'bg-slate-950/20 text-slate-900'
+                  : 'bg-amber-500/15 text-[#8c6d1f]'
+                : isDark
+                ? 'bg-amber-400/20 text-amber-300'
+                : 'bg-amber-500/20 text-[#85651c]'
+            }`}
+          >
+            PREMIUM
+          </span>
+        </button>
+      )}
     </div>
   );
 };

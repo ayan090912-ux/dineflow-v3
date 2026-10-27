@@ -22,6 +22,7 @@ import {
   Wine,
   FileText,
   CheckSquare,
+  Check,
   Sparkles as SparklesIcon,
 } from 'lucide-react';
 import {
@@ -36,6 +37,7 @@ import {
 import { api } from '../../packages/api/client';
 import {
   Order,
+  OrderItem,
   Table,
   TableSession,
   CustomerRequest,

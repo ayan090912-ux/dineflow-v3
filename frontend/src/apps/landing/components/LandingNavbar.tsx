@@ -83,15 +83,16 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
               <DinelyLogo size="md" />
             </button>
 
-            {/* Canonical Dual-Product Switcher */}
+            {/* Product Selector */}
             <div className="hidden sm:flex items-center">
               <ProductSwitcher
                 activeProduct="restaurants"
                 theme="dark"
-                onSwitch={(p) => {
-                  if (p === 'weddings') {
-                    if (onNavigateWeddings) onNavigateWeddings();
-                    else window.location.href = '/weddings';
+                hideWeddings
+                onSwitch={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  if (window.location.hash) {
+                    window.history.replaceState(null, '', window.location.pathname);
                   }
                 }}
               />
@@ -185,16 +186,17 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
             aria-label="Mobile navigation"
           >
             <div className="flex flex-col gap-1.5 px-6 pt-24">
-              {/* Product Switcher for Mobile */}
+              {/* Product Selector for Mobile */}
               <div className="mb-4 flex justify-center">
                 <ProductSwitcher
                   activeProduct="restaurants"
                   theme="dark"
-                  onSwitch={(p) => {
+                  hideWeddings
+                  onSwitch={() => {
                     setMobileMenuOpen(false);
-                    if (p === 'weddings') {
-                      if (onNavigateWeddings) onNavigateWeddings();
-                      else window.location.href = '/weddings';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    if (window.location.hash) {
+                      window.history.replaceState(null, '', window.location.pathname);
                     }
                   }}
                 />

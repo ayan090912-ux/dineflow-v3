@@ -1639,7 +1639,14 @@ function AppContent() {
             if (setupData) {
               setCurrentRestaurant(setupData);
             }
-            navigateTo('/restaurant/pending-approval');
+            const bType = String(setupData?.business_type || setupData?.businessType || '').toUpperCase();
+            if (bType.includes('WEDDING') || bType.includes('EVENT')) {
+              navigateTo('/weddings/dashboard');
+            } else if (bType.includes('CART') || bType.includes('TRUCK')) {
+              navigateTo('/cart/dashboard');
+            } else {
+              navigateTo('/restaurant/pending-approval');
+            }
           }}
         />
       );
