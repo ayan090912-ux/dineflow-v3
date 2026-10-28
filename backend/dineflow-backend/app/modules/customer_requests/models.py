@@ -18,3 +18,6 @@ class CustomerRequestModel(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
     waiter_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     table_session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    order_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    station: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    items_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

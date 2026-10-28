@@ -51,3 +51,5 @@ ssm_cmd.json
 !scripts/verify_wedding_event_operations_live.py
 !scripts/test_live_terminals_http.py
 !scripts/inspect_terminals_live_db.py
+!scripts/verify_prod_hookah.py
+Awwwards-mcp/

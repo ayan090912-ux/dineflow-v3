@@ -17,8 +17,8 @@ class Order(Base, TimestampMixin):
     business_day_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False, index=True)  # PENDING | ACCEPTED | PREPARING | READY | COMPLETED | CANCELLED
-    kitchen_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True, index=True)
-    bar_status: Mapped[Optional[str]] = mapped_column(String(30), default="PENDING", nullable=True, index=True)
+    kitchen_status: Mapped[Optional[str]] = mapped_column(String(30), default=None, nullable=True, index=True)
+    bar_status: Mapped[Optional[str]] = mapped_column(String(30), default=None, nullable=True, index=True)
     hookah_status: Mapped[Optional[str]] = mapped_column(String(30), default=None, nullable=True, index=True)
     customer_name: Mapped[Optional[str]] = mapped_column(String(255), default="Guest", nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -26,7 +26,7 @@ class Order(Base, TimestampMixin):
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     order_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    estimated_prep_time_minutes: Mapped[Optional[int]] = mapped_column(Integer, default=15, nullable=True)
+    estimated_prep_time_minutes: Mapped[Optional[int]] = mapped_column(Integer, default=None, nullable=True)
     eta_target_timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     items_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     tax_breakdown_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
@@ -36,6 +36,9 @@ class Order(Base, TimestampMixin):
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     claimed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     delivery_status: Mapped[Optional[str]] = mapped_column(String(50), default="PENDING", nullable=True)
+    kitchen_waiter_requested: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
+    bar_waiter_requested: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
+    hookah_waiter_requested: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     pickup_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     pickup_status: Mapped[Optional[str]] = mapped_column(String(50), default="UNCLAIMED", nullable=True, index=True)  # UNCLAIMED | REDEEMED

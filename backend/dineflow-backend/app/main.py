@@ -393,9 +393,16 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_status VARCHAR(50) DEFAULT 'UNCLAIMED';",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;",
         "CREATE INDEX IF NOT EXISTS ix_orders_pickup_code ON orders (pickup_code);",
-        "CREATE INDEX IF NOT EXISTS ix_orders_pickup_status ON orders (pickup_status);",
         "ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS stock_quantity INTEGER;",
         "ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS track_inventory BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS order_id VARCHAR(255);",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS station VARCHAR(50);",
+        "ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS items_summary TEXT;",
+        "CREATE INDEX IF NOT EXISTS ix_customer_requests_order_id ON customer_requests (order_id);",
+        "CREATE INDEX IF NOT EXISTS ix_customer_requests_station ON customer_requests (station);",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_waiter_requested BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS bar_waiter_requested BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS hookah_waiter_requested BOOLEAN DEFAULT FALSE;",
     ]
     for stmt in schema_patch_statements:
         try:

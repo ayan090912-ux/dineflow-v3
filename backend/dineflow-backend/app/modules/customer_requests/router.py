@@ -27,6 +27,9 @@ class CreateCustomerRequestSchema(BaseModel):
     customerNotes: Optional[str] = None
     priority: Optional[str] = "MEDIUM"
     tableSessionId: Optional[str] = None
+    orderId: Optional[str] = None
+    station: Optional[str] = None
+    itemsSummary: Optional[str] = None
 
 class UpdateCustomerRequestSchema(BaseModel):
     status: str
@@ -49,11 +52,16 @@ def format_request_dict(req: CustomerRequestModel) -> dict:
         "message": req.message,
         "customerNotes": req.message,
         "status": req.status,
-        "priority": "HIGH" if req.request_type in ["BILL", "CALL_WAITER"] else "MEDIUM",
+        "priority": "HIGH" if req.request_type in ["BILL", "CALL_WAITER", "ORDER_READY", "DISH_DELIVERY"] else "MEDIUM",
         "waiterName": req.waiter_name,
         "assignedWaiterName": req.waiter_name,
         "tableSessionId": req.table_session_id,
         "table_session_id": req.table_session_id,
+        "orderId": getattr(req, "order_id", None),
+        "order_id": getattr(req, "order_id", None),
+        "station": getattr(req, "station", None),
+        "itemsSummary": getattr(req, "items_summary", None),
+        "items_summary": getattr(req, "items_summary", None),
         "requestedAt": iso_time,
         "timestamp": iso_time,
         "created_at": iso_time,
@@ -104,6 +112,9 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
         message=msg,
         status="PENDING",
         table_session_id=session_id,
+        order_id=payload.orderId,
+        station=payload.station,
+        items_summary=payload.itemsSummary,
     )
 
     db.add(new_req)

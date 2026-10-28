@@ -890,8 +890,16 @@ export class DinelyApiClient extends BaseApiClient {
     return this.orderClient.markOrderReady(orderId);
   }
 
-  async deliverOrder(orderId: string) {
-    return this.orderClient.deliverOrder(orderId);
+  async requestWaiter(orderId: string, station: string = 'KITCHEN', notes?: string) {
+    return this.orderClient.requestWaiter(orderId, station, notes);
+  }
+
+  async collectOrder(orderId: string, station?: string, waiterName?: string) {
+    return this.orderClient.collectOrder(orderId, station, waiterName);
+  }
+
+  async deliverOrder(orderId: string, station?: string, waiterName?: string) {
+    return this.orderClient.deliverOrder(orderId, station, waiterName);
   }
 
   async updateOrderStatus(orderId: string, status: any) {

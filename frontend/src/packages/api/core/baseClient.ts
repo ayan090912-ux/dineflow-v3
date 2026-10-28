@@ -758,13 +758,21 @@ export class BaseApiClient {
                 localStorage.getItem('dinely_admin_token') ||
                 localStorage.getItem('dinely_auth_token')
               ) : null);
-    } else if (['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'].includes(targetScope)) {
+    } else if (['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope)) {
       token = this.currentTokensByScope[targetScope]?.accessToken ||
               this.currentTokensByScope['STAFF']?.accessToken ||
               (typeof window !== 'undefined' ? (
                 sessionStorage.getItem('dinely_staff_token') ||
                 localStorage.getItem('dinely_staff_token')
               ) : null);
+      if (!token) {
+        token = this.currentTokensByScope['OWNER']?.accessToken ||
+                (typeof window !== 'undefined' ? (
+                  sessionStorage.getItem('dinely_owner_token') ||
+                  localStorage.getItem('dinely_owner_token') ||
+                  localStorage.getItem('dinely_auth_token')
+                ) : null);
+      }
     } else {
       // OWNER and default
       token = this.currentTokensByScope[targetScope]?.accessToken ||

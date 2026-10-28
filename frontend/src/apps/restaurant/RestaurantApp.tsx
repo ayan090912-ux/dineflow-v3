@@ -2868,6 +2868,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                     tableId: tbl.id,
                                     waiterName: currentUser?.name || 'Owner',
                                     tableSessionId: activeSess?.id,
+                                    force: true,
                                   });
                                   addToast('success', 'Table Session Closed 🧹', `${tbl.tableNumber} is now AVAILABLE.`);
                                   setTables((prev) =>

@@ -629,6 +629,27 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     }
   };
 
+  const [waiterRequestedOrderIds, setWaiterRequestedOrderIds] = useState<Set<string>>(new Set());
+
+  const handleRequestWaiter = async (order: Order) => {
+    if (processingOrderIds.has(order.id)) return;
+    setProcessingOrderIds((prev) => new Set(prev).add(order.id));
+    setWaiterRequestedOrderIds((prev) => new Set(prev).add(order.id));
+    try {
+      await api.requestWaiter(order.id, 'KITCHEN');
+      showToast(`Waiter requested for Table ${order.tableNumber || 'pass'}! 🔔`, 'success');
+      onRefreshOrdersRef.current?.();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to request waiter', 'warning');
+    } finally {
+      setProcessingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
+    }
+  };
+
 
   const handleRecallOrder = async (order: Order) => {
     await api.updateOrderStatus(order.id, 'IN_KITCHEN');
@@ -1018,10 +1039,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                               icon={<Flame className="w-3.5 h-3.5" />}
                             >
                               {processingOrderIds.has(order.id)
-                                ? 'Starting...'
+                                ? 'Confirming...'
                                 : selectedEta
-                                ? `Start Cooking (${selectedEta}m ETA)`
-                                : 'Start Preparing'}
+                                ? `Confirm Order (${selectedEta}m ETA)`
+                                : 'Confirm Order'}
                             </Button>
                             <Button
                               variant="outline"
@@ -1224,10 +1245,26 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         ))}
                       </div>
 
-                      <div className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30">
-                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Plated & Ready • Notified Waiter Floor</span>
-                      </div>
+                      {((order as any).kitchenWaiterRequested || waiterRequestedOrderIds.has(order.id) || order.deliveryStatus === 'WAITING_FOR_WAITER' || order.deliveryStatus === 'COLLECTED') ? (
+                        <div className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30">
+                          <span className="flex items-center gap-1.5 font-mono">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                            <span>Waiter Requested • Floor Alert Active</span>
+                          </span>
+                          <span className="text-[10px] text-amber-400 font-mono bg-amber-500/20 px-1.5 py-0.5 rounded">Dispatched</span>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="brand"
+                          size="sm"
+                          disabled={processingOrderIds.has(order.id)}
+                          className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-xs transition-colors shadow-sm"
+                          onClick={() => handleRequestWaiter(order)}
+                          icon={<Bell className="w-3.5 h-3.5" />}
+                        >
+                          {processingOrderIds.has(order.id) ? 'Requesting Waiter...' : 'Request Waiter'}
+                        </Button>
+                      )}
                     </div>
                   ))
                 )}
@@ -1272,7 +1309,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-white text-sm">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>
                           <span className="bg-[#141822] text-slate-300 border border-[#242c3d] text-[10px] font-mono px-2 py-0.5 rounded">
-                            Table {order.tableNumber}
+                            {(order.tableNumber || '').trim().toLowerCase().startsWith('table') ? order.tableNumber : `Table ${order.tableNumber || ''}`}
                           </span>
                         </div>
                         <span className="text-[11px] font-mono text-slate-400">
@@ -1476,7 +1513,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 <div key={order.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
                   <div>
                     <span className="font-mono font-bold text-amber-400">#{order.id}</span>
-                    <p className="text-[11px] text-slate-400">Table {order.tableNumber} • {(order.items || []).length} items</p>
+                    <p className="text-[11px] text-slate-400">{(order.tableNumber || '').trim().toLowerCase().startsWith('table') ? order.tableNumber : `Table ${order.tableNumber || ''}`} • {(order.items || []).length} items</p>
                   </div>
                   <Button variant="brand" size="sm" onClick={() => handleRecallOrder(order)} className="text-xs">
                     Recall Ticket

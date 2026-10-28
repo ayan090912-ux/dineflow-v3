@@ -450,6 +450,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
         tableId: tbl.id,
         tableSessionId: targetSessionId,
         waiterName: staffName,
+        force: true,
       });
 
       // Immediate eviction from state

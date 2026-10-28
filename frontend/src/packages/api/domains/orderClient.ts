@@ -650,24 +650,128 @@ export class OrderClient {
     return order;
   }
 
-  async deliverOrder(orderId: string) {
-    const order = this.base.orders.find((o) => o.id === orderId);
+  async requestWaiter(orderId: string, station: string = 'KITCHEN', notes?: string) {
     try {
       await this.base.executeProtectedRequest<any>(
-        `/orders/${encodeURIComponent(orderId)}/status`,
+        `/orders/${encodeURIComponent(orderId)}/request-waiter`,
         {
-          method: 'PUT',
-          body: JSON.stringify({ status: 'DELIVERED', kitchenStatus: 'COMPLETED' }),
+          method: 'POST',
+          body: JSON.stringify({ station, notes }),
+        }
+      );
+    } catch (e) {
+      console.warn('API POST for requestWaiter failed:', e);
+    }
+
+    const order = this.base.orders.find((o) => o.id === orderId);
+    if (order) {
+      const st = station.toUpperCase();
+      if (st === 'KITCHEN') {
+        order.kitchenStatus = 'READY';
+        (order as any).kitchenWaiterRequested = true;
+      } else if (st === 'BAR') {
+        order.barStatus = 'READY';
+        (order as any).barWaiterRequested = true;
+      } else if (st === 'HOOKAH') {
+        order.hookahStatus = 'READY';
+        (order as any).hookahWaiterRequested = true;
+      }
+      order.deliveryStatus = 'WAITING_FOR_WAITER';
+      order.updatedAt = new Date().toISOString();
+      this.base.saveDatabase();
+
+      realtimeBus.emit('WaiterRequested' as any, {
+        orderId: order.id,
+        station: st,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
+    }
+    return order;
+  }
+
+  async collectOrder(orderId: string, station?: string, waiterName?: string) {
+    try {
+      await this.base.executeProtectedRequest<any>(
+        `/orders/${encodeURIComponent(orderId)}/collect`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ station, waiterName }),
         },
         'WAITER'
       );
     } catch (e) {
-      console.warn('API PUT for deliverOrder failed:', e);
+      console.warn('API POST for collectOrder failed:', e);
+    }
+
+    const order = this.base.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.deliveryStatus = 'COLLECTED';
+      if (waiterName) (order as any).claimedBy = waiterName;
+      order.updatedAt = new Date().toISOString();
+      this.base.saveDatabase();
+
+      realtimeBus.emit('OrderCollected' as any, {
+        orderId: order.id,
+        station,
+        waiterName,
+        restaurantId: order.restaurantId,
+        tableNumber: order.tableNumber,
+        data: order,
+      });
+    }
+    return order;
+  }
+
+  async deliverOrder(orderId: string, station?: string, waiterName?: string) {
+    const order = this.base.orders.find((o) => o.id === orderId);
+    try {
+      await this.base.executeProtectedRequest<any>(
+        `/orders/${encodeURIComponent(orderId)}/deliver`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ station, waiterName }),
+        },
+        'WAITER'
+      );
+    } catch (e) {
+      try {
+        await this.base.executeProtectedRequest<any>(
+          `/orders/${encodeURIComponent(orderId)}/status`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({ status: 'DELIVERED', deliveryStatus: 'DELIVERED' }),
+          },
+          'WAITER'
+        );
+      } catch (err2) {
+        console.warn('API deliverOrder failed:', err2);
+      }
     }
 
     if (order) {
-      order.status = 'DELIVERED';
-      order.deliveredAt = new Date().toISOString();
+      if (!station || station === 'ALL') {
+        order.status = 'DELIVERED';
+        order.deliveryStatus = 'DELIVERED';
+        order.kitchenStatus = 'COMPLETED';
+        order.barStatus = 'COMPLETED';
+        order.hookahStatus = 'COMPLETED';
+        order.deliveredAt = new Date().toISOString();
+      } else {
+        const st = station.toUpperCase();
+        if (st === 'KITCHEN') order.kitchenStatus = 'COMPLETED';
+        if (st === 'BAR') order.barStatus = 'COMPLETED';
+        if (st === 'HOOKAH') order.hookahStatus = 'COMPLETED';
+        const kDone = !order.kitchenStatus || order.kitchenStatus === 'COMPLETED';
+        const bDone = !order.barStatus || order.barStatus === 'COMPLETED';
+        const hDone = !order.hookahStatus || order.hookahStatus === 'COMPLETED';
+        if (kDone && bDone && hDone) {
+          order.status = 'DELIVERED';
+          order.deliveryStatus = 'DELIVERED';
+          order.deliveredAt = new Date().toISOString();
+        }
+      }
       order.updatedAt = new Date().toISOString();
       this.base.saveDatabase();
 

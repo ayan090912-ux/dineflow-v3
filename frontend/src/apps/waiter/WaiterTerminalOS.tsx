@@ -23,6 +23,7 @@ import {
   FileText,
   CheckSquare,
   Check,
+  Package,
   Sparkles as SparklesIcon,
 } from 'lucide-react';
 import {
@@ -133,6 +134,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
   // Debounce protection and history view mode
   const [deliveringOrderIds, setDeliveringOrderIds] = useState<Set<string>>(new Set());
+  const [collectingOrderIds, setCollectingOrderIds] = useState<Set<string>>(new Set());
   const [completingRequestIds, setCompletingRequestIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
   const [recentCompletedHistory, setRecentCompletedHistory] = useState<
@@ -547,6 +549,35 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       setCompletingRequestIds((prev) => {
         const next = new Set(prev);
         next.delete(requestId);
+        return next;
+      });
+    }
+  };
+
+  // Order Collection Handler (Transition: WAITING_FOR_WAITER/READY -> COLLECTED)
+  const handleCollectOrder = async (orderId: string, tableNumber?: string) => {
+    if (collectingOrderIds.has(orderId)) return;
+    setCollectingOrderIds((prev) => new Set(prev).add(orderId));
+    const waiterName = currentUser?.name || currentUser?.email || 'Floor Waiter';
+    // Optimistic state update
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? { ...o, deliveryStatus: 'COLLECTED', claimedBy: waiterName }
+          : o
+      )
+    );
+    const tblFormatted = tableNumber ? (tableNumber.startsWith('Table') ? tableNumber : `Table ${tableNumber}`) : 'Table';
+    showToast('Order Accepted 🍽️', `Order #${orderId.slice(-4)} accepted for ${tblFormatted}. Collecting from pass...`, 'info');
+    try {
+      await api.collectOrder(orderId, undefined, waiterName);
+    } catch (err: any) {
+      showToast('Collection Notice ⚠️', err.message || 'Failed to record collection', 'warning');
+      loadData(true);
+    } finally {
+      setCollectingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
         return next;
       });
     }
@@ -1192,7 +1223,17 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                     <span className="text-[11px] font-mono text-slate-400">
                                       #{order.id.slice(-4)}
                                     </span>
-                                    {readiness.isCompleteOrderReady ? (
+                                    {order.deliveryStatus === 'COLLECTED' ? (
+                                      <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                                        <Package className="w-3 h-3 text-sky-400" />
+                                        Collected by {order.claimedBy || 'Waiter'}
+                                      </span>
+                                    ) : ((order as any).kitchenWaiterRequested || (order as any).barWaiterRequested || (order as any).hookahWaiterRequested || order.deliveryStatus === 'WAITING_FOR_WAITER') ? (
+                                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1 animate-pulse">
+                                        <Bell className="w-3 h-3 text-amber-400" />
+                                        Waiter Requested
+                                      </span>
+                                    ) : readiness.isCompleteOrderReady ? (
                                       <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                         <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                                         All Items Ready
@@ -1275,30 +1316,50 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                 </div>
                               )}
 
-                              {/* 1-Click Action: Mark Delivered */}
-                              <button
-                                type="button"
-                                onClick={() => handleDeliverOrder(order.id, order.tableNumber)}
-                                disabled={isDelivering}
-                                className={`w-full py-2.5 px-4 rounded-lg text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 ${
-                                  readiness.isCompleteOrderReady
-                                    ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
-                                    : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
-                                }`}
-                              >
-                                {isDelivering ? (
-                                  <RefreshCw className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <CheckSquare className="w-4 h-4" />
-                                    <span>
-                                      {readiness.isCompleteOrderReady
-                                        ? `Mark Delivered to ${formattedTable}`
-                                        : `Deliver Ready Portion to ${formattedTable}`}
-                                    </span>
-                                  </>
+                              {/* 1-Click Action Workflow: Collect -> Served */}
+                              <div className="flex items-center gap-2 pt-1">
+                                {order.deliveryStatus !== 'COLLECTED' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCollectOrder(order.id, order.tableNumber)}
+                                    disabled={collectingOrderIds.has(order.id) || isDelivering}
+                                    className="flex-1 min-h-[44px] py-2.5 px-3 rounded-lg text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 bg-sky-600 text-white hover:bg-sky-500 touch-manipulation"
+                                  >
+                                    {collectingOrderIds.has(order.id) ? (
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Package className="w-4 h-4" />
+                                        <span>Accept & Collect</span>
+                                      </>
+                                    )}
+                                  </button>
                                 )}
-                              </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeliverOrder(order.id, order.tableNumber)}
+                                  disabled={isDelivering || collectingOrderIds.has(order.id)}
+                                  className={`min-h-[44px] py-2.5 px-4 rounded-lg text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 touch-manipulation ${
+                                    order.deliveryStatus === 'COLLECTED'
+                                      ? 'w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400'
+                                      : 'border border-emerald-500/40 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                  }`}
+                                >
+                                  {isDelivering ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                      <span>
+                                        {order.deliveryStatus === 'COLLECTED'
+                                          ? `Mark Served to ${formattedTable}`
+                                          : `Direct Served`}
+                                      </span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           );
                         })}

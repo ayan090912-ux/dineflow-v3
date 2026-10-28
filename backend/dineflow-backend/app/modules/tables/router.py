@@ -662,7 +662,11 @@ async def close_table_session(
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
     db: AsyncSession = Depends(get_db)
 ):
-    is_force = bool(force or (payload.force if payload else False))
+    is_force = bool(
+        force or
+        (payload.force if payload else False) or
+        (caller.role or "").upper() in ["OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN", "MANAGER"]
+    )
 
     # 1. Strict Authentication Enforcement: Caller must be authenticated staff or owner
     if not caller.is_authenticated:
@@ -672,8 +676,8 @@ async def close_table_session(
         )
 
     # 2. Role Authorization Check
-    authorized_roles = ["WAITER", "HOST", "SERVER", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN", "CASHIER"]
-    if caller.role not in authorized_roles and not caller.is_admin:
+    authorized_roles = ["WAITER", "HOST", "SERVER", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN", "CASHIER", "STAFF", "BAR", "HOOKAH", "CHEF"]
+    if (caller.role or "").upper() not in authorized_roles and not caller.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Role '{caller.role}' is not authorized to close table sessions."
@@ -711,8 +715,8 @@ async def close_table_session(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail=f"Access denied: You do not have ownership of restaurant '{tbl.restaurant_id}'."
                     )
-        elif caller.role in ["WAITER", "HOST", "SERVER", "MANAGER", "CASHIER"]:
-            if not caller.restaurant_id or caller.restaurant_id not in valid_rest_ids:
+        elif (caller.role or "").upper() in authorized_roles:
+            if caller.restaurant_id and caller.restaurant_id not in valid_rest_ids:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Access denied: Staff member is assigned to restaurant '{caller.restaurant_id}', not '{tbl.restaurant_id}'."
@@ -837,6 +841,10 @@ async def close_table_session(
             ord.status = "COMPLETED"
             ord.kitchen_status = "COMPLETED"
             ord.bar_status = "COMPLETED"
+            ord.hookah_status = "COMPLETED"
+            ord.delivery_status = "DELIVERED"
+            if not ord.delivered_at:
+                ord.delivered_at = now_utc
     except Exception as ord_err:
         print("[ORDER_CLEANUP_NOTICE]:", ord_err)
 

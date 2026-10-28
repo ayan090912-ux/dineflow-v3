@@ -74,6 +74,22 @@ class UpdateOrderStatusSchema(BaseModel):
     deliveryStatus: Optional[str] = None
     paymentStatus: Optional[str] = None
     paymentMethod: Optional[str] = None
+    kitchenWaiterRequested: Optional[bool] = None
+    barWaiterRequested: Optional[bool] = None
+    hookahWaiterRequested: Optional[bool] = None
+
+class RequestWaiterSchema(BaseModel):
+    station: Optional[str] = "KITCHEN"
+    notes: Optional[str] = None
+    idempotencyKey: Optional[str] = None
+
+class CollectOrderSchema(BaseModel):
+    station: Optional[str] = None
+    waiterName: Optional[str] = None
+
+class DeliverOrderSchema(BaseModel):
+    station: Optional[str] = None
+    waiterName: Optional[str] = None
 
 class UpdateOrderETASchema(BaseModel):
     deltaMinutes: Optional[int] = None
@@ -229,6 +245,12 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         "claimedAt": (order.claimed_at.isoformat() if getattr(order, "claimed_at", None) else None),
         "idempotency_key": getattr(order, "idempotency_key", None),
         "idempotencyKey": getattr(order, "idempotency_key", None),
+        "kitchen_waiter_requested": getattr(order, "kitchen_waiter_requested", False) or False,
+        "kitchenWaiterRequested": getattr(order, "kitchen_waiter_requested", False) or False,
+        "bar_waiter_requested": getattr(order, "bar_waiter_requested", False) or False,
+        "barWaiterRequested": getattr(order, "bar_waiter_requested", False) or False,
+        "hookah_waiter_requested": getattr(order, "hookah_waiter_requested", False) or False,
+        "hookahWaiterRequested": getattr(order, "hookah_waiter_requested", False) or False,
         "created_at": created_at_val,
         "createdAt": created_at_val,
     }
@@ -1309,6 +1331,12 @@ async def update_order_status(
         order.delivery_status = payload.deliveryStatus
         if payload.deliveryStatus in ["DELIVERED", "COMPLETED"]:
             order.delivered_at = datetime.now(timezone.utc)
+    if payload.kitchenWaiterRequested is not None:
+        order.kitchen_waiter_requested = payload.kitchenWaiterRequested
+    if payload.barWaiterRequested is not None:
+        order.bar_waiter_requested = payload.barWaiterRequested
+    if payload.hookahWaiterRequested is not None:
+        order.hookah_waiter_requested = payload.hookahWaiterRequested
 
     # Determine station items in order authoritatively from items and station statuses
     has_k_items = False
@@ -1544,6 +1572,419 @@ async def update_order_status(
         print("[WS_BROADCAST_NOTICE] order_status_updated:", ws_err)
 
     return resp_data
+
+
+@router.post("/{order_id}/request-waiter")
+async def request_waiter_for_order(
+    order_id: str,
+    payload: RequestWaiterSchema,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to request waiter"
+        )
+
+    query = select(Order).where(Order.id == order_id)
+    result = await db.execute(query)
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    res_r = await db.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
+    r_obj = res_r.scalar_one_or_none()
+    if not r_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
+    # Authoritative tenant isolation check
+    if not caller.is_admin:
+        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+            is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
+            if not is_owner:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
+        elif caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
+
+    req_station = (payload.station or "KITCHEN").upper()
+
+    # Resolve items belonging to requested station
+    station_items = []
+    if order.items_json:
+        for it in order.items_json:
+            st = resolve_item_station(it)
+            if req_station == "ALL" or st == req_station:
+                station_items.append(it)
+
+    # Station verification
+    if not station_items and req_station != "ALL":
+        if req_station == "KITCHEN" and not order.kitchen_status:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No kitchen items in this order")
+        elif req_station == "BAR" and not order.bar_status:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No bar items in this order")
+        elif req_station == "HOOKAH" and not order.hookah_status:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No hookah items in this order")
+
+    # Mark station ready and flag waiter requested
+    if req_station == "KITCHEN":
+        order.kitchen_status = "READY"
+        order.kitchen_waiter_requested = True
+    elif req_station == "BAR":
+        order.bar_status = "READY"
+        order.bar_waiter_requested = True
+    elif req_station == "HOOKAH":
+        order.hookah_status = "READY"
+        order.hookah_waiter_requested = True
+    elif req_station == "ALL":
+        if order.kitchen_status:
+            order.kitchen_status = "READY"
+            order.kitchen_waiter_requested = True
+        if order.bar_status:
+            order.bar_status = "READY"
+            order.bar_waiter_requested = True
+        if order.hookah_status:
+            order.hookah_status = "READY"
+            order.hookah_waiter_requested = True
+
+    # Reconcile overall order status
+    has_k = (order.kitchen_status is not None)
+    has_b = (order.bar_status is not None)
+    has_h = (order.hookah_status is not None)
+    all_ready = (
+        (not has_k or order.kitchen_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"]) and
+        (not has_b or order.bar_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"]) and
+        (not has_h or order.hookah_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"])
+    )
+    if all_ready and order.status not in ["DELIVERED", "COMPLETED"]:
+        order.status = "READY"
+
+    if order.delivery_status not in ["COLLECTED", "DELIVERED"]:
+        order.delivery_status = "WAITING_FOR_WAITER"
+
+    summary = ", ".join([f"{it.get('quantity', 1)}x {it.get('name', '')}" for it in station_items]) if station_items else f"{req_station.title()} items"
+
+    # Anti-duplicate idempotency check for existing active request
+    from app.modules.customer_requests.models import CustomerRequestModel
+    from app.modules.customer_requests.router import format_request_dict
+    query_existing = select(CustomerRequestModel).where(
+        (CustomerRequestModel.restaurant_id == order.restaurant_id) &
+        (CustomerRequestModel.order_id == order.id) &
+        (CustomerRequestModel.station == req_station) &
+        (CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS", "ACCEPTED"]))
+    )
+    res_ex = await db.execute(query_existing)
+    existing_req = res_ex.scalars().first()
+
+    now_utc = datetime.now(timezone.utc)
+    if existing_req:
+        serv_req = existing_req
+    else:
+        req_id = f"req-waiter-{order.id[-6:]}-{req_station.lower()}-{int(now_utc.timestamp() * 1000)}"
+        serv_req = CustomerRequestModel(
+            id=req_id,
+            restaurant_id=order.restaurant_id,
+            table_id=order.table_id,
+            table_number=order.table_number,
+            table_session_id=order.table_session_id,
+            request_type="ORDER_READY",
+            order_id=order.id,
+            station=req_station,
+            items_summary=summary,
+            message=payload.notes or f"Table {order.table_number} · {req_station.title()} Ready: {summary}",
+            status="PENDING",
+        )
+        db.add(serv_req)
+
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(serv_req)
+
+    req_dict = format_request_dict(serv_req)
+    order_dict = format_order_response(order)
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="waiter_requested",
+            payload={
+                **req_dict,
+                "orderId": order.id,
+                "order_id": order.id,
+                "station": req_station,
+                "tableNumber": order.table_number,
+                "table_number": order.table_number,
+                "itemsSummary": summary,
+                "items_summary": summary,
+                "order": order_dict,
+                "request": req_dict,
+            },
+            target_audience=["WAITER", "OWNER", "KITCHEN", "BAR", "HOOKAH"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="service_request_created",
+            payload=req_dict,
+            target_audience=["WAITER", "OWNER"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_status_updated",
+            payload=order_dict,
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
+        )
+    except Exception as e:
+        print("[WS BROADCAST] request_waiter notice:", e)
+
+    return {
+        "success": True,
+        "message": f"Waiter requested for {req_station.title()} pass",
+        "order": order_dict,
+        "request": req_dict,
+    }
+
+
+@router.post("/{order_id}/collect")
+async def collect_order(
+    order_id: str,
+    payload: CollectOrderSchema = CollectOrderSchema(),
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to collect order"
+        )
+
+    allowed_roles = ["WAITER", "SERVER", "RUNNER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "STAFF", "EVENT_RUNNER", "EVENT_STAFF"]
+    if not caller.is_admin and (caller.role or "").upper() not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only Waiter, Server, and Runner roles can collect orders"
+        )
+
+    query = select(Order).where(Order.id == order_id)
+    result = await db.execute(query)
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if not caller.is_admin and caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff does not belong to this restaurant")
+
+    if order.status in ["DELIVERED", "COMPLETED"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order has already been delivered")
+
+    waiter_name = payload.waiterName or caller.name or caller.email or "Floor Waiter"
+
+    if order.delivery_status == "COLLECTED" and order.claimed_by and order.claimed_by.lower() != waiter_name.lower():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Order has already been collected by {order.claimed_by}"
+        )
+
+    order.claimed_by = waiter_name
+    order.delivery_status = "COLLECTED"
+
+    from app.modules.customer_requests.models import CustomerRequestModel
+    from app.modules.customer_requests.router import format_request_dict
+    req_query = select(CustomerRequestModel).where(
+        (CustomerRequestModel.restaurant_id == order.restaurant_id) &
+        (CustomerRequestModel.order_id == order.id) &
+        (CustomerRequestModel.status.in_(["PENDING", "ACCEPTED"]))
+    )
+    if payload.station:
+        req_query = req_query.where(CustomerRequestModel.station == payload.station.upper())
+    res_reqs = await db.execute(req_query)
+    matched_reqs = res_reqs.scalars().all()
+    updated_req_dicts = []
+    for r in matched_reqs:
+        r.status = "IN_PROGRESS"
+        r.waiter_name = waiter_name
+        updated_req_dicts.append(format_request_dict(r))
+
+    await db.commit()
+    await db.refresh(order)
+
+    order_dict = format_order_response(order)
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_collected",
+            payload={
+                "orderId": order.id,
+                "order_id": order.id,
+                "station": payload.station,
+                "waiterName": waiter_name,
+                "tableNumber": order.table_number,
+                "order": order_dict,
+                "requests": updated_req_dicts,
+            },
+            target_audience=["WAITER", "OWNER", "KITCHEN", "BAR", "HOOKAH"]
+        )
+        for r_dict in updated_req_dicts:
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="service_request_updated",
+                payload=r_dict,
+                target_audience=["WAITER", "OWNER"]
+            )
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_status_updated",
+            payload=order_dict,
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
+        )
+    except Exception as e:
+        print("[WS BROADCAST] collect_order notice:", e)
+
+    return {
+        "success": True,
+        "message": f"Order #{order.id[-4:]} collected by {waiter_name}",
+        "order": order_dict,
+    }
+
+
+@router.post("/{order_id}/deliver")
+async def deliver_order(
+    order_id: str,
+    payload: DeliverOrderSchema = DeliverOrderSchema(),
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to deliver order"
+        )
+
+    allowed_roles = ["WAITER", "SERVER", "RUNNER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "STAFF", "EVENT_RUNNER", "EVENT_STAFF"]
+    if not caller.is_admin and (caller.role or "").upper() not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only Waiter, Server, and Runner roles can deliver orders to tables"
+        )
+
+    query = select(Order).where(Order.id == order_id)
+    result = await db.execute(query)
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if not caller.is_admin and caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff does not belong to this restaurant")
+
+    waiter_name = payload.waiterName or caller.name or caller.email or order.claimed_by or "Floor Waiter"
+    target_station = (payload.station or "").upper() if payload.station else None
+
+    has_k_items = False
+    has_b_items = False
+    has_h_items = False
+    if order.items_json:
+        for it in order.items_json:
+            st = resolve_item_station(it)
+            if st == "HOOKAH":
+                has_h_items = True
+            elif st == "BAR":
+                has_b_items = True
+            elif st == "KITCHEN":
+                has_k_items = True
+    else:
+        has_k_items = (order.kitchen_status is not None)
+        has_b_items = (order.bar_status is not None)
+        has_h_items = (order.hookah_status is not None)
+
+    if target_station == "KITCHEN":
+        order.kitchen_status = "COMPLETED"
+    elif target_station == "BAR":
+        order.bar_status = "COMPLETED"
+    elif target_station == "HOOKAH":
+        order.hookah_status = "COMPLETED"
+    else:
+        if has_k_items:
+            order.kitchen_status = "COMPLETED"
+        if has_b_items:
+            order.bar_status = "COMPLETED"
+        if has_h_items:
+            order.hookah_status = "COMPLETED"
+
+    k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"])
+    b_comp = (not has_b_items) or (order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"])
+    h_comp = (not has_h_items) or (order.hookah_status in ["COMPLETED", "DELIVERED", "SERVED"])
+
+    now_utc = datetime.now(timezone.utc)
+    if k_comp and b_comp and h_comp:
+        order.status = "DELIVERED"
+        order.delivery_status = "DELIVERED"
+        order.delivered_at = now_utc
+    else:
+        order.delivery_status = "PARTIALLY_DELIVERED"
+
+    from app.modules.customer_requests.models import CustomerRequestModel
+    from app.modules.customer_requests.router import format_request_dict
+    req_query = select(CustomerRequestModel).where(
+        (CustomerRequestModel.restaurant_id == order.restaurant_id) &
+        (CustomerRequestModel.order_id == order.id) &
+        (CustomerRequestModel.status != "COMPLETED")
+    )
+    if target_station:
+        req_query = req_query.where(CustomerRequestModel.station == target_station)
+    res_reqs = await db.execute(req_query)
+    completed_reqs = res_reqs.scalars().all()
+    completed_req_dicts = []
+    for r in completed_reqs:
+        r.status = "COMPLETED"
+        r.waiter_name = waiter_name
+        completed_req_dicts.append(format_request_dict(r))
+
+    await db.commit()
+    await db.refresh(order)
+
+    order_dict = format_order_response(order)
+
+    try:
+        from app.modules.websocket.manager import ws_manager
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_delivered",
+            payload={
+                **order_dict,
+                "orderId": order.id,
+                "order_id": order.id,
+                "station": target_station,
+                "waiterName": waiter_name,
+                "tableNumber": order.table_number,
+                "order": order_dict,
+                "completedRequests": completed_req_dicts,
+            },
+            target_audience=["WAITER", "CUSTOMER", "OWNER", "POS", "KITCHEN", "BAR", "HOOKAH"]
+        )
+        for c_dict in completed_req_dicts:
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="service_request_updated",
+                payload=c_dict,
+                target_audience=["WAITER", "OWNER"]
+            )
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_status_updated",
+            payload=order_dict,
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
+        )
+    except Exception as e:
+        print("[WS BROADCAST] deliver_order notice:", e)
+
+    return {
+        "success": True,
+        "message": f"Order #{order.id[-4:]} marked served to Table {order.table_number}",
+        "order": order_dict,
+    }
+
 
 @router.put("/{order_id}/eta")
 @router.patch("/{order_id}/eta")

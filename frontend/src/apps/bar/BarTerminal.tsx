@@ -23,6 +23,7 @@ import {
   Activity,
   ArrowRight,
   SlidersHorizontal,
+  Bell,
 } from 'lucide-react';
 import { Badge, DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -284,6 +285,28 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     });
   };
 
+  const [waiterRequestedOrderIds, setWaiterRequestedOrderIds] = useState<Set<string>>(new Set());
+
+  const handleRequestWaiter = async (orderId: string) => {
+    if (processingOrderIds.has(orderId)) return;
+    setProcessingOrderIds((prev) => new Set(prev).add(orderId));
+    setWaiterRequestedOrderIds((prev) => new Set(prev).add(orderId));
+    setActionError('');
+    try {
+      await api.requestWaiter(orderId, 'BAR');
+      await loadBarOrders(false);
+    } catch (err: any) {
+      console.error('Failed to request waiter:', err);
+      setActionError(err?.message || 'Failed to request waiter. Please retry.');
+    } finally {
+      setProcessingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+    }
+  };
+
   // Divide orders into Bar Pipeline stages based strictly on authoritative station and order status
   const pendingOrders = orders.filter(
     (o) =>
@@ -310,9 +333,14 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
       o.status !== 'DELIVERED' &&
       o.status !== 'CANCELLED'
   );
+  const isRecentDispatch = (timestamp?: string) => {
+    if (!timestamp) return false;
+    const diffHours = (Date.now() - new Date(timestamp).getTime()) / (1000 * 60 * 60);
+    return diffHours <= 4;
+  };
   const completedOrders = recentDispatches.length > 0
     ? recentDispatches
-    : orders.filter((o) => o.barStatus === 'COMPLETED');
+    : orders.filter((o) => o.barStatus === 'COMPLETED' && isRecentDispatch(o.createdAt));
 
   return (
     <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
@@ -471,7 +499,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                   key={ord.id}
                   order={ord}
                   currencySymbol={currencySymbol}
-                  actionLabel="Start Preparing"
+                  actionLabel="Confirm Order"
                   actionVariant="primary"
                   isProcessing={processingOrderIds.has(ord.id)}
                   onAction={() => handleUpdateStatus(ord.id, 'PREPARING')}
@@ -532,17 +560,63 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
             </div>
 
             <div className="space-y-3">
-              {readyOrders.map((ord) => (
-                <BarOrderCard
-                  key={ord.id}
-                  order={ord}
-                  currencySymbol={currencySymbol}
-                  actionLabel="Mark Dispatched / Served"
-                  actionVariant="neutral"
-                  isProcessing={processingOrderIds.has(ord.id)}
-                  onAction={() => handleUpdateStatus(ord.id, 'COMPLETED')}
-                />
-              ))}
+              {readyOrders.map((ord) => {
+                const isWaiterRequested = Boolean(
+                  (ord as any).barWaiterRequested ||
+                  waiterRequestedOrderIds.has(ord.id) ||
+                  ord.deliveryStatus === 'WAITING_FOR_WAITER' ||
+                  ord.deliveryStatus === 'COLLECTED'
+                );
+
+                return (
+                  <BarOrderCard
+                    key={ord.id}
+                    order={ord}
+                    currencySymbol={currencySymbol}
+                    isProcessing={processingOrderIds.has(ord.id)}
+                    customAction={
+                      <div className="space-y-1.5 pt-1">
+                        {isWaiterRequested ? (
+                          <div className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30">
+                            <span className="flex items-center gap-1.5 font-mono">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                              <span>Waiter Requested</span>
+                            </span>
+                            <span className="text-[10px] text-amber-400 font-mono bg-amber-500/20 px-1.5 py-0.5 rounded">
+                              Dispatched
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRequestWaiter(ord.id)}
+                            disabled={processingOrderIds.has(ord.id)}
+                            className="w-full py-2 px-3 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400 flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
+                          >
+                            {processingOrderIds.has(ord.id) ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <Bell className="w-3.5 h-3.5" />
+                                <span>Request Waiter</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateStatus(ord.id, 'COMPLETED')}
+                          disabled={processingOrderIds.has(ord.id)}
+                          className="w-full py-1.5 px-2 rounded-lg text-[11px] font-medium bg-[#181d27] text-slate-300 hover:text-white hover:bg-[#222838] border border-[#2d3545] flex items-center justify-center gap-1 transition-colors"
+                        >
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>Direct Bar Handover</span>
+                        </button>
+                      </div>
+                    }
+                  />
+                );
+              })}
               {readyOrders.length === 0 && (
                 <div className="p-8 text-center bg-[#12151b]/40 border border-dashed border-[#1e232e] rounded-xl text-slate-500 text-xs">
                   Pass is clear
@@ -615,6 +689,7 @@ const BarOrderCard: React.FC<{
   isProcessing?: boolean;
   isCompleted?: boolean;
   currencySymbol?: string;
+  customAction?: React.ReactNode;
 }> = ({
   order,
   actionLabel,
@@ -624,6 +699,7 @@ const BarOrderCard: React.FC<{
   isProcessing = false,
   isCompleted,
   currencySymbol = '₹',
+  customAction,
 }) => {
   const drinkItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
   if (drinkItems.length === 0) {
@@ -646,7 +722,7 @@ const BarOrderCard: React.FC<{
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2 py-0.5 rounded bg-[#181d27] text-slate-200 border border-[#2d3545] text-xs font-mono font-medium">
-              Table {order.tableNumber}
+              {(order.tableNumber || '').trim().toLowerCase().startsWith('table') ? order.tableNumber : `Table ${order.tableNumber || 'Bar'}`}
             </span>
             <span className="text-[11px] font-mono text-slate-400">#{order.id.slice(-4)}</span>
             {Boolean((order as any).eventName || (order as any).metadata?.eventName) && (
@@ -750,12 +826,13 @@ const BarOrderCard: React.FC<{
           </div>
         )}
 
-        {/* Primary Action Button */}
-        {!isCompleted && onAction && actionLabel && (
+        {/* Custom or Primary Action Button */}
+        {!isCompleted && customAction}
+        {!isCompleted && !customAction && onAction && actionLabel && (
           <button
             onClick={onAction}
             disabled={isProcessing}
-            className={`w-full py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${
+            className={`w-full min-h-[44px] py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 touch-manipulation ${
               actionVariant === 'primary' || actionVariant === 'success'
                 ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-xs'
                 : 'bg-[#181d27] text-white hover:bg-[#222838] border border-[#2d3545]'
