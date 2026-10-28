@@ -23,6 +23,7 @@ import { api } from '../../packages/api/client';
 import { Order, OrderStatus, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus } from '../../packages/api/realtime';
 import { getCurrencySymbol } from '../../packages/utils/currency';
+import { formatStandardTableNumber } from '../../packages/utils/tableUtils';
 
 interface HookahTerminalProps {
   restaurant?: any;
@@ -135,7 +136,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
               notifiedOrderIdsRef.current.delete(first);
             }
             setLastNotification(
-              `New Hookah Order #${String(orderId).slice(-4)} for Table ${event.tableNumber || 'Lounge'}`
+              `New Hookah Order #${String(orderId).slice(-4)} for ${formatStandardTableNumber(event.tableNumber, 'Lounge')}`
             );
             if (soundEnabledRef.current) {
               playNotificationSound();
@@ -741,8 +742,8 @@ const HookahOrderCard: React.FC<{
         {/* Header Info */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-[#181d27] text-slate-200 border border-[#2d3545] text-xs font-mono font-medium">
-              {(order.tableNumber || '').trim().toLowerCase().startsWith('table') ? order.tableNumber : `Table ${order.tableNumber || 'Lounge'}`}
+            <span className="px-2 py-0.5 rounded bg-[#181d27] text-slate-200 border border-[#2d3545] text-xs font-mono font-medium whitespace-nowrap">
+              {formatStandardTableNumber(order.tableNumber, 'Lounge')}
             </span>
             <span className="text-[11px] font-mono text-slate-400">#{order.id.slice(-4)}</span>
           </div>

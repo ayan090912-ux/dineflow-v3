@@ -73,6 +73,7 @@ export interface RealTimeEventPayload {
   reason?: string;
   timestamp: string;
   actor?: string;
+  waiterName?: string;
   barStatus?: string;
   kitchenStatus?: string;
   hookahStatus?: string;

@@ -1286,7 +1286,7 @@ export class RestaurantClient {
       throw new Error('table_id is required to close table session.');
     }
 
-    const userRole = this.base.currentUser?.role;
+    const userRole = this.base.currentUser?.role as string | undefined;
     const isOwner = userRole === 'OWNER' || userRole === 'RESTAURANT_OWNER' || userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
     const targetScope = isOwner ? 'OWNER' : getPortalScopeFromPath();
     const queryParams: string[] = [];

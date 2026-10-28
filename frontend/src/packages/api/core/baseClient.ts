@@ -226,6 +226,7 @@ export class BaseApiClient {
 
     this.purgeLegacyDemoData();
     this.sanitizeTableSessions();
+    this.sanitizeOrders();
   }
 
   public purgeLegacyDemoData() {
@@ -282,6 +283,27 @@ export class BaseApiClient {
         tbl.sessionStartedAt = undefined;
       }
     });
+  }
+
+  public sanitizeOrders() {
+    if (!Array.isArray(this.orders)) {
+      this.orders = [];
+      return;
+    }
+    const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000;
+    const initialLen = this.orders.length;
+    this.orders = this.orders.filter((o) => {
+      const isFinished = o.status === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'CANCELLED';
+      if (!isFinished) return true;
+      if (o.createdAt) {
+        const t = new Date(o.createdAt).getTime();
+        return !isNaN(t) && t >= fourHoursAgo;
+      }
+      return false;
+    });
+    if (this.orders.length !== initialLen) {
+      this.saveDatabase();
+    }
   }
 
   public saveDatabase() {

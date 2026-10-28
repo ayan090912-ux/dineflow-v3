@@ -60,11 +60,12 @@ class SlidingWindowRateLimiter:
                 return prefix, limit, window
         return "default", DEFAULT_RATE_LIMIT[0], DEFAULT_RATE_LIMIT[1]
 
-    async def is_allowed(self, client_ip: str, method: str, path: str) -> Tuple[bool, int, int, int]:
+    async def is_allowed(self, client_ip: str, method: str, path: str, custom_limit: Optional[int] = None) -> Tuple[bool, int, int, int]:
         """
         Returns (is_allowed, limit, remaining, retry_after)
         """
-        category, limit, window = self._get_rule(method, path)
+        category, default_limit, window = self._get_rule(method, path)
+        limit = custom_limit or default_limit
         key = f"{client_ip}:{category}"
         now = time.time()
         window_start = now - window
@@ -133,10 +134,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             or (request.client.host if request.client else "127.0.0.1")
         )
 
+        is_authenticated = bool(request.headers.get("authorization"))
         allowed, limit, remaining, retry_after = await limiter.is_allowed(
             client_ip=client_ip,
             method=request.method,
-            path=path
+            path=path,
+            custom_limit=1000 if is_authenticated else None
         )
 
         if not allowed:

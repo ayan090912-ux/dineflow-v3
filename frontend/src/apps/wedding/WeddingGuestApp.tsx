@@ -81,7 +81,7 @@ const DEFAULT_ASSISTANCE_OPTIONS = [
 
 const cleanTableBadge = (tbl?: string): string => {
   if (!tbl) return '';
-  return tbl.replace(/^table\s*/i, '').trim();
+  return tbl.replace(/^(?:(?:table|tbl)[\s_-]*)+/gi, '').trim();
 };
 
 export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({

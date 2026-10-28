@@ -65,6 +65,18 @@ export class OrderClient {
       .filter((o) => {
         if (o.restaurantId !== targetId) return false;
         if (options?.eventId && o.eventId !== options.eventId) return false;
+        if (options?.excludeEvents && o.eventId) return false;
+        if (options?.activeOnly) {
+          const isFinished = o.status === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'CANCELLED';
+          if (isFinished) return false;
+        }
+        if (options?.station) {
+          const st = options.station.toUpperCase();
+          const hasStationItem = (o.items || []).some(
+            (item: any) => getFulfillmentStation(item) === st
+          );
+          if (!hasStationItem) return false;
+        }
         return true;
       })
       .map(normalizeOrder);
@@ -682,7 +694,7 @@ export class OrderClient {
 
       realtimeBus.emit('WaiterRequested' as any, {
         orderId: order.id,
-        station: st,
+        station: st as any,
         restaurantId: order.restaurantId,
         tableNumber: order.tableNumber,
         data: order,
@@ -714,7 +726,7 @@ export class OrderClient {
 
       realtimeBus.emit('OrderCollected' as any, {
         orderId: order.id,
-        station,
+        station: station as any,
         waiterName,
         restaurantId: order.restaurantId,
         tableNumber: order.tableNumber,

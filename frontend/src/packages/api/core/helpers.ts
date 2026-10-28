@@ -8,6 +8,7 @@ import {
   Table,
   getFulfillmentStation,
 } from '../../types';
+import { formatStandardTableNumber } from '../../utils/tableUtils';
 
 export const delay = (_ms = 0) => Promise.resolve();
 
@@ -189,7 +190,7 @@ export function normalizeOrder(raw: any): Order {
     displayOrderNumber: raw.order_number || raw.orderNumber || (raw.id ? `#ORD-${String(raw.id).slice(-4)}` : '#ORD-1'),
     restaurantId: raw.restaurant_id || raw.restaurantId || '',
     tableId: raw.table_id || raw.tableId || '',
-    tableNumber: raw.table_number || raw.tableNumber || 'Table 01',
+    tableNumber: formatStandardTableNumber(raw.table_number || raw.tableNumber, 'Table 01'),
     tableSessionId: raw.table_session_id || raw.tableSessionId || '',
     status: (raw.status || 'PENDING').toUpperCase() as OrderStatus,
     kitchenStatus: (rawK ? String(rawK).toUpperCase() : (hasK ? (raw.status ? String(raw.status).toUpperCase() : 'PENDING') : undefined)) as any,

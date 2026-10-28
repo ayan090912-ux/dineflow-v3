@@ -922,7 +922,7 @@ export interface Order {
   readyAt?: string;
   deliveredAt?: string;
   claimedBy?: string;
-  deliveryStatus?: 'PENDING' | 'CLAIMED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+  deliveryStatus?: 'PENDING' | 'WAITING_FOR_WAITER' | 'CLAIMED' | 'COLLECTED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
   pickupCode?: string;
   pickupStatus?: 'UNCLAIMED' | 'REDEEMED' | string;
   claimedAt?: string;
