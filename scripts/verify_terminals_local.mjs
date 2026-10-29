@@ -3,7 +3,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { CDPClient, getWebSocketDebuggerUrl } from './cdp_helper.mjs';
 
-const ARTIFACT_DIR = '/Users/ayaan/.gemini/antigravity-ide/brain/15532efb-3e57-42ac-95a4-f3d53b41daa3';
+const ARTIFACT_DIR = '/Users/ayaan/.gemini/antigravity-ide/brain/c3d0d38b-c63b-4b26-b48a-09c2e48e676e';
 const VALID_JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzNmQ5MzEzNC00MDQ4LTQ5ZWItYTc4Yi0wOWE1YzQzMWYzZjgiLCJzY29wZSI6Ik9XTkVSIiwianRpIjoiNjRhNDUyZDItMGYxYi00YmE2LTgxYzktOGIwMGYxZjE0ODllIiwiaWF0IjoxNzkzMjQyODkyLCJleHAiOjE3OTM4NDc2OTIsInR5cGUiOiJhY2Nlc3MiLCJ1aWQiOiJXNDV3dGFnVk5jY240MzhxTHpLRnByMDQ3dDYzIiwiZW1haWwiOiJheWFuYW1pdHk3N0BnbWFpbC5jb20iLCJyb2xlIjoiT1dORVIiLCJyZXN0YXVyYW50X2lkIjoicmVzdC0xNzkwNTk0NTQ0NTI2LTM5NjAyMiJ9.ljYt1Sna2dT5nIK8myi-hrnG1MY8-rGs4_eC29nixHk';
 
 function sleep(ms) {
@@ -63,7 +63,7 @@ async function waitForCondition(cdp, fnStr, timeoutMs = 20000) {
 
 async function main() {
   console.log('================================================================');
-  console.log('🔍 LOCAL UI VERIFICATION: REDESIGNED BAR & HOOKAH TERMINALS');
+  console.log('🔍 LOCAL UI VERIFICATION: TWO-SECTION BAR & HOOKAH TERMINALS');
   console.log('================================================================');
 
   let chrome;
@@ -128,14 +128,16 @@ async function main() {
       })()
     `);
 
+    // =========================================================================
     // 2. Open Bar Terminal on local server
+    // =========================================================================
     console.log('\n[STEP 2] Navigating to http://localhost:3007/bar?tenant=the-start ...');
     await pageCdp.send('Page.navigate', { url: 'http://localhost:3007/bar?tenant=the-start' });
     
     await waitForCondition(pageCdp, `
       (function() {
-        const text = document.body.innerText;
-        return text.includes('BAR TERMINAL') || text.includes('Active Orders');
+        const text = document.body.innerText.toUpperCase();
+        return text.includes('ACTIVE ORDERS') && text.includes('SENT TO WAITER');
       })()
     `, 20000);
     await sleep(2000);
@@ -143,26 +145,30 @@ async function main() {
     const barInspection = await evaluate(pageCdp, `
       (function() {
         const buttons = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim());
-        const bodyText = document.body.innerText;
+        const bodyText = document.body.innerText.toUpperCase();
         return {
           title: document.title,
           url: window.location.href,
-          hasOldIncomingQueue: bodyText.includes('Incoming Queue'),
-          hasOldMixologyCol: bodyText.includes('Mixology & Pouring'),
-          hasOldReadyBarPass: bodyText.includes('Ready at Bar Pass'),
-          hasStartPreparingBtn: buttons.some(t => t.includes('START PREPARING')),
-          hasReadyNotifyBtn: buttons.some(t => t.includes('READY — NOTIFY WAITER')),
+          hasSectionActiveOrders: bodyText.includes('ACTIVE ORDERS'),
+          hasSectionSentToWaiter: bodyText.includes('SENT TO WAITER'),
+          hasOldIncomingQueue: bodyText.includes('INCOMING QUEUE'),
+          hasOldMixologyCol: bodyText.includes('MIXOLOGY & POURING'),
+          hasOldReadyBarPass: bodyText.includes('READY AT BAR PASS'),
+          hasOldRecentDispatchesCol: bodyText.includes('RECENT DISPATCHES') && !bodyText.includes('HISTORY'),
+          hasLiveShiftPulse: bodyText.includes('LIVE SHIFT PULSE'),
+          hasFilterPills: bodyText.includes('ALL ACTIVE') || bodyText.includes('NEW TICKETS'),
+          hasStartPreparingBtn: buttons.some(t => t.toUpperCase().includes('START PREPARING')),
+          hasReadySendToWaiterBtn: buttons.some(t => t.toUpperCase().includes('READY — SEND TO WAITER')),
           sampleButtons: buttons.filter(b => b.length > 0).slice(0, 10),
-          cardElements: document.querySelectorAll('.group.bg-\\\\[\\\\#111217\\\\]').length
         };
       })()
     `);
-    console.log('\n[BAR TERMINAL VERIFICATION REPORT]:\n', JSON.stringify(barInspection, null, 2));
+    console.log('\n[BAR TERMINAL 2-SECTION REPORT]:\n', JSON.stringify(barInspection, null, 2));
 
-    await captureScreenshot(pageCdp, 'redesigned_bar_terminal_verified.png');
+    await captureScreenshot(pageCdp, 'bar_terminal_two_sections_initial.png');
 
     // 3. Test Clicking "START PREPARING" on Bar Terminal if available
-    console.log('\n[STEP 3] Testing 1-Click "START PREPARING" action on Bar Terminal...');
+    console.log('\n[STEP 3] Testing action on Bar Terminal...');
     const startPrepClicked = await evaluate(pageCdp, `
       (function() {
         const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('START PREPARING'));
@@ -180,23 +186,51 @@ async function main() {
       (function() {
         const buttons = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim());
         return {
-          hasReadyNotifyBtn: buttons.some(t => t.includes('READY — NOTIFY WAITER')),
-          readyButtonsCount: buttons.filter(t => t.includes('READY — NOTIFY WAITER')).length
+          hasReadySendToWaiterBtn: buttons.some(t => t.includes('READY — SEND TO WAITER')),
+          readySendButtonsCount: buttons.filter(t => t.includes('READY — SEND TO WAITER')).length
         };
       })()
     `);
-    console.log('[BAR TERMINAL POST-ACTION]:', JSON.stringify(postStartInspection, null, 2));
+    console.log('[BAR TERMINAL POST-START-PREPARING]:', JSON.stringify(postStartInspection, null, 2));
+    await captureScreenshot(pageCdp, 'bar_terminal_two_sections_preparing.png');
 
-    await captureScreenshot(pageCdp, 'redesigned_bar_terminal_preparing_state.png');
+    // Test Clicking "READY — SEND TO WAITER" on Bar Terminal
+    console.log('\n[STEP 3b] Testing "READY — SEND TO WAITER" action on Bar Terminal...');
+    const readySendClicked = await evaluate(pageCdp, `
+      (function() {
+        const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('READY — SEND TO WAITER'));
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      })()
+    `);
+    console.log('READY — SEND TO WAITER clicked:', readySendClicked);
+    await sleep(2000);
 
+    const postReadyInspection = await evaluate(pageCdp, `
+      (function() {
+        const bodyText = document.body.innerText;
+        return {
+          hasWaitingForWaiter: bodyText.includes('WAITING FOR WAITER'),
+          hasSentToWaiterOrder: !bodyText.includes('No Orders Sent to Waiter')
+        };
+      })()
+    `);
+    console.log('[BAR TERMINAL POST-SEND-TO-WAITER]:', JSON.stringify(postReadyInspection, null, 2));
+    await captureScreenshot(pageCdp, 'bar_terminal_order_in_sent_to_waiter.png');
+
+    // =========================================================================
     // 4. Open Hookah Terminal on local server
+    // =========================================================================
     console.log('\n[STEP 4] Navigating to http://localhost:3007/hookah?tenant=the-start ...');
     await pageCdp.send('Page.navigate', { url: 'http://localhost:3007/hookah?tenant=the-start' });
 
     await waitForCondition(pageCdp, `
       (function() {
-        const text = document.body.innerText;
-        return text.includes('Hookah Terminal') || text.includes('LOUNGE OS');
+        const text = document.body.innerText.toUpperCase();
+        return text.includes('ACTIVE ORDERS') && text.includes('SENT TO WAITER');
       })()
     `, 20000);
     await sleep(2000);
@@ -204,26 +238,29 @@ async function main() {
     const hookahInspection = await evaluate(pageCdp, `
       (function() {
         const buttons = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim());
-        const bodyText = document.body.innerText;
+        const bodyText = document.body.innerText.toUpperCase();
         return {
           title: document.title,
           url: window.location.href,
-          hasOldIncomingQueue: bodyText.includes('Incoming Queue'),
-          hasOldCoalsPrep: bodyText.includes('Coals & Preparation'),
-          hasOldReadyShishaPass: bodyText.includes('Ready Shisha Pass'),
-          hasStartPreparingBtn: buttons.some(t => t.includes('START PREPARING')),
-          hasReadyNotifyBtn: buttons.some(t => t.includes('READY — NOTIFY WAITER')),
+          hasSectionActiveOrders: bodyText.includes('ACTIVE ORDERS'),
+          hasSectionSentToWaiter: bodyText.includes('SENT TO WAITER'),
+          hasOldIncomingQueue: bodyText.includes('INCOMING QUEUE'),
+          hasOldCoalsPrep: bodyText.includes('COALS & PREPARATION'),
+          hasOldReadyShishaPass: bodyText.includes('READY SHISHA PASS'),
+          hasLiveShiftPulse: bodyText.includes('LIVE SHIFT PULSE'),
+          hasFilterPills: bodyText.includes('ALL ACTIVE') || bodyText.includes('NEW TICKETS'),
+          hasStartPreparingBtn: buttons.some(t => t.toUpperCase().includes('START PREPARING')),
+          hasReadySendToWaiterBtn: buttons.some(t => t.toUpperCase().includes('READY — SEND TO WAITER')),
           sampleButtons: buttons.filter(b => b.length > 0).slice(0, 10),
-          cardElements: document.querySelectorAll('.group.bg-\\\\[\\\\#14100c\\\\]').length
         };
       })()
     `);
-    console.log('\n[HOOKAH TERMINAL VERIFICATION REPORT]:\n', JSON.stringify(hookahInspection, null, 2));
+    console.log('\n[HOOKAH TERMINAL 2-SECTION REPORT]:\n', JSON.stringify(hookahInspection, null, 2));
 
-    await captureScreenshot(pageCdp, 'redesigned_hookah_terminal_verified.png');
+    await captureScreenshot(pageCdp, 'hookah_terminal_two_sections_initial.png');
 
-    // 5. Test Clicking "START PREPARING" on Hookah Terminal
-    console.log('\n[STEP 5] Testing 1-Click "START PREPARING" action on Hookah Terminal...');
+    // 5. Test Clicking "START PREPARING" on Hookah Terminal if available
+    console.log('\n[STEP 5] Testing action on Hookah Terminal...');
     const hookahStartClicked = await evaluate(pageCdp, `
       (function() {
         const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('START PREPARING'));
@@ -237,13 +274,40 @@ async function main() {
     console.log('Hookah START PREPARING clicked:', hookahStartClicked);
     await sleep(2000);
 
-    await captureScreenshot(pageCdp, 'redesigned_hookah_terminal_preparing_state.png');
+    await captureScreenshot(pageCdp, 'hookah_terminal_two_sections_preparing.png');
+
+    // Test Clicking "READY — SEND TO WAITER" on Hookah Terminal
+    console.log('\n[STEP 5b] Testing "READY — SEND TO WAITER" action on Hookah Terminal...');
+    const hookahReadySendClicked = await evaluate(pageCdp, `
+      (function() {
+        const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('READY — SEND TO WAITER'));
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      })()
+    `);
+    console.log('Hookah READY — SEND TO WAITER clicked:', hookahReadySendClicked);
+    await sleep(2000);
+
+    const postHookahReadyInspection = await evaluate(pageCdp, `
+      (function() {
+        const bodyText = document.body.innerText;
+        return {
+          hasWaitingForWaiter: bodyText.includes('WAITING FOR WAITER'),
+          hasSentToWaiterOrder: !bodyText.includes('No Pipes Sent to Waiter')
+        };
+      })()
+    `);
+    console.log('[HOOKAH TERMINAL POST-SEND-TO-WAITER]:', JSON.stringify(postHookahReadyInspection, null, 2));
+    await captureScreenshot(pageCdp, 'hookah_terminal_order_in_sent_to_waiter.png');
 
     await pageCdp.send('Target.closeTarget', { targetId }).catch(() => {});
     if (chrome) chrome.kill();
 
     console.log('\n================================================================');
-    console.log('🎉 VISUAL PROOF & ACTIONS VERIFIED SUCCESSFULLY!');
+    console.log('🎉 2-SECTION TERMINAL PROOF & ACTIONS VERIFIED SUCCESSFULLY!');
     console.log('================================================================');
   } catch (err) {
     console.error('[-] Error during visual verification:', err);
