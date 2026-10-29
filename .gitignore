@@ -52,4 +52,5 @@ ssm_cmd.json
 !scripts/test_live_terminals_http.py
 !scripts/inspect_terminals_live_db.py
 !scripts/verify_prod_hookah.py
+!scripts/verify_terminals_local.mjs
 Awwwards-mcp/

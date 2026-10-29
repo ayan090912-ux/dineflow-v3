@@ -1223,6 +1223,21 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                     <span className="text-[11px] font-mono text-slate-400">
                                       #{order.id.slice(-4)}
                                     </span>
+                                    {readiness.readyItems.some(r => r.station === 'BAR') && (
+                                      <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-mono font-bold">
+                                        BAR
+                                      </span>
+                                    )}
+                                    {readiness.readyItems.some(r => r.station === 'HOOKAH') && (
+                                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold">
+                                        HOOKAH
+                                      </span>
+                                    )}
+                                    {readiness.readyItems.some(r => r.station === 'KITCHEN') && (
+                                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                                        KITCHEN
+                                      </span>
+                                    )}
                                     {order.deliveryStatus === 'COLLECTED' ? (
                                       <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                         <Package className="w-3 h-3 text-sky-400" />
@@ -1353,8 +1368,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                                       <span>
                                         {order.deliveryStatus === 'COLLECTED'
-                                          ? `Mark Served to ${formattedTable}`
-                                          : `Direct Served`}
+                                          ? `Mark Delivered (${formattedTable})`
+                                          : `Mark Delivered`}
                                       </span>
                                     </>
                                   )}

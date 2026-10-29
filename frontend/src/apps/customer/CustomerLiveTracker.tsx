@@ -29,6 +29,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
         let newStatus = p.status;
         let newKitchenStatus = p.kitchenStatus || p.kitchen_status;
         let newBarStatus = p.barStatus || p.bar_status;
+        let newHookahStatus = p.hookahStatus || p.hookah_status;
 
         if (event.type === 'order_ready' || event.type === 'OrderReady') {
           newStatus = 'READY';
@@ -46,6 +47,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
             status: newStatus || p.status || prev.status,
             kitchenStatus: newKitchenStatus || prev.kitchenStatus,
             barStatus: newBarStatus || prev.barStatus,
+            hookahStatus: newHookahStatus || prev.hookahStatus,
             etaTargetTimestamp: p.etaTargetTimestamp || p.eta_target_timestamp || prev.etaTargetTimestamp,
           };
           if (onUpdateOrder) {
@@ -92,11 +94,27 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       if (!currentOrder.etaTargetTimestamp) {
         setRemainingSeconds(0);
         if (isOrderDelivered) {
-          setEtaMessage('Served at your table • Enjoy your meal!');
+          if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+            setEtaMessage('Your hookah has been delivered. Enjoy!');
+          } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
+            setEtaMessage('Your beverages have been delivered. Enjoy!');
+          } else {
+            setEtaMessage('Served at your table • Enjoy your meal!');
+          }
         } else if (isOrderReady) {
-          setEtaMessage('Plated & ready • Floor staff is bringing your order.');
+          if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+            setEtaMessage('Your hookah is ready. Your waiter will bring it to your table shortly.');
+          } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
+            setEtaMessage('Your beverages are ready. Your waiter will bring them to your table shortly.');
+          } else {
+            setEtaMessage('Plated & ready • Floor staff is bringing your order.');
+          }
         } else if (isOrderPreparing) {
-          if (hasKitchenItems && currentOrder.kitchenStatus === 'READY' && hasBarItems && currentOrder.barStatus === 'PREPARING') {
+          if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+            setEtaMessage('Your hookah order is now being prepared.');
+          } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
+            setEtaMessage('Your beverage order is now being prepared.');
+          } else if (hasKitchenItems && currentOrder.kitchenStatus === 'READY' && hasBarItems && currentOrder.barStatus === 'PREPARING') {
             setEtaMessage('Food ready at kitchen pass • Bar preparing drinks');
           } else if (hasBarItems && currentOrder.barStatus === 'READY' && hasKitchenItems && currentOrder.kitchenStatus === 'PREPARING') {
             setEtaMessage('Drinks ready at bar • Kitchen cooking food');
@@ -116,9 +134,21 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       setRemainingSeconds(diffSec);
 
       if (isOrderDelivered) {
-        setEtaMessage('Served at your table • Enjoy your meal!');
+        if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+          setEtaMessage('Your hookah has been delivered. Enjoy!');
+        } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
+          setEtaMessage('Your beverages have been delivered. Enjoy!');
+        } else {
+          setEtaMessage('Served at your table • Enjoy your meal!');
+        }
       } else if (isOrderReady) {
-        setEtaMessage('Plated & ready • Floor staff is bringing your order.');
+        if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+          setEtaMessage('Your hookah is ready. Your waiter will bring it to your table shortly.');
+        } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
+          setEtaMessage('Your beverages are ready. Your waiter will bring them to your table shortly.');
+        } else {
+          setEtaMessage('Plated & ready • Floor staff is bringing your order.');
+        }
       } else if (isOrderPreparing) {
         if (diffSec <= 180 && diffSec > 0) {
           setEtaMessage('Final plating & garnishes in progress.');
@@ -135,7 +165,7 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
     updateTiming();
     const interval = setInterval(updateTiming, 1000);
     return () => clearInterval(interval);
-  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus, currentOrder.barStatus, isOrderDelivered, isOrderReady, isOrderPreparing, hasKitchenItems, hasBarItems]);
+  }, [currentOrder.etaTargetTimestamp, currentOrder.isTimerPaused, currentOrder.status, currentOrder.kitchenStatus, currentOrder.barStatus, currentOrder.hookahStatus, isOrderDelivered, isOrderReady, isOrderPreparing, hasKitchenItems, hasBarItems, hasHookahItems]);
 
   const formatCountdown = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -208,8 +238,8 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
         </div>
       )}
 
-      {/* Dual Station Badges */}
-      {(currentOrder.kitchenStatus || currentOrder.barStatus) && (
+      {/* Station Badges */}
+      {(currentOrder.kitchenStatus || currentOrder.barStatus || currentOrder.hookahStatus) && (
         <div className="flex flex-wrap items-center gap-2">
           {currentOrder.kitchenStatus && (
             <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/[0.03] text-white/70 border border-white/[0.06] flex items-center gap-1.5">
@@ -221,6 +251,12 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
             <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/[0.03] text-white/70 border border-white/[0.06] flex items-center gap-1.5">
               <Wine className="w-3.5 h-3.5 text-sky-400" />
               <span>Bar: <strong className="text-white uppercase font-normal">{currentOrder.barStatus.replace(/_/g, ' ')}</strong></span>
+            </span>
+          )}
+          {currentOrder.hookahStatus && (
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/[0.03] text-white/70 border border-white/[0.06] flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Hookah: <strong className="text-white uppercase font-normal">{currentOrder.hookahStatus.replace(/_/g, ' ')}</strong></span>
             </span>
           )}
         </div>

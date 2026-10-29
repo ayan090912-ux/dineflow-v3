@@ -254,6 +254,52 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         addToast('info', 'ETA Updated', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
       } else if (event.type === 'OrderAccepted') {
         addToast('success', 'Order Accepted', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
+      } else if (event.type === 'BarStatusUpdated') {
+        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        const bStatus = (event as any).barStatus || (event as any).payload?.barStatus;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) =>
+              o.id === oId
+                ? {
+                    ...o,
+                    barStatus: bStatus || o.barStatus,
+                    status: (event as any).status || (event as any).payload?.status || o.status,
+                  }
+                : o
+            )
+          );
+        }
+        if (bStatus === 'PREPARING') {
+          addToast('info', 'Beverage Preparation', 'Your beverage order is now being prepared.');
+        } else if (bStatus === 'READY') {
+          addToast('success', 'Beverages Ready', 'Your beverages are ready. Your waiter will bring them to your table shortly.');
+        } else if (bStatus === 'COMPLETED') {
+          addToast('success', 'Beverages Delivered', 'Your beverages have been delivered. Enjoy!');
+        }
+      } else if (event.type === 'HookahStatusUpdated') {
+        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        const hStatus = (event as any).hookahStatus || (event as any).payload?.hookahStatus;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) =>
+              o.id === oId
+                ? {
+                    ...o,
+                    hookahStatus: hStatus || o.hookahStatus,
+                    status: (event as any).status || (event as any).payload?.status || o.status,
+                  }
+                : o
+            )
+          );
+        }
+        if (hStatus === 'PREPARING') {
+          addToast('info', 'Hookah Preparation', 'Your hookah order is now being prepared.');
+        } else if (hStatus === 'READY') {
+          addToast('success', 'Hookah Ready', 'Your hookah is ready. Your waiter will bring it to your table shortly.');
+        } else if (hStatus === 'COMPLETED') {
+          addToast('success', 'Hookah Delivered', 'Your hookah has been delivered. Enjoy!');
+        }
       } else if (event.type === 'OrderReady' || event.type === 'order_ready') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         if (oId) {
@@ -266,21 +312,32 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         if (oId) {
           setCustomerOrders((prev) =>
-            prev.map((o) => (o.id === oId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED' } : o))
+            prev.map((o) => (o.id === oId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
           );
         }
-        addToast('success', 'Order Served', 'Enjoy your meal!');
+        const ord = customerOrders.find((o) => o.id === oId);
+        const hasB = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'BAR');
+        const hasH = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'HOOKAH');
+        if (hasH && !hasB) {
+          addToast('success', 'Hookah Delivered', 'Your hookah has been delivered. Enjoy!');
+        } else if (hasB && !hasH) {
+          addToast('success', 'Beverages Delivered', 'Your beverages have been delivered. Enjoy!');
+        } else {
+          addToast('success', 'Order Served', 'Enjoy your meal!');
+        }
       } else if (event.type === 'OrderCompleted' || event.type === 'order_completed') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         if (oId) {
           setCustomerOrders((prev) =>
-            prev.map((o) => (o.id === oId ? { ...o, status: 'COMPLETED', kitchenStatus: 'COMPLETED' } : o))
+            prev.map((o) => (o.id === oId ? { ...o, status: 'COMPLETED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
           );
         }
       } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         const newStatus = (event as any).status || (event as any).payload?.status;
         const newKitchenStatus = (event as any).kitchenStatus || (event as any).payload?.kitchenStatus;
+        const newBarStatus = (event as any).barStatus || (event as any).payload?.barStatus || (event as any).payload?.bar_status;
+        const newHookahStatus = (event as any).hookahStatus || (event as any).payload?.hookahStatus || (event as any).payload?.hookah_status;
         if (oId) {
           setCustomerOrders((prev) =>
             prev.map((o) =>
@@ -289,13 +346,24 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     ...o,
                     status: newStatus || o.status,
                     kitchenStatus: newKitchenStatus || o.kitchenStatus,
+                    barStatus: newBarStatus || o.barStatus,
+                    hookahStatus: newHookahStatus || o.hookahStatus,
                   }
                 : o
             )
           );
         }
         if (newStatus === 'DELIVERED') {
-          addToast('success', 'Order Served', 'Enjoy your meal!');
+          const ord = customerOrders.find((o) => o.id === oId);
+          const hasB = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'BAR');
+          const hasH = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'HOOKAH');
+          if (hasH && !hasB) {
+            addToast('success', 'Hookah Delivered', 'Your hookah has been delivered. Enjoy!');
+          } else if (hasB && !hasH) {
+            addToast('success', 'Beverages Delivered', 'Your beverages have been delivered. Enjoy!');
+          } else {
+            addToast('success', 'Order Served', 'Enjoy your meal!');
+          }
         }
       }
     });

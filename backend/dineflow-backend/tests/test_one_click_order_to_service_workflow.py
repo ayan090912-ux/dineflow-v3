@@ -561,3 +561,85 @@ class TestOneClickOrderToServiceWorkflow:
             late_claim = await client.post(f"/api/v1/orders/{order_id}/collect", json={"waiterName": "Maria Runner"}, headers={"Authorization": f"Bearer {waiter2_token}"})
             assert late_claim.status_code == 400
             assert "already been delivered" in late_claim.json()["detail"]
+
+    async def test_criterion_15_one_click_bar_and_hookah_end_to_end_workflow(self, db_session: AsyncSession):
+        """15: One-click 3-action synchronized workflow for Bar and Hookah stations."""
+        env = await self._setup_restaurant(db_session)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # === BAR WORKFLOW ===
+            # Step 1: Customer places beverage order
+            res_b = await client.post("/api/v1/orders", json={
+                "restaurantId": env["rest_id"],
+                "tableNumber": "12",
+                "items": [{"menuItemId": env["item_drink"].id, "name": env["item_drink"].name, "price": env["item_drink"].price, "quantity": 2, "targetDestination": "BAR"}]
+            })
+            assert res_b.status_code == 201
+            bar_ord = res_b.json()
+            assert bar_ord["barStatus"] == "PENDING"
+            assert bar_ord["deliveryStatus"] == "PENDING"
+
+            # Bartender Action 1: START PREPARING (one click)
+            prep_b = await client.put(f"/api/v1/orders/{bar_ord['id']}/status", json={"barStatus": "PREPARING"}, headers={"Authorization": f"Bearer {env['bar_token']}"})
+            assert prep_b.status_code == 200
+            assert prep_b.json()["barStatus"] == "PREPARING"
+            assert prep_b.json()["status"] == "PREPARING"
+
+            # Bartender Action 2: READY — NOTIFY WAITER (one click)
+            ready_b = await client.post(f"/api/v1/orders/{bar_ord['id']}/request-waiter", json={"station": "BAR"}, headers={"Authorization": f"Bearer {env['bar_token']}"})
+            assert ready_b.status_code == 200
+            assert ready_b.json()["order"]["barStatus"] == "READY"
+            assert ready_b.json()["order"]["barWaiterRequested"] is True
+            assert ready_b.json()["order"]["deliveryStatus"] == "WAITING_FOR_WAITER"
+            assert ready_b.json()["request"]["requestType"] == "ORDER_READY"
+            assert ready_b.json()["request"]["station"] == "BAR"
+
+            # Waiter Action: ACCEPT & COLLECT (one click)
+            collect_b = await client.post(f"/api/v1/orders/{bar_ord['id']}/collect", json={"station": "BAR", "waiterName": "Sam Floor"}, headers={"Authorization": f"Bearer {env['waiter_token']}"})
+            assert collect_b.status_code == 200
+            assert collect_b.json()["order"]["claimedBy"] == "Sam Floor"
+            assert collect_b.json()["order"]["deliveryStatus"] == "COLLECTED"
+
+            # Waiter Action: MARK DELIVERED (one click)
+            deliver_b = await client.post(f"/api/v1/orders/{bar_ord['id']}/deliver", json={"station": "BAR", "waiterName": "Sam Floor"}, headers={"Authorization": f"Bearer {env['waiter_token']}"})
+            assert deliver_b.status_code == 200
+            assert deliver_b.json()["order"]["status"] == "DELIVERED"
+            assert deliver_b.json()["order"]["barStatus"] == "COMPLETED"
+            assert deliver_b.json()["order"]["deliveryStatus"] == "DELIVERED"
+            assert deliver_b.json()["order"]["deliveredAt"] is not None
+
+            # === HOOKAH WORKFLOW ===
+            # Step 1: Customer places hookah order
+            res_h = await client.post("/api/v1/orders", json={
+                "restaurantId": env["rest_id"],
+                "tableNumber": "12",
+                "items": [{"menuItemId": env["item_hookah"].id, "name": env["item_hookah"].name, "price": env["item_hookah"].price, "quantity": 1, "targetDestination": "HOOKAH"}]
+            })
+            assert res_h.status_code == 201
+            hk_ord = res_h.json()
+            assert hk_ord["hookahStatus"] == "PENDING"
+
+            # Hookah Action 1: START PREPARING (one click)
+            prep_h = await client.put(f"/api/v1/orders/{hk_ord['id']}/status", json={"hookahStatus": "PREPARING"}, headers={"Authorization": f"Bearer {env['hookah_token']}"})
+            assert prep_h.status_code == 200
+            assert prep_h.json()["hookahStatus"] == "PREPARING"
+
+            # Hookah Action 2: READY — NOTIFY WAITER (one click)
+            ready_h = await client.post(f"/api/v1/orders/{hk_ord['id']}/request-waiter", json={"station": "HOOKAH"}, headers={"Authorization": f"Bearer {env['hookah_token']}"})
+            assert ready_h.status_code == 200
+            assert ready_h.json()["order"]["hookahStatus"] == "READY"
+            assert ready_h.json()["order"]["hookahWaiterRequested"] is True
+            assert ready_h.json()["order"]["deliveryStatus"] == "WAITING_FOR_WAITER"
+
+            # Waiter Action: ACCEPT & COLLECT (one click)
+            collect_h = await client.post(f"/api/v1/orders/{hk_ord['id']}/collect", json={"station": "HOOKAH", "waiterName": "Sam Floor"}, headers={"Authorization": f"Bearer {env['waiter_token']}"})
+            assert collect_h.status_code == 200
+            assert collect_h.json()["order"]["deliveryStatus"] == "COLLECTED"
+
+            # Waiter Action: MARK DELIVERED (one click)
+            deliver_h = await client.post(f"/api/v1/orders/{hk_ord['id']}/deliver", json={"station": "HOOKAH", "waiterName": "Sam Floor"}, headers={"Authorization": f"Bearer {env['waiter_token']}"})
+            assert deliver_h.status_code == 200
+            assert deliver_h.json()["order"]["status"] == "DELIVERED"
+            assert deliver_h.json()["order"]["hookahStatus"] == "COMPLETED"
+            assert deliver_h.json()["order"]["deliveryStatus"] == "DELIVERED"
+
