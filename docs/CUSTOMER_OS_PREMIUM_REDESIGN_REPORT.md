@@ -118,3 +118,4 @@ Comprehensive end-to-end testing was performed via Chrome DevTools Protocol (CDP
    - Commit & push to branch `security-hardening-cleanup`.
    - Run SSM deployment command: `python3 scripts/deploy_prod.py --target web`.
    - Validate live HTTP 200 responses on `https://the-start.dinely.food` and `https://dinely.food`.
+

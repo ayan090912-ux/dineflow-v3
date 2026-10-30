@@ -471,13 +471,14 @@ export class BaseApiClient {
     options: RequestInit = {},
     scope?: PortalScope
   ): Promise<T> {
-    await ensureFirebaseAuthReady();
     const targetScope = scope || getPortalScopeFromPath();
+    const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope);
     const apiBase = getApiBaseUrl();
     const url = endpoint.startsWith('http') ? endpoint : `${apiBase}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
 
     let token: string | null = null;
     if (targetScope === 'ADMIN') {
+      await ensureFirebaseAuthReady();
       token = await getValidFirebaseIdToken(false);
       if (!token) {
         token = await getValidFirebaseIdToken(true);
@@ -493,15 +494,15 @@ export class BaseApiClient {
         throw unauthErr;
       }
     } else {
-      token = await getValidFirebaseIdToken(false);
-      if (!token && typeof window !== 'undefined') {
+      // Fast path for staff terminals: check local tokens immediately without awaiting Firebase
+      if (typeof window !== 'undefined') {
         const scopeLower = targetScope.toLowerCase();
         token =
           localStorage.getItem(`dinely_staff_token_${scopeLower}`) ||
           sessionStorage.getItem(`dinely_staff_token_${scopeLower}`) ||
-          (targetScope === 'KITCHEN' ? (localStorage.getItem('dinely_staff_token_chef') || sessionStorage.getItem('dinely_staff_token_chef')) : null) ||
-          (targetScope === 'BAR' ? (localStorage.getItem('dinely_staff_token_bartender') || sessionStorage.getItem('dinely_staff_token_bartender')) : null) ||
-          (targetScope === 'HOOKAH' ? (localStorage.getItem('dinely_staff_token_shisha') || sessionStorage.getItem('dinely_staff_token_shisha')) : null) ||
+          (targetScope === 'HOOKAH' ? (localStorage.getItem('dinely_staff_token_hookah') || localStorage.getItem('dinely_staff_token_shisha')) : null) ||
+          (targetScope === 'BAR' ? (localStorage.getItem('dinely_staff_token_bar') || localStorage.getItem('dinely_staff_token_bartender')) : null) ||
+          (targetScope === 'KITCHEN' ? (localStorage.getItem('dinely_staff_token_kitchen') || localStorage.getItem('dinely_staff_token_chef')) : null) ||
           localStorage.getItem('dinely_staff_token') ||
           sessionStorage.getItem('dinely_staff_token') ||
           localStorage.getItem('dinely_staff_token_staff') ||
@@ -511,6 +512,11 @@ export class BaseApiClient {
           this.currentTokensByScope['STAFF']?.accessToken ||
           this.currentTokensByScope['OWNER']?.accessToken ||
           null;
+      }
+
+      if (!token) {
+        await ensureFirebaseAuthReady();
+        token = await getValidFirebaseIdToken(false);
       }
 
       const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope);

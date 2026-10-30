@@ -23,6 +23,7 @@ import {
   DinelyLogo,
 } from '../../packages/ui';
 import { api } from '../../packages/api/client';
+import { normalizeOrder } from '../../packages/api/core/helpers';
 import { Order, OrderItem, MenuItem, Table, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
 import { formatStandardTableNumber } from '../../packages/utils/tableUtils';
@@ -144,7 +145,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
 
   // Realtime connection & events
   useEffect(() => {
-    const currentRestId = api.getCurrentRestaurantId() || restaurant?.id || '';
+    const currentRestId = restaurant?.id || api.getCurrentRestaurantId() || '';
     if (currentRestId) {
       if (!api.getCurrentRestaurantId()) {
         api.setCurrentRestaurantId(currentRestId);
@@ -172,6 +173,25 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
         event.type === 'OrderDelivered' ||
         (event.type === 'FulfillmentTicketUpdated' && event.station === 'BAR')
       ) {
+        // Fast-path instant reactive state ingestion
+        const rawPayload = event.payload || event.data;
+        if (rawPayload && rawPayload.id) {
+          const norm = normalizeOrder(rawPayload);
+          setOrders((prev) => {
+            const exists = prev.some((o) => o.id === norm.id);
+            if (exists) {
+              return prev.map((o) => (o.id === norm.id ? { ...o, ...norm } : o));
+            }
+            if (isBarOrder(norm)) {
+              if (hasInitializedRef.current && !isAudioMutedRef.current && !notifiedOrderIdsRef.current.has(norm.id)) {
+                playNotificationChime();
+                notifiedOrderIdsRef.current.add(norm.id);
+              }
+              return [norm, ...prev];
+            }
+            return prev;
+          });
+        }
         loadData(false);
       }
     });
@@ -261,7 +281,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
 
   // Filter orders by Bar relevance
   const isBarOrder = (order: Order) => {
-    if (order.barStatus && ['PENDING', 'PREPARING', 'READY'].includes(order.barStatus)) {
+    if (order.barStatus && ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(order.barStatus)) {
       return true;
     }
     return (order.items || []).some(
@@ -282,7 +302,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
     return relevantOrders
       .filter((o) => {
         const s = o.barStatus || 'PENDING';
-        return ['PENDING', 'PREPARING'].includes(s) && o.status !== 'CANCELLED' && o.status !== 'DELIVERED';
+        return ['PENDING', 'ACCEPTED', 'PREPARING'].includes(s) && o.status !== 'CANCELLED' && o.barStatus !== 'COMPLETED';
       })
       .filter((o) => {
         if (!searchQuery) return true;
@@ -302,7 +322,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
         return (
           o.barStatus === 'READY' &&
           o.status !== 'CANCELLED' &&
-          o.status !== 'DELIVERED'
+          o.barStatus !== 'COMPLETED'
         );
       })
       .filter((o) => {

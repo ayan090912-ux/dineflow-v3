@@ -1241,7 +1241,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         </span>
                       </div>
                       <span className="text-[11px] font-mono text-slate-400">
-                        Kitchen & Bar Passes
+                        Kitchen, Bar & Hookah Passes
                       </span>
                     </div>
 

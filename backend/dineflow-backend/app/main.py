@@ -494,6 +494,7 @@ async def _business_day_rollover_daemon():
                                 await perform_business_day_rollover(rest, session, caller_actor="System / Auto-Rollover Daemon")
                         else:
                             # Auto-initialize active operational day if none exists
+                            from datetime import datetime, timezone
                             from app.modules.business_day.service import get_operational_business_date
                             now_utc = datetime.now(timezone.utc)
                             target_date = get_operational_business_date(now_utc, rest)

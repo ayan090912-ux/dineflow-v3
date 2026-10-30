@@ -304,47 +304,70 @@ export async function signInPlatformAdminWithGoogle(): Promise<GoogleAuthResult 
   return signInWithGoogle({ forceRefreshIdToken: true });
 }
 
+let _firebaseAuthReadyPromise: Promise<any> | null = null;
+let _isFirebaseAuthInitialized = false;
+
 /**
  * Waits for Firebase Auth to complete initial asynchronous hydration from IndexedDB / Redirect.
+ * Cached singleton: executes once and returns immediately on all subsequent calls.
  */
 export async function ensureFirebaseAuthReady(): Promise<any> {
   if (typeof window === 'undefined') return null;
-
-  // Process any pending redirect results first
-  try {
-    await handleGoogleRedirectResult();
-  } catch (e) {
-    console.warn('[firebase] Pending redirect result error during hydration:', e);
+  if (_isFirebaseAuthInitialized) {
+    return firebaseAuth.currentUser;
   }
 
-  if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
-  try {
-    if (typeof (firebaseAuth as any).authStateReady === 'function') {
-      const readyPromise = (firebaseAuth as any).authStateReady();
-      const timeoutPromise = new Promise<void>((res) => setTimeout(res, 2500));
-      await Promise.race([readyPromise, timeoutPromise]);
-      if (firebaseAuth.currentUser) return firebaseAuth.currentUser;
-    }
-  } catch (e) {
-    console.warn('authStateReady check failed:', e);
+  if (!_firebaseAuthReadyPromise) {
+    _firebaseAuthReadyPromise = (async () => {
+      // Process any pending redirect results first
+      try {
+        await handleGoogleRedirectResult();
+      } catch (e) {
+        console.warn('[firebase] Pending redirect result error during hydration:', e);
+      }
+
+      if (firebaseAuth.currentUser) {
+        _isFirebaseAuthInitialized = true;
+        return firebaseAuth.currentUser;
+      }
+
+      try {
+        if (typeof (firebaseAuth as any).authStateReady === 'function') {
+          const readyPromise = (firebaseAuth as any).authStateReady();
+          const timeoutPromise = new Promise<void>((res) => setTimeout(res, 500));
+          await Promise.race([readyPromise, timeoutPromise]);
+          if (firebaseAuth.currentUser) {
+            _isFirebaseAuthInitialized = true;
+            return firebaseAuth.currentUser;
+          }
+        }
+      } catch (e) {
+        console.warn('authStateReady check failed:', e);
+      }
+
+      return new Promise((resolve) => {
+        let resolved = false;
+        const unsub = firebaseAuth.onAuthStateChanged((u) => {
+          if (!resolved) {
+            resolved = true;
+            _isFirebaseAuthInitialized = true;
+            unsub();
+            resolve(u);
+          }
+        });
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            _isFirebaseAuthInitialized = true;
+            unsub();
+            resolve(firebaseAuth.currentUser);
+          }
+        }, 500);
+      });
+    })();
   }
-  return new Promise((resolve) => {
-    let resolved = false;
-    const unsub = firebaseAuth.onAuthStateChanged((u) => {
-      if (!resolved) {
-        resolved = true;
-        unsub();
-        resolve(u);
-      }
-    });
-    setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        unsub();
-        resolve(firebaseAuth.currentUser);
-      }
-    }, 2000);
-  });
+
+  return _firebaseAuthReadyPromise;
 }
 
 /**

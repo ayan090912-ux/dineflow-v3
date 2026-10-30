@@ -233,8 +233,17 @@ export const RoleLoginPage: React.FC<RoleLoginPageProps> = ({
           result = await api.loginStaff(cleanIdentifier, password);
         }
       } else {
-        // Real persisted staff username + password authentication
-        result = await api.loginStaff(cleanIdentifier, password);
+        // Real persisted staff username + password authentication with terminal-login fallback
+        try {
+          result = await api.loginStaff(cleanIdentifier, password);
+        } catch (staffErr) {
+          const roleUpper = (portal === 'shisha' ? 'HOOKAH' : portal.toUpperCase()) as any;
+          if (['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY'].includes(roleUpper)) {
+            result = await api.loginStaffTerminal(roleUpper, cleanIdentifier, password);
+          } else {
+            throw staffErr;
+          }
+        }
       }
 
       let destination = result?.targetRoute || config.targetDashboard;

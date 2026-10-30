@@ -560,11 +560,28 @@ async def create_order(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Item '{m_rec.name}' is currently unavailable or sold out."
                     )
-                m_dest = (getattr(m_rec, "target_destination", None) or "").upper()
+                m_dest = (getattr(m_rec, "target_destination", None) or getattr(i, "targetDestination", None) or getattr(i, "target_destination", None) or "").upper()
                 m_name = (m_rec.name or "").lower()
-                if m_dest == "HOOKAH" or "hookah" in m_name or "shisha" in m_name:
+                m_cat = (getattr(m_rec, "category_id", "") or getattr(i, "category", "") or getattr(i, "categoryName", "") or "").lower()
+                i_custom = getattr(i, "customization", None) or {}
+                if (
+                    m_dest in ("HOOKAH", "SHISHA")
+                    or "hookah" in m_name
+                    or "shisha" in m_name
+                    or "hookah" in m_cat
+                    or "shisha" in m_cat
+                    or getattr(i, "flavor", None)
+                    or getattr(i, "flavour", None)
+                    or any(k in i_custom for k in ("flavor", "flavour", "coal", "coals", "bowl", "headType", "coalType"))
+                ):
                     station = "HOOKAH"
-                elif m_dest == "BAR" or m_rec.is_alcoholic or any(k in m_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda")):
+                elif (
+                    m_dest == "BAR"
+                    or m_rec.is_alcoholic
+                    or getattr(i, "isAlcoholic", False)
+                    or any(k in m_cat for k in ("bar", "cocktail", "mocktail", "wine", "beer", "whiskey", "beverage", "drink"))
+                    or any(k in m_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda"))
+                ):
                     station = "BAR"
                 else:
                     station = "KITCHEN"
@@ -597,11 +614,27 @@ async def create_order(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Item '{i.name or i.menuItemId or i.id}' is not found on the menu."
                     )
-                p_dest = (i.targetDestination or "").upper()
+                p_dest = (i.targetDestination or getattr(i, "target_destination", None) or "").upper()
                 p_name = (i.name or "").lower()
-                if p_dest == "HOOKAH" or "hookah" in p_name or "shisha" in p_name:
+                p_cat = (getattr(i, "category", "") or getattr(i, "categoryName", "") or "").lower()
+                i_custom = getattr(i, "customization", None) or {}
+                if (
+                    p_dest in ("HOOKAH", "SHISHA")
+                    or "hookah" in p_name
+                    or "shisha" in p_name
+                    or "hookah" in p_cat
+                    or "shisha" in p_cat
+                    or getattr(i, "flavor", None)
+                    or getattr(i, "flavour", None)
+                    or any(k in i_custom for k in ("flavor", "flavour", "coal", "coals", "bowl", "headType", "coalType"))
+                ):
                     station = "HOOKAH"
-                elif p_dest == "BAR" or i.isAlcoholic or any(k in p_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda")):
+                elif (
+                    p_dest == "BAR"
+                    or i.isAlcoholic
+                    or any(k in p_cat for k in ("bar", "cocktail", "mocktail", "wine", "beer", "whiskey", "beverage", "drink"))
+                    or any(k in p_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda"))
+                ):
                     station = "BAR"
                 else:
                     station = p_dest or "KITCHEN"
@@ -1201,61 +1234,59 @@ async def get_restaurant_orders(
                     query = query.where(Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"]))
 
         if effective_station == "BAR":
-            bar_subq = (
-                select(OrderItem.order_id)
-                .join(Order, OrderItem.order_id == Order.id)
-                .where(
-                    Order.restaurant_id == target_rest_id,
-                    or_(
-                        func.upper(OrderItem.target_destination).in_(["BAR", "DRINK", "BEVERAGE"]),
-                        func.lower(OrderItem.name).like("%cocktail%"),
-                        func.lower(OrderItem.name).like("%mocktail%"),
-                        func.lower(OrderItem.name).like("%beer%"),
-                        func.lower(OrderItem.name).like("%wine%"),
-                        func.lower(OrderItem.name).like("%whiskey%"),
-                        func.lower(OrderItem.name).like("%drink%")
-                    )
+            query = query.where(
+                or_(
+                    Order.bar_status.isnot(None),
+                    select(OrderItem.id).where(
+                        OrderItem.order_id == Order.id,
+                        or_(
+                            func.upper(OrderItem.target_destination).in_(["BAR", "DRINK", "BEVERAGE"]),
+                            func.lower(OrderItem.name).like("%cocktail%"),
+                            func.lower(OrderItem.name).like("%mocktail%"),
+                            func.lower(OrderItem.name).like("%beer%"),
+                            func.lower(OrderItem.name).like("%wine%"),
+                            func.lower(OrderItem.name).like("%whiskey%"),
+                            func.lower(OrderItem.name).like("%drink%")
+                        )
+                    ).exists()
                 )
-                .scalar_subquery()
             )
-            query = query.where(or_(Order.id.in_(bar_subq), Order.bar_status.isnot(None)))
             if active_only:
                 query = query.where(
                     or_(
-                        Order.bar_status.in_(["PENDING", "PREPARING", "READY", "ACCEPTED"]),
+                        Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"]),
                         and_(
                             Order.bar_status.is_(None),
-                            Order.id.in_(bar_subq)
+                            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
                         )
                     ),
-                    Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+                    Order.status != "CANCELLED"
                 )
 
         elif effective_station == "HOOKAH":
-            hookah_subq = (
-                select(OrderItem.order_id)
-                .join(Order, OrderItem.order_id == Order.id)
-                .where(
-                    Order.restaurant_id == target_rest_id,
-                    or_(
-                        func.upper(OrderItem.target_destination).in_(["HOOKAH", "SHISHA"]),
-                        func.lower(OrderItem.name).like("%hookah%"),
-                        func.lower(OrderItem.name).like("%shisha%")
-                    )
+            query = query.where(
+                or_(
+                    Order.hookah_status.isnot(None),
+                    select(OrderItem.id).where(
+                        OrderItem.order_id == Order.id,
+                        or_(
+                            func.upper(OrderItem.target_destination).in_(["HOOKAH", "SHISHA"]),
+                            func.lower(OrderItem.name).like("%hookah%"),
+                            func.lower(OrderItem.name).like("%shisha%")
+                        )
+                    ).exists()
                 )
-                .scalar_subquery()
             )
-            query = query.where(or_(Order.id.in_(hookah_subq), Order.hookah_status.isnot(None)))
             if active_only:
                 query = query.where(
                     or_(
-                        Order.hookah_status.in_(["PENDING", "PREPARING", "READY", "ACCEPTED"]),
+                        Order.hookah_status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"]),
                         and_(
                             Order.hookah_status.is_(None),
-                            Order.id.in_(hookah_subq)
+                            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
                         )
                     ),
-                    Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+                    Order.status != "CANCELLED"
                 )
 
         elif effective_station == "KITCHEN":

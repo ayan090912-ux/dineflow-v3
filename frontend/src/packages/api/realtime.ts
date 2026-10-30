@@ -543,10 +543,22 @@ class RealTimeEventBus {
     if (
       event.restaurantId &&
       this.currentRestaurantId &&
-      this.currentRole !== 'PLATFORM_ADMIN' &&
-      event.restaurantId.toLowerCase().trim() !== this.currentRestaurantId.toLowerCase().trim()
+      this.currentRole !== 'PLATFORM_ADMIN'
     ) {
-      return;
+      const evRest = event.restaurantId.toLowerCase().trim();
+      const curRest = this.currentRestaurantId.toLowerCase().trim();
+      const isDirectMatch = evRest === curRest;
+      const isSubdomainMatch = typeof window !== 'undefined' && (
+        window.location.hostname.includes(evRest) ||
+        window.location.hostname.includes(curRest) ||
+        (localStorage.getItem('dinely_restaurant_id') || '').toLowerCase().trim() === evRest ||
+        (sessionStorage.getItem('dinely_restaurant_id') || '').toLowerCase().trim() === evRest ||
+        (localStorage.getItem('dinely_active_restaurant_id') || '').toLowerCase().trim() === evRest
+      );
+
+      if (!isDirectMatch && !isSubdomainMatch) {
+        return;
+      }
     }
 
     this.listeners.forEach((listener) => {

@@ -23,6 +23,7 @@ import {
   DinelyLogo,
 } from '../../packages/ui';
 import { api } from '../../packages/api/client';
+import { normalizeOrder } from '../../packages/api/core/helpers';
 import { Order, OrderItem, MenuItem, Table, getFulfillmentStation } from '../../packages/types';
 import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
 import { formatStandardTableNumber } from '../../packages/utils/tableUtils';
@@ -145,7 +146,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
 
   // Realtime connection & events
   useEffect(() => {
-    const currentRestId = api.getCurrentRestaurantId() || restaurant?.id || '';
+    const currentRestId = restaurant?.id || api.getCurrentRestaurantId() || '';
     if (currentRestId) {
       if (!api.getCurrentRestaurantId()) {
         api.setCurrentRestaurantId(currentRestId);
@@ -173,6 +174,25 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
         event.type === 'OrderDelivered' ||
         (event.type === 'FulfillmentTicketUpdated' && event.station === 'HOOKAH')
       ) {
+        // Fast-path instant reactive state ingestion
+        const rawPayload = event.payload || event.data;
+        if (rawPayload && rawPayload.id) {
+          const norm = normalizeOrder(rawPayload);
+          setOrders((prev) => {
+            const exists = prev.some((o) => o.id === norm.id);
+            if (exists) {
+              return prev.map((o) => (o.id === norm.id ? { ...o, ...norm } : o));
+            }
+            if (isHookahOrder(norm)) {
+              if (hasInitializedRef.current && !isAudioMutedRef.current && !notifiedOrderIdsRef.current.has(norm.id)) {
+                playNotificationChime();
+                notifiedOrderIdsRef.current.add(norm.id);
+              }
+              return [norm, ...prev];
+            }
+            return prev;
+          });
+        }
         loadData(false);
       }
     });
@@ -260,7 +280,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
 
   // Filter orders by Hookah relevance
   const isHookahOrder = (order: Order) => {
-    if (order.hookahStatus && ['PENDING', 'PREPARING', 'READY'].includes(order.hookahStatus)) {
+    if (order.hookahStatus && ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(order.hookahStatus)) {
       return true;
     }
     return (order.items || []).some(
@@ -284,7 +304,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     return relevantOrders
       .filter((o) => {
         const s = o.hookahStatus || 'PENDING';
-        return ['PENDING', 'PREPARING'].includes(s) && o.status !== 'CANCELLED' && o.status !== 'DELIVERED';
+        return ['PENDING', 'ACCEPTED', 'PREPARING'].includes(s) && o.status !== 'CANCELLED' && o.hookahStatus !== 'COMPLETED';
       })
       .filter((o) => {
         if (!searchQuery) return true;
@@ -304,7 +324,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
         return (
           o.hookahStatus === 'READY' &&
           o.status !== 'CANCELLED' &&
-          o.status !== 'DELIVERED'
+          o.hookahStatus !== 'COMPLETED'
         );
       })
       .filter((o) => {
