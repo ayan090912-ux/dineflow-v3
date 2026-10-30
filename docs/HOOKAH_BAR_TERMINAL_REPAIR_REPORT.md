@@ -213,7 +213,7 @@ Real end-to-end browser flows were executed on Vite production preview (`http://
 | **Multi-Tenant Strict Isolation** | **FIXED AND VERIFIED** | Validated in Scenario 10. Orders from one restaurant cannot be viewed or manipulated by another restaurant tenant. |
 | **Idempotency & Duplicate Prevention** | **FIXED AND VERIFIED** | Validated in Scenario 11. Repeated clicks or rapid transitions do not create duplicate orders. |
 | **Waiter Assistance Requests** | **FIXED AND VERIFIED** | Validated in Scenario 12. Customer call-waiter assistance requests operate smoothly and independently. |
-| **Production Deployment** | **FIXED LOCALLY** | Verified locally across backend, frontend production build, 12-scenario pytest suite, and CDP browser automation. Ready for deployment when credentials are provided. |
+| **Production Deployment** | **FIXED AND VERIFIED** | Deployed live to AWS EC2 (`i-0997b0b381dfb3fd0`) with commit `44cd51a`. Public endpoints at `https://dinely.food` and `https://the-start.dinely.food` verified healthy (HTTP 200). |
 
 ---
 
