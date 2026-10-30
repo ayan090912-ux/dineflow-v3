@@ -102,15 +102,28 @@ def resolve_item_station(it: Any) -> str:
     if not isinstance(it, dict):
         return "KITCHEN"
     dest = (it.get("targetDestination") or it.get("target_destination") or it.get("station") or "").upper()
-    if dest == "HOOKAH":
+    if dest in ("HOOKAH", "SHISHA"):
         return "HOOKAH"
     if dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True:
         return "BAR"
+    if dest in ("KITCHEN", "COOK", "CHEF"):
+        return "KITCHEN"
 
     cat = (it.get("categoryName") or it.get("category") or it.get("barCategory") or "").lower()
     name = (it.get("name") or "").lower()
+    custom = it.get("customization") or {}
 
-    if "hookah" in cat or "shisha" in cat or "hookah" in name or "shisha" in name:
+    if (
+        "hookah" in cat
+        or "shisha" in cat
+        or "hookah" in name
+        or "shisha" in name
+        or any(k in custom for k in ("flavor", "flavour", "coals", "bowl", "headType", "coalType"))
+        or it.get("flavor")
+        or it.get("flavour")
+        or it.get("coalType")
+        or it.get("headType")
+    ):
         return "HOOKAH"
 
     bar_keywords = (
@@ -185,6 +198,18 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         prep_time_val = raw_prep if raw_prep is not None else None
         eff_eta_val = eta_val
 
+    raw_status = getattr(order, "status", "PENDING")
+    eff_k_status = getattr(order, "kitchen_status", None)
+    eff_b_status = getattr(order, "bar_status", None)
+    eff_h_status = getattr(order, "hookah_status", None)
+    if raw_items:
+        if eff_h_status is None and any(resolve_item_station(it) == "HOOKAH" for it in raw_items):
+            eff_h_status = "COMPLETED" if raw_status in ["COMPLETED", "DELIVERED", "CANCELLED"] else (raw_status or "PENDING")
+        if eff_b_status is None and any(resolve_item_station(it) == "BAR" for it in raw_items):
+            eff_b_status = "COMPLETED" if raw_status in ["COMPLETED", "DELIVERED", "CANCELLED"] else (raw_status or "PENDING")
+        if eff_k_status is None and any(resolve_item_station(it) == "KITCHEN" for it in raw_items):
+            eff_k_status = "COMPLETED" if raw_status in ["COMPLETED", "DELIVERED", "CANCELLED"] else (raw_status or "PENDING")
+
     return {
         "id": getattr(order, "id", ""),
         "restaurant_id": rest_id,
@@ -195,13 +220,13 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         "tableNumber": tbl_num,
         "table_session_id": sess_id,
         "tableSessionId": sess_id,
-        "status": getattr(order, "status", "PENDING"),
-        "kitchen_status": getattr(order, "kitchen_status", None),
-        "kitchenStatus": getattr(order, "kitchen_status", None),
-        "bar_status": getattr(order, "bar_status", None),
-        "barStatus": getattr(order, "bar_status", None),
-        "hookah_status": getattr(order, "hookah_status", None),
-        "hookahStatus": getattr(order, "hookah_status", None),
+        "status": raw_status,
+        "kitchen_status": eff_k_status,
+        "kitchenStatus": eff_k_status,
+        "bar_status": eff_b_status,
+        "barStatus": eff_b_status,
+        "hookah_status": eff_h_status,
+        "hookahStatus": eff_h_status,
         "customer_name": cust_name,
         "customerName": cust_name,
         "notes": getattr(order, "notes", ""),
@@ -265,6 +290,7 @@ class CachedRestaurant:
         owner_email: Optional[str] = None,
         has_kitchen: bool = True,
         has_bar: bool = True,
+        has_hookah: bool = True,
         has_waiter: bool = True,
         enabled_modules: Optional[list] = None
     ):
@@ -274,8 +300,9 @@ class CachedRestaurant:
         self.owner_email = owner_email
         self.has_kitchen = has_kitchen
         self.has_bar = has_bar
+        self.has_hookah = has_hookah
         self.has_waiter = has_waiter
-        self.enabled_modules = enabled_modules or ["kitchen", "bar", "waiter", "billing"]
+        self.enabled_modules = enabled_modules or ["kitchen", "bar", "hookah", "waiter", "billing"]
 
 class CachedTax:
     def __init__(self, id: str, name: str, type: str, rate: float, fixed_amount: float, is_inclusive: bool, status: str, applicable_order_types: list, applies_to: str):
@@ -357,6 +384,7 @@ async def create_order(
                 owner_email=db_rest.owner_email,
                 has_kitchen=getattr(db_rest, "has_kitchen", True),
                 has_bar=getattr(db_rest, "has_bar", True),
+                has_hookah=getattr(db_rest, "has_hookah", True),
                 has_waiter=getattr(db_rest, "has_waiter", True),
                 enabled_modules=getattr(db_rest, "enabled_modules", None)
             )
@@ -1178,14 +1206,28 @@ async def get_restaurant_orders(
                 .join(Order, OrderItem.order_id == Order.id)
                 .where(
                     Order.restaurant_id == target_rest_id,
-                    OrderItem.target_destination == "BAR"
+                    or_(
+                        func.upper(OrderItem.target_destination).in_(["BAR", "DRINK", "BEVERAGE"]),
+                        func.lower(OrderItem.name).like("%cocktail%"),
+                        func.lower(OrderItem.name).like("%mocktail%"),
+                        func.lower(OrderItem.name).like("%beer%"),
+                        func.lower(OrderItem.name).like("%wine%"),
+                        func.lower(OrderItem.name).like("%whiskey%"),
+                        func.lower(OrderItem.name).like("%drink%")
+                    )
                 )
                 .scalar_subquery()
             )
             query = query.where(or_(Order.id.in_(bar_subq), Order.bar_status.isnot(None)))
             if active_only:
                 query = query.where(
-                    Order.bar_status.in_(["PENDING", "PREPARING", "READY"]),
+                    or_(
+                        Order.bar_status.in_(["PENDING", "PREPARING", "READY", "ACCEPTED"]),
+                        and_(
+                            Order.bar_status.is_(None),
+                            Order.id.in_(bar_subq)
+                        )
+                    ),
                     Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
                 )
 
@@ -1195,14 +1237,24 @@ async def get_restaurant_orders(
                 .join(Order, OrderItem.order_id == Order.id)
                 .where(
                     Order.restaurant_id == target_rest_id,
-                    OrderItem.target_destination == "HOOKAH"
+                    or_(
+                        func.upper(OrderItem.target_destination).in_(["HOOKAH", "SHISHA"]),
+                        func.lower(OrderItem.name).like("%hookah%"),
+                        func.lower(OrderItem.name).like("%shisha%")
+                    )
                 )
                 .scalar_subquery()
             )
             query = query.where(or_(Order.id.in_(hookah_subq), Order.hookah_status.isnot(None)))
             if active_only:
                 query = query.where(
-                    Order.hookah_status.in_(["PENDING", "PREPARING", "READY"]),
+                    or_(
+                        Order.hookah_status.in_(["PENDING", "PREPARING", "READY", "ACCEPTED"]),
+                        and_(
+                            Order.hookah_status.is_(None),
+                            Order.id.in_(hookah_subq)
+                        )
+                    ),
                     Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
                 )
 
@@ -1777,7 +1829,7 @@ async def collect_order(
     if order.status in ["DELIVERED", "COMPLETED"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order has already been delivered")
 
-    waiter_name = payload.waiterName or caller.name or caller.email or "Floor Waiter"
+    waiter_name = payload.waiterName or getattr(caller, "name", None) or getattr(caller, "email", None) or "Floor Waiter"
 
     if order.delivery_status == "COLLECTED" and order.claimed_by and order.claimed_by.lower() != waiter_name.lower():
         raise HTTPException(
@@ -1878,7 +1930,7 @@ async def deliver_order(
     if not caller.is_admin and caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff does not belong to this restaurant")
 
-    waiter_name = payload.waiterName or caller.name or caller.email or order.claimed_by or "Floor Waiter"
+    waiter_name = payload.waiterName or getattr(caller, "name", None) or getattr(caller, "email", None) or getattr(order, "claimed_by", None) or "Floor Waiter"
     target_station = (payload.station or "").upper() if payload.station else None
 
     has_k_items = False

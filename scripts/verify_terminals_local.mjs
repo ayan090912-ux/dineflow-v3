@@ -3,7 +3,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { CDPClient, getWebSocketDebuggerUrl } from './cdp_helper.mjs';
 
-const ARTIFACT_DIR = '/Users/ayaan/.gemini/antigravity-ide/brain/c3d0d38b-c63b-4b26-b48a-09c2e48e676e';
+const ARTIFACT_DIR = '/Users/ayaan/.gemini/antigravity-ide/brain/6a14bafb-16c8-4f03-9b1f-35c99b5e4114';
 const VALID_JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzNmQ5MzEzNC00MDQ4LTQ5ZWItYTc4Yi0wOWE1YzQzMWYzZjgiLCJzY29wZSI6Ik9XTkVSIiwianRpIjoiNjRhNDUyZDItMGYxYi00YmE2LTgxYzktOGIwMGYxZjE0ODllIiwiaWF0IjoxNzkzMjQyODkyLCJleHAiOjE3OTM4NDc2OTIsInR5cGUiOiJhY2Nlc3MiLCJ1aWQiOiJXNDV3dGFnVk5jY240MzhxTHpLRnByMDQ3dDYzIiwiZW1haWwiOiJheWFuYW1pdHk3N0BnbWFpbC5jb20iLCJyb2xlIjoiT1dORVIiLCJyZXN0YXVyYW50X2lkIjoicmVzdC0xNzkwNTk0NTQ0NTI2LTM5NjAyMiJ9.ljYt1Sna2dT5nIK8myi-hrnG1MY8-rGs4_eC29nixHk';
 
 function sleep(ms) {
@@ -146,20 +146,60 @@ async function main() {
       (function() {
         const buttons = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim());
         const bodyText = document.body.innerText.toUpperCase();
+        const main = document.querySelector('main');
+        const mainStyle = main ? window.getComputedStyle(main) : null;
+        const sections = Array.from(document.querySelectorAll('section'));
+        
+        const sec1 = sections[0];
+        const sec2 = sections[1];
+        const sec1Rect = sec1 ? sec1.getBoundingClientRect() : null;
+        const sec2Rect = sec2 ? sec2.getBoundingClientRect() : null;
+        const sec1Style = sec1 ? window.getComputedStyle(sec1) : null;
+        const sec2Style = sec2 ? window.getComputedStyle(sec2) : null;
+
+        // Cards inside Section 1
+        const sec1CardsContainer = sec1 ? sec1.querySelector('div.flex-col, div[style*=\"flex-direction: column\"]') : null;
+        const sec1Cards = sec1CardsContainer ? Array.from(sec1CardsContainer.children).map(c => {
+          const r = c.getBoundingClientRect();
+          return { top: r.top, left: r.left, width: r.width, height: r.height };
+        }) : [];
+
+        // Check vertical stacking: is card 2 strictly below card 1?
+        const isCardsVerticallyStacked = sec1Cards.length >= 2 
+          ? (sec1Cards[1].top >= sec1Cards[0].top + sec1Cards[0].height - 10)
+          : true;
+
         return {
           title: document.title,
           url: window.location.href,
+          mainComputed: main ? {
+            display: mainStyle.display,
+            flexDirection: mainStyle.flexDirection,
+            width: mainStyle.width,
+            maxWidth: mainStyle.maxWidth,
+          } : null,
           hasSectionActiveOrders: bodyText.includes('ACTIVE ORDERS'),
           hasSectionSentToWaiter: bodyText.includes('SENT TO WAITER'),
-          hasOldIncomingQueue: bodyText.includes('INCOMING QUEUE'),
-          hasOldMixologyCol: bodyText.includes('MIXOLOGY & POURING'),
-          hasOldReadyBarPass: bodyText.includes('READY AT BAR PASS'),
-          hasOldRecentDispatchesCol: bodyText.includes('RECENT DISPATCHES') && !bodyText.includes('HISTORY'),
-          hasLiveShiftPulse: bodyText.includes('LIVE SHIFT PULSE'),
-          hasFilterPills: bodyText.includes('ALL ACTIVE') || bodyText.includes('NEW TICKETS'),
-          hasStartPreparingBtn: buttons.some(t => t.toUpperCase().includes('START PREPARING')),
-          hasReadySendToWaiterBtn: buttons.some(t => t.toUpperCase().includes('READY — SEND TO WAITER')),
-          sampleButtons: buttons.filter(b => b.length > 0).slice(0, 10),
+          section1: sec1Rect ? {
+            top: sec1Rect.top,
+            left: sec1Rect.left,
+            width: sec1Rect.width,
+            height: sec1Rect.height,
+            display: sec1Style ? sec1Style.display : null,
+            flexDirection: sec1Style ? sec1Style.flexDirection : null,
+          } : null,
+          section2: sec2Rect ? {
+            top: sec2Rect.top,
+            left: sec2Rect.left,
+            width: sec2Rect.width,
+            height: sec2Rect.height,
+            display: sec2Style ? sec2Style.display : null,
+            flexDirection: sec2Style ? sec2Style.flexDirection : null,
+          } : null,
+          isSection2DirectlyBelowSection1: (sec1Rect && sec2Rect) ? (sec2Rect.top >= sec1Rect.top + sec1Rect.height - 20) : null,
+          activeOrderCards: sec1Cards,
+          isCardsVerticallyStacked,
+          sampleButtons: buttons.filter(b => b.length > 0).slice(0, 8),
         };
       })()
     `);
@@ -214,7 +254,7 @@ async function main() {
         const bodyText = document.body.innerText;
         return {
           hasWaitingForWaiter: bodyText.includes('WAITING FOR WAITER'),
-          hasSentToWaiterOrder: !bodyText.includes('No Orders Sent to Waiter')
+          hasSentToWaiterOrder: !bodyText.includes('Nothing waiting for delivery')
         };
       })()
     `);
@@ -239,19 +279,60 @@ async function main() {
       (function() {
         const buttons = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim());
         const bodyText = document.body.innerText.toUpperCase();
+        const main = document.querySelector('main');
+        const mainStyle = main ? window.getComputedStyle(main) : null;
+        const sections = Array.from(document.querySelectorAll('section'));
+        
+        const sec1 = sections[0];
+        const sec2 = sections[1];
+        const sec1Rect = sec1 ? sec1.getBoundingClientRect() : null;
+        const sec2Rect = sec2 ? sec2.getBoundingClientRect() : null;
+        const sec1Style = sec1 ? window.getComputedStyle(sec1) : null;
+        const sec2Style = sec2 ? window.getComputedStyle(sec2) : null;
+
+        // Cards inside Section 1
+        const sec1CardsContainer = sec1 ? sec1.querySelector('div.flex-col, div[style*=\"flex-direction: column\"]') : null;
+        const sec1Cards = sec1CardsContainer ? Array.from(sec1CardsContainer.children).map(c => {
+          const r = c.getBoundingClientRect();
+          return { top: r.top, left: r.left, width: r.width, height: r.height };
+        }) : [];
+
+        // Check vertical stacking: is card 2 strictly below card 1?
+        const isCardsVerticallyStacked = sec1Cards.length >= 2 
+          ? (sec1Cards[1].top >= sec1Cards[0].top + sec1Cards[0].height - 10)
+          : true;
+
         return {
           title: document.title,
           url: window.location.href,
+          mainComputed: main ? {
+            display: mainStyle.display,
+            flexDirection: mainStyle.flexDirection,
+            width: mainStyle.width,
+            maxWidth: mainStyle.maxWidth,
+          } : null,
           hasSectionActiveOrders: bodyText.includes('ACTIVE ORDERS'),
           hasSectionSentToWaiter: bodyText.includes('SENT TO WAITER'),
-          hasOldIncomingQueue: bodyText.includes('INCOMING QUEUE'),
-          hasOldCoalsPrep: bodyText.includes('COALS & PREPARATION'),
-          hasOldReadyShishaPass: bodyText.includes('READY SHISHA PASS'),
-          hasLiveShiftPulse: bodyText.includes('LIVE SHIFT PULSE'),
-          hasFilterPills: bodyText.includes('ALL ACTIVE') || bodyText.includes('NEW TICKETS'),
-          hasStartPreparingBtn: buttons.some(t => t.toUpperCase().includes('START PREPARING')),
-          hasReadySendToWaiterBtn: buttons.some(t => t.toUpperCase().includes('READY — SEND TO WAITER')),
-          sampleButtons: buttons.filter(b => b.length > 0).slice(0, 10),
+          section1: sec1Rect ? {
+            top: sec1Rect.top,
+            left: sec1Rect.left,
+            width: sec1Rect.width,
+            height: sec1Rect.height,
+            display: sec1Style ? sec1Style.display : null,
+            flexDirection: sec1Style ? sec1Style.flexDirection : null,
+          } : null,
+          section2: sec2Rect ? {
+            top: sec2Rect.top,
+            left: sec2Rect.left,
+            width: sec2Rect.width,
+            height: sec2Rect.height,
+            display: sec2Style ? sec2Style.display : null,
+            flexDirection: sec2Style ? sec2Style.flexDirection : null,
+          } : null,
+          isSection2DirectlyBelowSection1: (sec1Rect && sec2Rect) ? (sec2Rect.top >= sec1Rect.top + sec1Rect.height - 20) : null,
+          activeOrderCards: sec1Cards,
+          isCardsVerticallyStacked,
+          sampleButtons: buttons.filter(b => b.length > 0).slice(0, 8),
         };
       })()
     `);
@@ -296,7 +377,7 @@ async function main() {
         const bodyText = document.body.innerText;
         return {
           hasWaitingForWaiter: bodyText.includes('WAITING FOR WAITER'),
-          hasSentToWaiterOrder: !bodyText.includes('No Pipes Sent to Waiter')
+          hasSentToWaiterOrder: !bodyText.includes('Nothing waiting for delivery')
         };
       })()
     `);

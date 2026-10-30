@@ -30,6 +30,7 @@ import {
   BellRing,
   AlertTriangle,
   Trash2,
+  Loader2,
 } from 'lucide-react';
 import {
   Button,
@@ -58,9 +59,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 }) => {
   const { theme, formatPrice, setTheme } = useTheme();
   const [currentMenuTab, setCurrentMenuTab] = useState<'FOOD' | 'BAR' | 'HOOKAH'>('FOOD');
-  const [pendingAgeTab, setPendingAgeTab] = useState<'BAR' | 'HOOKAH'>('BAR');
-  const [isAgeConfirmed, setIsAgeConfirmed] = useState<boolean>(false);
-  const [isAgeModalOpen, setIsAgeModalOpen] = useState<boolean>(false);
+  const [isAgeConfirmed, setIsAgeConfirmed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('dinely_age_verified') === 'true';
+    }
+    return false;
+  });
+  const [latestPlacedOrder, setLatestPlacedOrder] = useState<Order | null>(null);
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -558,24 +563,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   };
 
   const handleSwitchMenuTab = (tab: 'FOOD' | 'BAR' | 'HOOKAH') => {
-    if ((tab === 'BAR' || tab === 'HOOKAH') && !isAgeConfirmed) {
-      setPendingAgeTab(tab);
-      setIsAgeModalOpen(true);
-      return;
-    }
     setCurrentMenuTab(tab);
     setActiveCategory('all');
-  };
-
-  const handleConfirmAge = () => {
-    setIsAgeConfirmed(true);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('dinely_age_verified', 'true');
-    }
-    setIsAgeModalOpen(false);
-    setCurrentMenuTab(pendingAgeTab);
-    setActiveCategory('all');
-    addToast('success', 'Age Verified', `Welcome to the ${pendingAgeTab === 'HOOKAH' ? 'Hookah & Shisha' : 'Bar'} Menu.`);
   };
 
   const getTableStorageKey = (restId?: string, tableNum?: string) => {
@@ -641,6 +630,30 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
+  };
+
+  const handleDirectAddItem = (item: MenuItem) => {
+    if (item.isAvailable === false) return;
+    if (item.servingOptions && item.servingOptions.length > 0) {
+      setSelectedItem(item);
+      setQuantity(1);
+      setSelectedServingOption(item.servingOptions[0]);
+      setSpecialInstructions('');
+      return;
+    }
+    const station = getFulfillmentStation(item);
+    const itemToAdd = {
+      ...item,
+      targetDestination: station,
+    };
+    setCart((prev) => {
+      const existing = prev.find((c) => c.item.id === item.id);
+      if (existing) {
+        return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+      }
+      return [...prev, { item: itemToAdd, quantity: 1 }];
+    });
+    addToast('success', 'Added to order', `1x ${item.name}`);
   };
 
   const handleAddToCart = () => {
@@ -731,7 +744,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
       setCart([]);
       setIsCartOpen(false);
-      setIsOrderStatusModalOpen(true);
+      setLatestPlacedOrder(newOrd);
 
       const routedTo = [
         hasKitchenItems && 'Kitchen KDS',
@@ -1122,6 +1135,52 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
+      {/* Reassuring Order Confirmation Banner (Non-blocking) */}
+      {latestPlacedOrder && (
+        <div className="mx-4 mt-3 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start justify-between gap-3 shadow-lg">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-emerald-300 truncate">
+                Order #{latestPlacedOrder.displayOrderNumber || latestPlacedOrder.orderNumber || (latestPlacedOrder.id.length > 8 ? latestPlacedOrder.id.slice(-4) : latestPlacedOrder.id)} Received!
+              </p>
+              <p className="text-[11px] text-white/70 mt-0.5">
+                Sent directly to preparation queue. Table: <strong className="text-white">{selectedTableNum}</strong>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => setIsOrderStatusModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500 text-black text-xs font-semibold hover:bg-emerald-400 transition-colors"
+            >
+              Track
+            </button>
+            <button
+              onClick={() => setLatestPlacedOrder(null)}
+              className="text-white/40 hover:text-white p-1 rounded-lg"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Non-intrusive legal notice when viewing Bar / Hookah */}
+      {currentMenuTab === 'BAR' && (
+        <div className="mx-4 mt-2 p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-200 flex items-center gap-2">
+          <Wine className="w-4 h-4 text-purple-400 shrink-0" />
+          <span>Craft Bar Catalog · 21+ Government ID required upon table service.</span>
+        </div>
+      )}
+      {currentMenuTab === 'HOOKAH' && (
+        <div className="mx-4 mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 flex items-center gap-2">
+          <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>Hookah & Shisha Lounge Catalog · Statutory adult age (18+) required upon table service.</span>
+        </div>
+      )}
+
       {/* Menu Filter Tabs */}
       <div className="p-4 space-y-3">
         {/* Search */}
@@ -1236,6 +1295,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           {filteredItems.map((item) => {
             const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
             const isAvailable = item.isAvailable !== false;
+            const inCart = cart.find((c) => c.item.id === item.id);
+            const hasOptions = item.servingOptions && item.servingOptions.length > 0;
             return (
               <div
                 key={item.id}
@@ -1246,9 +1307,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 }`}
                 onClick={() => {
                   if (!isAvailable) return;
-                  setSelectedItem(item);
-                  setQuantity(1);
-                  setSelectedServingOption(item.servingOptions?.[0] || '');
+                  if (inCart) return;
+                  handleDirectAddItem(item);
                 }}
               >
                 <div className="relative shrink-0">
@@ -1313,28 +1373,51 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                       {formatPrice(item.price)}
                     </span>
                     {isAvailable ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const station = getFulfillmentStation(item);
-                          const itemToAdd = {
-                            ...item,
-                            targetDestination: station,
-                          };
-                          setCart((prev) => {
-                            const existing = prev.find((c) => c.item.id === item.id);
-                            if (existing) {
-                              return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
-                            }
-                            return [...prev, { item: itemToAdd, quantity: 1 }];
-                          });
-                          addToast('success', 'Added to order', `1x ${item.name}`);
-                        }}
-                        className="text-xs py-1 px-3 rounded-lg font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors flex items-center gap-1"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Add</span>
-                      </button>
+                      inCart ? (
+                        <div
+                          className="flex items-center gap-2 bg-[#0c0e14] border border-amber-500/40 rounded-lg p-0.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => {
+                              setCart((prev) =>
+                                prev
+                                  .map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity - 1 } : c))
+                                  .filter((c) => c.quantity > 0)
+                              );
+                            }}
+                            className="w-6 h-6 rounded flex items-center justify-center text-amber-400 hover:bg-white/[0.08] transition-colors"
+                            title="Decrease quantity"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="font-mono text-xs font-bold text-white min-w-[16px] text-center">
+                            {inCart.quantity}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setCart((prev) =>
+                                prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c))
+                              );
+                            }}
+                            className="w-6 h-6 rounded flex items-center justify-center text-amber-400 hover:bg-white/[0.08] transition-colors"
+                            title="Increase quantity"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDirectAddItem(item);
+                          }}
+                          className="text-xs py-1 px-3 rounded-lg font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors flex items-center gap-1 active:scale-95 shadow-sm"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>{hasOptions ? 'Options' : 'Add'}</span>
+                        </button>
+                      )
                     ) : (
                       <span className="text-[10px] font-mono py-1 px-2.5 rounded-lg font-medium bg-white/[0.06] text-white/40 border border-white/[0.08] cursor-not-allowed">
                         Sold Out
@@ -1401,19 +1484,20 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
       )}
 
-      {/* Item Selection & Customization Modal */}
-      <Modal
-        isOpen={!!selectedItem}
-        onClose={() => setSelectedItem(null)}
-        title={selectedItem?.name}
-      >
-        {selectedItem && (
-          <div className="space-y-4 text-xs font-sans">
-            <div className="relative rounded-xl overflow-hidden border border-white/[0.08] bg-[#12151b]">
-              <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-44 object-cover" />
-              <div className="absolute top-2.5 left-2.5">
+      {/* Item Selection & Customization Bottom Sheet Drawer */}
+      {selectedItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm transition-opacity"
+          onClick={() => setSelectedItem(null)}
+        >
+          <div
+            className="w-full max-w-md bg-[#0e1117] border-t border-x border-white/[0.12] rounded-t-2xl p-4 space-y-4 max-h-[85vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+              <div className="flex items-center gap-2 min-w-0">
                 <span
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded font-medium ${
+                  className={`text-[9px] font-mono px-2 py-0.5 rounded font-medium shrink-0 ${
                     selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG'
                       ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
                       : 'bg-rose-950/80 text-rose-400 border border-rose-500/30'
@@ -1421,17 +1505,28 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 >
                   {selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG' ? 'VEG' : 'NON-VEG'}
                 </span>
+                <h3 className="font-semibold text-white text-xs truncate">{selectedItem.name}</h3>
               </div>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/[0.08]"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            
+
+            <div className="relative rounded-xl overflow-hidden border border-white/[0.08] bg-[#12151b]">
+              <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-36 object-cover" />
+            </div>
+
             {selectedItem.brand && (
               <p className="text-amber-400 font-mono text-xs font-medium">Brand: {selectedItem.brand}</p>
             )}
-            
+
             <p className="text-white/60 leading-relaxed text-xs">{selectedItem.description}</p>
 
             {selectedItem.servingOptions && selectedItem.servingOptions.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <span className="font-medium text-white/80 block text-xs">Serving Option</span>
                 <div className="flex flex-wrap gap-2">
                   {selectedItem.servingOptions.map((opt) => (
@@ -1451,137 +1546,182 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-between py-2.5 border-y border-white/[0.08]">
+            <div className="flex items-center justify-between py-2 border-y border-white/[0.08]">
               <span className="font-medium text-white/80 text-xs">Quantity</span>
               <div className="flex items-center gap-3 bg-[#12151b] border border-white/[0.08] p-1 rounded-lg">
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="h-7 w-7 p-0 text-white/60 hover:text-white"
+                  className="h-7 w-7 flex items-center justify-center rounded text-white/60 hover:text-white"
                 >
                   <Minus className="w-3.5 h-3.5" />
-                </Button>
+                </button>
                 <span className="font-mono font-semibold text-xs text-white min-w-[20px] text-center">{quantity}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
                   onClick={() => setQuantity(quantity + 1)}
-                  className="h-7 w-7 p-0 text-white/60 hover:text-white"
+                  className="h-7 w-7 flex items-center justify-center rounded text-white/60 hover:text-white"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                </Button>
+                </button>
               </div>
             </div>
 
-            <Input
-              label="Preparation Instructions / Notes"
-              placeholder="e.g. Less spicy, dressing on the side, allergies..."
+            <input
+              type="text"
+              placeholder="Preparation notes (e.g. less spicy, dressing on side)..."
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
+              className="w-full bg-[#12151b] text-white text-xs rounded-xl px-3.5 py-2.5 border border-white/[0.08] focus:border-amber-400/60 focus:outline-none placeholder:text-white/30"
             />
 
-            <Button
-              variant="brand"
+            <button
               onClick={handleAddToCart}
-              className="w-full py-3 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md"
+              className="w-full py-3 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-md transition-all active:scale-[0.99]"
             >
               Add to Order · {formatPrice(selectedItem.price * quantity)}
-            </Button>
+            </button>
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
 
-      {/* Cart Summary Modal */}
-      <Modal
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        title="Order Summary"
-      >
-        <div className="space-y-4 text-xs font-sans">
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-            {cart.map((c, idx) => (
-              <div key={idx} className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="font-medium text-white text-xs">
-                    <span className="font-mono text-amber-400 font-bold mr-1.5">{c.quantity}×</span>
-                    {c.item.name}
-                  </p>
-                  {c.servingOption && (
-                    <p className="text-[11px] text-white/50 font-mono">Serving: {c.servingOption}</p>
-                  )}
-                  {c.notes && <p className="text-[11px] text-amber-400/80 italic">{c.notes}</p>}
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="flex items-center gap-1 bg-black/40 border border-white/[0.08] rounded-lg px-1.5 py-0.5">
+      {/* Cart Review & Checkout Bottom Sheet Drawer */}
+      {isCartOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm transition-opacity"
+          onClick={() => setIsCartOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-[#0e1117] border-t border-x border-white/[0.12] rounded-t-2xl p-4 space-y-4 max-h-[85vh] flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4 text-amber-400" />
+                <h3 className="font-semibold text-white text-xs">Your Order Cart ({totalCartCount})</h3>
+              </div>
+              <button
+                onClick={() => setIsCartOpen(false)}
+                className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/[0.08]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {cart.map((c, idx) => (
+                <div key={idx} className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] flex items-center justify-between">
+                  <div className="space-y-0.5 min-w-0 flex-1 pr-2">
+                    <p className="font-medium text-white text-xs truncate">
+                      <span className="font-mono text-amber-400 font-bold mr-1.5">{c.quantity}×</span>
+                      {c.item.name}
+                    </p>
+                    {c.servingOption && (
+                      <p className="text-[10px] text-white/50 font-mono">Serving: {c.servingOption}</p>
+                    )}
+                    {c.notes && <p className="text-[10px] text-amber-400/80 italic truncate">{c.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 bg-black/40 border border-white/[0.08] rounded-lg px-1 py-0.5">
+                      <button
+                        onClick={() => {
+                          setCart((prev) =>
+                            prev
+                              .map((item, i) => (i === idx ? { ...item, quantity: item.quantity - 1 } : item))
+                              .filter((item) => item.quantity > 0)
+                          );
+                        }}
+                        className="p-1 text-white/60 hover:text-white transition-colors"
+                        title="Decrease"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="font-mono text-xs font-semibold text-white px-1">{c.quantity}</span>
+                      <button
+                        onClick={() => {
+                          setCart((prev) =>
+                            prev.map((item, i) => (i === idx ? { ...item, quantity: item.quantity + 1 } : item))
+                          );
+                        }}
+                        className="p-1 text-white/60 hover:text-white transition-colors"
+                        title="Increase"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <span className="font-mono font-semibold text-xs text-white min-w-[50px] text-right">
+                      {formatPrice(c.item.price * c.quantity)}
+                    </span>
                     <button
                       onClick={() => {
-                        setCart((prev) =>
-                          prev
-                            .map((item, i) => (i === idx ? { ...item, quantity: item.quantity - 1 } : item))
-                            .filter((item) => item.quantity > 0)
-                        );
+                        setCart((prev) => prev.filter((_, i) => i !== idx));
                       }}
-                      className="p-1 text-white/60 hover:text-white transition-colors"
-                      title="Decrease quantity"
+                      className="p-1 text-white/40 hover:text-rose-400 transition-colors"
+                      title="Remove"
                     >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="font-mono text-xs font-semibold text-white px-1">{c.quantity}</span>
-                    <button
-                      onClick={() => {
-                        setCart((prev) =>
-                          prev.map((item, i) => (i === idx ? { ...item, quantity: item.quantity + 1 } : item))
-                        );
-                      }}
-                      className="p-1 text-white/60 hover:text-white transition-colors"
-                      title="Increase quantity"
-                    >
-                      <Plus className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <span className="font-mono font-semibold text-white min-w-[55px] text-right">{formatPrice(c.item.price * c.quantity)}</span>
-                  <button
-                    onClick={() => {
-                      setCart((prev) => prev.filter((_, i) => i !== idx));
-                    }}
-                    className="p-1 text-white/40 hover:text-rose-400 transition-colors"
-                    title="Remove item"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
-            <div className="flex justify-between text-white/60">
-              <span>Subtotal</span>
-              <span>{formatPrice(subtotal)}</span>
+              ))}
             </div>
-            {(typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) > 0 && (
+
+            <div className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
               <div className="flex justify-between text-white/60">
-                <span>GST / Taxes ({typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5}%)</span>
-                <span>{formatPrice(Math.round(subtotal * (((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5)) / 100) * 100) / 100)}</span>
+                <span>Subtotal</span>
+                <span>{formatPrice(subtotal)}</span>
               </div>
-            )}
-            <div className="flex justify-between text-white font-semibold text-sm pt-2 border-t border-white/[0.08]">
-              <span>Estimated Total</span>
-              <span className="text-amber-400">{formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
+              {(typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) > 0 && (
+                <div className="flex justify-between text-white/60">
+                  <span>GST / Taxes ({typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5}%)</span>
+                  <span>{formatPrice(Math.round(subtotal * (((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5)) / 100) * 100) / 100)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-white font-semibold text-xs pt-2 border-t border-white/[0.08]">
+                <span>Total Payable</span>
+                <span className="text-amber-400">{formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
+              </div>
             </div>
-          </div>
 
-          <Button
-            variant="brand"
-            disabled={isSubmittingOrder || cart.length === 0}
-            onClick={handleCheckout}
-            className="w-full py-3.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmittingOrder ? 'Transmitting Order...' : 'Confirm & Send to Kitchen'}
-          </Button>
+            {/* Inline Age Requirement Checkbox if Bar or Hookah items present */}
+            {cart.some((c) => c.item.isAlcoholic || c.item.targetDestination === 'BAR' || c.item.targetDestination === 'HOOKAH') && (
+              <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isAgeConfirmed}
+                  onChange={(e) => {
+                    setIsAgeConfirmed(e.target.checked);
+                    if (typeof window !== 'undefined' && e.target.checked) {
+                      sessionStorage.setItem('dinely_age_verified', 'true');
+                    }
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded text-amber-500 focus:ring-0 bg-black/40 border-amber-400/40"
+                />
+                <span className="leading-tight">
+                  I confirm I meet statutory age requirements (21+ Bar / 18+ Hookah). Valid ID required upon delivery.
+                </span>
+              </label>
+            )}
+
+            {/* Single Clear Primary Action: Place Order */}
+            <button
+              disabled={isSubmittingOrder || cart.length === 0 || (cart.some((c) => c.item.isAlcoholic || c.item.targetDestination === 'BAR' || c.item.targetDestination === 'HOOKAH') && !isAgeConfirmed)}
+              onClick={handleCheckout}
+              className="w-full py-3.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmittingOrder ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Transmitting Order to Kitchen...</span>
+                </>
+              ) : (
+                <>
+                  <span>Place Order · {formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      </Modal>
+      )}
 
       {/* Table Switcher Modal */}
       <Modal
@@ -1608,64 +1748,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 <span className="text-[10px] text-white/40">{t.section || 'Main Area'}</span>
               </button>
             ))}
-          </div>
-        </div>
-      </Modal>
-
-      {/* Legal Age Confirmation Modal */}
-      <Modal
-        isOpen={isAgeModalOpen}
-        onClose={() => setIsAgeModalOpen(false)}
-        title={pendingAgeTab === 'HOOKAH' ? "Age Verification (Hookah & Shisha 18+)" : "Age Verification (Bar 21+)"}
-      >
-        <div className="space-y-4 text-xs font-sans">
-          <div className="p-4 bg-[#12151b] border border-white/[0.08] rounded-xl space-y-2">
-            <div className="flex items-center gap-2 font-semibold text-amber-400 text-xs">
-              {pendingAgeTab === 'HOOKAH' ? <Flame className="w-4 h-4 text-amber-400" /> : <Wine className="w-4 h-4 text-amber-400" />}
-              <span>Age Verification Required</span>
-            </div>
-            <p className="text-xs text-white/60 leading-relaxed">
-              {pendingAgeTab === 'HOOKAH'
-                ? "Before viewing or ordering from our Hookah & Shisha lounge catalog, please confirm that you meet the statutory age requirement (18+ / 21+ depending on regional law). Hookah products are served exclusively to eligible adults."
-                : "Before viewing or ordering from our craft beverage and cocktail menu, please confirm that you are of legal drinking age in your jurisdiction (21+)."}
-            </p>
-            <p className="text-[10px] text-amber-400/80 font-mono italic">
-              Notice: Lounge staff may verify official government photo identification upon table delivery.
-            </p>
-          </div>
-
-          <div className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="ageCheckbox"
-              className="w-4 h-4 rounded border-white/20 bg-black/40 text-amber-500 focus:ring-amber-500"
-              defaultChecked={true}
-            />
-            <label htmlFor="ageCheckbox" className="text-xs text-white/80 font-medium cursor-pointer">
-              {pendingAgeTab === 'HOOKAH'
-                ? "I confirm I am of legal age to purchase and consume hookah products."
-                : "I confirm I am of legal drinking age (21+)."}
-            </label>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsAgeModalOpen(false)}
-              className="border-white/[0.08] text-white/60 hover:text-white"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="brand"
-              size="sm"
-              onClick={handleConfirmAge}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold"
-              icon={pendingAgeTab === 'HOOKAH' ? <Flame className="w-4 h-4" /> : <Wine className="w-4 h-4" />}
-            >
-              {pendingAgeTab === 'HOOKAH' ? "Confirm & Enter Hookah Lounge" : "Confirm & Enter Bar Menu"}
-            </Button>
           </div>
         </div>
       </Modal>

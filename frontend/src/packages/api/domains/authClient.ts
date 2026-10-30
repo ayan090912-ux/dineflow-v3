@@ -368,8 +368,9 @@ export class AuthClient {
     const staffUserId = authResponse.staff_user_id || `staff-${cleanUsername}`;
     const targetRoute = authResponse.target_route || (
       role === 'WAITER' ? '/waiter' :
-      (role === 'KITCHEN' || role === 'CHEF') ? '/kitchen' :
+      (role === 'KITCHEN' || role === 'CHEF' || role === 'COOK') ? '/kitchen' :
       (role === 'BAR' || role === 'BARTENDER') ? '/bar' :
+      (role === 'HOOKAH' || role === 'SHISHA' || role === 'HOOKAH_STAFF' || role === 'SHISHA_STAFF') ? '/hookah' :
       role === 'INVENTORY' ? '/inventory' : '/billing'
     );
 
@@ -384,14 +385,15 @@ export class AuthClient {
       id: staffUserId,
       name: authResponse.name || cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
       email: authResponse.user?.email || `${cleanUsername}@staff.dinely.internal`,
-      role: (role === 'KITCHEN' ? 'CHEF' : role === 'BAR' ? 'BARTENDER' : role) as any,
+      role: (role === 'KITCHEN' ? 'CHEF' : role === 'BAR' ? 'BARTENDER' : role === 'HOOKAH' || role === 'SHISHA' ? 'HOOKAH' : role) as any,
       restaurantId: restId,
       tokens,
     };
     (staffUser as any).scope = 'STAFF';
 
-    const portalScope = (role === 'KITCHEN' || role === 'CHEF') ? 'KITCHEN'
+    const portalScope = (role === 'KITCHEN' || role === 'CHEF' || role === 'COOK') ? 'KITCHEN'
       : (role === 'BAR' || role === 'BARTENDER') ? 'BAR'
+      : (role === 'HOOKAH' || role === 'SHISHA' || role === 'HOOKAH_STAFF' || role === 'SHISHA_STAFF') ? 'HOOKAH'
       : (role === 'INVENTORY') ? 'INVENTORY'
       : (role === 'CASHIER' || role === 'BILLING') ? 'ADMIN'
       : 'WAITER' as PortalScope;
@@ -422,6 +424,10 @@ export class AuthClient {
       localStorage.setItem('dinely_active_scope', 'STAFF');
       localStorage.setItem('dinely_staff_token', token);
       localStorage.setItem(`dinely_staff_token_${portalScope.toLowerCase()}`, token);
+      if (portalScope === 'HOOKAH') {
+        localStorage.setItem('dinely_staff_token_hookah', token);
+        localStorage.setItem('dinely_staff_token_shisha', token);
+      }
       localStorage.setItem('dinely_active_restaurant_id', restId);
       localStorage.setItem('dinely_user_staff', JSON.stringify(staffUser));
       localStorage.setItem(`dinely_user_${portalScope.toLowerCase()}`, JSON.stringify(staffUser));

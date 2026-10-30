@@ -363,19 +363,36 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         const payloadData = (event as any).payload || event;
         const incomingOrder = payloadData.order || (payloadData.id ? payloadData : (event as any).order);
         const orderId = payloadData.orderId || payloadData.order_id || incomingOrder?.id || (event as any).orderId || (event as any).order_id;
+        const station = (payloadData.station || (event as any).station || '').toUpperCase();
+        const stationPatch: any = { status: 'READY' };
+        if (station === 'HOOKAH') {
+          stationPatch.hookahStatus = 'READY';
+          stationPatch.hookahWaiterRequested = true;
+        } else if (station === 'BAR') {
+          stationPatch.barStatus = 'READY';
+          stationPatch.barWaiterRequested = true;
+        } else if (station === 'KITCHEN') {
+          stationPatch.kitchenStatus = 'READY';
+          stationPatch.kitchenWaiterRequested = true;
+        } else {
+          if (incomingOrder?.kitchenStatus) stationPatch.kitchenStatus = incomingOrder.kitchenStatus;
+          if (incomingOrder?.barStatus) stationPatch.barStatus = incomingOrder.barStatus;
+          if (incomingOrder?.hookahStatus) stationPatch.hookahStatus = incomingOrder.hookahStatus;
+        }
+
         if (incomingOrder && incomingOrder.id) {
           setOrders((prev) => {
             const exists = prev.some((o) => o.id === incomingOrder.id);
             if (exists) {
-              return prev.map((o) => (o.id === incomingOrder.id ? { ...o, ...incomingOrder, status: 'READY', kitchenStatus: 'READY' } : o));
+              return prev.map((o) => (o.id === incomingOrder.id ? { ...o, ...incomingOrder, ...stationPatch } : o));
             }
-            return [{ ...incomingOrder, status: 'READY', kitchenStatus: 'READY' }, ...prev];
+            return [{ ...incomingOrder, ...stationPatch }, ...prev];
           });
         } else if (orderId) {
           setOrders((prev) => {
             const exists = prev.some((o) => o.id === orderId);
             if (exists) {
-              return prev.map((o) => (o.id === orderId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o));
+              return prev.map((o) => (o.id === orderId ? { ...o, ...stationPatch } : o));
             }
             return prev;
           });
@@ -388,26 +405,67 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
           }).catch(() => {});
         }
         showToast(
-          'Order Plated & Ready 🔥',
-          `Order for ${tblNum} is ready for pickup`,
+          station ? `${station} Item Ready 🛎️` : 'Order Plated & Ready 🔥',
+          `Order for ${tblNum} is ready for collection`,
           'success'
         );
       } else if (event.type === 'order_delivered' || event.type === 'OrderDelivered') {
         const payloadData = (event as any).payload || event;
         const orderId = payloadData.orderId || payloadData.order_id || payloadData.id || (event as any).orderId || (event as any).order_id;
+        const station = (payloadData.station || (event as any).station || '').toUpperCase();
         if (orderId) {
           setOrders((prev) =>
-            prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED' } : o))
+            prev.map((o) => {
+              if (o.id !== orderId) return o;
+              if (station === 'HOOKAH') {
+                return { ...o, hookahStatus: 'COMPLETED' };
+              }
+              if (station === 'BAR') {
+                return { ...o, barStatus: 'COMPLETED' };
+              }
+              if (station === 'KITCHEN') {
+                return { ...o, kitchenStatus: 'COMPLETED' };
+              }
+              return {
+                ...o,
+                status: 'DELIVERED',
+                deliveryStatus: 'DELIVERED',
+                kitchenStatus: 'COMPLETED',
+                barStatus: 'COMPLETED',
+                hookahStatus: 'COMPLETED',
+              };
+            })
           );
         }
-      } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
+      } else if (
+        event.type === 'order_status_updated' ||
+        event.type === 'OrderStatusUpdated' ||
+        event.type === 'HookahStatusUpdated' ||
+        event.type === 'BarStatusUpdated'
+      ) {
         const payloadData = (event as any).payload || event;
         const orderId = (event as any).orderId || (event as any).order_id || payloadData.orderId || payloadData.order_id || payloadData.id;
         const newStatus = (event as any).status || payloadData.status;
         const newKitchenStatus = (event as any).kitchenStatus || payloadData.kitchenStatus;
+        const newBarStatus = (event as any).barStatus || payloadData.barStatus;
+        const newHookahStatus = (event as any).hookahStatus || payloadData.hookahStatus;
+        const newDeliveryStatus = (event as any).deliveryStatus || payloadData.deliveryStatus || (event as any).delivery_status;
+        const newClaimedBy = (event as any).claimedBy || payloadData.claimedBy || (event as any).claimed_by;
+
         if (orderId) {
           setOrders((prev) =>
-            prev.map((o) => (o.id === orderId ? { ...o, status: newStatus || o.status, kitchenStatus: newKitchenStatus || o.kitchenStatus } : o))
+            prev.map((o) => {
+              if (o.id !== orderId) return o;
+              return {
+                ...o,
+                status: newStatus || o.status,
+                kitchenStatus: newKitchenStatus !== undefined ? newKitchenStatus : o.kitchenStatus,
+                barStatus: newBarStatus !== undefined ? newBarStatus : o.barStatus,
+                hookahStatus: newHookahStatus !== undefined ? newHookahStatus : o.hookahStatus,
+                deliveryStatus: newDeliveryStatus || o.deliveryStatus,
+                claimedBy: newClaimedBy || o.claimedBy,
+              };
+            })
           );
         }
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
@@ -786,30 +844,30 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
     if (hasKitchen) {
       if (o.kitchenStatus === 'READY' || o.kitchenStatus === 'COMPLETED') {
-        kitchenItems.forEach((i) => readyItems.push({ item: i, station: 'Kitchen' }));
+        kitchenItems.forEach((i) => readyItems.push({ item: i, station: 'KITCHEN' }));
       } else {
         kitchenItems.forEach((i) =>
-          outstandingItems.push({ item: i, station: 'Kitchen', stationStatus: o.kitchenStatus || 'Cooking' })
+          outstandingItems.push({ item: i, station: 'KITCHEN', stationStatus: o.kitchenStatus || 'Cooking' })
         );
       }
     }
 
     if (hasBar) {
       if (o.barStatus === 'READY' || o.barStatus === 'COMPLETED') {
-        barItems.forEach((i) => readyItems.push({ item: i, station: 'Bar' }));
+        barItems.forEach((i) => readyItems.push({ item: i, station: 'BAR' }));
       } else {
         barItems.forEach((i) =>
-          outstandingItems.push({ item: i, station: 'Bar', stationStatus: o.barStatus || 'Mixology' })
+          outstandingItems.push({ item: i, station: 'BAR', stationStatus: o.barStatus || 'Mixology' })
         );
       }
     }
 
     if (hasHookah) {
       if (o.hookahStatus === 'READY' || o.hookahStatus === 'COMPLETED') {
-        hookahItems.forEach((i) => readyItems.push({ item: i, station: 'Hookah' }));
+        hookahItems.forEach((i) => readyItems.push({ item: i, station: 'HOOKAH' }));
       } else {
         hookahItems.forEach((i) =>
-          outstandingItems.push({ item: i, station: 'Hookah', stationStatus: o.hookahStatus || 'Heating' })
+          outstandingItems.push({ item: i, station: 'HOOKAH', stationStatus: o.hookahStatus || 'Heating' })
         );
       }
     }

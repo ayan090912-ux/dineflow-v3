@@ -294,10 +294,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   // Analytics State
   const [analytics, setAnalytics] = useState<any>(null);
 
-  // Sync initial prop orders only when non-empty
+  // Sync initial prop orders only when internal orders are empty
   useEffect(() => {
     if (initialOrders && Array.isArray(initialOrders) && initialOrders.length > 0) {
-      setOrders(initialOrders);
+      setOrders((prev) => (prev.length === 0 ? initialOrders : prev));
     }
   }, [initialOrders]);
 
@@ -328,15 +328,18 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   // Subscribe to Realtime Bus Events & Background Polling (Scoped by restaurant_id)
   // NOTE: Empty dependency array — this effect registers ONCE and reads mute state via ref
   useEffect(() => {
-    const currentRestId = api.getCurrentRestaurantId() || '';
+    const currentRestId = restaurant?.id || api.getCurrentRestaurantId() || '';
     if (currentRestId) {
+      if (!api.getCurrentRestaurantId()) {
+        api.setCurrentRestaurantId(currentRestId);
+      }
       realtimeBus.connect(currentRestId, 'KITCHEN');
     }
 
     // fetchFreshOrders refreshes data silently. It NEVER plays sound.
     // Sounds are ONLY triggered by genuine backend WS events (order_created).
     const fetchFreshOrders = () => {
-      const restId = currentRestId || undefined;
+      const restId = currentRestId || restaurant?.id || undefined;
       const isNotWeddingBusiness = (restaurant as any)?.businessType !== 'WEDDING_ORDERING';
       api.getOrders(restId, { station: 'KITCHEN', excludeEvents: isNotWeddingBusiness }).then((freshOrders) => {
         if (!freshOrders) return;
@@ -353,18 +356,29 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     // Mark initialized after first load so subsequent events can play sound
     setTimeout(() => { hasInitializedRef.current = true; }, 2000);
 
-    const pollInterval = setInterval(fetchFreshOrders, 30000);
+    const pollInterval = setInterval(fetchFreshOrders, 15000);
 
     // Per-session event deduplication (stable across re-renders, reset only on full effect re-registration)
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event: RealTimeEventPayload) => {
       const evtRestId = event.restaurantId || (event as any).restaurant_id;
-      if (evtRestId && currentRestId && String(evtRestId).toLowerCase() !== String(currentRestId).toLowerCase()) {
+      const currentIdStr = String(currentRestId || '').toLowerCase();
+      const restIdStr = restaurant?.id ? String(restaurant.id).toLowerCase() : '';
+      const restSlugStr = restaurant?.slug ? String(restaurant.slug).toLowerCase() : '';
+
+      const restMatches =
+        !evtRestId ||
+        !currentIdStr ||
+        String(evtRestId).toLowerCase() === currentIdStr ||
+        (restIdStr && String(evtRestId).toLowerCase() === restIdStr) ||
+        (restSlugStr && String(evtRestId).toLowerCase() === restSlugStr);
+
+      if (!restMatches) {
         return;
       }
       // Skip events targeted at other stations
-      if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station === 'BAR') {
+      if ((event as any).type === 'FulfillmentTicketUpdated' && (event as any).station && (event as any).station !== 'KITCHEN') {
         return;
       }
 
@@ -439,6 +453,19 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           }
           playKitchenChime('NEW_ORDER');
         }
+
+        // Optimistically append order if it contains kitchen items
+        const rawOrder = event.data || (event as any).payload || (event as any).order;
+        if (rawOrder && Array.isArray(rawOrder.items)) {
+          const hasKitchenItems = rawOrder.items.some((item: any) => getFulfillmentStation(item) === 'KITCHEN');
+          if (hasKitchenItems) {
+            setOrders((prev) => {
+              if (prev.some((o) => o.id === (rawOrder.id || orderId))) return prev;
+              return [rawOrder, ...prev];
+            });
+          }
+        }
+
         // Reload data silently (no sound from fetchFreshOrders)
         fetchFreshOrders();
       } else if (event.type === 'TableMerged') {

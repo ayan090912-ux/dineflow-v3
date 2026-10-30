@@ -495,12 +495,22 @@ export class BaseApiClient {
     } else {
       token = await getValidFirebaseIdToken(false);
       if (!token && typeof window !== 'undefined') {
-        token = localStorage.getItem('dinely_auth_token') ||
-                localStorage.getItem(`dinely_staff_token_${targetScope.toLowerCase()}`) ||
-                localStorage.getItem('dinely_staff_token_staff') ||
-                this.currentTokensByScope[targetScope]?.accessToken ||
-                this.currentTokensByScope['STAFF']?.accessToken ||
-                this.currentTokensByScope['OWNER']?.accessToken || null;
+        const scopeLower = targetScope.toLowerCase();
+        token =
+          localStorage.getItem(`dinely_staff_token_${scopeLower}`) ||
+          sessionStorage.getItem(`dinely_staff_token_${scopeLower}`) ||
+          (targetScope === 'KITCHEN' ? (localStorage.getItem('dinely_staff_token_chef') || sessionStorage.getItem('dinely_staff_token_chef')) : null) ||
+          (targetScope === 'BAR' ? (localStorage.getItem('dinely_staff_token_bartender') || sessionStorage.getItem('dinely_staff_token_bartender')) : null) ||
+          (targetScope === 'HOOKAH' ? (localStorage.getItem('dinely_staff_token_shisha') || sessionStorage.getItem('dinely_staff_token_shisha')) : null) ||
+          localStorage.getItem('dinely_staff_token') ||
+          sessionStorage.getItem('dinely_staff_token') ||
+          localStorage.getItem('dinely_staff_token_staff') ||
+          localStorage.getItem('dinely_auth_token') ||
+          sessionStorage.getItem('dinely_auth_token') ||
+          this.currentTokensByScope[targetScope]?.accessToken ||
+          this.currentTokensByScope['STAFF']?.accessToken ||
+          this.currentTokensByScope['OWNER']?.accessToken ||
+          null;
       }
 
       const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope);
@@ -714,7 +724,7 @@ export class BaseApiClient {
 
   public clearAllAuthSessions() {
     this.currentUser = null;
-    (['ADMIN', 'OWNER', 'KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF', 'CUSTOMER'] as PortalScope[]).forEach((s) => {
+    (['ADMIN', 'OWNER', 'KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF', 'CUSTOMER'] as PortalScope[]).forEach((s) => {
       delete this.currentUsersByScope[s];
       delete this.currentTokensByScope[s];
       if (typeof window !== 'undefined') {
@@ -856,16 +866,20 @@ export class BaseApiClient {
       return directUser;
     }
 
-    if (['KITCHEN', 'WAITER', 'BAR', 'INVENTORY', 'STAFF'].includes(targetScope)) {
+    if (['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope)) {
       const staffUser = this.currentUsersByScope['STAFF'] || this.restoreSession('STAFF');
       if (staffUser) return staffUser;
 
-      for (const s of ['KITCHEN', 'WAITER', 'BAR', 'INVENTORY'] as PortalScope[]) {
+      for (const s of ['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY'] as PortalScope[]) {
         if (s !== targetScope) {
           const u = this.currentUsersByScope[s] || this.restoreSession(s);
           if (u) return u;
         }
       }
+
+      const ownerUser = this.currentUsersByScope['OWNER'] || this.restoreSession('OWNER');
+      if (ownerUser) return ownerUser;
+
       return null;
     }
 

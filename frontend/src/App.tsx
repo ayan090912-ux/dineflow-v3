@@ -90,7 +90,8 @@ function PlatformTenantRedirector({
           );
 
           const matchingRest = api.restaurants.find((res) => res.id === user?.restaurantId);
-          if (matchingRest?.slug) {
+          const isDev = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.endsWith('.localhost'));
+          if (!isDev && matchingRest?.slug) {
             window.location.replace(`https://${matchingRest.slug}.dinely.food${terminalRoute}`);
             return;
           }
@@ -963,11 +964,6 @@ function AppContent() {
         return (
           <KitchenETADashboard
             restaurant={resolvedTenant}
-            orders={kitchenOrders.length > 0 ? kitchenOrders : undefined}
-            onRefreshOrders={() => {
-              const restId = api.getCurrentRestaurantId() || currentUser?.restaurantId || resolvedTenant?.id || undefined;
-              if (restId) api.getOrders(restId).then(setKitchenOrders).catch(() => {});
-            }}
             onLogout={() => handleLogout('/staff/login')}
           />
         );
@@ -1522,7 +1518,7 @@ function AppContent() {
           onNavigate={navigateTo}
           onLoginSuccess={(_, user) => {
             setCurrentUser(user);
-            navigateTo('/bar/dashboard');
+            navigateTo('/bar');
           }}
         />
       );
@@ -1961,7 +1957,8 @@ function AppContent() {
           r === 'INVENTORY' ? '/inventory' : '/waiter'
         );
         const matchingRest = api.restaurants.find((res) => res.id === currentUser?.restaurantId);
-        if (matchingRest?.slug) {
+        const isDev = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.endsWith('.localhost'));
+        if (!isDev && matchingRest?.slug) {
           window.location.replace(`https://${matchingRest.slug}.dinely.food${terminalRoute}`);
           return null;
         }

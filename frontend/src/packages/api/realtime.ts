@@ -106,12 +106,21 @@ function getWebSocketUrl(restaurantId: string, role: string = 'CUSTOMER', tableS
   let host = 'dinely.food';
 
   const cleanRole = (role || 'CUSTOMER').trim().toUpperCase();
+  const roleLower = cleanRole.toLowerCase();
   const token = explicitToken || (typeof window !== 'undefined'
     ? (
-        localStorage.getItem(`dinely_staff_token_${cleanRole.toLowerCase()}`) ||
+        localStorage.getItem(`dinely_staff_token_${roleLower}`) ||
+        sessionStorage.getItem(`dinely_staff_token_${roleLower}`) ||
+        (cleanRole === 'KITCHEN' ? (localStorage.getItem('dinely_staff_token_chef') || sessionStorage.getItem('dinely_staff_token_chef')) : null) ||
+        (cleanRole === 'BAR' ? (localStorage.getItem('dinely_staff_token_bartender') || sessionStorage.getItem('dinely_staff_token_bartender')) : null) ||
+        (cleanRole === 'HOOKAH' ? (localStorage.getItem('dinely_staff_token_shisha') || sessionStorage.getItem('dinely_staff_token_shisha')) : null) ||
+        localStorage.getItem('dinely_staff_token') ||
+        sessionStorage.getItem('dinely_staff_token') ||
+        localStorage.getItem('dinely_staff_token_staff') ||
         localStorage.getItem('dinely_platform_admin_id_token') ||
         sessionStorage.getItem('dinely_admin_token') ||
         localStorage.getItem('dinely_auth_token') ||
+        sessionStorage.getItem('dinely_auth_token') ||
         ''
       )
     : '');

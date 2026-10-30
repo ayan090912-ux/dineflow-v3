@@ -92,7 +92,7 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     subtitle: 'Beverage queue, drinks preparation & bar dispatch',
     roleBadge: 'BAR_TERMINAL',
     icon: <Wine className="w-5 h-5 text-indigo-300" />,
-    targetDashboard: '/bar/dashboard',
+    targetDashboard: '/bar',
     identifierLabel: 'Staff Username',
     identifierPlaceholder: 'e.g. bartender_sam or username',
   },

@@ -963,19 +963,31 @@ export type FulfillmentStation = 'KITCHEN' | 'BAR' | 'HOOKAH';
 
 export function getFulfillmentStation(item: {
   targetDestination?: string;
+  target_destination?: string;
+  station?: string;
   isAlcoholic?: boolean;
+  is_alcoholic?: boolean;
   category?: string;
   barCategory?: string;
+  categoryName?: string;
   name?: string;
 }): 'KITCHEN' | 'BAR' | 'HOOKAH' {
-  const dest = (item.targetDestination || '').toUpperCase();
-  if (dest === 'HOOKAH') {
+  const dest = (
+    item.targetDestination ||
+    (item as any).target_destination ||
+    (item as any).station ||
+    ''
+  ).toUpperCase();
+  if (dest === 'HOOKAH' || dest === 'SHISHA') {
     return 'HOOKAH';
   }
-  if (dest === 'BAR' || item.isAlcoholic === true) {
+  if (dest === 'BAR' || item.isAlcoholic === true || (item as any).is_alcoholic === true) {
     return 'BAR';
   }
-  const cat = (item.category || item.barCategory || '').toLowerCase();
+  if (dest === 'KITCHEN' || dest === 'COOK' || dest === 'CHEF') {
+    return 'KITCHEN';
+  }
+  const cat = (item.category || item.barCategory || (item as any).categoryName || '').toLowerCase();
   const name = (item.name || '').toLowerCase();
   if (cat.includes('hookah') || cat.includes('shisha') || name.includes('hookah') || name.includes('shisha')) {
     return 'HOOKAH';

@@ -13,6 +13,7 @@ import {
   Utensils,
   ChevronRight,
   ShieldAlert,
+  Bell,
 } from 'lucide-react';
 import { Card, Badge, Button, Input } from '../../packages/ui';
 import { Order, MenuItem, WeddingEvent, getFulfillmentStation } from '../../packages/types';
@@ -83,6 +84,24 @@ export const EventBarTerminal: React.FC<EventBarTerminalProps> = ({
       ready: readyCount,
       completed: completedCount,
     };
+  }, [barOrders]);
+
+  const activeOrders = useMemo(() => {
+    return barOrders.filter((o) => {
+      const bStatus = o.barStatus || 'PENDING';
+      const isFinished = bStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.deliveryStatus === 'DELIVERED';
+      if (isFinished) return false;
+      return bStatus !== 'READY';
+    });
+  }, [barOrders]);
+
+  const sentToWaiterOrders = useMemo(() => {
+    return barOrders.filter((o) => {
+      const bStatus = o.barStatus || 'PENDING';
+      const isFinished = bStatus === 'COMPLETED' || o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.deliveryStatus === 'DELIVERED';
+      if (isFinished) return false;
+      return bStatus === 'READY';
+    });
   }, [barOrders]);
 
   // Filtered orders
@@ -213,238 +232,190 @@ export const EventBarTerminal: React.FC<EventBarTerminalProps> = ({
         </div>
       )}
 
-      {/* Station KPI Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="p-4 rounded-xl bg-[#14121f] border border-purple-900/30">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-purple-300/70">Pending Mixing</div>
-          <div className="text-2xl font-bold font-serif text-amber-400 mt-1">{summary.pending}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">Awaiting bar intake</div>
-        </Card>
-
-        <Card className="p-4 rounded-xl bg-[#14121f] border border-purple-900/30">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-purple-300/70">In Preparation</div>
-          <div className="text-2xl font-bold font-serif text-purple-300 mt-1">{summary.preparing}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">Pouring & shaker active</div>
-        </Card>
-
-        <Card className="p-4 rounded-xl bg-[#14121f] border border-purple-900/30">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-purple-300/70">Drinks Ready</div>
-          <div className="text-2xl font-bold font-serif text-emerald-400 mt-1">{summary.ready}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">At pickup counter</div>
-        </Card>
-
-        <Card className="p-4 rounded-xl bg-[#14121f] border border-purple-900/30">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-purple-300/70">Total Drinks Shift</div>
-          <div className="text-2xl font-bold font-serif text-white mt-1">{summary.total}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">{summary.completed} delivered</div>
-        </Card>
-      </div>
-
-      {/* Control Bar: Filters & Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          {[
-            { id: 'ACTIVE', label: 'Active Queue', count: summary.pending + summary.preparing + summary.ready },
-            { id: 'PENDING', label: 'Pending', count: summary.pending },
-            { id: 'PREPARING', label: 'Mixing', count: summary.preparing },
-            { id: 'READY', label: 'Ready', count: summary.ready },
-            { id: 'ALL', label: 'All Orders', count: summary.total },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id as any)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-serif font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                statusFilter === tab.id
-                  ? 'bg-purple-600 text-white font-bold shadow-md shadow-purple-900/30'
-                  : 'bg-[#151322] border border-purple-900/30 text-purple-200/70 hover:text-white hover:bg-purple-950/40'
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${
-                statusFilter === tab.id ? 'bg-purple-800 text-white' : 'bg-[#1f1a33] text-purple-300'
-              }`}>
-                {tab.count}
+      {/* SECTION 1: ACTIVE ORDERS (Top, Full Width, Single Column) */}
+      <section className="space-y-2.5 w-full" style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+        <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.08] w-full">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold font-mono tracking-wider text-white uppercase flex items-center gap-2">
+              <span>ACTIVE ORDERS</span>
+              <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                {activeOrders.length}
               </span>
-            </button>
-          ))}
+            </h2>
+          </div>
         </div>
 
-        <div className="relative min-w-[200px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-purple-400" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search table or drink..."
-            className="pl-9 h-9 text-xs bg-[#13111f] border-purple-900/30 text-white placeholder:text-slate-500 rounded-xl"
-          />
-        </div>
-      </div>
+        {activeOrders.length === 0 ? (
+          <div className="py-2.5 px-3 rounded-lg bg-[#0e121a]/60 border border-white/[0.06] text-xs text-slate-400 font-mono">
+            No active orders. New orders appear here automatically.
+          </div>
+        ) : (
+          <div className="w-full flex flex-col space-y-2" style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+            {activeOrders.map((order) => {
+              const bStatus = order.barStatus || 'PENDING';
+              const isPreparing = bStatus === 'PREPARING';
+              const isNew = !isPreparing;
+              const barItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
+              const displayItems = barItems.length > 0 ? barItems : (order.items || []);
+              const isUpdating = updatingOrderId === order.id;
 
-      {/* Orders Grid */}
-      {filteredOrders.length === 0 ? (
-        <div className="p-16 text-center bg-[#13111f] rounded-2xl border border-purple-950/40 space-y-3">
-          <Wine className="w-10 h-10 text-purple-600/50 mx-auto" />
-          <h3 className="text-base font-serif font-bold text-white">Bar Queue Clear</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            {searchQuery
-              ? `No drink orders match "${searchQuery}".`
-              : 'There are no active beverage orders awaiting bar preparation right now.'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredOrders.map((order) => {
-            const bStatus = order.barStatus || 'PENDING';
-            const barItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
-            const displayItems = barItems.length > 0 ? barItems : (order.items || []);
-            const isUpdating = updatingOrderId === order.id;
-
-            // Multi-station status indicators for parent order
-            const kStatus = order.kitchenStatus;
-            const hStatus = order.hookahStatus;
-
-            return (
-              <Card
-                key={order.id}
-                className={`p-4 rounded-2xl bg-[#13111f] border transition-all space-y-4 flex flex-col justify-between ${
-                  bStatus === 'READY'
-                    ? 'border-emerald-500/40 bg-[#12181b]'
-                    : bStatus === 'PREPARING'
-                    ? 'border-purple-500/60 bg-[#171328] shadow-lg shadow-purple-950/40'
-                    : 'border-amber-500/40 bg-[#17131d]'
-                }`}
-              >
-                <div className="space-y-3">
-                  {/* Top: Table & Elapsed */}
-                  <div className="flex items-center justify-between border-b border-[#231d38] pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-serif font-bold text-base text-white bg-purple-900/40 px-2.5 py-1 rounded-lg border border-purple-500/30">
+              return (
+                <div
+                  key={order.id}
+                  className={`w-full rounded-xl border p-3 sm:p-3.5 transition-all shadow-sm ${
+                    isNew
+                      ? 'bg-[#0e121a] border-amber-500/40 hover:border-amber-400'
+                      : 'bg-[#0e141f] border-amber-500/30 hover:border-amber-400/50'
+                  }`}
+                  style={{ width: '100%' }}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 w-full">
+                    {/* Left: Table, Order #, Elapsed, Status */}
+                    <div className="flex items-center flex-wrap gap-2 sm:gap-2.5 shrink-0">
+                      <span className="px-2.5 py-1 rounded-md text-sm font-black font-mono bg-white/10 text-white border border-white/20">
                         Table {cleanTableBadge(order.tableNumber)}
                       </span>
-                      {order.customerName && (
-                        <span className="text-xs text-purple-200/80 font-medium truncate max-w-[120px]">
-                          {order.customerName}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-purple-400" />
+                      <span className="text-xs font-bold font-mono text-slate-300">
+                        #{order.id.slice(-4)}
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
+                        <Clock className="w-3 h-3 text-slate-500" />
                         {formatElapsed(order.createdAt)}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-500">#{order.id.slice(-6)}</span>
-                    </div>
-                  </div>
-
-                  {/* Multi-Station Context Badge */}
-                  {(kStatus || hStatus) && (
-                    <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                      <span className="text-slate-400">Other Stations:</span>
-                      {kStatus && (
-                        <span className={`px-1.5 py-0.5 rounded ${
-                          kStatus === 'READY' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-[#1e1b2b] text-slate-400'
-                        }`}>
-                          Kitchen: {kStatus}
+                      {isNew ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                          NEW
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-500/20 text-amber-200 border border-amber-500/40 flex items-center gap-1">
+                          <Wine className="w-3 h-3 text-amber-400" />
+                          PREPARING
                         </span>
                       )}
-                      {hStatus && (
-                        <span className={`px-1.5 py-0.5 rounded ${
-                          hStatus === 'READY' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-[#1e1b2b] text-slate-400'
-                        }`}>
-                          Hookah: {hStatus}
+                      {order.customerName && (
+                        <span className="text-[11px] text-slate-400 font-medium truncate max-w-[120px]">
+                          ({order.customerName})
                         </span>
                       )}
                     </div>
-                  )}
 
-                  {/* Drinks Items List */}
-                  <div className="space-y-2 py-1">
-                    {displayItems.map((item, idx) => (
-                      <div key={idx} className="bg-[#1b172d] p-2 rounded-xl border border-purple-900/30 flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <div className="text-sm font-medium text-white flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 text-xs flex items-center justify-center font-bold">
-                              {item.quantity}
-                            </span>
-                            <span>{item.name}</span>
-                          </div>
-                          {item.notes && (
-                            <div className="text-[11px] text-amber-300/90 pl-7 italic">
-                              "{item.notes}"
-                            </div>
-                          )}
-                        </div>
-
-                        {item.isAlcoholic ? (
-                          <span className="text-[9px] font-mono uppercase bg-purple-900/50 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/30">
-                            Alcoholic
+                    {/* Center: Items & Instructions */}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white">
+                        {displayItems.map((item, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1">
+                            <strong className="text-amber-400 font-mono">{item.quantity}×</strong>
+                            <span className="font-medium">{item.name}</span>
+                            {item.notes && <span className="text-xs text-amber-300 italic">"{item.notes}"</span>}
                           </span>
-                        ) : (
-                          <span className="text-[9px] font-mono uppercase bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">
-                            Beverage
-                          </span>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
-
-                  {order.notes && (
-                    <div className="text-xs text-slate-400 bg-[#161224] p-2 rounded-lg border border-purple-950">
-                      <span className="text-purple-400 font-medium">Guest Note:</span> {order.notes}
+                      {order.notes && (
+                        <div className="inline-flex items-center gap-1 text-[11px] bg-rose-500/15 text-rose-200 px-2 py-0.5 rounded border border-rose-500/30 max-w-full">
+                          <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
+                          <span className="truncate"><strong>Note:</strong> {order.notes}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
 
-                {/* Bottom Actions */}
-                <div className="pt-2 border-t border-[#231d38] flex items-center justify-between gap-2">
-                  <Badge
-                    variant={
-                      bStatus === 'READY' ? 'success' : bStatus === 'PREPARING' ? 'brand' : 'warning'
-                    }
-                    className="text-[10px] font-mono tracking-wider"
-                  >
-                    {bStatus === 'ACCEPTED' ? 'PENDING' : bStatus}
-                  </Badge>
-
-                  <div className="flex items-center gap-2">
-                    {bStatus !== 'PREPARING' && bStatus !== 'READY' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isUpdating}
-                        onClick={() => handleAdvance(order.id, 'PREPARING')}
-                        className="text-xs border-purple-500/50 text-purple-200 hover:bg-purple-900/40"
-                      >
-                        Start Mixing
-                      </Button>
-                    )}
-
-                    {bStatus === 'PREPARING' && (
-                      <Button
-                        size="sm"
-                        variant="brand"
-                        disabled={isUpdating}
-                        onClick={() => handleAdvance(order.id, 'READY')}
-                        className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                      >
-                        Drinks Ready ✓
-                      </Button>
-                    )}
-
-                    {bStatus === 'READY' && (
-                      <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        Ready for Runner
-                      </span>
-                    )}
+                    {/* Right: Action */}
+                    <div className="shrink-0 flex items-center gap-2">
+                      {isNew ? (
+                        <button
+                          type="button"
+                          onClick={() => handleAdvance(order.id, 'PREPARING')}
+                          disabled={isUpdating}
+                          className="px-4 py-2 rounded-lg font-bold font-mono text-xs tracking-wider bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {isUpdating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>START PREPARING</span>}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAdvance(order.id, 'READY')}
+                          disabled={isUpdating}
+                          className="px-4 py-2 rounded-lg font-bold font-mono text-xs tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {isUpdating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>READY — SEND TO WAITER</span>}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </Card>
-            );
-          })}
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* SECTION 2: SENT TO WAITER (Below Active Orders, Full Width, Read-Only) */}
+      <section className="space-y-2.5 w-full pt-2" style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+        <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.08] w-full">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold font-mono tracking-wider text-white uppercase flex items-center gap-2">
+              <span>SENT TO WAITER</span>
+              <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                {sentToWaiterOrders.length}
+              </span>
+            </h2>
+          </div>
         </div>
-      )}
+
+        {sentToWaiterOrders.length === 0 ? (
+          <div className="py-2.5 px-3 rounded-lg bg-[#0e121a]/60 border border-white/[0.06] text-xs text-slate-400 font-mono">
+            No orders awaiting delivery.
+          </div>
+        ) : (
+          <div className="w-full flex flex-col space-y-2" style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+            {sentToWaiterOrders.map((order) => {
+              const barItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'BAR');
+              const displayItems = barItems.length > 0 ? barItems : (order.items || []);
+
+              return (
+                <div
+                  key={order.id}
+                  className="w-full rounded-xl border border-blue-500/30 bg-[#0d151c] p-3 sm:p-3.5 shadow-sm"
+                  style={{ width: '100%' }}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 w-full">
+                    <div className="flex items-center flex-wrap gap-2 sm:gap-2.5 shrink-0">
+                      <span className="px-2.5 py-1 rounded-md text-sm font-black font-mono bg-white/10 text-white border border-white/20">
+                        Table {cleanTableBadge(order.tableNumber)}
+                      </span>
+                      <span className="text-xs font-bold font-mono text-slate-300">
+                        #{order.id.slice(-4)}
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        {formatElapsed(order.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white">
+                        {displayItems.map((item, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1">
+                            <strong className="text-blue-300 font-mono">{item.quantity}×</strong>
+                            <span className="font-medium">{item.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center">
+                      <div className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-blue-500/15 text-blue-200 border border-blue-500/30 flex items-center gap-1.5 animate-pulse">
+                        <Bell className="w-3.5 h-3.5 text-blue-300" />
+                        <span>WAITING FOR WAITER</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 };

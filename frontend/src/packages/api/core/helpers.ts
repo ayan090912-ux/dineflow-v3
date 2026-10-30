@@ -99,15 +99,15 @@ export function getPortalScopeFromPath(pathname?: string): PortalScope {
 }
 
 export function getApiBaseUrl(): string {
-  if (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL) {
-    const envVal = process.env.VITE_API_BASE_URL.trim();
-    if (envVal && !envVal.includes('onrender.com')) return envVal;
+  // If running in Node.js test environment, prefer process.env.VITE_API_BASE_URL
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    if (process.env?.VITE_API_BASE_URL) {
+      const envVal = process.env.VITE_API_BASE_URL.trim();
+      if (envVal && !envVal.includes('onrender.com')) return envVal;
+    }
   }
-  if (typeof import.meta !== 'undefined') {
-    const envUrl = (import.meta.env?.VITE_API_BASE_URL || import.meta.env?.VITE_API_URL || '').trim();
-    if (envUrl && !envUrl.includes('onrender.com')) return envUrl;
-  }
-  if (typeof window !== 'undefined') {
+
+  if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
     const host = window.location.hostname;
     const isDevHost =
       host === 'localhost' ||
@@ -120,6 +120,10 @@ export function getApiBaseUrl(): string {
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
 
     if (isDevHost) {
+      if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) {
+        const envUrl = import.meta.env.VITE_API_BASE_URL.trim();
+        if (envUrl && !envUrl.includes('onrender.com')) return envUrl;
+      }
       const protocol = window.location.protocol;
       const apiHost = (host.endsWith('.localhost') || host.includes('localhost')) ? 'localhost' : host;
       return `${protocol}//${apiHost}:8000/api/v1`;
@@ -127,6 +131,15 @@ export function getApiBaseUrl(): string {
 
     // In AWS production, all requests to dinely.food and *.dinely.food are proxied via Nginx on /api/v1
     return '/api/v1';
+  }
+
+  if (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL) {
+    const envVal = process.env.VITE_API_BASE_URL.trim();
+    if (envVal && !envVal.includes('onrender.com')) return envVal;
+  }
+  if (typeof import.meta !== 'undefined') {
+    const envUrl = (import.meta.env?.VITE_API_BASE_URL || import.meta.env?.VITE_API_URL || '').trim();
+    if (envUrl && !envUrl.includes('onrender.com')) return envUrl;
   }
   return 'http://localhost:8000/api/v1';
 }
