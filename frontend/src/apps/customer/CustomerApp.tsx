@@ -254,12 +254,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setIsRecentStatusPulse(true);
       setTimeout(() => setIsRecentStatusPulse(false), 3500);
 
-
-      if (event.type === 'ETAUpdated') {
-        addToast('info', 'ETA Updated', event.reason || `Prep time adjusted to ${event.estimatedPrepTimeMinutes}m`);
-      } else if (event.type === 'OrderAccepted') {
-        addToast('success', 'Order Accepted', `Estimated time: ${event.estimatedPrepTimeMinutes} mins`);
-      } else if (event.type === 'BarStatusUpdated') {
+      // Silently update live state from events without disruptive popup spam
+      if (event.type === 'BarStatusUpdated') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         const bStatus = (event as any).barStatus || (event as any).payload?.barStatus;
         if (oId) {
@@ -274,13 +270,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 : o
             )
           );
-        }
-        if (bStatus === 'PREPARING') {
-          addToast('info', 'Beverage Preparation', 'Your beverage order is now being prepared.');
-        } else if (bStatus === 'READY') {
-          addToast('success', 'Beverages Ready', 'Your beverages are ready. Your waiter will bring them to your table shortly.');
-        } else if (bStatus === 'COMPLETED') {
-          addToast('success', 'Beverages Delivered', 'Your beverages have been delivered. Enjoy!');
         }
       } else if (event.type === 'HookahStatusUpdated') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
@@ -298,13 +287,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             )
           );
         }
-        if (hStatus === 'PREPARING') {
-          addToast('info', 'Hookah Preparation', 'Your hookah order is now being prepared.');
-        } else if (hStatus === 'READY') {
-          addToast('success', 'Hookah Ready', 'Your hookah is ready. Your waiter will bring it to your table shortly.');
-        } else if (hStatus === 'COMPLETED') {
-          addToast('success', 'Hookah Delivered', 'Your hookah has been delivered. Enjoy!');
-        }
       } else if (event.type === 'OrderReady' || event.type === 'order_ready') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         if (oId) {
@@ -312,23 +294,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             prev.map((o) => (o.id === oId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o))
           );
         }
-        addToast('success', 'Order Ready', 'Your food/drinks are prepared and ready.');
       } else if (event.type === 'OrderDelivered' || event.type === 'order_delivered') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         if (oId) {
           setCustomerOrders((prev) =>
             prev.map((o) => (o.id === oId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
           );
-        }
-        const ord = customerOrders.find((o) => o.id === oId);
-        const hasB = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'BAR');
-        const hasH = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'HOOKAH');
-        if (hasH && !hasB) {
-          addToast('success', 'Hookah Delivered', 'Your hookah has been delivered. Enjoy!');
-        } else if (hasB && !hasH) {
-          addToast('success', 'Beverages Delivered', 'Your beverages have been delivered. Enjoy!');
-        } else {
-          addToast('success', 'Order Served', 'Enjoy your meal!');
         }
       } else if (event.type === 'OrderCompleted' || event.type === 'order_completed') {
         const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
@@ -357,18 +328,6 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 : o
             )
           );
-        }
-        if (newStatus === 'DELIVERED') {
-          const ord = customerOrders.find((o) => o.id === oId);
-          const hasB = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'BAR');
-          const hasH = ord?.items && ord.items.some((i) => getFulfillmentStation(i) === 'HOOKAH');
-          if (hasH && !hasB) {
-            addToast('success', 'Hookah Delivered', 'Your hookah has been delivered. Enjoy!');
-          } else if (hasB && !hasH) {
-            addToast('success', 'Beverages Delivered', 'Your beverages have been delivered. Enjoy!');
-          } else {
-            addToast('success', 'Order Served', 'Enjoy your meal!');
-          }
         }
       }
     });
@@ -626,14 +585,31 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const addToast = (type: ToastMessage['type'], title: string, message?: string) => {
     const id = `toast-${Date.now()}`;
-    setToasts((prev) => [...prev, { id, type, title, message }]);
+    // Keep at most 1 active toast to strictly prevent notification stacking
+    setToasts([{ id, type, title, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, 3500);
+  };
+
+  const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
+  const lastAddTapTimeRef = React.useRef<number>(0);
+
+  const handleUpdateItemQuantity = (itemId: string, newQuantity: number) => {
+    setCart((prev) => {
+      if (newQuantity <= 0) {
+        return prev.filter((c) => c.item.id !== itemId);
+      }
+      return prev.map((c) => (c.item.id === itemId ? { ...c, quantity: newQuantity } : c));
+    });
   };
 
   const handleDirectAddItem = (item: MenuItem) => {
     if (item.isAvailable === false) return;
+    const now = Date.now();
+    if (now - lastAddTapTimeRef.current < 150) return; // Prevent duplicate rapid taps
+    lastAddTapTimeRef.current = now;
+
     if (item.servingOptions && item.servingOptions.length > 0) {
       setSelectedItem(item);
       setQuantity(1);
@@ -653,7 +629,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
       return [...prev, { item: itemToAdd, quantity: 1 }];
     });
-    addToast('success', 'Added to order', `1x ${item.name}`);
+
+    // Provide subtle non-blocking micro-feedback directly on the card button
+    setRecentlyAddedId(item.id);
+    setTimeout(() => {
+      setRecentlyAddedId((curr) => (curr === item.id ? null : curr));
+    }, 700);
   };
 
   const handleAddToCart = () => {
@@ -675,7 +656,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
       return [...prev, { item: itemToAdd, quantity, notes: combinedNotes, servingOption: selectedServingOption }];
     });
-    addToast('success', 'Added to Order Cart', `${quantity}x ${selectedItem.name}`);
+
+    setRecentlyAddedId(selectedItem.id);
+    setTimeout(() => {
+      setRecentlyAddedId((curr) => (curr === selectedItem.id ? null : curr));
+    }, 700);
+
     setSelectedItem(null);
     setQuantity(1);
     setSpecialInstructions('');
@@ -976,11 +962,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const isHookahTheme = currentMenuTab === 'HOOKAH';
 
   return (
-    <div className={`min-h-screen font-sans pb-44 sm:pb-48 max-w-md mx-auto relative border-x border-white/[0.08] bg-[#0b0d11] text-[#f0f2f5]`}>
-      <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
+    <div className={`min-h-screen font-sans pb-52 max-w-md mx-auto relative border-x border-white/[0.08] bg-[#0b0d11] text-[#f0f2f5] shadow-2xl selection:bg-amber-500/30`}>
+      <ToastContainer position="top" toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
-      {/* Hero Banner Header */}
-      <div className="relative h-48 w-full bg-[#12151b] overflow-hidden">
+      {/* Compact Luxury Venue Header */}
+      <div className="relative h-36 sm:h-40 w-full bg-[#12151b] overflow-hidden">
         <img
           src={
             isHookahTheme
@@ -990,54 +976,60 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               : theme.bannerUrl
           }
           alt={theme.restaurantName}
-          className="w-full h-full object-cover brightness-[0.7] transition-all duration-700"
+          className="w-full h-full object-cover brightness-[0.6] transition-all duration-700 scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0d11] via-[#0b0d11]/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0d11] via-[#0b0d11]/70 to-[#0b0d11]/25" />
 
-        {/* Floating Action Buttons Top Right */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-          {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
-            <button
-              onClick={() => setIsOrderStatusModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500 text-black hover:bg-amber-400 flex items-center gap-1.5 transition-colors shadow-sm"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Orders ({customerOrders.filter((o) => o.status !== 'CANCELLED').length})</span>
-            </button>
-          )}
+        {/* Top Header Floating Badge Row */}
+        <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-[11px] text-white font-mono font-medium shadow-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{currentRestaurant?.hasTables === false ? 'Counter Pickup' : selectedTableNum}</span>
+          </div>
 
-          <div className="px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-black/60 backdrop-blur-md text-white border border-white/[0.1]">
-            <span>{selectedTableNum}</span>
+          <div className="flex items-center gap-2">
+            {allRestaurantTables.length > 1 && currentRestaurant?.hasTables !== false && (
+              <button
+                onClick={() => setIsTableSelectorModalOpen(true)}
+                className="px-2.5 py-1 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 text-[11px] text-white/80 hover:text-white transition-all shadow-md active:scale-95"
+              >
+                Switch Table
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Restaurant Header Content */}
-        <div className="absolute bottom-4 left-4 right-4 flex items-end gap-3 z-10">
+        {/* Restaurant Branding Header Row */}
+        <div className="absolute bottom-3 left-3 right-3 flex items-end gap-3 z-10">
           <img
             src={theme.logo}
             alt={theme.restaurantName}
-            className="w-14 h-14 rounded-xl object-cover border border-white/20 shadow-lg bg-[#0b0d11]"
+            className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl object-cover border border-white/20 shadow-xl bg-[#0b0d11] shrink-0"
           />
-          <div>
-            <h1 className="text-lg font-semibold text-white tracking-tight">{theme.restaurantName}</h1>
-            <p className="text-xs text-white/60 font-medium flex items-center gap-2 mt-0.5">
-              <span className="flex items-center gap-1">
-                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight truncate drop-shadow-md">
+              {theme.restaurantName}
+            </h1>
+            <div className="text-[11px] text-white/70 font-medium flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="flex items-center gap-0.5 text-amber-400 font-semibold">
+                <Star className="w-3 h-3 fill-amber-400" />
                 <span>4.9</span>
               </span>
               <span>•</span>
-              <span className="text-white/40">{isBarTheme ? 'Craft Cocktails & Wine Lounge' : 'Dining Room Experience'}</span>
-            </p>
+              <span className="text-white/50 truncate">
+                {isHookahTheme ? 'Premium Shisha Lounge' : isBarTheme ? 'Craft Cocktails & Wine' : (currentRestaurant?.cuisine || 'Gourmet Dining')}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Action Bar (Call Waiter, Live Order Tracker & My Bill) */}
+      {/* Quick Action Sticky Bar (Call Staff, Live Orders & Bill) */}
       {currentRestaurant?.hasTables !== false ? (
-        <div className="p-2.5 grid grid-cols-3 gap-2 bg-[#0b0d11]/90 border-b border-white/[0.08] sticky top-0 z-20 backdrop-blur-md">
+        <div className="sticky top-0 z-30 bg-[#0b0d11]/95 backdrop-blur-xl border-b border-white/[0.08] p-2.5 grid grid-cols-3 gap-2 shadow-lg">
           <button
             onClick={handleCallWaiter}
-            className="py-2 px-2 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-white/80 hover:text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+            className="h-11 px-2 rounded-xl bg-[#12151b] border border-white/[0.08] hover:border-amber-500/40 hover:bg-[#161a22] text-white/90 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 shadow-sm"
           >
             <PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="truncate">Call Staff</span>
@@ -1045,16 +1037,16 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
           <button
             onClick={() => setIsOrderStatusModalOpen(true)}
-            className={`py-2 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+            className={`h-11 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 shadow-sm ${
               customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0
-                ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300 font-semibold'
-                : 'bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-white/80 hover:text-white'
+                ? 'bg-amber-500/15 border border-amber-500/40 text-amber-300'
+                : 'bg-[#12151b] border border-white/[0.08] hover:border-white/[0.16] hover:bg-[#161a22] text-white/90'
             }`}
           >
             <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="truncate">Orders</span>
             {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[10px] font-bold font-mono">
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-bold font-mono">
                 {customerOrders.filter((o) => o.status !== 'CANCELLED').length}
               </span>
             )}
@@ -1062,14 +1054,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
           <button
             onClick={() => setIsBillModalOpen(true)}
-            className="py-2 px-2 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] text-white/80 hover:text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+            className="h-11 px-2 rounded-xl bg-[#12151b] border border-white/[0.08] hover:border-emerald-500/40 hover:bg-[#161a22] text-white/90 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 shadow-sm"
           >
             <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="truncate">Bill</span>
           </button>
         </div>
       ) : (
-        <div className="px-4 py-2 bg-white/[0.02] border-b border-white/[0.08] text-white/70 flex items-center justify-between text-xs font-mono sticky top-0 z-20 backdrop-blur-md">
+        <div className="px-4 py-2 bg-white/[0.02] border-b border-white/[0.08] text-white/70 flex items-center justify-between text-xs font-mono sticky top-0 z-30 backdrop-blur-xl">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
             <span>Counter Pickup Ordering</span>
@@ -1081,13 +1073,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Food Menu ⇄ Bar Menu ⇄ Hookah Menu Switcher */}
       {(hasBarDivision || hasHookahDivision) && (
         <div className="px-4 pt-3 pb-1">
-          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1 bg-[#12151b] rounded-xl border border-white/[0.08] text-xs font-medium`}>
+          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1 bg-[#12151b] rounded-2xl border border-white/[0.08] text-xs font-medium gap-1`}>
             <button
               onClick={() => handleSwitchMenuTab('FOOD')}
-              className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+              className={`h-10 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 font-semibold ${
                 currentMenuTab === 'FOOD'
-                  ? 'bg-white/[0.08] text-white font-semibold'
-                  : 'text-white/40 hover:text-white'
+                  ? 'bg-amber-500 text-black shadow-md'
+                  : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
               }`}
             >
               <Utensils className="w-3.5 h-3.5" />
@@ -1097,51 +1089,51 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             {hasBarDivision && (
               <button
                 onClick={() => handleSwitchMenuTab('BAR')}
-                className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                className={`h-10 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 font-semibold ${
                   currentMenuTab === 'BAR'
-                    ? 'bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/20'
-                    : 'text-white/40 hover:text-white'
+                    ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md'
+                    : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
                 }`}
               >
-                <Wine className="w-3.5 h-3.5 text-purple-400" />
+                <Wine className="w-3.5 h-3.5 text-purple-300" />
                 <span>Bar</span>
-                {isAgeConfirmed && (
-                  <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    21+
-                  </span>
-                )}
+                <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                  currentMenuTab === 'BAR' ? 'bg-black/30 text-white' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                }`}>
+                  21+
+                </span>
               </button>
             )}
 
             {hasHookahDivision && (
               <button
                 onClick={() => handleSwitchMenuTab('HOOKAH')}
-                className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                className={`h-10 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 font-semibold ${
                   currentMenuTab === 'HOOKAH'
-                    ? 'bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/20'
-                    : 'text-white/40 hover:text-white'
+                    ? 'bg-gradient-to-r from-amber-600 to-orange-500 text-white shadow-md'
+                    : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
                 }`}
               >
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <Flame className="w-3.5 h-3.5 text-amber-300" />
                 <span>Hookah</span>
-                {isAgeConfirmed && (
-                  <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                    18+
-                  </span>
-                )}
+                <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                  currentMenuTab === 'HOOKAH' ? 'bg-black/30 text-white' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                }`}>
+                  18+
+                </span>
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* Reassuring Order Confirmation Banner (Non-blocking) */}
+      {/* Non-blocking Single Confirmation Banner after order checkout */}
       {latestPlacedOrder && (
-        <div className="mx-4 mt-3 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start justify-between gap-3 shadow-lg">
+        <div className="mx-4 mt-3 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-start justify-between gap-3 shadow-lg">
           <div className="flex items-start gap-2.5 min-w-0">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-emerald-300 truncate">
+              <p className="text-xs font-bold text-emerald-300 truncate">
                 Order #{latestPlacedOrder.displayOrderNumber || latestPlacedOrder.orderNumber || (latestPlacedOrder.id.length > 8 ? latestPlacedOrder.id.slice(-4) : latestPlacedOrder.id)} Received!
               </p>
               <p className="text-[11px] text-white/70 mt-0.5">
@@ -1152,7 +1144,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setIsOrderStatusModalOpen(true)}
-              className="px-2.5 py-1 rounded-lg bg-emerald-500 text-black text-xs font-semibold hover:bg-emerald-400 transition-colors"
+              className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-all shadow-sm"
             >
               Track
             </button>
@@ -1183,16 +1175,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Menu Filter Tabs */}
       <div className="p-4 space-y-3">
-        {/* Search */}
+        {/* Search Input with 16px font-size to prevent iOS auto-zoom */}
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3.5 top-3 text-white/40" />
+          <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-white/40" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={isBarTheme ? "Search cocktails, wine, spirits, craft beers..." : "Search dishes, appetizers, desserts..."}
-            className="w-full bg-[#12151b] text-white text-xs rounded-xl pl-9 pr-4 py-2.5 border border-white/[0.08] focus:border-amber-400/60 focus:outline-none placeholder:text-white/30"
+            placeholder={isBarTheme ? "Search cocktails, wine, spirits, craft beers..." : isHookahTheme ? "Search shisha flavours, blends..." : "Search dishes, appetizers, desserts..."}
+            className="w-full bg-[#12151b] text-white text-[16px] sm:text-xs rounded-xl pl-10 pr-9 py-2.5 border border-white/[0.08] focus:border-amber-400/60 focus:outline-none placeholder:text-white/30 transition-colors"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-3 text-white/40 hover:text-white p-0.5"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Dietary Veg/Non-Veg Quick Filter */}
@@ -1201,7 +1202,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <button
               onClick={() => setDietaryFilter('ALL')}
               className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors text-center ${
-                dietaryFilter === 'ALL' ? 'bg-white/[0.06] text-white' : 'text-white/40 hover:text-white'
+                dietaryFilter === 'ALL' ? 'bg-white/[0.08] text-white font-semibold' : 'text-white/40 hover:text-white'
               }`}
             >
               All Dishes
@@ -1211,11 +1212,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               onClick={() => setDietaryFilter('VEG')}
               className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 dietaryFilter === 'VEG'
-                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                  ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
                   : 'text-white/40 hover:text-emerald-400'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
               <span>Veg Only</span>
             </button>
 
@@ -1223,23 +1224,23 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               onClick={() => setDietaryFilter('NON_VEG')}
               className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 dietaryFilter === 'NON_VEG'
-                  ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+                  ? 'bg-rose-500/15 text-rose-300 font-semibold border border-rose-500/30'
                   : 'text-white/40 hover:text-rose-400'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+              <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />
               <span>Non-Veg</span>
             </button>
           </div>
         )}
 
-        {/* Categories */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        {/* Categories Horizontal Scroll */}
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
           <button
             onClick={() => setActiveCategory('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
               activeCategory === 'all'
-                ? 'bg-amber-500 text-black font-semibold'
+                ? 'bg-amber-500 text-black shadow-sm'
                 : 'bg-[#12151b] text-white/60 hover:text-white border border-white/[0.08]'
             }`}
           >
@@ -1279,9 +1280,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 ${
                 activeCategory === cat.id
-                  ? 'bg-amber-500 text-black font-semibold'
+                  ? 'bg-amber-500 text-black font-semibold shadow-sm'
                   : 'bg-[#12151b] text-white/60 hover:text-white border border-white/[0.08]'
               }`}
             >
@@ -1300,63 +1301,52 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             return (
               <div
                 key={item.id}
-                className={`p-3.5 flex gap-3.5 transition-colors rounded-xl bg-[#12151b] border shadow-sm group ${
+                className={`p-3.5 flex gap-3.5 transition-all duration-200 rounded-2xl bg-[#12151b] border shadow-sm ${
                   isAvailable
-                    ? 'cursor-pointer border-white/[0.08] hover:border-white/[0.16]'
-                    : 'opacity-60 border-white/[0.04] cursor-not-allowed'
+                    ? 'border-white/[0.08] hover:border-white/[0.16]'
+                    : 'opacity-50 border-white/[0.04]'
                 }`}
-                onClick={() => {
-                  if (!isAvailable) return;
-                  if (inCart) return;
-                  handleDirectAddItem(item);
-                }}
               >
                 <div className="relative shrink-0">
                   <img
                     src={item.image}
                     alt={item.name}
-                    className="w-22 h-22 rounded-lg object-cover border border-white/[0.08] group-hover:opacity-90 transition-opacity"
+                    loading="lazy"
+                    className="w-22 h-22 sm:w-24 sm:h-24 rounded-xl object-cover border border-white/[0.08] bg-[#1a1e27]"
                   />
                   {item.isAlcoholic && (
-                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-white/80 border border-white/[0.1]">
+                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-white/90 border border-white/10">
                       {item.alcoholPercentage || 40}% ABV
                     </span>
                   )}
                 </div>
+
                 <div className="flex-1 min-w-0 flex flex-col justify-between">
                   <div>
-                    <div className="flex items-start justify-between gap-1">
+                    <div className="flex items-start justify-between gap-1.5">
                       <div className="flex items-center gap-1.5 min-w-0">
                         {!isBarTheme && !item.isAlcoholic && (
                           <span
                             className={`inline-flex items-center justify-center border p-0.5 rounded-[3px] shrink-0 ${
-                              isVeg ? 'border-emerald-500/60 bg-emerald-500/10' : 'border-rose-500/60 bg-rose-500/10'
+                              isVeg ? 'border-emerald-500/70 bg-emerald-500/10' : 'border-rose-500/70 bg-rose-500/10'
                             }`}
                             title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${isVeg ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                           </span>
                         )}
-                        <h3 className="text-xs font-semibold text-white truncate">{item.name}</h3>
+                        <h3 className="text-xs sm:text-sm font-semibold text-white tracking-tight truncate">{item.name}</h3>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
                         {!isAvailable && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">
                             SOLD OUT
                           </span>
                         )}
-                        <span
-                          className={`text-[9px] font-mono px-1.5 py-0.2 rounded shrink-0 ${
-                            isVeg
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                          }`}
-                        >
-                          {isVeg ? 'VEG' : 'NON-VEG'}
-                        </span>
                       </div>
                     </div>
+
                     {item.brand && (
                       <p className="text-[10px] text-amber-400/90 font-mono mt-0.5">{item.brand}</p>
                     )}
@@ -1368,42 +1358,33 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.06]">
-                    <span className="text-xs font-mono font-semibold text-white">
+                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06]">
+                    <span className="text-xs sm:text-sm font-mono font-bold text-amber-400">
                       {formatPrice(item.price)}
                     </span>
+
                     {isAvailable ? (
                       inCart ? (
                         <div
-                          className="flex items-center gap-2 bg-[#0c0e14] border border-amber-500/40 rounded-lg p-0.5"
+                          className="flex items-center gap-1.5 bg-[#161a22] border border-amber-500/40 rounded-xl p-0.5 shadow-inner"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
-                            onClick={() => {
-                              setCart((prev) =>
-                                prev
-                                  .map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity - 1 } : c))
-                                  .filter((c) => c.quantity > 0)
-                              );
-                            }}
-                            className="w-6 h-6 rounded flex items-center justify-center text-amber-400 hover:bg-white/[0.08] transition-colors"
-                            title="Decrease quantity"
+                            onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity - 1)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                            aria-label="Decrease quantity"
                           >
-                            <Minus className="w-3 h-3" />
+                            <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="font-mono text-xs font-bold text-white min-w-[16px] text-center">
+                          <span className="font-mono text-xs font-bold text-white min-w-[20px] text-center">
                             {inCart.quantity}
                           </span>
                           <button
-                            onClick={() => {
-                              setCart((prev) =>
-                                prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c))
-                              );
-                            }}
-                            className="w-6 h-6 rounded flex items-center justify-center text-amber-400 hover:bg-white/[0.08] transition-colors"
-                            title="Increase quantity"
+                            onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity + 1)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                            aria-label="Increase quantity"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (
@@ -1412,14 +1393,27 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                             e.stopPropagation();
                             handleDirectAddItem(item);
                           }}
-                          className="text-xs py-1 px-3 rounded-lg font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors flex items-center gap-1 active:scale-95 shadow-sm"
+                          className={`h-8 px-3.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 active:scale-95 shadow-sm ${
+                            recentlyAddedId === item.id
+                              ? 'bg-emerald-500 text-black scale-105'
+                              : 'bg-amber-500 hover:bg-amber-400 text-black'
+                          }`}
                         >
-                          <Plus className="w-3 h-3" />
-                          <span>{hasOptions ? 'Options' : 'Add'}</span>
+                          {recentlyAddedId === item.id ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Added</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>{hasOptions ? 'Options' : 'Add'}</span>
+                            </>
+                          )}
                         </button>
                       )
                     ) : (
-                      <span className="text-[10px] font-mono py-1 px-2.5 rounded-lg font-medium bg-white/[0.06] text-white/40 border border-white/[0.08] cursor-not-allowed">
+                      <span className="text-[10px] font-mono py-1 px-2.5 rounded-xl font-medium bg-white/[0.04] text-white/40 border border-white/[0.06] cursor-not-allowed">
                         Sold Out
                       </span>
                     )}
@@ -1429,7 +1423,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             );
           })}
           {filteredItems.length === 0 && (
-            <div className="p-8 text-center bg-[#12151b] border border-dashed border-white/[0.08] rounded-xl text-white/40 text-xs space-y-2">
+            <div className="p-8 text-center bg-[#12151b] border border-dashed border-white/[0.08] rounded-2xl text-white/40 text-xs space-y-2">
               {isHookahTheme ? (
                 <>
                   <Flame className="w-8 h-8 text-amber-400 mx-auto opacity-70" />
@@ -1454,7 +1448,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
 
       {/* Subtle Customer Footer Attribution */}
-      <footer className="py-8 px-4 text-center text-xs text-slate-500 border-t border-slate-900 mt-12 mb-24 space-y-1">
+      <footer className="py-8 px-4 text-center text-xs text-slate-500 border-t border-white/[0.06] mt-8 mb-16 space-y-1">
         <p className="font-semibold text-slate-400">{currentRestaurant?.name || 'Restaurant'}</p>
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-mono pt-1">
           <span>Powered by</span>
@@ -1468,17 +1462,20 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         <div className="fixed bottom-4 left-4 right-4 z-40 max-w-md mx-auto">
           <button
             onClick={() => setIsCartOpen(true)}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold p-3.5 rounded-xl shadow-2xl border border-amber-400/30 flex items-center justify-between transition-all active:scale-[0.99]"
+            className="w-full bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-black font-semibold p-3.5 rounded-2xl shadow-[0_12px_32px_rgba(245,158,11,0.25)] border border-amber-300/30 flex items-center justify-between transition-all active:scale-[0.99] group"
           >
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center font-mono text-xs font-bold text-slate-950">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-xl bg-black/15 flex items-center justify-center font-mono text-xs font-black text-black">
                 {totalCartCount}
               </div>
-              <span className="text-xs font-semibold">View Order Cart</span>
+              <div className="text-left">
+                <span className="text-xs font-bold uppercase tracking-wider text-black/70 block text-[10px]">Order Cart</span>
+                <span className="text-xs font-black text-black">{totalCartCount} {totalCartCount === 1 ? 'item' : 'items'}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
+            <div className="flex items-center gap-2 font-mono text-sm font-black">
               <span>{formatPrice(subtotal)}</span>
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </button>
         </div>
@@ -1487,14 +1484,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Item Selection & Customization Bottom Sheet Drawer */}
       {selectedItem && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm transition-opacity"
           onClick={() => setSelectedItem(null)}
         >
           <div
-            className="w-full max-w-md bg-[#0e1117] border-t border-x border-white/[0.12] rounded-t-2xl p-4 space-y-4 max-h-[85vh] overflow-y-auto shadow-2xl"
+            className="w-full max-w-md bg-[#0e1117] border-t border-x border-white/[0.12] rounded-t-3xl p-5 space-y-4 max-h-[85vh] overflow-y-auto shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className={`text-[9px] font-mono px-2 py-0.5 rounded font-medium shrink-0 ${
@@ -1505,17 +1502,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 >
                   {selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG' ? 'VEG' : 'NON-VEG'}
                 </span>
-                <h3 className="font-semibold text-white text-xs truncate">{selectedItem.name}</h3>
+                <h3 className="font-bold text-white text-sm tracking-tight truncate">{selectedItem.name}</h3>
               </div>
               <button
                 onClick={() => setSelectedItem(null)}
-                className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/[0.08]"
+                className="p-1.5 rounded-xl text-white/50 hover:text-white hover:bg-white/[0.08] transition-colors"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="relative rounded-xl overflow-hidden border border-white/[0.08] bg-[#12151b]">
+            <div className="relative rounded-2xl overflow-hidden border border-white/[0.08] bg-[#12151b]">
               <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-36 object-cover" />
             </div>
 
@@ -1533,9 +1531,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     <button
                       key={opt}
                       onClick={() => setSelectedServingOption(opt)}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-mono transition-all ${
+                      className={`px-3.5 py-1.5 rounded-xl border text-xs font-mono transition-all ${
                         selectedServingOption === opt
-                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-semibold'
+                          ? 'bg-amber-500 text-black border-amber-400 font-semibold shadow-sm'
                           : 'bg-[#12151b] text-white/70 border-white/[0.08] hover:border-white/20'
                       }`}
                     >
@@ -1546,19 +1544,21 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-between py-2 border-y border-white/[0.08]">
-              <span className="font-medium text-white/80 text-xs">Quantity</span>
-              <div className="flex items-center gap-3 bg-[#12151b] border border-white/[0.08] p-1 rounded-lg">
+            <div className="flex items-center justify-between py-2.5 border-y border-white/[0.08]">
+              <span className="font-semibold text-white/80 text-xs">Quantity</span>
+              <div className="flex items-center gap-3 bg-[#12151b] border border-white/[0.08] p-1 rounded-xl">
                 <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="h-7 w-7 flex items-center justify-center rounded text-white/60 hover:text-white"
+                  className="h-8 w-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/[0.06] active:scale-95 transition-all"
+                  aria-label="Decrease quantity"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="font-mono font-semibold text-xs text-white min-w-[20px] text-center">{quantity}</span>
+                <span className="font-mono font-bold text-xs text-white min-w-[20px] text-center">{quantity}</span>
                 <button
                   onClick={() => setQuantity(quantity + 1)}
-                  className="h-7 w-7 flex items-center justify-center rounded text-white/60 hover:text-white"
+                  className="h-8 w-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/[0.06] active:scale-95 transition-all"
+                  aria-label="Increase quantity"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -1567,15 +1567,15 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <input
               type="text"
-              placeholder="Preparation notes (e.g. less spicy, dressing on side)..."
+              placeholder="Preparation notes (e.g. less spicy, extra ice)..."
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
-              className="w-full bg-[#12151b] text-white text-xs rounded-xl px-3.5 py-2.5 border border-white/[0.08] focus:border-amber-400/60 focus:outline-none placeholder:text-white/30"
+              className="w-full bg-[#12151b] text-white text-[16px] sm:text-xs rounded-xl px-3.5 py-2.5 border border-white/[0.08] focus:border-amber-400/60 focus:outline-none placeholder:text-white/30"
             />
 
             <button
               onClick={handleAddToCart}
-              className="w-full py-3 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-md transition-all active:scale-[0.99]"
+              className="w-full py-3.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black rounded-xl shadow-lg transition-all active:scale-[0.99]"
             >
               Add to Order · {formatPrice(selectedItem.price * quantity)}
             </button>
@@ -1586,21 +1586,22 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Cart Review & Checkout Bottom Sheet Drawer */}
       {isCartOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm transition-opacity"
           onClick={() => setIsCartOpen(false)}
         >
           <div
-            className="w-full max-w-md bg-[#0e1117] border-t border-x border-white/[0.12] rounded-t-2xl p-4 space-y-4 max-h-[85vh] flex flex-col shadow-2xl"
+            className="w-full max-w-md bg-[#0e1117] border-t border-x border-white/[0.12] rounded-t-3xl p-5 space-y-4 max-h-[85vh] flex flex-col shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-4 h-4 text-amber-400" />
-                <h3 className="font-semibold text-white text-xs">Your Order Cart ({totalCartCount})</h3>
+                <h3 className="font-bold text-white text-sm">Your Order Cart ({totalCartCount})</h3>
               </div>
               <button
                 onClick={() => setIsCartOpen(false)}
-                className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/[0.08]"
+                className="p-1.5 rounded-xl text-white/50 hover:text-white hover:bg-white/[0.08] transition-colors"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1664,7 +1665,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               ))}
             </div>
 
-            <div className="p-3 bg-[#12151b] rounded-xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
+            <div className="p-3.5 bg-[#12151b] rounded-2xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
               <div className="flex justify-between text-white/60">
                 <span>Subtotal</span>
                 <span>{formatPrice(subtotal)}</span>
@@ -1677,13 +1678,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               )}
               <div className="flex justify-between text-white font-semibold text-xs pt-2 border-t border-white/[0.08]">
                 <span>Total Payable</span>
-                <span className="text-amber-400">{formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
+                <span className="text-amber-400 font-bold">{formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
               </div>
             </div>
 
             {/* Inline Age Requirement Checkbox if Bar or Hookah items present */}
             {cart.some((c) => c.item.isAlcoholic || c.item.targetDestination === 'BAR' || c.item.targetDestination === 'HOOKAH') && (
-              <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 cursor-pointer select-none">
+              <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={isAgeConfirmed}
@@ -1705,7 +1706,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <button
               disabled={isSubmittingOrder || cart.length === 0 || (cart.some((c) => c.item.isAlcoholic || c.item.targetDestination === 'BAR' || c.item.targetDestination === 'HOOKAH') && !isAgeConfirmed)}
               onClick={handleCheckout}
-              className="w-full py-3.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmittingOrder ? (
                 <>
@@ -1817,18 +1818,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         >
           <div
             onClick={() => setIsOrderStatusModalOpen(true)}
-            className="bg-[#0e1117]/95 border border-white/[0.12] p-3 rounded-xl shadow-2xl backdrop-blur-md flex items-center justify-between gap-3 cursor-pointer group hover:border-amber-400/40 transition-all"
+            className="bg-[#0e1117]/95 border border-white/[0.12] p-3 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.6)] backdrop-blur-xl flex items-center justify-between gap-3 cursor-pointer group hover:border-amber-400/40 transition-all"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                 <Clock className="w-4 h-4" />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-white truncate">Live Order In Progress</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shrink-0 animate-pulse" />
+                  <span className="text-xs font-bold text-white truncate">Live Order In Progress</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0 animate-pulse" />
                 </div>
-                <p className="text-[11px] text-white/50 font-mono truncate">
+                <p className="text-[11px] text-white/60 font-mono truncate">
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').length} {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} · Total: ₹
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
                 </p>
@@ -1836,9 +1837,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              <span className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.12] text-white transition-colors flex items-center gap-1 whitespace-nowrap">
-                <span>Track Status</span>
-                <ChevronRight className="w-3.5 h-3.5 shrink-0 text-white/60" />
+              <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/[0.08] group-hover:bg-amber-500 group-hover:text-black text-white transition-all flex items-center gap-1 whitespace-nowrap shadow-sm">
+                <span>Track</span>
+                <ChevronRight className="w-3.5 h-3.5 shrink-0" />
               </span>
             </div>
           </div>
