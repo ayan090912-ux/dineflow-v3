@@ -456,10 +456,6 @@ class BillingService:
             b_res = await db.execute(b_stmt)
             existing_bill = b_res.scalar_one_or_none()
 
-        # IMMUTABILITY GUARANTEE: If already paid or closed, do not rewrite!
-        if existing_bill and existing_bill.payment_status == "PAID":
-            return existing_bill
-
         # Calculate authoritative numbers
         calc_data = await cls.calculate_table_bill_data(
             rest=rest,
@@ -472,6 +468,10 @@ class BillingService:
             order_type=order_type,
             db=db
         )
+
+        # IMMUTABILITY GUARANTEE: If already paid and no balance due remains, do not rewrite!
+        if existing_bill and existing_bill.payment_status == "PAID" and calc_data["balanceDue"] <= 0.0:
+            return existing_bill
 
         effective_sess_id = calc_data["tableSessionId"] or sess_id or f"sess-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 

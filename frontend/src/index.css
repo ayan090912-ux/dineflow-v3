@@ -286,8 +286,21 @@
     border-color: #cbd5e1 !important;
   }
 
-  .printable-receipt .no-print {
+  .printable-receipt .no-print,
+  .printable-receipt .print\:hidden {
     display: none !important;
+  }
+
+  .printable-receipt .bg-white,
+  .printable-receipt .qr-code-box,
+  .printable-receipt img,
+  .printable-receipt canvas {
+    background-color: #ffffff !important;
+    display: block !important;
+    visibility: visible !important;
+    margin: 0 auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Printable Standee Card Styling */

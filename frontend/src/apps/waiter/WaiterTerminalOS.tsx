@@ -25,6 +25,7 @@ import {
   Check,
   Package,
   Sparkles as SparklesIcon,
+  Printer,
 } from 'lucide-react';
 import {
   Button,
@@ -33,6 +34,7 @@ import {
   Avatar,
   SearchInput,
   Modal,
+  QRCodeDisplay,
   DinelyLogo,
 } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -53,6 +55,7 @@ import {
 } from '../../packages/types';
 import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
 import { matchTableNumber } from '../../packages/utils/tableUtils';
+import { calculateAuthoritativeSessionBill } from '../../packages/utils/billingUtils';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 
 // Web Audio API Chime Synthesizer for notifications
@@ -1667,16 +1670,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
                     : undefined;
                   const tableOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
-                  const itemCount = matchingBill?.itemCount !== undefined
-                    ? matchingBill.itemCount
-                    : (table.itemCount !== undefined
-                      ? table.itemCount
-                      : tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0));
-                  const sessionTotal = matchingBill?.grandTotal !== undefined
-                    ? matchingBill.grandTotal
-                    : (table.sessionTotal !== undefined
-                      ? table.sessionTotal
-                      : tableOrders.reduce((sum, o) => sum + o.totalAmount, 0));
+                  const authCalc = calculateAuthoritativeSessionBill(tableOrders, restaurant, matchingBill);
+                  const itemCount = authCalc.totalItems;
+                  const sessionTotal = authCalc.grandTotal;
                   const latestOrder = tableOrders[0];
 
                   return (
@@ -1815,7 +1811,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 : 'UNPAID');
 
             return (
-              <div className="space-y-4 font-sans text-slate-100">
+              <div className="space-y-4 font-sans text-slate-100 printable-receipt">
                 <div className="flex justify-between items-center bg-[#0c0e14] p-3.5 rounded-xl border border-[#1e232e]">
                   <div>
                     <h3 className="text-base font-bold text-white font-mono">{tableNum}</h3>
@@ -1931,9 +1927,37 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   </div>
                 </div>
 
+                {/* Dynamic / Merchant UPI QR Code for physical bill print / guest scan */}
+                {(bill?.qrDataUrl || bill?.paymentQrPayload || restaurant?.upiId) && (
+                  <div className="bg-[#0c0e14] p-3.5 rounded-xl border border-[#1e232e] text-center space-y-2 qr-code-box">
+                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-1.5 text-[11px] font-mono">
+                      <span className="text-amber-400 font-bold uppercase">UPI Payment QR</span>
+                      <span className="text-emerald-400 font-bold">₹{calculatedTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="w-36 h-36 bg-white p-2 rounded-xl shadow-md mx-auto flex items-center justify-center">
+                      {bill?.qrDataUrl ? (
+                        <img src={bill.qrDataUrl} alt="Bill UPI QR" className="w-full h-full object-contain" />
+                      ) : bill?.paymentQrPayload ? (
+                        <QRCodeDisplay value={bill.paymentQrPayload} size={128} />
+                      ) : restaurant?.upiId ? (
+                        <QRCodeDisplay
+                          value={`upi://pay?pa=${encodeURIComponent(restaurant.upiId)}&pn=${encodeURIComponent(restaurant.name || 'Restaurant')}&am=${calculatedTotal.toFixed(2)}&cu=INR`}
+                          size={128}
+                        />
+                      ) : null}
+                    </div>
+                    {restaurant?.upiId && (
+                      <p className="text-[10px] font-mono text-slate-400">
+                        UPI: <span className="text-slate-200 select-all font-bold">{restaurant.upiId}</span>
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400">Scan to pay via GPay, PhonePe, Paytm, BHIM</p>
+                  </div>
+                )}
+
                 {/* Payment Actions */}
                 {currentPayStatus !== 'PAID' ? (
-                  <div className="space-y-3 pt-2 border-t border-[#1e232e]">
+                  <div className="space-y-3 pt-2 border-t border-[#1e232e] no-print print:hidden">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-300">
                         Select Payment Method:
@@ -1956,43 +1980,64 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                       </div>
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-2">
+                    <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
                       <Button
+                        type="button"
                         variant="outline"
-                        onClick={() => setSelectedBillForAction(null)}
-                        disabled={isProcessingPayment}
-                        className="text-xs border-[#1e232e] text-slate-300"
+                        onClick={() => window.print()}
+                        className="text-xs border-[#1e232e] bg-[#12151b] text-slate-100 hover:text-white flex items-center gap-1.5"
                       >
-                        Cancel
+                        <Printer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Print Bill & QR</span>
                       </Button>
-                      <Button
-                        variant="success"
-                        disabled={isProcessingPayment}
-                        onClick={() =>
-                          handleRecordPayment(
-                            bill?.id,
-                            tableNum,
-                            sessId,
-                            selectedPaymentMethod,
-                            req?.id
-                          )
-                        }
-                        className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
-                      >
-                        {isProcessingPayment
-                          ? 'Recording...'
-                          : currentPayStatus === 'PAYMENT_AWAITING_CONFIRMATION'
-                          ? `Verify & Confirm Payment (₹${calculatedTotal.toFixed(2)})`
-                          : `Record ${selectedPaymentMethod} Payment (₹${calculatedTotal.toFixed(2)})`}
-                      </Button>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setSelectedBillForAction(null)}
+                          disabled={isProcessingPayment}
+                          className="text-xs border-[#1e232e] text-slate-300"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="success"
+                          disabled={isProcessingPayment}
+                          onClick={() =>
+                            handleRecordPayment(
+                              bill?.id,
+                              tableNum,
+                              sessId,
+                              selectedPaymentMethod,
+                              req?.id
+                            )
+                          }
+                          className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+                        >
+                          {isProcessingPayment
+                            ? 'Recording...'
+                            : currentPayStatus === 'PAYMENT_AWAITING_CONFIRMATION'
+                            ? `Verify & Confirm Payment (₹${calculatedTotal.toFixed(2)})`
+                            : `Record ${selectedPaymentMethod} Payment (₹${calculatedTotal.toFixed(2)})`}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex justify-between items-center pt-2 border-t border-[#1e232e]">
+                  <div className="flex justify-between items-center pt-2 border-t border-[#1e232e] no-print print:hidden">
                     <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4" /> Payment Confirmed & Completed
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => window.print()}
+                        className="text-xs border-[#1e232e] bg-[#12151b] text-slate-100 hover:text-white flex items-center gap-1.5"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Print Bill</span>
+                      </Button>
                       {req && req.status !== 'COMPLETED' && (
                         <Button
                           variant="success"
@@ -2037,11 +2082,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             );
             const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
             const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED') : undefined;
-            const sessionTotal = matchingBill?.grandTotal !== undefined
-              ? matchingBill.grandTotal
-              : (selectedTableForView.sessionTotal !== undefined
-                ? selectedTableForView.sessionTotal
-                : sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0));
+            const authCalc = calculateAuthoritativeSessionBill(sessionOrders, restaurant, matchingBill);
+            const sessionTotal = authCalc.grandTotal;
             const tableRequests = requests.filter(
               (r) => r.tableNumber.toLowerCase() === selectedTableForView.tableNumber.toLowerCase() && r.status !== 'COMPLETED'
             );
@@ -2151,11 +2193,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             );
             const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
             const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED') : undefined;
-            const sessionTotal = matchingBill?.grandTotal !== undefined
-              ? matchingBill.grandTotal
-              : (selectedTableForView.sessionTotal !== undefined
-                ? selectedTableForView.sessionTotal
-                : sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0));
+            const authCalc = calculateAuthoritativeSessionBill(sessionOrders, restaurant, matchingBill);
+            const sessionTotal = authCalc.grandTotal;
             const allPaid = sessionOrders.length === 0 || sessionOrders.every((o) => o.paymentStatus === 'PAID' || o.status === 'COMPLETED');
 
             return (

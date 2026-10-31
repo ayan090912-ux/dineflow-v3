@@ -203,11 +203,18 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
           gstin: billingConfig?.gstin || currentRestaurant?.gstin || currentRestaurant?.gstNumber,
           pan: billingConfig?.pan || currentRestaurant?.pan,
           address: billingConfig?.address || currentRestaurant?.address,
+          qrDataUrl: bill.qrDataUrl,
+          paymentQrPayload: bill.paymentQrPayload,
+          upiId: activeUpiId,
         }
       );
       setNotificationToast('Receipt downloaded successfully.');
       setTimeout(() => setNotificationToast(null), 4000);
     }
+  };
+
+  const handlePrintReceipt = () => {
+    window.print();
   };
 
   if (!isOpen) return null;
@@ -218,7 +225,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
       onClose={onClose}
       title={`Session Bill • Table ${standardTable.replace(/^Table\s*/i, '')}`}
     >
-      <div className="space-y-4 text-xs text-white/90">
+      <div className="space-y-4 text-xs text-white/90 printable-receipt">
         {isLoading && !bill ? (
           <div className="p-8 text-center space-y-2">
             <Clock className="w-6 h-6 text-amber-400 animate-spin mx-auto" />
@@ -393,6 +400,52 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               </div>
             </div>
 
+            {/* ATTACHED UPI QR PAYMENT SECTION (SHOWN ON BILL & ON PHYSICAL PRINT) */}
+            {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (bill.qrDataUrl || bill.paymentQrPayload || activeQrUrl || activeUpiId) && (
+              <div className="bg-[#0b0d11] rounded-xl border border-white/[0.08] p-4 text-center space-y-3 qr-code-box">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-[11px] font-mono">
+                  <span className="text-amber-400 font-semibold uppercase tracking-wider">UPI Payment QR • Scan to Pay</span>
+                  <span className="text-white font-bold">{formatCurrency(bill.grandTotal)}</span>
+                </div>
+
+                <div className="w-40 h-40 bg-white p-2.5 rounded-xl shadow-md mx-auto flex items-center justify-center">
+                  {bill.qrDataUrl ? (
+                    <img
+                      src={bill.qrDataUrl}
+                      alt="Bill UPI QR Code"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : bill.paymentQrPayload ? (
+                    <QRCodeDisplay
+                      value={bill.paymentQrPayload}
+                      size={144}
+                    />
+                  ) : activeQrUrl ? (
+                    <img
+                      src={activeQrUrl}
+                      alt="Merchant UPI QR Code"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : activeUpiId ? (
+                    <QRCodeDisplay
+                      value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${bill.grandTotal.toFixed(2)}&cu=INR`}
+                      size={144}
+                    />
+                  ) : null}
+                </div>
+
+                {activeUpiId && (
+                  <div className="bg-white/[0.02] p-2 rounded-lg border border-white/[0.06] font-mono text-[10px] flex items-center justify-between">
+                    <span className="text-white/40">UPI ID:</span>
+                    <span className="font-semibold text-white select-all">{activeUpiId}</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-white/40">
+                  Scan with GPay, PhonePe, Paytm, BHIM, or any banking app
+                </p>
+              </div>
+            )}
+
             {/* LIVE FEEDBACK TOAST */}
             {notificationToast && (
               <div className="p-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white/80 flex items-center justify-between text-xs font-mono">
@@ -424,7 +477,16 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                 </div>
               )}
 
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button
+                  onClick={handlePrintReceipt}
+                  variant="outline"
+                  className="w-full text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.12] bg-white/[0.04] text-white hover:bg-white/[0.08]"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Print Bill (with UPI QR)</span>
+                </Button>
+
                 <Button
                   onClick={handleDownloadReceipt}
                   variant="outline"

@@ -29,43 +29,76 @@ export class CustomerClient {
   }): Promise<CustomerRequest> {
     const restId = this.base.resolveTenantRestaurantId(data.restaurantId) || data.restaurantId || this.base.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
-    const res = await fetch(`${apiBase}/customer-requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    let createdReq: CustomerRequest | null = null;
+    try {
+      const res = await fetch(`${apiBase}/customer-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.base.getAuthHeader(),
+        },
+        body: JSON.stringify({
+          restaurantId: restId,
+          tableId: data.tableId,
+          tableNumber: data.tableNumber,
+          requestType: data.requestType || data.type || 'WATER',
+          customTitle: data.customTitle,
+          message: data.message || data.customerNotes || data.notes,
+          customerNotes: data.customerNotes || data.notes,
+          priority: data.priority || 'MEDIUM',
+          tableSessionId: data.tableSessionId,
+        }),
+      });
+      if (res.ok) {
+        const raw = await res.json();
+        createdReq = {
+          id: raw.id,
+          restaurantId: raw.restaurantId || raw.restaurant_id || restId,
+          tableId: raw.tableId || raw.table_id,
+          tableNumber: raw.tableNumber || raw.table_number || data.tableNumber,
+          requestType: (raw.requestType || raw.request_type || data.requestType || 'WATER').toUpperCase() as CustomerRequestType,
+          customTitle: raw.customTitle || raw.custom_title || raw.message,
+          message: raw.message || raw.customerNotes || data.customerNotes,
+          customerNotes: raw.customerNotes || raw.customer_notes || data.customerNotes,
+          priority: (raw.priority || data.priority || 'MEDIUM') as any,
+          status: (raw.status || 'PENDING').toUpperCase() as CustomerRequestStatus,
+          requestedAt: raw.requestedAt || raw.requested_at || raw.created_at || raw.timestamp || new Date().toISOString(),
+          acceptedAt: raw.acceptedAt || raw.accepted_at,
+          completedAt: raw.completedAt || raw.completed_at,
+          assignedWaiterName: raw.waiterName || raw.waiter_name || raw.assignedWaiterName,
+          tableSessionId: raw.tableSessionId || raw.table_session_id || data.tableSessionId,
+        };
+      }
+    } catch (err) {
+      console.warn('Failed to submit remote customer request, falling back to local database:', err);
+    }
+
+    if (!createdReq) {
+      createdReq = {
+        id: `req-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         restaurantId: restId,
         tableId: data.tableId,
         tableNumber: data.tableNumber,
-        requestType: data.requestType || data.type || 'WATER',
-        customTitle: data.customTitle,
-        message: data.message || data.customerNotes || data.notes,
-        customerNotes: data.customerNotes || data.notes,
-        priority: data.priority || 'MEDIUM',
+        requestType: (data.requestType || data.type || 'WATER').toUpperCase() as CustomerRequestType,
+        customTitle: data.customTitle || (data.requestType || 'Service').replace(/_/g, ' '),
+        message: data.message || data.customerNotes || data.notes || '',
+        customerNotes: data.customerNotes || data.notes || '',
+        priority: (data.priority || 'MEDIUM') as any,
+        status: 'PENDING',
+        requestedAt: new Date().toISOString(),
         tableSessionId: data.tableSessionId,
-      }),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Failed to create customer request: ${errText}`);
+      };
     }
-    const raw = await res.json();
-    return {
-      id: raw.id,
-      restaurantId: raw.restaurantId || raw.restaurant_id || restId,
-      tableId: raw.tableId || raw.table_id,
-      tableNumber: raw.tableNumber || raw.table_number || data.tableNumber,
-      requestType: (raw.requestType || raw.request_type || data.requestType || 'WATER').toUpperCase() as CustomerRequestType,
-      customTitle: raw.customTitle || raw.custom_title || raw.message,
-      message: raw.message || raw.customerNotes || data.customerNotes,
-      customerNotes: raw.customerNotes || raw.customer_notes || data.customerNotes,
-      priority: (raw.priority || data.priority || 'MEDIUM') as any,
-      status: (raw.status || 'PENDING').toUpperCase() as CustomerRequestStatus,
-      requestedAt: raw.requestedAt || raw.requested_at || raw.created_at || raw.timestamp || new Date().toISOString(),
-      acceptedAt: raw.acceptedAt || raw.accepted_at,
-      completedAt: raw.completedAt || raw.completed_at,
-      assignedWaiterName: raw.waiterName || raw.waiter_name || raw.assignedWaiterName,
-      tableSessionId: raw.tableSessionId || raw.table_session_id || data.tableSessionId,
-    };
+
+    // Persist in local client database
+    const existingIdx = this.base.customerRequests.findIndex((r) => r.id === createdReq!.id);
+    if (existingIdx >= 0) {
+      this.base.customerRequests[existingIdx] = createdReq;
+    } else {
+      this.base.customerRequests.unshift(createdReq);
+    }
+    this.base.saveDatabase();
+    return createdReq;
   }
 
   async getCustomerRequests(restaurantId?: string, statusFilter?: string): Promise<CustomerRequest[]> {
@@ -76,11 +109,17 @@ export class CustomerClient {
       url += `&status_filter=${encodeURIComponent(statusFilter)}`;
     }
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.base.getAuthHeader(),
+        },
+      });
       if (res.ok) {
         const items = await res.json();
         if (Array.isArray(items)) {
-          return items.map((raw: any) => ({
+          const mapped: CustomerRequest[] = items.map((raw: any) => ({
             id: raw.id,
             restaurantId: raw.restaurantId || raw.restaurant_id || restId,
             tableId: raw.tableId || raw.table_id,
@@ -97,12 +136,19 @@ export class CustomerClient {
             assignedWaiterName: raw.waiterName || raw.waiter_name || raw.assignedWaiterName,
             tableSessionId: raw.tableSessionId || raw.table_session_id,
           }));
+          // Sync with local memory
+          this.base.customerRequests = this.base.customerRequests
+            .filter((r) => r.restaurantId !== restId)
+            .concat(mapped);
+          this.base.saveDatabase();
+          return mapped;
         }
       }
     } catch (e) {
-      console.warn('Failed to fetch customer requests:', e);
+      console.warn('Failed to fetch customer requests from remote backend, using local store:', e);
     }
-    return [];
+    this.base.loadDatabase();
+    return this.base.customerRequests.filter((r) => r.restaurantId === restId);
   }
 
   async updateCustomerRequest(requestId: string, statusVal: string, waiterName?: string): Promise<CustomerRequest> {
@@ -117,8 +163,8 @@ export class CustomerClient {
       },
       'WAITER'
     );
-    return {
-      id: raw.id,
+    const updatedReq: CustomerRequest = {
+      id: raw.id || requestId,
       restaurantId: raw.restaurantId || raw.restaurant_id || '',
       tableId: raw.tableId || raw.table_id,
       tableNumber: raw.tableNumber || raw.table_number || 'Table 01',
@@ -134,6 +180,12 @@ export class CustomerClient {
       assignedWaiterName: raw.waiterName || raw.waiter_name || waiterName,
       tableSessionId: raw.tableSessionId || raw.table_session_id,
     };
+    const reqIdx = this.base.customerRequests.findIndex((r) => r.id === requestId);
+    if (reqIdx >= 0) {
+      this.base.customerRequests[reqIdx] = updatedReq;
+      this.base.saveDatabase();
+    }
+    return updatedReq;
   }
 
   async acceptCustomerRequest(reqId: string, waiterName?: string) {

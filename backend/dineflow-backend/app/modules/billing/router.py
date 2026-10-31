@@ -129,6 +129,10 @@ def format_bill_response(bill: Bill) -> dict:
 
     qr_payload = getattr(bill, "payment_qr_payload", None)
     qr_data_url = None
+    if not qr_payload and bill.payment_status != "PAID" and getattr(bill, "grand_total", 0.0) > 0:
+        upi_id = "dinely.pos@icici"
+        merchant_name = "Restaurant"
+        qr_payload = f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(merchant_name)}&am={bill.grand_total:.2f}&cu=INR&tr={bill.id}&tn=Bill_{bill.invoice_number or bill.id}"
     if qr_payload:
         from app.modules.payments.service import PaymentService
         try:
@@ -512,10 +516,6 @@ async def get_running_table_bill(
         b_res = await db.execute(query)
         existing_bill = b_res.scalar_one_or_none()
 
-    # Immutability Guarantee: If bill is already paid or closed, return historical snapshot
-    if existing_bill and existing_bill.payment_status == "PAID":
-        return format_bill_response(existing_bill)
-
     # 2. Compute authoritative bill data from active session orders
     calc_data = await BillingService.calculate_table_bill_data(
         rest=rest,
@@ -527,6 +527,10 @@ async def get_running_table_bill(
         service_charge_percentage=existing_bill.service_charge_percentage if existing_bill else None,
         db=db
     )
+
+    # Immutability Guarantee: If bill is already paid and no outstanding balance remains, return historical snapshot
+    if existing_bill and existing_bill.payment_status == "PAID" and calc_data["balanceDue"] <= 0.0:
+        return format_bill_response(existing_bill)
 
     if existing_bill:
         # Sync unpaid bill with newly placed or modified orders
@@ -551,6 +555,16 @@ async def get_running_table_bill(
 
     # 3. If no persisted bill exists yet, return provisional bill matching format_bill_response contract
     now_iso = datetime.now(timezone.utc).isoformat()
+    upi_id = getattr(rest, "upi_id", None) or "dinely.pos@icici"
+    merchant_name = getattr(rest, "upi_merchant_name", None) or getattr(rest, "name", "Restaurant")
+    prov_qr_payload = f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(merchant_name)}&am={calc_data['grandTotal']:.2f}&cu=INR&tr=provisional-{rest.id}-{tbl_num}&tn=Bill_{tbl_num}"
+    prov_qr_data_url = None
+    try:
+        from app.modules.payments.service import PaymentService
+        prov_qr_data_url = PaymentService.generate_qr_data_url(prov_qr_payload)
+    except Exception:
+        pass
+
     return {
         "id": f"provisional-{rest.id}-{tbl_num.lower().replace(' ', '_')}",
         "restaurantId": rest.id,
@@ -595,6 +609,10 @@ async def get_running_table_bill(
         "payment_verified_by": None,
         "paymentReference": None,
         "payment_reference": None,
+        "paymentQrPayload": prov_qr_payload,
+        "payment_qr_payload": prov_qr_payload,
+        "qrDataUrl": prov_qr_data_url,
+        "qr_data_url": prov_qr_data_url,
         "taxBreakdown": calc_data["taxBreakdown"],
         "tax_breakdown": calc_data["taxBreakdown"],
         "tax_breakdown_json": calc_data["taxBreakdown"],

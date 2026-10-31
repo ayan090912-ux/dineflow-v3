@@ -153,15 +153,32 @@ async def get_customer_requests(
     active_only: bool = False,
     table_id: Optional[str] = None,
     table_session_id: Optional[str] = None,
-    caller: CallerContext = Depends(require_tenant_staff_or_owner),
+    caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
     from app.core.tenant.resolver import resolve_canonical_restaurant_id
     canonical_rest_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    if not canonical_rest_id:
+        return []
+
+    # If caller has authentication, enforce tenant authorization
+    if caller.is_authenticated and not caller.is_admin:
+        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+            from app.modules.restaurants.models import Restaurant
+            res_r = await db.execute(select(Restaurant).where(Restaurant.id == canonical_rest_id))
+            r_obj = res_r.scalar_one_or_none()
+            if not r_obj or not (
+                (caller.uid and r_obj.owner_uid == caller.uid) or
+                (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
+            ):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
+        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
+            if caller.restaurant_id and caller.restaurant_id != canonical_rest_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
 
     query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == canonical_rest_id)
     if status_filter:
-        query = query.where(CustomerRequestModel.status == status_filter)
+        query = query.where(CustomerRequestModel.status == status_filter.upper())
     elif active_only:
         query = query.where(CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS", "ACCEPTED"]))
     if table_session_id:
@@ -179,7 +196,7 @@ async def get_customer_requests(
         from app.modules.tables.models import TableSession
         res_active = await db.execute(
             select(TableSession).where(
-                (TableSession.restaurant_id == restaurant_id) &
+                (TableSession.restaurant_id == canonical_rest_id) &
                 (TableSession.status == "ACTIVE")
             )
         )

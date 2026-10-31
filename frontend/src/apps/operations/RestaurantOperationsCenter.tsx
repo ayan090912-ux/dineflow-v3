@@ -64,6 +64,7 @@ import {
 } from '../../packages/types';
 import { api, getApiBaseUrl } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
+import { calculateAuthoritativeSessionBill } from '../../packages/utils/billingUtils';
 
 // --- Web Audio Synthesizers for Professional Operations Alerts ---
 const playChime = (type: 'ORDER' | 'WAITER' | 'READY' | 'ALERT') => {
@@ -993,9 +994,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       const tableOrders = session
                         ? orders.filter((o) => o.tableSessionId === session.id && o.status !== 'CANCELLED')
                         : [];
-                      const runningTotal = tbl.sessionTotal !== undefined
-                        ? tbl.sessionTotal
-                        : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                      const runningTotal = calculateAuthoritativeSessionBill(tableOrders, restaurant).grandTotal;
 
                       return (
                         <div
@@ -1260,9 +1259,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 const tableOrders = session
                   ? orders.filter((o) => o.tableSessionId === session.id && o.status !== 'CANCELLED')
                   : [];
-                const runningTotal = tbl.sessionTotal !== undefined
-                  ? tbl.sessionTotal
-                  : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                const runningTotal = calculateAuthoritativeSessionBill(tableOrders, restaurant).grandTotal;
 
                 return (
                   <Card
@@ -1578,9 +1575,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 const tableOrders = session
                   ? orders.filter((o) => o.tableSessionId === session.id && o.status !== 'CANCELLED')
                   : [];
-                const runningTotal = tbl.sessionTotal !== undefined
-                  ? tbl.sessionTotal
-                  : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                const runningTotal = calculateAuthoritativeSessionBill(tableOrders, restaurant).grandTotal;
 
                 return (
                   <Card key={tbl.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">

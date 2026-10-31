@@ -1067,7 +1067,7 @@ async def create_order(
                         open_bill_stmt = select(Bill).where(
                             Bill.restaurant_id == restaurant.id,
                             Bill.table_session_id == actual_session_id,
-                            Bill.status.notin_(["CLOSED", "CANCELLED", "PAID"])
+                            Bill.status.notin_(["CLOSED", "CANCELLED"])
                         ).order_by(Bill.created_at.desc()).limit(1)
                         ob_res = await db.execute(open_bill_stmt)
                         open_bill_rec = ob_res.scalar_one_or_none()
@@ -1076,6 +1076,7 @@ async def create_order(
                             open_bill_rec.tax_amount = bill_data["taxAmount"]
                             open_bill_rec.grand_total = bill_data["grandTotal"]
                             open_bill_rec.amount_due = bill_data["balanceDue"]
+                            open_bill_rec.payment_status = bill_data["paymentStatus"]
                             open_bill_rec.items_snapshot_json = bill_data["items"]
                             open_bill_rec.orders_snapshot_json = bill_data["orders"]
                             open_bill_rec.tax_breakdown_json = bill_data["taxBreakdown"]

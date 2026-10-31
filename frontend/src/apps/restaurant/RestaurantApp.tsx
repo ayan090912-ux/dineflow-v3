@@ -93,6 +93,7 @@ import { BarTerminal } from '../bar/BarTerminal';
 import { HookahTerminal } from '../hookah/HookahTerminal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
+import { calculateAuthoritativeSessionBill } from '../../packages/utils/billingUtils';
 import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { ThermalPrinterSettings } from './ThermalPrinterSettings';
@@ -2795,11 +2796,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 const matchingBill = activeSess
                   ? bills.find((b) => b.tableSessionId === activeSess.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
                   : undefined;
-                const sessionTotal = matchingBill?.grandTotal !== undefined
-                  ? matchingBill.grandTotal
-                  : (tbl.sessionTotal !== undefined
-                    ? tbl.sessionTotal
-                    : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0));
+                const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, matchingBill);
+                const sessionTotal = authCalc.grandTotal;
 
                 return (
                   <Card
@@ -4082,18 +4080,50 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           const activeBill = activeSess
                             ? bills.find((b) => b.tableSessionId === activeSess.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
                             : undefined;
-                          const orderCount = activeBill?.orders?.length || tableOrders.length;
-                          const totalItems = activeBill?.itemCount !== undefined
-                            ? activeBill.itemCount
-                            : tableOrders.reduce(
-                                (sum, o) => sum + (o.items || []).reduce((iSum, itm) => iSum + itm.quantity, 0),
-                                0
-                              );
-                          const runningTotal = activeBill
-                            ? activeBill.grandTotal
-                            : (tbl.sessionTotal !== undefined
-                              ? tbl.sessionTotal
-                              : tableOrders.reduce((sum, o) => sum + o.totalAmount, 0));
+                          const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, activeBill);
+                          const orderCount = authCalc.orderCount;
+                          const totalItems = authCalc.totalItems;
+                          const runningTotal = authCalc.grandTotal;
+                          const effectivePaymentStatus = authCalc.paymentStatus;
+                          const invoiceNumber = authCalc.invoiceNumber || activeBill?.invoiceNumber;
+
+                          const effectiveBill: Bill = activeBill ? {
+                            ...activeBill,
+                            items: authCalc.items,
+                            orders: tableOrders,
+                            subtotal: authCalc.subtotal,
+                            taxAmount: authCalc.taxAmount,
+                            taxBreakdown: authCalc.taxBreakdown as any,
+                            taxRate: authCalc.taxRate,
+                            serviceChargeAmount: authCalc.serviceChargeAmount,
+                            roundOffAmount: authCalc.roundOffAmount,
+                            grandTotal: authCalc.grandTotal,
+                            amountPaid: authCalc.amountPaid,
+                            balanceDue: authCalc.balanceDue,
+                            paymentStatus: effectivePaymentStatus,
+                          } : {
+                            id: `bill-${tbl.tableNumber.toLowerCase().replace(/\s+/g, '-')}-${activeSess?.id || Date.now()}`,
+                            restaurantId: currentRestaurant?.id || api.getCurrentRestaurantId() || '',
+                            tableNumber: tbl.tableNumber,
+                            tableId: tbl.id,
+                            tableSessionId: activeSess?.id,
+                            orders: tableOrders,
+                            items: authCalc.items,
+                            subtotal: authCalc.subtotal,
+                            taxAmount: authCalc.taxAmount,
+                            taxBreakdown: authCalc.taxBreakdown as any,
+                            taxRate: authCalc.taxRate,
+                            serviceChargeAmount: authCalc.serviceChargeAmount,
+                            serviceChargePercentage: authCalc.serviceChargePercentage,
+                            roundOffAmount: authCalc.roundOffAmount,
+                            grandTotal: authCalc.grandTotal,
+                            amountPaid: authCalc.amountPaid,
+                            balanceDue: authCalc.balanceDue,
+                            status: 'OPEN',
+                            paymentStatus: effectivePaymentStatus,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                          };
 
                           return (
                             <Card
@@ -4101,7 +4131,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                               className={`p-5 rounded-xl border transition-all space-y-4 ${
                                 tbl.status === 'BILL_REQUESTED' || activeBill?.status === 'BILL_REQUESTED'
                                   ? 'bg-amber-950/20 border-amber-500/50 shadow-md shadow-amber-950/20'
-                                  : activeBill?.paymentStatus === 'PAID'
+                                  : effectivePaymentStatus === 'PAID'
                                   ? 'bg-emerald-950/20 border-emerald-500/50'
                                   : 'bg-[#12151b] border-[#1e232e]'
                               }`}
@@ -4114,12 +4144,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                       variant={
                                         tbl.status === 'BILL_REQUESTED'
                                           ? 'warning'
-                                          : activeBill?.paymentStatus === 'PAID'
+                                          : effectivePaymentStatus === 'PAID'
                                           ? 'success'
+                                          : effectivePaymentStatus === 'PARTIALLY_PAID'
+                                          ? 'info'
                                           : 'default'
                                       }
                                     >
-                                      {tbl.status === 'BILL_REQUESTED' ? 'BILL REQUESTED 🧾' : activeBill?.paymentStatus === 'PAID' ? 'PAID ✅' : 'ACTIVE'}
+                                      {tbl.status === 'BILL_REQUESTED'
+                                        ? 'BILL REQUESTED 🧾'
+                                        : effectivePaymentStatus === 'PAID'
+                                        ? 'PAID ✅'
+                                        : effectivePaymentStatus === 'PARTIALLY_PAID'
+                                        ? 'PARTIALLY PAID 💳'
+                                        : 'ACTIVE'}
                                     </Badge>
                                   </h4>
                                   <p className="text-[11px] text-slate-400 font-mono mt-0.5">
@@ -4137,72 +4175,48 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                               <div className="bg-[#0e1117] p-3 rounded-lg border border-[#1e232e] text-xs font-mono flex items-center justify-between text-slate-300">
                                 <span>{orderCount} Orders ({totalItems} Items)</span>
-                                {activeBill?.invoiceNumber && (
-                                  <span className="text-emerald-400 font-bold">{activeBill.invoiceNumber}</span>
+                                {invoiceNumber && (
+                                  <span className="text-emerald-400 font-bold">{invoiceNumber}</span>
                                 )}
                               </div>
 
                               {/* ACTIONS */}
                               <div className="grid grid-cols-2 gap-2 pt-1">
-                                {activeBill ? (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => setSelectedBillDetails(activeBill)}
-                                      className="border-[#1e232e] bg-[#12151b] text-xs font-semibold text-slate-200 hover:text-white"
-                                    >
-                                      View Bill 📄
-                                    </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedBillDetails(effectiveBill)}
+                                  className="border-[#1e232e] bg-[#12151b] text-xs font-semibold text-slate-200 hover:text-white"
+                                >
+                                  View Bill 📄
+                                </Button>
 
-                                    {activeBill.paymentStatus !== 'PAID' ? (
-                                      <Button
-                                        size="sm"
-                                        variant="brand"
-                                        onClick={() => {
-                                          setPaymentBillModal(activeBill);
-                                          setPaymentMethodInput('CASH');
-                                        }}
-                                        className="text-xs font-semibold"
-                                      >
-                                        Record Manual Payment 💳
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        disabled={settlingBillId === activeBill.id}
-                                        onClick={async () => {
-                                          setSettlingBillId(activeBill.id);
-                                          await api.closeTableSettlement(currentRestaurant?.id || api.getCurrentRestaurantId() || '', activeBill.id, 'Cashier');
-                                          addToast('success', 'Table Closed & Reset! 🧹', `${tbl.tableNumber} is now available.`);
-                                          setSettlingBillId(null);
-                                          await loadData();
-                                        }}
-                                        className="bg-[#181d27] hover:bg-[#222838] text-amber-300 text-xs font-semibold border border-[#2d3545]"
-                                      >
-                                        Close Table 🏁
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : (
+                                {effectivePaymentStatus !== 'PAID' ? (
                                   <Button
                                     size="sm"
                                     variant="brand"
-                                    onClick={async () => {
-                                      try {
-                                        const b = await api.generateTableInvoice(currentRestaurant?.id || api.getCurrentRestaurantId() || '', {
-                                          tableNumber: tbl.tableNumber,
-                                          tableId: tbl.id,
-                                        });
-                                        addToast('success', 'Invoice Generated! 🧾', `${b.invoiceNumber || b.id} created for ${tbl.tableNumber}`);
-                                        await loadData();
-                                      } catch (err: any) {
-                                        addToast('error', 'Invoice Error', err.message || 'Failed to generate invoice');
-                                      }
+                                    onClick={() => {
+                                      setPaymentBillModal(effectiveBill);
+                                      setPaymentMethodInput('CASH');
                                     }}
-                                    className="col-span-2 text-xs font-semibold"
+                                    className="text-xs font-semibold"
                                   >
-                                    Generate GST Invoice 🧾
+                                    Record Manual Payment 💳
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    disabled={settlingBillId === effectiveBill.id}
+                                    onClick={async () => {
+                                      setSettlingBillId(effectiveBill.id);
+                                      await api.closeTableSettlement(currentRestaurant?.id || api.getCurrentRestaurantId() || '', effectiveBill.id, 'Cashier');
+                                      addToast('success', 'Table Closed & Reset! 🧹', `${tbl.tableNumber} is now available.`);
+                                      setSettlingBillId(null);
+                                      await loadData();
+                                    }}
+                                    className="bg-[#181d27] hover:bg-[#222838] text-amber-300 text-xs font-semibold border border-[#2d3545]"
+                                  >
+                                    Close Table 🏁
                                   </Button>
                                 )}
                               </div>
@@ -6187,7 +6201,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       <span className="text-slate-400">GPay, PhonePe, Paytm, BHIM</span>
                     </div>
 
-                    <div className="pt-1 flex gap-2">
+                    <div className="pt-1 flex gap-2 no-print print:hidden">
                       <Button
                         type="button"
                         onClick={async () => {
@@ -6236,7 +6250,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
             )}
 
-            <div className="pt-2 flex flex-wrap justify-end gap-2">
+            <div className="pt-2 flex flex-wrap justify-end gap-2 no-print print:hidden">
+              <Button
+                type="button"
+                onClick={() => window.print()}
+                variant="outline"
+                className="border-slate-700 bg-slate-900 text-slate-100 hover:text-white font-bold text-xs flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                <span>Print Bill (with UPI QR)</span>
+              </Button>
+
               <Button
                 onClick={async () => {
                   try {

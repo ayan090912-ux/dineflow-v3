@@ -7,19 +7,30 @@ export interface ReceiptOptions {
   gstin?: string;
   pan?: string;
   address?: string;
+  qrDataUrl?: string;
+  upiId?: string;
+  paymentQrPayload?: string;
 }
 
-export function downloadDigitalReceiptPNG(
+export async function downloadDigitalReceiptPNG(
   bill: Bill,
   restaurantName: string = 'Dinely Cloud POS',
   options?: ReceiptOptions
-): void {
+): Promise<void> {
   const canvas = document.createElement('canvas');
   const width = 640;
   const itemsCount = (bill.items || []).length;
   const taxBreakdownCount = (bill.taxBreakdown || []).length;
   const extraHeaderLines = (options?.gstin || options?.pan || options?.address) ? 30 : 0;
-  const height = 820 + itemsCount * 45 + taxBreakdownCount * 22 + extraHeaderLines;
+  let effectiveQrUrl = options?.qrDataUrl || bill.qrDataUrl;
+  if (!effectiveQrUrl && bill.paymentStatus !== 'PAID') {
+    const payload = options?.paymentQrPayload || bill.paymentQrPayload || (options?.upiId ? `upi://pay?pa=${encodeURIComponent(options.upiId)}&pn=${encodeURIComponent(restaurantName)}&am=${(bill.grandTotal || 0).toFixed(2)}&cu=INR` : '');
+    if (payload) {
+      effectiveQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}`;
+    }
+  }
+  const qrExtraHeight = (effectiveQrUrl && bill.paymentStatus !== 'PAID') ? 190 : 0;
+  const height = 820 + itemsCount * 45 + taxBreakdownCount * 22 + extraHeaderLines + qrExtraHeight;
 
   canvas.width = width * 2; // High-DPI 2x scale
   canvas.height = height * 2;
@@ -269,6 +280,43 @@ export function downloadDigitalReceiptPNG(
   ctx.fillStyle = '#34d399';
   ctx.font = '900 22px monospace';
   ctx.fillText(formatCurrency(bill.grandTotal || 0), width - 60, y + 14);
+
+  // Dynamic UPI Payment QR Code
+  if (effectiveQrUrl && bill.paymentStatus !== 'PAID') {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = effectiveQrUrl;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+      if (img.complete && img.naturalWidth > 0) {
+        y += 45;
+        const qrBoxSize = 130;
+        const qrX = (width - qrBoxSize) / 2;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(qrX - 5, y - 5, qrBoxSize + 10, qrBoxSize + 10);
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(qrX - 5, y - 5, qrBoxSize + 10, qrBoxSize + 10);
+        ctx.drawImage(img, qrX, y, qrBoxSize, qrBoxSize);
+
+        y += qrBoxSize + 18;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = '700 11px Inter, system-ui, sans-serif';
+        ctx.fillText('SCAN TO PAY VIA UPI (GPay, PhonePe, Paytm, BHIM)', width / 2, y);
+
+        y += 16;
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '600 11px monospace';
+        ctx.fillText(`Exact Amount: ${formatCurrency(bill.grandTotal || 0)}`, width / 2, y);
+      }
+    } catch (e) {
+      console.warn('QR image render skipped:', e);
+    }
+  }
 
   // Footer Verification & Compliance Notice
   y += 65;

@@ -211,6 +211,10 @@ export class BillingClient {
     let existingBill = this.base.bills.find((b) => b.restaurantId === restId && b.tableSessionId === session!.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED');
 
     if (existingBill) {
+      const alreadyPaid = existingBill.paymentStatus === 'PAID' ? (existingBill.amountPaid || existingBill.grandTotal || 0) : (existingBill.amountPaid || 0);
+      const balanceDue = Math.max(0, Math.round((grandTotal - alreadyPaid) * 100) / 100);
+      const hasUnpaidOrders = sessionOrders.some((o) => (o.paymentStatus as string) !== 'PAID' && (o.paymentStatus as string) !== 'SETTLED');
+
       existingBill.orders = sessionOrders;
       existingBill.items = items;
       existingBill.subtotal = subtotal;
@@ -222,6 +226,13 @@ export class BillingClient {
       existingBill.serviceChargeAmount = serviceChargeAmount;
       existingBill.roundOffAmount = roundOffAmount;
       existingBill.grandTotal = grandTotal;
+      existingBill.amountPaid = alreadyPaid;
+      existingBill.balanceDue = balanceDue;
+      existingBill.paymentStatus = (balanceDue === 0 && !hasUnpaidOrders && alreadyPaid > 0)
+        ? 'PAID'
+        : (alreadyPaid > 0 && balanceDue > 0)
+        ? 'PARTIALLY_PAID'
+        : 'UNPAID';
       existingBill.taxBreakdown = taxBreakdown as any;
       existingBill.updatedAt = new Date().toISOString();
       this.base.saveDatabase();
