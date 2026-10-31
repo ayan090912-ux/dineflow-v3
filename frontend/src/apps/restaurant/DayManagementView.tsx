@@ -334,15 +334,19 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const [barViewMode, setBarViewMode] = useState<'items' | 'orders'>('items');
   const [hookahViewMode, setHookahViewMode] = useState<'items' | 'orders'>('items');
 
-  console.log('[DayManagementView DEBUG]', {
+  console.log('[DayManagementView DEBUG]', JSON.stringify({
     hasCurrentBusinessDay: !!currentBusinessDay,
     currentBusinessDayId: currentBusinessDay?.id,
     currentBusinessDayStatus: currentBusinessDay?.status,
+    currentBusinessDayGross: (currentBusinessDay as any)?.gross_sales ?? (currentBusinessDay as any)?.grossSales,
+    currentBusinessDayOrderVal: (currentBusinessDay as any)?.order_value ?? (currentBusinessDay as any)?.orderValue,
     hasSections: !!currentBusinessDay?.sections,
-    sections: currentBusinessDay?.sections,
+    sectionsKitchen: currentBusinessDay?.sections?.kitchen?.sales,
+    sectionsBar: currentBusinessDay?.sections?.bar?.sales,
+    sectionsHookah: currentBusinessDay?.sections?.hookah?.sales,
     ordersCount: orders?.length,
     restaurantId: currentRestaurant?.id,
-  });
+  }));
 
   // Precheck & Rollover Modal
   const [isPrecheckOpen, setIsPrecheckOpen] = useState(false);
@@ -472,22 +476,120 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 
   // Merge server authoritative sections with client fallback
   const kitchenSection: StationSectionData = useMemo(() => {
-    if (activeDay?.sections?.kitchen && (activeDay.sections.kitchen.items?.length > 0 || activeDay.sections.kitchen.sales > 0)) {
-      return activeDay.sections.kitchen;
+    const s = activeDay?.sections?.kitchen;
+    if (s && ((s.items && s.items.length > 0) || (s.sales || 0) > 0 || ((s as any).order_value || 0) > 0)) {
+      return {
+        ...s,
+        sales: Number(s.sales || (s as any).order_value || 0),
+        orderValue: Number(s.orderValue || (s as any).order_value || s.sales || 0),
+        ordersCount: Number(s.ordersCount ?? (s as any).orders_count ?? s.orders?.length ?? 0),
+        itemsCount: Number(s.itemsCount ?? (s as any).items_count ?? s.items?.length ?? 0),
+        dishesCount: Number(s.dishesCount ?? (s as any).dishes_count ?? s.items?.length ?? 0),
+        items: (s.items || []).map((it: any) => ({
+          name: it.name,
+          quantity: Number(it.quantity || 1),
+          unitPrice: Number(it.unitPrice ?? it.unit_price ?? 0),
+          discountAmount: Number(it.discountAmount ?? it.discount_amount ?? 0),
+          grossSales: Number(it.grossSales ?? it.gross_sales ?? 0),
+          netSales: Number(it.netSales ?? it.net_sales ?? 0),
+          taxAmount: Number(it.taxAmount ?? it.tax_amount ?? 0),
+          ordersCount: Number(it.ordersCount ?? it.orders_count ?? 1),
+          station: 'KITCHEN' as const,
+        })),
+        orders: (s.orders || []).map((ord: any) => ({
+          id: ord.id,
+          orderNumber: ord.orderNumber || ord.order_number || `#${ord.id?.slice(0, 6)}`,
+          tableNumber: ord.tableNumber || ord.table_number || '',
+          tableId: ord.tableId || ord.table_id || '',
+          createdAt: ord.createdAt || ord.created_at || '',
+          status: ord.status || '',
+          stationStatus: ord.stationStatus || ord.station_status || ord.status || '',
+          items: ord.items || [],
+          subtotal: Number(ord.subtotal || 0),
+          paymentStatus: ord.paymentStatus || ord.payment_status || 'UNPAID',
+          customerName: ord.customerName || ord.customer_name || 'Guest',
+        })),
+      };
     }
     return clientSections.kitchen;
   }, [activeDay?.sections?.kitchen, clientSections.kitchen]);
 
   const barSection: StationSectionData = useMemo(() => {
-    if (activeDay?.sections?.bar && (activeDay.sections.bar.items?.length > 0 || activeDay.sections.bar.sales > 0)) {
-      return activeDay.sections.bar;
+    const s = activeDay?.sections?.bar;
+    if (s && ((s.items && s.items.length > 0) || (s.sales || 0) > 0 || ((s as any).order_value || 0) > 0)) {
+      return {
+        ...s,
+        sales: Number(s.sales || (s as any).order_value || 0),
+        orderValue: Number(s.orderValue || (s as any).order_value || s.sales || 0),
+        ordersCount: Number(s.ordersCount ?? (s as any).orders_count ?? s.orders?.length ?? 0),
+        itemsCount: Number(s.itemsCount ?? (s as any).items_count ?? s.items?.length ?? 0),
+        beveragesCount: Number(s.beveragesCount ?? (s as any).beverages_count ?? s.items?.length ?? 0),
+        items: (s.items || []).map((it: any) => ({
+          name: it.name,
+          quantity: Number(it.quantity || 1),
+          unitPrice: Number(it.unitPrice ?? it.unit_price ?? 0),
+          discountAmount: Number(it.discountAmount ?? it.discount_amount ?? 0),
+          grossSales: Number(it.grossSales ?? it.gross_sales ?? 0),
+          netSales: Number(it.netSales ?? it.net_sales ?? 0),
+          taxAmount: Number(it.taxAmount ?? it.tax_amount ?? 0),
+          ordersCount: Number(it.ordersCount ?? it.orders_count ?? 1),
+          station: 'BAR' as const,
+        })),
+        orders: (s.orders || []).map((ord: any) => ({
+          id: ord.id,
+          orderNumber: ord.orderNumber || ord.order_number || `#${ord.id?.slice(0, 6)}`,
+          tableNumber: ord.tableNumber || ord.table_number || '',
+          tableId: ord.tableId || ord.table_id || '',
+          createdAt: ord.createdAt || ord.created_at || '',
+          status: ord.status || '',
+          stationStatus: ord.stationStatus || ord.station_status || ord.status || '',
+          items: ord.items || [],
+          subtotal: Number(ord.subtotal || 0),
+          paymentStatus: ord.paymentStatus || ord.payment_status || 'UNPAID',
+          customerName: ord.customerName || ord.customer_name || 'Guest',
+        })),
+      };
     }
     return clientSections.bar;
   }, [activeDay?.sections?.bar, clientSections.bar]);
 
   const hookahSection: StationSectionData = useMemo(() => {
-    if (activeDay?.sections?.hookah && (activeDay.sections.hookah.items?.length > 0 || activeDay.sections.hookah.sales > 0)) {
-      return activeDay.sections.hookah;
+    const s = activeDay?.sections?.hookah;
+    if (s && ((s.items && s.items.length > 0) || (s.sales || 0) > 0 || ((s as any).order_value || 0) > 0)) {
+      return {
+        ...s,
+        sales: Number(s.sales || (s as any).order_value || 0),
+        orderValue: Number(s.orderValue || (s as any).order_value || s.sales || 0),
+        ordersCount: Number(s.ordersCount ?? (s as any).orders_count ?? s.orders?.length ?? 0),
+        itemsCount: Number(s.itemsCount ?? (s as any).items_count ?? s.items?.length ?? 0),
+        productsCount: Number(s.productsCount ?? (s as any).products_count ?? s.items?.length ?? 0),
+        items: (s.items || []).map((it: any) => ({
+          name: it.name,
+          productName: it.productName || it.product_name || it.name,
+          flavour: it.flavour || 'Standard Flavour',
+          quantity: Number(it.quantity || 1),
+          unitPrice: Number(it.unitPrice ?? it.unit_price ?? 0),
+          discountAmount: Number(it.discountAmount ?? it.discount_amount ?? 0),
+          grossSales: Number(it.grossSales ?? it.gross_sales ?? 0),
+          netSales: Number(it.netSales ?? it.net_sales ?? 0),
+          taxAmount: Number(it.taxAmount ?? it.tax_amount ?? 0),
+          ordersCount: Number(it.ordersCount ?? it.orders_count ?? 1),
+          station: 'HOOKAH' as const,
+        })),
+        orders: (s.orders || []).map((ord: any) => ({
+          id: ord.id,
+          orderNumber: ord.orderNumber || ord.order_number || `#${ord.id?.slice(0, 6)}`,
+          tableNumber: ord.tableNumber || ord.table_number || '',
+          tableId: ord.tableId || ord.table_id || '',
+          createdAt: ord.createdAt || ord.created_at || '',
+          status: ord.status || '',
+          stationStatus: ord.stationStatus || ord.station_status || ord.status || '',
+          items: ord.items || [],
+          subtotal: Number(ord.subtotal || 0),
+          paymentStatus: ord.paymentStatus || ord.payment_status || 'UNPAID',
+          customerName: ord.customerName || ord.customer_name || 'Guest',
+        })),
+      };
     }
     return clientSections.hookah;
   }, [activeDay?.sections?.hookah, clientSections.hookah]);
@@ -496,19 +598,37 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 
   // Authoritative financial ledger numbers
   const backendBday = activeDay as any;
-  const grossOrderValue = backendBday?.orderValue ?? backendBday?.grossSales ?? combinedOrderValue;
-  const discountAmount = backendBday?.discountAmount ?? 0;
-  const netSales = backendBday?.netSales ?? Math.max(0, grossOrderValue - discountAmount);
-  const taxAmount = backendBday?.taxAmount ?? 0;
-  const settledRevenue = backendBday?.settledSales ?? backendBday?.totalSales ?? ((backendBday?.cashSales || 0) + (backendBday?.cardSales || 0) + (backendBday?.upiSales || 0));
-  const cashSales = backendBday?.cashSales ?? 0;
-  const cardSales = backendBday?.cardSales ?? 0;
-  const upiSales = backendBday?.upiSales ?? 0;
-  const unpaidBillsAmount = backendBday?.unpaidBillsAmount ?? precheck?.unpaid_bills_amount ?? 0;
-  const unbilledOrdersAmount = backendBday?.unbilledOrdersAmount ?? precheck?.unbilled_orders_amount ?? Math.max(0, grossOrderValue - settledRevenue);
-  const outstandingReceivables = backendBday?.outstandingReceivables ?? (unpaidBillsAmount + unbilledOrdersAmount);
+  const grossOrderValue = Number(
+    backendBday?.orderValue ||
+    backendBday?.order_value ||
+    backendBday?.grossSales ||
+    backendBday?.gross_sales ||
+    combinedOrderValue ||
+    0
+  );
+  const discountAmount = Number(backendBday?.discountAmount || backendBday?.discount_amount || 0);
+  const netSales = Number(backendBday?.netSales || backendBday?.net_sales || Math.max(0, grossOrderValue - discountAmount));
+  const taxAmount = Number(backendBday?.taxAmount || backendBday?.tax_amount || 0);
+  const settledRevenue = Number(
+    backendBday?.settledSales ||
+    backendBday?.settled_sales ||
+    backendBday?.totalSales ||
+    backendBday?.total_sales ||
+    ((backendBday?.cashSales || backendBday?.cash_sales || 0) + (backendBday?.cardSales || backendBday?.card_sales || 0) + (backendBday?.upiSales || backendBday?.upi_sales || 0)) ||
+    0
+  );
+  const cashSales = Number(backendBday?.cashSales || backendBday?.cash_sales || 0);
+  const cardSales = Number(backendBday?.cardSales || backendBday?.card_sales || 0);
+  const upiSales = Number(backendBday?.upiSales || backendBday?.upi_sales || 0);
+  const unpaidBillsAmount = Number(backendBday?.unpaidBillsAmount || backendBday?.unpaid_bills_amount || precheck?.unpaid_bills_amount || 0);
+  const unbilledOrdersAmount = Number(backendBday?.unbilledOrdersAmount || backendBday?.unbilled_orders_amount || precheck?.unbilled_orders_amount || Math.max(0, grossOrderValue - settledRevenue));
+  const outstandingReceivables = Number(backendBday?.outstandingReceivables || backendBday?.outstanding_receivables || (unpaidBillsAmount + unbilledOrdersAmount));
 
-  const totalOrdersCount = activeDay?.totalOrders ?? (kitchenSection.ordersCount + barSection.ordersCount + hookahSection.ordersCount);
+  const totalOrdersCount = Number(
+    activeDay?.totalOrders ||
+    backendBday?.total_orders ||
+    (kitchenSection.ordersCount + barSection.ordersCount + hookahSection.ordersCount)
+  );
   const activeTablesCount = isHistoricalView ? 0 : (precheck?.active_tables_count ?? currentBusinessDay?.activeTablesCount ?? tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied).length);
   const activeSessionsCount = isHistoricalView ? 0 : (precheck?.active_sessions_count ?? currentBusinessDay?.activeSessionsCount ?? 0);
 
