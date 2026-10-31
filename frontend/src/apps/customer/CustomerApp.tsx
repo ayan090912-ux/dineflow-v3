@@ -58,7 +58,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   tableNumber = 'Table 01',
 }) => {
   const { theme, formatPrice, setTheme } = useTheme();
-  const [currentMenuTab, setCurrentMenuTab] = useState<'FOOD' | 'BAR' | 'HOOKAH'>('FOOD');
+  const [currentMenuTab, setCurrentMenuTab] = useState<'FOOD' | 'BAR' | 'HOOKAH'>(() => {
+    if (typeof window !== 'undefined') {
+      const tabParam = new URLSearchParams(window.location.search).get('tab')?.toUpperCase();
+      if (tabParam === 'BAR' || tabParam === 'HOOKAH' || tabParam === 'FOOD') return tabParam as any;
+    }
+    return 'FOOD';
+  });
   const [isAgeConfirmed, setIsAgeConfirmed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem('dinely_age_verified') === 'true';
