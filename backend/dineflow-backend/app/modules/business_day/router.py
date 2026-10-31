@@ -75,6 +75,25 @@ def _format_business_day(bday: BusinessDay, rest: Optional[Restaurant] = None) -
     requires_reconciliation = getattr(bday, "requires_reconciliation", False) or (outstanding_receivables > 0 and bday.status == "CLOSED")
     is_auto_rolled = getattr(bday, "is_auto_rolled", False)
 
+    summary_data = bday.summary_json or {}
+    kitchen_orders = getattr(bday, "kitchen_orders", None)
+    if kitchen_orders is None:
+        kitchen_orders = summary_data.get("kitchen_orders", bday.food_orders)
+
+    kitchen_sales = getattr(bday, "kitchen_sales", None)
+    if kitchen_sales is None:
+        kitchen_sales = summary_data.get("kitchen_sales", bday.food_sales)
+
+    hookah_orders = getattr(bday, "hookah_orders", None)
+    if hookah_orders is None:
+        hookah_orders = summary_data.get("hookah_orders", 0)
+
+    hookah_sales = getattr(bday, "hookah_sales", None)
+    if hookah_sales is None:
+        hookah_sales = summary_data.get("hookah_sales", 0.0)
+
+    sections = summary_data.get("sections")
+
     return {
         "id": bday.id,
         "restaurant_id": bday.restaurant_id,
@@ -123,8 +142,12 @@ def _format_business_day(bday: BusinessDay, rest: Optional[Restaurant] = None) -
         "totalOrders": bday.total_orders,
         "food_orders": bday.food_orders,
         "foodOrders": bday.food_orders,
+        "kitchen_orders": kitchen_orders,
+        "kitchenOrders": kitchen_orders,
         "bar_orders": bday.bar_orders,
         "barOrders": bday.bar_orders,
+        "hookah_orders": hookah_orders,
+        "hookahOrders": hookah_orders,
         "completed_orders": bday.completed_orders,
         "completedOrders": bday.completed_orders,
         "cancelled_orders": bday.cancelled_orders,
@@ -146,8 +169,13 @@ def _format_business_day(bday: BusinessDay, rest: Optional[Restaurant] = None) -
 
         "food_sales": bday.food_sales,
         "foodSales": bday.food_sales,
+        "kitchen_sales": kitchen_sales,
+        "kitchenSales": kitchen_sales,
         "bar_sales": bday.bar_sales,
         "barSales": bday.bar_sales,
+        "hookah_sales": hookah_sales,
+        "hookahSales": hookah_sales,
+        "sections": sections,
         "tax_amount": bday.tax_amount,
         "taxAmount": bday.tax_amount,
         "discount_amount": bday.discount_amount,
@@ -182,7 +210,9 @@ def _format_business_day(bday: BusinessDay, rest: Optional[Restaurant] = None) -
             "grossSales": gross_sales,
             "netSales": net_sales,
             "foodSales": bday.food_sales,
+            "kitchenSales": kitchen_sales,
             "barSales": bday.bar_sales,
+            "hookahSales": hookah_sales,
             "cashSales": bday.cash_sales,
             "cardSales": bday.card_sales,
             "upiSales": bday.upi_sales,
@@ -191,6 +221,7 @@ def _format_business_day(bday: BusinessDay, rest: Optional[Restaurant] = None) -
             "unpaidBillsAmount": unpaid_bills_amount,
             "unbilledOrdersAmount": unbilled_orders_amount,
             "averageOrderValue": avg_order_val,
+            "sections": sections,
         },
     }
 
@@ -254,8 +285,8 @@ async def get_current_business_day(
 
     formatted = _format_business_day(current_bday, rest)
 
-    # If day is OPEN, compute authoritative live operational & financial counters scoped to this shift!
-    if current_bday.status == "OPEN":
+    # Compute authoritative live operational & financial counters scoped to this shift!
+    if current_bday.status == "OPEN" or not formatted.get("sections"):
         metrics = await calculate_shift_financial_ledger(rest.id, current_bday, db)
         for k, v in metrics.items():
             formatted[k] = v
@@ -1129,7 +1160,25 @@ async def get_historical_business_day_detail(
     if not bday:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historical business day record not found.")
 
-    return _format_business_day(bday, rest)
+    formatted = _format_business_day(bday, rest)
+    if not formatted.get("sections") or not isinstance(formatted["sections"], dict) or not formatted["sections"].get("kitchen"):
+        try:
+            metrics = await calculate_shift_financial_ledger(rest.id, bday, db)
+            formatted["sections"] = metrics.get("sections")
+            formatted["kitchen_sales"] = metrics.get("kitchen_sales")
+            formatted["kitchenSales"] = metrics.get("kitchen_sales")
+            formatted["kitchen_orders"] = metrics.get("kitchen_orders")
+            formatted["kitchenOrders"] = metrics.get("kitchen_orders")
+            formatted["hookah_sales"] = metrics.get("hookah_sales")
+            formatted["hookahSales"] = metrics.get("hookah_sales")
+            formatted["hookah_orders"] = metrics.get("hookah_orders")
+            formatted["hookahOrders"] = metrics.get("hookah_orders")
+            if "summary" in formatted and isinstance(formatted["summary"], dict):
+                formatted["summary"]["sections"] = metrics.get("sections")
+        except Exception as e:
+            logger.warning(f"[HISTORICAL_SECTIONS_WARN] day={bday.id}: {e}")
+
+    return formatted
 
 
 @router.get("/history/{day_id}/orders")

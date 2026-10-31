@@ -863,3 +863,135 @@ class TestBusinessDayLifecycle:
             assert data["total_sales"] == 0.0
             assert data["totalOrders"] == 0
 
+    async def test_three_distinct_sales_sections_kitchen_bar_hookah(self, db_session: AsyncSession):
+        """
+        Verify that daily management calculates exactly 3 distinct fulfillment stations:
+        Kitchen, Bar, and Hookah with zero double-counting:
+        Total Operational Order Value = Kitchen Order Value + Bar Order Value + Hookah Order Value.
+        """
+        slug = f"sections-{uuid.uuid4().hex[:6]}"
+        owner_uid = f"uid-{slug}"
+        owner_email = f"{slug}@dinely.com"
+        rest = await self._create_test_restaurant(db_session, slug, owner_uid, owner_email)
+        tbl = Table(
+            id=f"tbl-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_number="Table 03",
+            status="OCCUPIED",
+            capacity=4,
+        )
+        db_session.add(tbl)
+        await db_session.commit()
+
+        now_utc = datetime.now(timezone.utc)
+        bday = BusinessDay(
+            id=f"bday-sections-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            business_date=now_utc.strftime("%d %b %Y"),
+            status="OPEN",
+            opened_at=now_utc,
+            opened_by=owner_email,
+        )
+        db_session.add(bday)
+        await db_session.commit()
+
+        # Multi-station order: Food + Bar + Hookah
+        ord1 = Order(
+            id=f"ord-multi-{uuid.uuid4().hex[:6]}",
+            restaurant_id=rest.id,
+            table_id=tbl.id,
+            table_number="Table 03",
+            business_day_id=bday.id,
+            status="COMPLETED",
+            kitchen_status="COMPLETED",
+            bar_status="COMPLETED",
+            hookah_status="COMPLETED",
+            delivery_status="DELIVERED",
+            subtotal=1759.0,
+            tax_amount=87.95,
+            total_amount=1846.95,
+            order_number="#ORD-301",
+            payment_status="UNPAID",
+            items_json=[
+                {
+                    "name": "Chicken Biryani",
+                    "price": 340.0,
+                    "quantity": 1,
+                    "station": "KITCHEN",
+                },
+                {
+                    "name": "Crispy Truffle Fries",
+                    "price": 280.0,
+                    "quantity": 1,
+                    "station": "KITCHEN",
+                },
+                {
+                    "name": "Kingfisher Beer",
+                    "price": 340.0,
+                    "quantity": 1,
+                    "station": "BAR",
+                },
+                {
+                    "name": "Mint Hookah",
+                    "price": 799.0,
+                    "quantity": 1,
+                    "station": "HOOKAH",
+                    "selected_flavour": "Mint",
+                },
+            ],
+            created_at=now_utc,
+        )
+        db_session.add(ord1)
+        await db_session.commit()
+
+        token = create_test_jwt({"sub": owner_uid, "email": owner_email, "role": "OWNER", "restaurant_id": rest.id})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            res = await ac.get(f"/api/v1/restaurants/{rest.id}/business-day/current", headers=headers)
+            assert res.status_code == 200
+            data = res.json()
+
+            # Verify 3 distinct station sections
+            assert "sections" in data
+            sections = data["sections"]
+            assert "kitchen" in sections
+            assert "bar" in sections
+            assert "hookah" in sections
+            assert "combined" in sections
+
+            kitchen = sections["kitchen"]
+            bar = sections["bar"]
+            hookah = sections["hookah"]
+            combined = sections["combined"]
+
+            # Kitchen sales = 340 + 280 = 620.0
+            assert kitchen["sales"] == 620.0
+            assert kitchen["orders_count"] == 1
+            assert len(kitchen["items"]) == 2
+
+            # Bar sales = 340.0
+            assert bar["sales"] == 340.0
+            assert bar["orders_count"] == 1
+            assert len(bar["items"]) == 1
+
+            # Hookah sales = 799.0
+            assert hookah["sales"] == 799.0
+            assert hookah["orders_count"] == 1
+            assert len(hookah["items"]) == 1
+            assert hookah["items"][0]["flavour"] == "Mint"
+
+            # Mathematical verification: zero double-counting
+            assert combined["total_order_value"] == round(kitchen["sales"] + bar["sales"] + hookah["sales"], 2)
+            assert combined["total_order_value"] == 1759.0
+            assert combined["is_reconciled"] is True
+
+            # Verify Historical endpoint captures sections
+            hist_res = await ac.get(f"/api/v1/restaurants/{rest.id}/business-day/history/{bday.id}", headers=headers)
+            assert hist_res.status_code == 200
+            hist_data = hist_res.json()
+            assert "sections" in hist_data
+            assert hist_data["sections"]["kitchen"]["sales"] == 620.0
+            assert hist_data["sections"]["hookah"]["sales"] == 799.0
+

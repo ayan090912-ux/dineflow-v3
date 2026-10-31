@@ -828,6 +828,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.restaurant.getBusinessDayOrders(restaurantId, dayId);
   }
 
+  async getBusinessDayDetail(restaurantId?: string, dayId?: string): Promise<BusinessDay | null> {
+    return this.restaurant.getBusinessDayDetail(restaurantId, dayId);
+  }
+
   async createOrganization(orgData: any) {
     return this.restaurant.createOrganization(orgData);
   }

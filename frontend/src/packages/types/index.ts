@@ -699,6 +699,101 @@ export interface DailySummaryData {
   totalSales: number;
   completedOrders: number;
   cancelledOrders: number;
+  kitchenOrders?: number;
+  hookahOrders?: number;
+  kitchenSales?: number;
+  hookahSales?: number;
+  sections?: DaySectionsBreakdown;
+}
+
+export interface StationItemBreakdown {
+  name: string;
+  productName?: string;
+  product_name?: string;
+  flavour?: string;
+  quantity: number;
+  unitPrice?: number;
+  unit_price?: number;
+  discountAmount?: number;
+  discount_amount?: number;
+  grossSales?: number;
+  gross_sales?: number;
+  netSales?: number;
+  net_sales?: number;
+  taxAmount?: number;
+  tax_amount?: number;
+  ordersCount?: number;
+  orders_count?: number;
+  station: 'KITCHEN' | 'BAR' | 'HOOKAH';
+}
+
+export interface StationOrderBreakdown {
+  id: string;
+  orderNumber?: string;
+  order_number?: string;
+  tableNumber?: string;
+  table_number?: string;
+  tableId?: string;
+  table_id?: string;
+  createdAt?: string;
+  created_at?: string;
+  status: string;
+  stationStatus?: string;
+  station_status?: string;
+  items: Array<{
+    name: string;
+    flavour?: string;
+    quantity: number;
+    unitPrice?: number;
+    unit_price?: number;
+    totalPrice?: number;
+    total_price?: number;
+  }>;
+  subtotal: number;
+  paymentStatus?: string;
+  payment_status?: string;
+  customerName?: string;
+  customer_name?: string;
+}
+
+export interface StationSectionData {
+  title: string;
+  station: 'KITCHEN' | 'BAR' | 'HOOKAH';
+  sales: number;
+  orderValue?: number;
+  order_value?: number;
+  ordersCount?: number;
+  orders_count?: number;
+  itemsCount?: number;
+  items_count?: number;
+  dishesCount?: number;
+  dishes_count?: number;
+  beveragesCount?: number;
+  beverages_count?: number;
+  productsCount?: number;
+  products_count?: number;
+  items: StationItemBreakdown[];
+  orders: StationOrderBreakdown[];
+}
+
+export interface DaySectionsBreakdown {
+  kitchen: StationSectionData;
+  bar: StationSectionData;
+  hookah: StationSectionData;
+  combined: {
+    kitchenSales?: number;
+    kitchen_sales?: number;
+    barSales?: number;
+    bar_sales?: number;
+    hookahSales?: number;
+    hookah_sales?: number;
+    totalOrderValue?: number;
+    total_order_value?: number;
+    totalOrders?: number;
+    total_orders?: number;
+    isReconciled?: boolean;
+    is_reconciled?: boolean;
+  };
 }
 
 export interface BusinessDay {
@@ -719,11 +814,19 @@ export interface BusinessDay {
   completedOrders?: number;
   cancelledOrders?: number;
   foodOrders?: number;
+  kitchenOrders?: number;
+  kitchen_orders?: number;
   barOrders?: number;
+  hookahOrders?: number;
+  hookah_orders?: number;
   totalSales?: number;
   orderValue?: number;
   foodSales?: number;
+  kitchenSales?: number;
+  kitchen_sales?: number;
   barSales?: number;
+  hookahSales?: number;
+  hookah_sales?: number;
   cashSales?: number;
   cardSales?: number;
   upiSales?: number;
@@ -738,6 +841,7 @@ export interface BusinessDay {
   barPendingCount?: number;
   hookahPendingCount?: number;
   waiterPendingCount?: number;
+  sections?: DaySectionsBreakdown;
   summary?: DailySummaryData;
 }
 
@@ -890,6 +994,7 @@ export interface Order {
   customerName?: string;
   customerPhone?: string;
   notes?: string;
+  orderNumber?: string;
   displayOrderNumber?: string;
   items: OrderItem[];
   totalAmount: number;

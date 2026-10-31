@@ -2517,11 +2517,15 @@ export class RestaurantClient {
           completedOrders: data.completed_orders ?? data.completedOrders ?? 0,
           cancelledOrders: data.cancelled_orders ?? data.cancelledOrders ?? 0,
           foodOrders: data.food_orders ?? data.foodOrders ?? 0,
+          kitchenOrders: data.kitchen_orders ?? data.kitchenOrders ?? (data.food_orders ?? data.foodOrders ?? 0),
           barOrders: data.bar_orders ?? data.barOrders ?? 0,
+          hookahOrders: data.hookah_orders ?? data.hookahOrders ?? 0,
           totalSales: data.total_sales ?? data.totalSales ?? 0,
           orderValue: data.order_value ?? data.orderValue ?? 0,
           foodSales: data.food_sales ?? data.foodSales ?? 0,
+          kitchenSales: data.kitchen_sales ?? data.kitchenSales ?? (data.food_sales ?? data.foodSales ?? 0),
           barSales: data.bar_sales ?? data.barSales ?? 0,
+          hookahSales: data.hookah_sales ?? data.hookahSales ?? 0,
           cashSales: data.cash_sales ?? data.cashSales ?? 0,
           cardSales: data.card_sales ?? data.cardSales ?? 0,
           upiSales: data.upi_sales ?? data.upiSales ?? 0,
@@ -2536,6 +2540,7 @@ export class RestaurantClient {
           barPendingCount: data.bar_pending_count ?? data.barPendingCount,
           hookahPendingCount: data.hookah_pending_count ?? data.hookahPendingCount,
           waiterPendingCount: data.waiter_pending_count ?? data.waiterPendingCount,
+          sections: data.sections || data.summary?.sections,
           summary: data.summary,
         };
         const idx = this.base.businessDays.findIndex((b) => b.id === bday.id);
@@ -2816,11 +2821,33 @@ export class RestaurantClient {
           id: d.id,
           restaurantId: d.restaurant_id || d.restaurantId || restId,
           date: d.business_date || d.date,
+          businessDate: d.business_date || d.businessDate || d.date,
           status: d.status,
           openedAt: d.opened_at || d.openedAt,
           openedBy: d.opened_by || d.openedBy,
           closedAt: d.closed_at || d.closedAt,
           closedBy: d.closed_by || d.closedBy,
+          totalOrders: d.total_orders ?? d.totalOrders ?? 0,
+          completedOrders: d.completed_orders ?? d.completedOrders ?? 0,
+          cancelledOrders: d.cancelled_orders ?? d.cancelledOrders ?? 0,
+          foodOrders: d.food_orders ?? d.foodOrders ?? 0,
+          kitchenOrders: d.kitchen_orders ?? d.kitchenOrders ?? (d.food_orders ?? d.foodOrders ?? 0),
+          barOrders: d.bar_orders ?? d.barOrders ?? 0,
+          hookahOrders: d.hookah_orders ?? d.hookahOrders ?? 0,
+          totalSales: d.total_sales ?? d.totalSales ?? 0,
+          orderValue: d.order_value ?? d.orderValue ?? 0,
+          foodSales: d.food_sales ?? d.foodSales ?? 0,
+          kitchenSales: d.kitchen_sales ?? d.kitchenSales ?? (d.food_sales ?? d.foodSales ?? 0),
+          barSales: d.bar_sales ?? d.barSales ?? 0,
+          hookahSales: d.hookah_sales ?? d.hookahSales ?? 0,
+          cashSales: d.cash_sales ?? d.cashSales ?? 0,
+          cardSales: d.card_sales ?? d.cardSales ?? 0,
+          upiSales: d.upi_sales ?? d.upiSales ?? 0,
+          taxAmount: d.tax_amount ?? d.taxAmount ?? 0,
+          discountAmount: d.discount_amount ?? d.discountAmount ?? 0,
+          unpaidBillsAmount: d.unpaid_bills_amount ?? d.unpaidBillsAmount ?? 0,
+          averageOrderValue: d.average_order_value ?? d.averageOrderValue ?? 0,
+          sections: d.sections || d.summary?.sections,
           summary: d.summary,
         }));
       }
@@ -2828,6 +2855,61 @@ export class RestaurantClient {
       console.warn('[getBusinessDayHistory] Backend API fallback:', err);
     }
     return this.base.businessDays.filter((b) => b.restaurantId === restId && b.status === 'CLOSED');
+  }
+
+  async getBusinessDayDetail(restaurantId?: string, dayId?: string): Promise<BusinessDay | null> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId);
+    if (!restId || !dayId) return null;
+
+    try {
+      const data = await this.base.executeProtectedRequest<any>(
+        `/restaurants/${encodeURIComponent(restId)}/business-day/history/${encodeURIComponent(dayId)}`,
+        { method: 'GET' },
+        'OWNER'
+      );
+      if (data && data.id) {
+        return {
+          id: data.id,
+          restaurantId: data.restaurant_id || data.restaurantId || restId,
+          date: data.business_date || data.date,
+          businessDate: data.business_date || data.businessDate || data.date,
+          currentBusinessDate: data.current_business_date || data.currentBusinessDate || data.business_date,
+          nextBusinessDate: data.next_business_date || data.nextBusinessDate,
+          status: data.status || 'CLOSED',
+          openedAt: data.opened_at || data.openedAt,
+          openedBy: data.opened_by || data.openedBy,
+          closedAt: data.closed_at || data.closedAt,
+          closedBy: data.closed_by || data.closedBy,
+          requiresRollover: data.requires_rollover ?? data.requiresRollover ?? false,
+          isStaleShift: data.is_stale_shift ?? data.isStaleShift ?? false,
+          totalOrders: data.total_orders ?? data.totalOrders ?? 0,
+          completedOrders: data.completed_orders ?? data.completedOrders ?? 0,
+          cancelledOrders: data.cancelled_orders ?? data.cancelledOrders ?? 0,
+          foodOrders: data.food_orders ?? data.foodOrders ?? 0,
+          kitchenOrders: data.kitchen_orders ?? data.kitchenOrders ?? (data.food_orders ?? data.foodOrders ?? 0),
+          barOrders: data.bar_orders ?? data.barOrders ?? 0,
+          hookahOrders: data.hookah_orders ?? data.hookahOrders ?? 0,
+          totalSales: data.total_sales ?? data.totalSales ?? 0,
+          orderValue: data.order_value ?? data.orderValue ?? 0,
+          foodSales: data.food_sales ?? data.foodSales ?? 0,
+          kitchenSales: data.kitchen_sales ?? data.kitchenSales ?? (data.food_sales ?? data.foodSales ?? 0),
+          barSales: data.bar_sales ?? data.barSales ?? 0,
+          hookahSales: data.hookah_sales ?? data.hookahSales ?? 0,
+          cashSales: data.cash_sales ?? data.cashSales ?? 0,
+          cardSales: data.card_sales ?? data.cardSales ?? 0,
+          upiSales: data.upi_sales ?? data.upiSales ?? 0,
+          taxAmount: data.tax_amount ?? data.taxAmount ?? 0,
+          discountAmount: data.discount_amount ?? data.discountAmount ?? 0,
+          unpaidBillsAmount: data.unpaid_bills_amount ?? data.unpaidBillsAmount ?? 0,
+          averageOrderValue: data.average_order_value ?? data.averageOrderValue ?? 0,
+          sections: data.sections || data.summary?.sections,
+          summary: data.summary,
+        };
+      }
+    } catch (err) {
+      console.warn('[getBusinessDayDetail] Backend API failed:', err);
+    }
+    return null;
   }
 
   async getBusinessDayOrders(restaurantId?: string, dayId?: string): Promise<Order[]> {

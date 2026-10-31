@@ -24,7 +24,9 @@ class BusinessDay(Base, TimestampMixin):
     # Operational & Financial Metrics
     total_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     food_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    kitchen_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     bar_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    hookah_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     completed_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     cancelled_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -32,7 +34,9 @@ class BusinessDay(Base, TimestampMixin):
     gross_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     net_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     food_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    kitchen_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     bar_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    hookah_sales: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     discount_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     service_charge_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)

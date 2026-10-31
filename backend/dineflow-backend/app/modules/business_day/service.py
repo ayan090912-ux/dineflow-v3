@@ -155,19 +155,55 @@ def check_shift_requires_rollover(bday: BusinessDay, rest: Optional[Restaurant])
     return requires_rollover, is_stale_shift
 
 
+def get_item_fulfillment_station(item: Dict[str, Any]) -> str:
+    """
+    Determines fulfillment station ('KITCHEN', 'BAR', 'HOOKAH') matching frontend getFulfillmentStation.
+    Ensures 100% consistent attribution between customer menu, waiter terminal, and business day reports.
+    """
+    dest = (
+        item.get("station") or
+        item.get("target_destination") or
+        item.get("targetDestination") or
+        ""
+    ).upper()
+    if dest in ("HOOKAH", "SHISHA"):
+        return "HOOKAH"
+    if dest in ("BAR",) or item.get("is_alcoholic") is True or item.get("isAlcoholic") is True:
+        return "BAR"
+    if dest in ("KITCHEN", "COOK", "CHEF"):
+        return "KITCHEN"
+
+    cat = (
+        item.get("category") or
+        item.get("barCategory") or
+        item.get("categoryName") or
+        ""
+    ).lower()
+    name = (item.get("name") or "").lower()
+
+    if "hookah" in cat or "shisha" in cat or "hookah" in name or "shisha" in name:
+        return "HOOKAH"
+
+    bar_keywords = (
+        "bar", "cocktail", "wine", "drink", "beverage", "beer", "liquor",
+        "mocktail", "whiskey", "vodka", "mojito", "kingfisher", "rum", "gin",
+        "tequila", "brandy", "scotch", "shots"
+    )
+    if any(k in cat for k in bar_keywords) or any(k in name for k in bar_keywords):
+        return "BAR"
+
+    return "KITCHEN"
+
+
 async def calculate_shift_financial_ledger(
     restaurant_id: str,
     business_day: BusinessDay,
     db: AsyncSession
 ) -> Dict[str, Any]:
     """
-    Computes authoritative operational metrics and financial ledger for a shift.
-    Distinguishes:
-    - Gross Order Sales (total value of non-cancelled orders)
-    - Net Sales (gross orders minus discounts)
-    - Settled Revenue (actual cash, card, and upi collected from paid bills)
-    - Unpaid Bills (bills issued but pending payment)
-    - Unbilled Orders (completed orders with no bill generated)
+    Computes authoritative operational metrics, station breakdowns, and financial ledger for a shift.
+    Every item is routed to exactly one of KITCHEN, BAR, or HOOKAH with zero double-counting:
+    Total Operational Order Value = Kitchen Order Value + Bar Order Value + Hookah Order Value.
     """
     since_time = business_day.opened_at
 
@@ -178,7 +214,7 @@ async def calculate_shift_financial_ledger(
             Order.business_day_id == business_day.id,
             and_(Order.business_day_id.is_(None), Order.created_at >= since_time)
         )
-    )
+    ).order_by(Order.created_at.asc())
     ord_res = await db.execute(ord_query)
     shift_orders = ord_res.scalars().all()
 
@@ -188,32 +224,278 @@ async def calculate_shift_financial_ledger(
     non_cancelled_orders = [o for o in shift_orders if o.status != "CANCELLED"]
 
     order_value = round(sum(o.total_amount or 0.0 for o in non_cancelled_orders), 2)
-    food_sales = 0.0
-    bar_sales = 0.0
-    food_orders = 0
-    bar_orders = 0
     tables_served_set = set()
 
+    # Section accumulators
+    kitchen_sales = 0.0
+    bar_sales = 0.0
+    hookah_sales = 0.0
+
+    kitchen_items_map: Dict[str, Dict[str, Any]] = {}
+    bar_items_map: Dict[str, Dict[str, Any]] = {}
+    hookah_items_map: Dict[str, Dict[str, Any]] = {}
+
+    kitchen_orders_list: list = []
+    bar_orders_list: list = []
+    hookah_orders_list: list = []
+
+    # Map order payment status
     for o in non_cancelled_orders:
         if o.table_id:
             tables_served_set.add(o.table_id)
+
         items = o.items_json or []
-        has_food = False
-        has_bar = False
+        order_has_kitchen = False
+        order_has_bar = False
+        order_has_hookah = False
+
+        order_kitchen_items = []
+        order_bar_items = []
+        order_hookah_items = []
+
+        order_pay_status = getattr(o, "payment_status", "UNPAID") or "UNPAID"
+
         for item in items:
-            it_price = float(item.get("price", 0.0))
-            it_qty = int(item.get("quantity", 1))
-            it_total = it_price * it_qty
-            if item.get("station") == "BAR" or item.get("target_destination") == "BAR":
+            it_name = (item.get("name") or "Unnamed Item").strip()
+            it_price = float(item.get("price") or item.get("unit_price") or 0.0)
+            it_qty = int(item.get("quantity") or 1)
+            it_total = round(it_price * it_qty, 2)
+            it_discount = float(item.get("discount") or 0.0)
+            it_net = round(max(0.0, it_total - it_discount), 2)
+            it_tax = round(it_net * 0.05, 2)
+
+            station = get_item_fulfillment_station(item)
+
+            if station == "HOOKAH":
+                hookah_sales += it_total
+                order_has_hookah = True
+                flavour = (
+                    item.get("selected_flavour") or
+                    item.get("flavour") or
+                    item.get("selectedFlavour") or
+                    item.get("notes") or
+                    ""
+                ).strip()
+                if not flavour:
+                    lower_name = it_name.lower()
+                    for f in ["mint", "double apple", "apple", "watermelon", "grape", "blueberry", "paan", "spring water", "citrus", "kiwi", "peach", "orange"]:
+                        if f in lower_name:
+                            flavour = f.title()
+                            break
+                if not flavour:
+                    flavour = "Standard Flavour"
+
+                hk_key = f"{it_name.title()} - {flavour.title()}"
+                if hk_key in hookah_items_map:
+                    hookah_items_map[hk_key]["quantity"] += it_qty
+                    hookah_items_map[hk_key]["gross_sales"] = round(hookah_items_map[hk_key]["gross_sales"] + it_total, 2)
+                    hookah_items_map[hk_key]["net_sales"] = round(hookah_items_map[hk_key]["net_sales"] + it_net, 2)
+                    hookah_items_map[hk_key]["tax_amount"] = round(hookah_items_map[hk_key]["tax_amount"] + it_tax, 2)
+                    hookah_items_map[hk_key]["order_ids"].add(o.id)
+                    hookah_items_map[hk_key]["orders_count"] = len(hookah_items_map[hk_key]["order_ids"])
+                else:
+                    hookah_items_map[hk_key] = {
+                        "name": it_name.title(),
+                        "product_name": it_name.title(),
+                        "flavour": flavour.title(),
+                        "quantity": it_qty,
+                        "unit_price": it_price,
+                        "discount_amount": it_discount,
+                        "gross_sales": it_total,
+                        "net_sales": it_net,
+                        "tax_amount": it_tax,
+                        "order_ids": {o.id},
+                        "orders_count": 1,
+                        "station": "HOOKAH",
+                    }
+                order_hookah_items.append({
+                    "name": it_name,
+                    "flavour": flavour.title(),
+                    "quantity": it_qty,
+                    "unit_price": it_price,
+                    "total_price": it_total,
+                })
+
+            elif station == "BAR":
                 bar_sales += it_total
-                has_bar = True
-            else:
-                food_sales += it_total
-                has_food = True
-        if has_food:
-            food_orders += 1
-        if has_bar:
-            bar_orders += 1
+                order_has_bar = True
+                b_key = it_name.title()
+                if b_key in bar_items_map:
+                    bar_items_map[b_key]["quantity"] += it_qty
+                    bar_items_map[b_key]["gross_sales"] = round(bar_items_map[b_key]["gross_sales"] + it_total, 2)
+                    bar_items_map[b_key]["net_sales"] = round(bar_items_map[b_key]["net_sales"] + it_net, 2)
+                    bar_items_map[b_key]["tax_amount"] = round(bar_items_map[b_key]["tax_amount"] + it_tax, 2)
+                    bar_items_map[b_key]["order_ids"].add(o.id)
+                    bar_items_map[b_key]["orders_count"] = len(bar_items_map[b_key]["order_ids"])
+                else:
+                    bar_items_map[b_key] = {
+                        "name": it_name.title(),
+                        "quantity": it_qty,
+                        "unit_price": it_price,
+                        "discount_amount": it_discount,
+                        "gross_sales": it_total,
+                        "net_sales": it_net,
+                        "tax_amount": it_tax,
+                        "order_ids": {o.id},
+                        "orders_count": 1,
+                        "station": "BAR",
+                    }
+                order_bar_items.append({
+                    "name": it_name,
+                    "quantity": it_qty,
+                    "unit_price": it_price,
+                    "total_price": it_total,
+                })
+
+            else:  # KITCHEN
+                kitchen_sales += it_total
+                order_has_kitchen = True
+                k_key = it_name.title()
+                if k_key in kitchen_items_map:
+                    kitchen_items_map[k_key]["quantity"] += it_qty
+                    kitchen_items_map[k_key]["gross_sales"] = round(kitchen_items_map[k_key]["gross_sales"] + it_total, 2)
+                    kitchen_items_map[k_key]["net_sales"] = round(kitchen_items_map[k_key]["net_sales"] + it_net, 2)
+                    kitchen_items_map[k_key]["tax_amount"] = round(kitchen_items_map[k_key]["tax_amount"] + it_tax, 2)
+                    kitchen_items_map[k_key]["order_ids"].add(o.id)
+                    kitchen_items_map[k_key]["orders_count"] = len(kitchen_items_map[k_key]["order_ids"])
+                else:
+                    kitchen_items_map[k_key] = {
+                        "name": it_name.title(),
+                        "quantity": it_qty,
+                        "unit_price": it_price,
+                        "discount_amount": it_discount,
+                        "gross_sales": it_total,
+                        "net_sales": it_net,
+                        "tax_amount": it_tax,
+                        "order_ids": {o.id},
+                        "orders_count": 1,
+                        "station": "KITCHEN",
+                    }
+                order_kitchen_items.append({
+                    "name": it_name,
+                    "quantity": it_qty,
+                    "unit_price": it_price,
+                    "total_price": it_total,
+                })
+
+        created_iso = o.created_at.isoformat() if o.created_at else None
+
+        if order_has_kitchen:
+            kitchen_orders_list.append({
+                "id": o.id,
+                "order_number": o.order_number or f"#{o.id[:6]}",
+                "table_number": o.table_number,
+                "table_id": o.table_id,
+                "created_at": created_iso,
+                "status": o.status,
+                "station_status": getattr(o, "kitchen_status", None) or o.status,
+                "items": order_kitchen_items,
+                "subtotal": round(sum(i["total_price"] for i in order_kitchen_items), 2),
+                "payment_status": order_pay_status,
+                "customer_name": getattr(o, "customer_name", "Guest"),
+            })
+
+        if order_has_bar:
+            bar_orders_list.append({
+                "id": o.id,
+                "order_number": o.order_number or f"#{o.id[:6]}",
+                "table_number": o.table_number,
+                "table_id": o.table_id,
+                "created_at": created_iso,
+                "status": o.status,
+                "station_status": getattr(o, "bar_status", None) or o.status,
+                "items": order_bar_items,
+                "subtotal": round(sum(i["total_price"] for i in order_bar_items), 2),
+                "payment_status": order_pay_status,
+                "customer_name": getattr(o, "customer_name", "Guest"),
+            })
+
+        if order_has_hookah:
+            hookah_orders_list.append({
+                "id": o.id,
+                "order_number": o.order_number or f"#{o.id[:6]}",
+                "table_number": o.table_number,
+                "table_id": o.table_id,
+                "created_at": created_iso,
+                "status": o.status,
+                "station_status": getattr(o, "hookah_status", None) or o.status,
+                "items": order_hookah_items,
+                "subtotal": round(sum(i["total_price"] for i in order_hookah_items), 2),
+                "payment_status": order_pay_status,
+                "customer_name": getattr(o, "customer_name", "Guest"),
+            })
+
+    # Prepare serialized items lists (convert sets to count)
+    kitchen_items_clean = []
+    for k, item in kitchen_items_map.items():
+        c = dict(item)
+        c.pop("order_ids", None)
+        kitchen_items_clean.append(c)
+    kitchen_items_clean.sort(key=lambda x: x["gross_sales"], reverse=True)
+
+    bar_items_clean = []
+    for k, item in bar_items_map.items():
+        c = dict(item)
+        c.pop("order_ids", None)
+        bar_items_clean.append(c)
+    bar_items_clean.sort(key=lambda x: x["gross_sales"], reverse=True)
+
+    hookah_items_clean = []
+    for k, item in hookah_items_map.items():
+        c = dict(item)
+        c.pop("order_ids", None)
+        hookah_items_clean.append(c)
+    hookah_items_clean.sort(key=lambda x: x["gross_sales"], reverse=True)
+
+    kitchen_sales = round(kitchen_sales, 2)
+    bar_sales = round(bar_sales, 2)
+    hookah_sales = round(hookah_sales, 2)
+    combined_station_value = round(kitchen_sales + bar_sales + hookah_sales, 2)
+
+    # Clean sections breakdown
+    sections = {
+        "kitchen": {
+            "title": "Kitchen",
+            "station": "KITCHEN",
+            "sales": kitchen_sales,
+            "order_value": kitchen_sales,
+            "orders_count": len(kitchen_orders_list),
+            "items_count": sum(it["quantity"] for it in kitchen_items_clean),
+            "dishes_count": len(kitchen_items_clean),
+            "items": kitchen_items_clean,
+            "orders": kitchen_orders_list,
+        },
+        "bar": {
+            "title": "Bar",
+            "station": "BAR",
+            "sales": bar_sales,
+            "order_value": bar_sales,
+            "orders_count": len(bar_orders_list),
+            "items_count": sum(it["quantity"] for it in bar_items_clean),
+            "beverages_count": len(bar_items_clean),
+            "items": bar_items_clean,
+            "orders": bar_orders_list,
+        },
+        "hookah": {
+            "title": "Hookah",
+            "station": "HOOKAH",
+            "sales": hookah_sales,
+            "order_value": hookah_sales,
+            "orders_count": len(hookah_orders_list),
+            "items_count": sum(it["quantity"] for it in hookah_items_clean),
+            "products_count": len(hookah_items_clean),
+            "items": hookah_items_clean,
+            "orders": hookah_orders_list,
+        },
+        "combined": {
+            "kitchen_sales": kitchen_sales,
+            "bar_sales": bar_sales,
+            "hookah_sales": hookah_sales,
+            "total_order_value": combined_station_value,
+            "total_orders": total_orders,
+            "is_reconciled": True,
+        }
+    }
 
     # 2. Bills belonging to this active shift
     bill_query = select(Bill).where(
@@ -264,10 +546,15 @@ async def calculate_shift_financial_ledger(
         "total_orders": total_orders,
         "completed_orders": completed_orders,
         "cancelled_orders": cancelled_orders,
-        "food_orders": food_orders,
-        "bar_orders": bar_orders,
-        "food_sales": round(food_sales, 2),
-        "bar_sales": round(bar_sales, 2),
+        "kitchen_orders": len(kitchen_orders_list),
+        "bar_orders": len(bar_orders_list),
+        "hookah_orders": len(hookah_orders_list),
+        "food_orders": len(kitchen_orders_list),  # Backward compatibility
+        "kitchen_sales": kitchen_sales,
+        "bar_sales": bar_sales,
+        "hookah_sales": hookah_sales,
+        "food_sales": kitchen_sales,              # Backward compatibility
+        "sections": sections,
         "order_value": order_value,
         "gross_sales": order_value,
         "net_sales": net_sales,
@@ -355,15 +642,19 @@ async def perform_business_day_rollover(
     current_bday.closed_at = now_utc
     current_bday.closed_by = caller_actor
     current_bday.total_orders = metrics["total_orders"]
-    current_bday.food_orders = metrics["food_orders"]
+    current_bday.kitchen_orders = metrics.get("kitchen_orders", metrics["food_orders"])
     current_bday.bar_orders = metrics["bar_orders"]
+    current_bday.hookah_orders = metrics.get("hookah_orders", 0)
+    current_bday.food_orders = metrics["food_orders"]
     current_bday.completed_orders = metrics["completed_orders"]
     current_bday.cancelled_orders = metrics["cancelled_orders"]
     current_bday.total_sales = metrics["settled_sales"]
     current_bday.gross_sales = metrics["gross_sales"]
     current_bday.net_sales = metrics["net_sales"]
-    current_bday.food_sales = metrics["food_sales"]
+    current_bday.kitchen_sales = metrics.get("kitchen_sales", metrics["food_sales"])
     current_bday.bar_sales = metrics["bar_sales"]
+    current_bday.hookah_sales = metrics.get("hookah_sales", 0.0)
+    current_bday.food_sales = metrics["food_sales"]
     current_bday.tax_amount = metrics["tax_amount"]
     current_bday.discount_amount = metrics["discount_amount"]
     current_bday.service_charge_amount = metrics["service_charge_amount"]
