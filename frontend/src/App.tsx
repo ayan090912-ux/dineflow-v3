@@ -536,7 +536,15 @@ function AppContent() {
           }
           setCurrentUser(appUser);
         } else {
-          authStateMachine.setUnauthenticated();
+          // If an active session token exists in storage or handoff parameters, retain the authenticated state
+          const hasExistingSession = typeof window !== 'undefined' && Boolean(
+            localStorage.getItem('dinely_auth_token') ||
+            sessionStorage.getItem('dinely_auth_token') ||
+            new URLSearchParams(window.location.search).get('auth_token')
+          );
+          if (!hasExistingSession) {
+            authStateMachine.setUnauthenticated();
+          }
         }
       },
       (error) => {
