@@ -454,8 +454,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           playKitchenChime('NEW_ORDER');
         }
 
-        // Optimistically append order if it contains kitchen items
-        const rawOrder = event.data || (event as any).payload || (event as any).order;
+        // Optimistically append order if it contains kitchen items (zero latency card ingestion)
+        const rawOrder = event.data || (event as any).payload || (event as any).order || ((event as any).items ? event : null);
         if (rawOrder && Array.isArray(rawOrder.items)) {
           const hasKitchenItems = rawOrder.items.some((item: any) => getFulfillmentStation(item) === 'KITCHEN');
           if (hasKitchenItems) {

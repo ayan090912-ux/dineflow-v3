@@ -356,6 +356,15 @@ def invalidate_order_tax_cache(restaurant_id: Optional[str] = None):
     else:
         _ORDER_TAX_CACHE.clear()
 
+_ORDER_BDAY_CACHE: dict = {}
+_ORDER_BDAY_CACHE_TTL: float = 15.0
+
+def invalidate_order_bday_cache(restaurant_id: Optional[str] = None):
+    if restaurant_id:
+        _ORDER_BDAY_CACHE.pop(restaurant_id, None)
+    else:
+        _ORDER_BDAY_CACHE.clear()
+
 _ORDER_DAILY_SEQ: dict = {}
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -366,7 +375,9 @@ async def create_order(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        print(f"[ORDER_CREATED_REQUEST] restaurant_id={payload.restaurantId} table_number={payload.tableNumber} items_count={len(payload.items or [])}")
+        t_start = time.time()
+        correlation_id = getattr(payload, "correlationId", None) or getattr(payload, "idempotencyKey", None) or (payload.id if payload.id and not payload.id.startswith("ord-") else None) or str(uuid.uuid4())[:8]
+        print(f"[PERF][ORDER_RECEIVED] correlation_id={correlation_id} rest={payload.restaurantId} table={payload.tableNumber} items={len(payload.items or [])}")
         if not payload.restaurantId:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="restaurantId is required")
         if not payload.items or len(payload.items) == 0:
@@ -817,13 +828,18 @@ async def create_order(
                     print(f"[ORDER_RAPID_DUPLICATE_GUARD] Returning existing order {cand.id} to prevent double tap")
                     return format_order_response(cand, hide_financials=(is_wedding_event and not is_staff_caller))
 
-        # Query active OPEN business day for authoritative attribution
-        query_bday = select(BusinessDay.id).where(
-            BusinessDay.restaurant_id == restaurant.id,
-            BusinessDay.status == "OPEN"
-        ).order_by(BusinessDay.opened_at.desc()).limit(1)
-        res_bday = await db.execute(query_bday)
-        active_bday_id = res_bday.scalar_one_or_none()
+        # Query active OPEN business day for authoritative attribution (cached for 15s)
+        cached_bday = _ORDER_BDAY_CACHE.get(restaurant.id)
+        if cached_bday and (now_mono - cached_bday[0] < _ORDER_BDAY_CACHE_TTL):
+            active_bday_id = cached_bday[1]
+        else:
+            query_bday = select(BusinessDay.id).where(
+                BusinessDay.restaurant_id == restaurant.id,
+                BusinessDay.status == "OPEN"
+            ).order_by(BusinessDay.opened_at.desc()).limit(1)
+            res_bday = await db.execute(query_bday)
+            active_bday_id = res_bday.scalar_one_or_none()
+            _ORDER_BDAY_CACHE[restaurant.id] = (now_mono, active_bday_id)
 
         # Event Verification & Association (Weddings & Events Module)
         eff_order_type = payload.orderType or "DINE_IN"
@@ -992,6 +1008,21 @@ async def create_order(
 
         # Authoritative Inventory & Menu Item Stock Decrement
         menu_stock_updated = False
+        item_names_lower = [it.get("name", "").strip().lower() for it in items_list_dict if it.get("name")]
+        inv_map = {}
+        if item_names_lower:
+            try:
+                from app.modules.inventory.models import InventoryItemModel
+                inv_res = await db.execute(
+                    select(InventoryItemModel).where(
+                        InventoryItemModel.restaurant_id == restaurant.id,
+                        func.lower(InventoryItemModel.name).in_(item_names_lower)
+                    )
+                )
+                inv_map = {inv.name.strip().lower(): inv for inv in inv_res.scalars().all()}
+            except Exception as inv_err:
+                print("[INVENTORY_BATCH_NOTICE]:", inv_err)
+
         for it_meta in items_list_dict:
             qty_ordered = int(it_meta.get("quantity") or 1)
             mid = it_meta.get("menuItemId") or it_meta.get("id")
@@ -1007,32 +1038,25 @@ async def create_order(
                         m_obj.is_available = False
                     menu_stock_updated = True
 
-            # 2. Decrement corresponding InventoryItemModel if exists
-            try:
-                from app.modules.inventory.models import InventoryItemModel
-                inv_res = await db.execute(
-                    select(InventoryItemModel).where(
-                        InventoryItemModel.restaurant_id == restaurant.id,
-                        func.lower(InventoryItemModel.name) == m_name.lower()
-                    )
-                )
-                inv_rec = inv_res.scalar_one_or_none()
-                if inv_rec:
-                    new_inv_q = max(0.0, float(inv_rec.quantity) - qty_ordered)
-                    inv_rec.quantity = new_inv_q
-                    if new_inv_q <= 0:
-                        inv_rec.status = "OUT_OF_STOCK"
-                    elif new_inv_q <= inv_rec.min_threshold:
-                        inv_rec.status = "LOW_STOCK"
-                    else:
-                        inv_rec.status = "IN_STOCK"
-            except Exception as inv_err:
-                print("[INVENTORY_SYNC_NOTICE] Inventory decrement handled:", inv_err)
+            # 2. Decrement corresponding InventoryItemModel if exists (from batched map)
+            inv_rec = inv_map.get(m_name.lower())
+            if inv_rec:
+                new_inv_q = max(0.0, float(inv_rec.quantity) - qty_ordered)
+                inv_rec.quantity = new_inv_q
+                if new_inv_q <= 0:
+                    inv_rec.status = "OUT_OF_STOCK"
+                elif new_inv_q <= inv_rec.min_threshold:
+                    inv_rec.status = "LOW_STOCK"
+                else:
+                    inv_rec.status = "IN_STOCK"
 
         await db.commit()
-        print(f"[ORDER_DATABASE_COMMITTED] order_id={order_id} restaurant_id={restaurant.id} total={total}")
+        t_db_committed = time.time()
+        print(f"[PERF][DB_COMMITTED] correlation_id={correlation_id} order_id={order_id} took={int((t_db_committed - t_start) * 1000)}ms total={total}")
         is_evt_order = bool(new_order.event_id) or (getattr(new_order, "order_type", "") in ["EVENT_ORDER", "WEDDING_EVENT"])
         resp_data = format_order_response(new_order, hide_financials=is_evt_order)
+        resp_data["correlation_id"] = correlation_id
+        resp_data["correlationId"] = correlation_id
 
         try:
             from app.modules.websocket.manager import ws_manager
@@ -1052,16 +1076,21 @@ async def create_order(
                 payload=resp_data,
                 target_audience=order_target_aud
             )
+            t_ws_published = time.time()
+            print(f"[PERF][WS_PUBLISHED] correlation_id={correlation_id} took={int((t_ws_published - t_start) * 1000)}ms targets={order_target_aud}")
+
             # Instantly update Active Tables across Owner, Waiter, and Customer terminals (ordinary orders only)
             if not payload.eventId and (tbl_id or tbl_num):
                 bill_data = None
                 try:
+                    pre_taxes = (active_taxes, tax_cats_map, tax_items_map) if 'active_taxes' in locals() else None
                     bill_data = await BillingService.calculate_table_bill_data(
                         rest=restaurant,
                         table_number=tbl_num,
                         table_session_id=actual_session_id,
                         table_id=tbl_id,
-                        db=db
+                        db=db,
+                        prefetched_taxes=pre_taxes
                     )
                     if actual_session_id:
                         open_bill_stmt = select(Bill).where(

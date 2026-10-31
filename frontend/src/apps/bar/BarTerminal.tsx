@@ -174,7 +174,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
         (event.type === 'FulfillmentTicketUpdated' && event.station === 'BAR')
       ) {
         // Fast-path instant reactive state ingestion
-        const rawPayload = event.payload || event.data;
+        const rawPayload = event.payload || event.data || (event as any).order || (event.items ? event : null);
         if (rawPayload && rawPayload.id) {
           const norm = normalizeOrder(rawPayload);
           setOrders((prev) => {

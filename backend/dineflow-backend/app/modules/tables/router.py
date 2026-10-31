@@ -865,7 +865,7 @@ async def close_table_session(
 
     # Clean up / finalize orders associated with the closed session(s)
     try:
-        from app.modules.orders.models import Order
+        from app.modules.orders.models import Order, Bill
         query_ords = select(Order).where(
             (Order.restaurant_id.in_(search_rest_ids)) &
             (
@@ -886,6 +886,16 @@ async def close_table_session(
             ord.delivery_status = "DELIVERED"
             if not ord.delivered_at:
                 ord.delivered_at = now_utc
+
+        # Mark all bills associated with closed session(s) as CLOSED to guarantee billing source-of-truth
+        if closed_session_ids:
+            query_bills = select(Bill).where(
+                (Bill.restaurant_id.in_(search_rest_ids)) &
+                (Bill.table_session_id.in_(closed_session_ids))
+            )
+            res_bills = await db.execute(query_bills)
+            for b in res_bills.scalars().all():
+                b.status = "CLOSED"
     except Exception as ord_err:
         print("[ORDER_CLEANUP_NOTICE]:", ord_err)
 

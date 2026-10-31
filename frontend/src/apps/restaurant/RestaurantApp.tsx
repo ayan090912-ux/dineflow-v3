@@ -2786,10 +2786,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 const isReserved = tbl.status === 'RESERVED' || Boolean(tbl.reservationDetails);
                 const isMerged = tbl.isMerged || tbl.status === 'MERGED';
 
-                const activeSessionId = tbl.activeSessionId || (tbl as any).active_session_id || activeSessions.find(
+                const activeSession = activeSessions.find(
                   (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
-                )?.id;
-                const activeSess = activeSessions.find((s) => s.id === activeSessionId) || (activeSessionId ? {
+                );
+                const activeSessionId = activeSession?.id || tbl.activeSessionId || (tbl as any).active_session_id;
+                const activeSess = activeSession || (activeSessionId ? {
                   id: activeSessionId,
                   tableId: tbl.id,
                   tableNumber: tbl.tableNumber,
@@ -2799,10 +2800,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 } : undefined);
                 const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
                 const tableOrders = activeSessionId
-                  ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()))) && o.status !== 'CANCELLED')
+                  ? orders.filter((o) => o.tableSessionId === activeSessionId && o.status !== 'CANCELLED')
                   : orders.filter((o) => (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && o.status !== 'CANCELLED');
                 const matchingBill = activeSessionId
-                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.status !== 'PAID')
                   : undefined;
                 const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, matchingBill);
                 const sessionTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : (tbl.sessionTotal !== undefined ? tbl.sessionTotal : (tbl as any).session_total || 0);
@@ -4081,10 +4082,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       {tables
                         .filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.isOccupied)
                         .map((tbl) => {
-                          const activeSessionId = tbl.activeSessionId || (tbl as any).active_session_id || activeSessions.find(
+                          const activeSession = activeSessions.find(
                             (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
-                          )?.id;
-                          const activeSess = activeSessions.find((s) => s.id === activeSessionId) || (activeSessionId ? {
+                          );
+                          const activeSessionId = activeSession?.id || tbl.activeSessionId || (tbl as any).active_session_id;
+                          const activeSess = activeSession || (activeSessionId ? {
                             id: activeSessionId,
                             tableId: tbl.id,
                             tableNumber: tbl.tableNumber,
@@ -4093,10 +4095,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             restaurantId: currentRestaurant?.id || ''
                           } : undefined);
                           const tableOrders = activeSessionId
-                            ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()))) && o.status !== 'CANCELLED')
+                            ? orders.filter((o) => o.tableSessionId === activeSessionId && o.status !== 'CANCELLED')
                             : orders.filter((o) => (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && o.status !== 'CANCELLED');
                           const activeBill = activeSessionId
-                            ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                            ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.status !== 'PAID')
                             : undefined;
                           const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, activeBill);
                           const fallbackGrandTotal = tbl.sessionTotal !== undefined ? tbl.sessionTotal : ((tbl as any).session_total || 0);
@@ -4204,7 +4206,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => setSelectedBillDetails(effectiveBill)}
+                                  onClick={async () => {
+                                    try {
+                                      const liveBill = await api.getRunningTableBill(currentRestaurant?.id || api.getCurrentRestaurantId() || '', tbl.tableNumber, activeSessionId);
+                                      setSelectedBillDetails(liveBill || effectiveBill);
+                                    } catch (err) {
+                                      setSelectedBillDetails(effectiveBill);
+                                    }
+                                  }}
                                   className="border-[#1e232e] bg-[#12151b] text-xs font-semibold text-slate-200 hover:text-white"
                                 >
                                   View Bill 📄

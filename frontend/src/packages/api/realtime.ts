@@ -348,6 +348,7 @@ class RealTimeEventBus {
           const restId = raw.restaurant_id || raw.restaurantId || payloadObj.restaurantId || payloadObj.restaurant_id;
           const tblNum = raw.table_number || raw.tableNumber || payloadObj.tableNumber || payloadObj.table_number;
           const tblSessId = raw.table_session_id || raw.tableSessionId || payloadObj.tableSessionId || payloadObj.table_session_id;
+          const correlationId = raw.correlation_id || raw.correlationId || payloadObj.correlation_id || payloadObj.correlationId;
 
           const mappedPayload: RealTimeEventPayload = {
             eventId,
@@ -357,6 +358,10 @@ class RealTimeEventBus {
             tableSessionId: tblSessId,
             timestamp: raw.timestamp || new Date().toISOString(),
             ...payloadObj,
+            payload: payloadObj,
+            data: payloadObj,
+            order: payloadObj,
+            ...(correlationId ? { correlationId, correlation_id: correlationId } : {}),
           };
 
           // Dispatch event exactly once to listeners

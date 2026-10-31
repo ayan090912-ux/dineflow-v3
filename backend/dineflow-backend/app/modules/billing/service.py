@@ -153,7 +153,8 @@ class BillingService:
         discount_amount: float = 0.0,
         service_charge_percentage: Optional[float] = None,
         order_type: str = "DINE_IN",
-        db: AsyncSession = None
+        db: AsyncSession = None,
+        prefetched_taxes: Optional[Tuple[List[Any], Dict[str, Any], Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Authoritative calculation of a table's running or final bill.
@@ -271,7 +272,10 @@ class BillingService:
         taxable_subtotal = max(0.0, round(subtotal - disc_amt, 2))
 
         # Get Effective Taxes
-        active_taxes, tax_cats_map, tax_items_map = await cls.get_effective_taxes(rest, db)
+        if prefetched_taxes:
+            active_taxes, tax_cats_map, tax_items_map = prefetched_taxes
+        else:
+            active_taxes, tax_cats_map, tax_items_map = await cls.get_effective_taxes(rest, db)
 
         # Run Tax Engine with Prorated Discount
         calc_res = calculate_taxes(

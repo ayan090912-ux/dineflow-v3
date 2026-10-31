@@ -303,7 +303,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
       // 4. Granular instant state dispatch
       if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
-        const payloadData = (event as any).payload || event;
+        const payloadData = (event as any).payload || (event as any).data || event;
         const newReq: CustomerRequest = {
           id: payloadData.id || (event as any).id || `req-${Date.now()}`,
           restaurantId: payloadData.restaurantId || payloadData.restaurant_id || currentRestaurantId,
@@ -332,7 +332,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
           'warning'
         );
       } else if (event.type === 'service_request_updated' || event.type === 'CustomerRequestUpdated') {
-        const payloadData = (event as any).payload || event;
+        const payloadData = (event as any).payload || (event as any).data || event;
         const reqId = payloadData.id || (event as any).id;
         const updatedStatus = (payloadData.status || (event as any).status || '').toUpperCase();
         const assignedStaff = payloadData.waiterName || payloadData.waiter_name || payloadData.assignedWaiterName;
@@ -351,7 +351,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
           );
         }
       } else if (event.type === 'order_created' || event.type === 'OrderCreated') {
-        const payloadOrder = (event as any).order || (event as any).payload?.order;
+        const payloadOrder = (event as any).order || (event as any).payload?.order || (event as any).payload || (event as any).data || ((event as any).items ? event : null);
         if (payloadOrder && payloadOrder.id) {
           setOrders((prev) => {
             if (prev.some((o) => o.id === payloadOrder.id)) {
@@ -711,24 +711,24 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     }
   };
 
-  // Helper to find matching bill for a customer request
+  // Helper to find matching non-closed bill for a customer request
   const getBillForRequest = (req: CustomerRequest): Bill | undefined => {
     if (req.tableSessionId) {
-      const bySess = bills.find((b) => b.tableSessionId === req.tableSessionId);
+      const bySess = bills.find((b) => b.tableSessionId === req.tableSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED');
       if (bySess) return bySess;
     }
-    return bills.find((b) => matchTableNumber(b.tableNumber, req.tableNumber));
+    return bills.find((b) => matchTableNumber(b.tableNumber, req.tableNumber) && b.status !== 'CLOSED' && b.status !== 'CANCELLED');
   };
 
   // Helper to resolve amount for a customer request
   const getAmountForRequest = (req: CustomerRequest, matchingBill?: Bill): number => {
     if (matchingBill && matchingBill.grandTotal) return matchingBill.grandTotal;
     const sess = activeSessions.find(
-      (s) => (req.tableSessionId && s.id === req.tableSessionId) || matchTableNumber(s.tableNumber, req.tableNumber)
+      (s) => (req.tableSessionId && s.id === req.tableSessionId) || (s.status !== 'CLOSED' && matchTableNumber(s.tableNumber, req.tableNumber))
     );
     if (sess) {
       const tableOrders = orders.filter((o) => o.tableSessionId === sess.id && o.status !== 'CANCELLED');
-      const total = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+      const total = tableOrders.reduce((sum, o) => sum + (o.totalAmount || o.subtotal || 0), 0);
       return total;
     }
     return 0;
