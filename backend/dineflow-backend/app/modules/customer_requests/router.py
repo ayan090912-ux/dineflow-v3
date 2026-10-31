@@ -163,7 +163,7 @@ async def get_customer_requests(
 
     # If caller has authentication, enforce tenant authorization
     if caller.is_authenticated and not caller.is_admin:
-        caller_tid = caller.tenant_id or caller.restaurant_id
+        caller_tid = getattr(caller, "restaurant_id", None) or getattr(caller, "tenant_id", None)
         is_same_tenant = bool(caller_tid and caller_tid.lower() == canonical_rest_id.lower())
         if not is_same_tenant:
             if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
@@ -250,7 +250,7 @@ async def update_customer_request(
         )
 
     if not caller.is_admin:
-        caller_tid = caller.tenant_id or caller.restaurant_id
+        caller_tid = getattr(caller, "restaurant_id", None) or getattr(caller, "tenant_id", None)
         is_same_tenant = bool(caller_tid and caller_tid.lower() == req.restaurant_id.lower())
         if not is_same_tenant:
             if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
