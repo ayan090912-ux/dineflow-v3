@@ -29,6 +29,18 @@
     --dinely-warning: #f59e0b;
     --dinely-danger: #ef4444;
     --dinely-info: #3b82f6;
+
+    /* Liquid Glass Hospitality Design System Tokens */
+    --liquid-bg: #080a0d;
+    --liquid-elevated: #11151b;
+    --liquid-glass-surface: rgba(255, 255, 255, 0.055);
+    --liquid-glass-strong: rgba(255, 255, 255, 0.10);
+    --liquid-text: #f7f7f5;
+    --liquid-text-secondary: #a1a8b3;
+    --liquid-border: rgba(255, 255, 255, 0.10);
+    --liquid-accent-gold: #f5a623;
+    --liquid-accent-bar: #a855f7;
+    --liquid-accent-hookah: #d97706;
   }
 
   html, body {
@@ -87,6 +99,43 @@
 
   .dinely-hairline {
     border-color: var(--color-border-subtle);
+  }
+
+  /* Liquid Glass Hospitality Utilities */
+  .liquid-glass {
+    background: rgba(255, 255, 255, 0.055);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .liquid-glass-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.065) 0%, rgba(255, 255, 255, 0.025) 100%);
+    backdrop-filter: blur(16px) saturate(170%);
+    -webkit-backdrop-filter: blur(16px) saturate(170%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  }
+
+  .liquid-glass-strong {
+    background: rgba(255, 255, 255, 0.095);
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .liquid-glass-pill {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .safe-bottom {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
   }
 }
 
