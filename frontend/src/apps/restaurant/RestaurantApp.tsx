@@ -2789,12 +2789,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
                 );
                 const isTableOccupied = Boolean(activeSess) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
-                const tableOrders = orders.filter((o) =>
-                  (activeSess && o.tableSessionId === activeSess.id) ||
-                  o.tableId === tbl.id ||
-                  (o.tableNumber && o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
-                ).filter((o) => o.status !== 'CANCELLED');
-                const sessionTotal = tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                const tableOrders = activeSess
+                  ? orders.filter((o) => o.tableSessionId === activeSess.id && o.status !== 'CANCELLED')
+                  : [];
+                const matchingBill = activeSess
+                  ? bills.find((b) => b.tableSessionId === activeSess.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                  : undefined;
+                const sessionTotal = matchingBill?.grandTotal !== undefined
+                  ? matchingBill.grandTotal
+                  : (tbl.sessionTotal !== undefined
+                    ? tbl.sessionTotal
+                    : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0));
 
                 return (
                   <Card
@@ -4068,20 +4073,27 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       {tables
                         .filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.isOccupied)
                         .map((tbl) => {
-                          const tableOrders = orders.filter(
-                            (o) => o.tableNumber === tbl.tableNumber && o.status !== 'CANCELLED'
+                          const activeSess = activeSessions.find(
+                            (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
                           );
-                          const activeBill = bills.find(
-                            (b) => b.tableNumber === tbl.tableNumber && b.status !== 'CLOSED' && b.status !== 'CANCELLED'
-                          );
-                          const orderCount = tableOrders.length;
-                          const totalItems = tableOrders.reduce(
-                            (sum, o) => sum + (o.items || []).reduce((iSum, itm) => iSum + itm.quantity, 0),
-                            0
-                          );
+                          const tableOrders = activeSess
+                            ? orders.filter((o) => o.tableSessionId === activeSess.id && o.status !== 'CANCELLED')
+                            : [];
+                          const activeBill = activeSess
+                            ? bills.find((b) => b.tableSessionId === activeSess.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                            : undefined;
+                          const orderCount = activeBill?.orders?.length || tableOrders.length;
+                          const totalItems = activeBill?.itemCount !== undefined
+                            ? activeBill.itemCount
+                            : tableOrders.reduce(
+                                (sum, o) => sum + (o.items || []).reduce((iSum, itm) => iSum + itm.quantity, 0),
+                                0
+                              );
                           const runningTotal = activeBill
                             ? activeBill.grandTotal
-                            : tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+                            : (tbl.sessionTotal !== undefined
+                              ? tbl.sessionTotal
+                              : tableOrders.reduce((sum, o) => sum + o.totalAmount, 0));
 
                           return (
                             <Card

@@ -174,19 +174,23 @@ class BillingService:
             s_query = select(TableSession).where(
                 TableSession.restaurant_id == rest.id,
                 TableSession.table_number.in_(t_candidates),
-                TableSession.status != "CLOSED"
+                TableSession.status == "ACTIVE"
             ).order_by(TableSession.session_started_at.desc()).limit(1)
             s_res = await db.execute(s_query)
             actual_session = s_res.scalar_one_or_none()
             if actual_session:
                 sess_id = actual_session.id
 
-        # 2. Query all non-cancelled orders belonging to this active session
-        orders_query = select(Order).where(
-            Order.restaurant_id == rest.id,
-            Order.status.notin_(["CANCELLED", "VOID"])
-        )
-        if sess_id:
+        # 2. Query all non-cancelled orders belonging strictly to this active session
+        table_orders: List[Order] = []
+        if not sess_id and not actual_session:
+            # Table has no active session -> strictly zero orders (never load historical orders from past sessions!)
+            table_orders = []
+        else:
+            orders_query = select(Order).where(
+                Order.restaurant_id == rest.id,
+                Order.status.notin_(["CANCELLED", "VOID"])
+            )
             if actual_session:
                 session_start = actual_session.session_started_at
                 session_end = actual_session.session_closed_at
@@ -198,36 +202,24 @@ class BillingService:
                     table_filters.append(Order.table_id == actual_session.table_id)
                 if t_candidates:
                     table_filters.append(Order.table_number.in_(t_candidates))
-                
+
                 orders_query = orders_query.where(
                     or_(
-                        Order.table_session_id == sess_id,
-                        and_(or_(*table_filters), *time_filters) if table_filters else (Order.table_session_id == sess_id)
+                        Order.table_session_id == actual_session.id,
+                        and_(or_(*table_filters), *time_filters) if table_filters else (Order.table_session_id == actual_session.id)
                     )
                 )
-            else:
+            elif sess_id:
                 orders_query = orders_query.where(Order.table_session_id == sess_id)
-        else:
-            table_filters = []
-            if table_id:
-                table_filters.append(Order.table_id == table_id)
-            if t_candidates:
-                table_filters.append(Order.table_number.in_(t_candidates))
-            if table_filters:
-                orders_query = orders_query.where(or_(*table_filters))
+
+            o_res = await db.execute(orders_query.order_by(Order.created_at.asc()))
+            table_orders = list(o_res.scalars().all())
+
+            # Auto-link unassigned orders to active session
             if actual_session:
-                orders_query = orders_query.where(Order.created_at >= actual_session.session_started_at)
-                if actual_session.session_closed_at:
-                    orders_query = orders_query.where(Order.created_at <= actual_session.session_closed_at)
-
-        o_res = await db.execute(orders_query.order_by(Order.created_at.asc()))
-        table_orders = list(o_res.scalars().all())
-
-        # Auto-link unassigned orders to active session
-        if sess_id:
-            for ord_obj in table_orders:
-                if not getattr(ord_obj, "table_session_id", None):
-                    ord_obj.table_session_id = sess_id
+                for ord_obj in table_orders:
+                    if not getattr(ord_obj, "table_session_id", None):
+                        ord_obj.table_session_id = actual_session.id
 
         # 3. Aggregate billable items across all eligible orders
         bill_items: List[Dict[str, Any]] = []
@@ -306,43 +298,50 @@ class BillingService:
         round_off = round(round(raw_total) - raw_total, 2)
         grand_total = round(raw_total + round_off, 2)
 
-        # Check existing paid amounts across paid bills or open bill for this session / table
+        # Check existing paid amounts across paid bills or open bill for this session
         already_paid_amount = 0.0
-        paid_bills_stmt = select(Bill).where(
-            Bill.restaurant_id == rest.id,
-            or_(
-                Bill.status == "PAID",
-                Bill.payment_status == "PAID"
+        if sess_id or (t_candidates and actual_session):
+            paid_bills_stmt = select(Bill).where(
+                Bill.restaurant_id == rest.id,
+                or_(
+                    Bill.status == "PAID",
+                    Bill.payment_status == "PAID"
+                )
             )
-        )
-        if sess_id:
-            paid_bills_stmt = paid_bills_stmt.where(Bill.table_session_id == sess_id)
-        elif t_candidates:
-            paid_bills_stmt = paid_bills_stmt.where(Bill.table_number.in_(t_candidates))
-            if actual_session:
-                paid_bills_stmt = paid_bills_stmt.where(Bill.created_at >= actual_session.session_started_at)
-        p_res = await db.execute(paid_bills_stmt)
-        for pb in p_res.scalars().all():
-            already_paid_amount = round(already_paid_amount + float(getattr(pb, "amount_paid", 0.0) or getattr(pb, "grand_total", 0.0) or 0.0), 2)
+            if sess_id:
+                paid_bills_stmt = paid_bills_stmt.where(Bill.table_session_id == sess_id)
+            elif actual_session:
+                paid_bills_stmt = paid_bills_stmt.where(
+                    Bill.table_number.in_(t_candidates),
+                    Bill.created_at >= actual_session.session_started_at
+                )
+            p_res = await db.execute(paid_bills_stmt)
+            for pb in p_res.scalars().all():
+                already_paid_amount = round(already_paid_amount + float(getattr(pb, "amount_paid", 0.0) or getattr(pb, "grand_total", 0.0) or 0.0), 2)
 
-        open_bill_stmt = select(Bill).where(
-            Bill.restaurant_id == rest.id,
-            Bill.payment_status != "PAID",
-            Bill.status.notin_(["CLOSED", "CANCELLED", "PAID"])
-        )
-        if sess_id:
-            open_bill_stmt = open_bill_stmt.where(Bill.table_session_id == sess_id)
-        elif t_candidates:
-            open_bill_stmt = open_bill_stmt.where(Bill.table_number.in_(t_candidates))
-            if actual_session:
-                open_bill_stmt = open_bill_stmt.where(Bill.created_at >= actual_session.session_started_at)
-        ob_res = await db.execute(open_bill_stmt.order_by(Bill.created_at.desc()).limit(1))
-        open_bill = ob_res.scalar_one_or_none()
-        if open_bill and getattr(open_bill, "amount_paid", 0.0):
-            already_paid_amount = round(already_paid_amount + float(open_bill.amount_paid or 0.0), 2)
+            open_bill_stmt = select(Bill).where(
+                Bill.restaurant_id == rest.id,
+                Bill.payment_status != "PAID",
+                Bill.status.notin_(["CLOSED", "CANCELLED", "PAID"])
+            )
+            if sess_id:
+                open_bill_stmt = open_bill_stmt.where(Bill.table_session_id == sess_id)
+            elif actual_session:
+                open_bill_stmt = open_bill_stmt.where(
+                    Bill.table_number.in_(t_candidates),
+                    Bill.created_at >= actual_session.session_started_at
+                )
+            ob_res = await db.execute(open_bill_stmt.order_by(Bill.created_at.desc()).limit(1))
+            open_bill = ob_res.scalar_one_or_none()
+            if open_bill and getattr(open_bill, "amount_paid", 0.0):
+                already_paid_amount = round(already_paid_amount + float(open_bill.amount_paid or 0.0), 2)
 
         balance_due = max(0.0, round(grand_total - already_paid_amount, 2))
-        if balance_due <= 0.0 and already_paid_amount > 0.0:
+        if subtotal == 0.0 and len(table_orders) == 0:
+            eff_payment_status = "UNPAID"
+            balance_due = 0.0
+            already_paid_amount = 0.0
+        elif balance_due <= 0.0 and already_paid_amount > 0.0:
             eff_payment_status = "PAID"
         elif already_paid_amount > 0.0:
             eff_payment_status = "PARTIALLY_PAID"
@@ -361,8 +360,8 @@ class BillingService:
             "table_number": tbl_num,
             "tableId": table_id or (actual_session.table_id if actual_session else f"table-{tbl_num}"),
             "table_id": table_id or (actual_session.table_id if actual_session else f"table-{tbl_num}"),
-            "tableSessionId": sess_id,
-            "table_session_id": sess_id,
+            "tableSessionId": sess_id or (actual_session.id if actual_session else None),
+            "table_session_id": sess_id or (actual_session.id if actual_session else None),
             "itemCount": len(bill_items),
             "items": bill_items,
             "orders": [
@@ -370,6 +369,10 @@ class BillingService:
                     "id": o.id,
                     "orderNumber": o.order_number or f"#ORD-{o.id[:4]}",
                     "status": o.status,
+                    "kitchenStatus": o.kitchen_status,
+                    "barStatus": o.bar_status,
+                    "hookahStatus": o.hookah_status,
+                    "deliveryStatus": o.delivery_status,
                     "totalAmount": o.total_amount,
                     "total_amount": o.total_amount,
                     "subtotal": o.subtotal,
@@ -507,6 +510,36 @@ class BillingService:
             await db.commit()
             await db.refresh(existing_bill)
             return existing_bill
+
+        # Requirement 2: Do not persist a new invoice for an empty table with no orders!
+        if calc_data["itemCount"] == 0 and len(calc_data["orders"]) == 0:
+            now_iso = datetime.now(timezone.utc)
+            return Bill(
+                id=f"provisional-{rest.id}-{tbl_num.lower().replace(' ', '_')}",
+                restaurant_id=rest.id,
+                table_id=table_id or calc_data["tableId"] or f"table-{tbl_num}",
+                table_number=tbl_num,
+                table_session_id=effective_sess_id,
+                invoice_number="Provisional Bill",
+                subtotal=0.0,
+                discount_amount=0.0,
+                discount_percentage=0.0,
+                service_charge_amount=0.0,
+                service_charge_percentage=0.0,
+                tax_percentage=calc_data["taxPercentage"],
+                tax_amount=0.0,
+                round_off_amount=0.0,
+                grand_total=0.0,
+                amount_paid=0.0,
+                amount_due=0.0,
+                status="OPEN",
+                payment_status="UNPAID",
+                items_snapshot_json=[],
+                orders_snapshot_json=[],
+                tax_breakdown_json=[],
+                created_at=now_iso,
+                updated_at=now_iso,
+            )
 
         # Otherwise: Generate next sequential invoice number and create new Bill
         prefix = rest.invoice_prefix or "INV-"

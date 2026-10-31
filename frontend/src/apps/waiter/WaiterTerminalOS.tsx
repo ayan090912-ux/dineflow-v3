@@ -641,21 +641,51 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     }
   };
 
-  // Order Delivery Handler (Valid transition: READY -> DELIVERED)
-  const handleDeliverOrder = async (orderId: string, tableNumber?: string) => {
+  // Order Delivery Handler (Valid transition: READY -> DELIVERED, strictly respecting station isolation)
+  const handleDeliverOrder = async (orderId: string, tableNumber?: string, station?: string) => {
     if (deliveringOrderIds.has(orderId)) return;
     setDeliveringOrderIds((prev) => new Set(prev).add(orderId));
     const ordToDeliver = orders.find((o) => o.id === orderId);
-    // Instant optimistic state update
+
+    // Instant optimistic state update strictly respecting station isolation
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
+      prev.map((o) => {
+        if (o.id !== orderId) return o;
+        if (!station || station === 'ALL') {
+          return {
+            ...o,
+            status: 'DELIVERED',
+            deliveryStatus: 'DELIVERED',
+            kitchenStatus: 'COMPLETED',
+            barStatus: 'COMPLETED',
+            hookahStatus: 'COMPLETED',
+          };
+        }
+        const st = station.toUpperCase();
+        const updated = {
+          ...o,
+          kitchenStatus: st === 'KITCHEN' ? 'COMPLETED' : o.kitchenStatus,
+          barStatus: st === 'BAR' ? 'COMPLETED' : o.barStatus,
+          hookahStatus: st === 'HOOKAH' ? 'COMPLETED' : o.hookahStatus,
+        };
+        const kDone = !updated.kitchenStatus || updated.kitchenStatus === 'COMPLETED';
+        const bDone = !updated.barStatus || updated.barStatus === 'COMPLETED';
+        const hDone = !updated.hookahStatus || updated.hookahStatus === 'COMPLETED';
+        if (kDone && bDone && hDone) {
+          updated.status = 'DELIVERED';
+          updated.deliveryStatus = 'DELIVERED';
+        } else {
+          updated.deliveryStatus = 'PARTIALLY_DELIVERED';
+        }
+        return updated;
+      })
     );
     if (ordToDeliver) {
       setRecentCompletedHistory((prev) => [
         {
           id: orderId,
           type: 'ORDER_DELIVERED',
-          title: `Table ${ordToDeliver.tableNumber || tableNumber} · Order #${orderId.slice(-4)} Delivered`,
+          title: `Table ${ordToDeliver.tableNumber || tableNumber} · Order #${orderId.slice(-4)} Delivered${station ? ` (${station})` : ''}`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           details: (ordToDeliver.items || []).map((i) => `${i.quantity}x ${i.name}`).join(', '),
         },
@@ -665,7 +695,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     const tblFormatted = tableNumber ? (tableNumber.startsWith('Table') ? tableNumber : `Table ${tableNumber}`) : 'Table';
     showToast('Order Delivered 🎉', `Order delivered to ${tblFormatted}`, 'success');
     try {
-      await api.deliverOrder(orderId);
+      await api.deliverOrder(orderId, station, waiterName);
     } catch (err: any) {
       showToast('Delivery Error ⚠️', err.message || 'Failed to deliver order', 'warning');
       loadData(true);
@@ -694,14 +724,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       (s) => (req.tableSessionId && s.id === req.tableSessionId) || matchTableNumber(s.tableNumber, req.tableNumber)
     );
     if (sess) {
-      const tableOrders = orders.filter((o) => o.tableSessionId === sess.id);
+      const tableOrders = orders.filter((o) => o.tableSessionId === sess.id && o.status !== 'CANCELLED');
       const total = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-      if (total > 0) return total;
+      return total;
     }
-    const ordersByTable = orders.filter(
-      (o) => matchTableNumber(o.tableNumber, req.tableNumber) && o.status !== 'CANCELLED'
-    );
-    return ordersByTable.reduce((sum, o) => sum + o.totalAmount, 0);
+    return 0;
   };
 
   // Record Bill Payment (CASH / UPI / CARD) & Auto-complete Service Request
@@ -1411,7 +1438,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
                                 <button
                                   type="button"
-                                  onClick={() => handleDeliverOrder(order.id, order.tableNumber)}
+                                  onClick={() => {
+                                    const readyStations = Array.from(new Set(readiness.readyItems.map((r) => r.station).filter(Boolean)));
+                                    const stationToDeliver = readyStations.length === 1 ? readyStations[0] : undefined;
+                                    handleDeliverOrder(order.id, order.tableNumber, stationToDeliver);
+                                  }}
                                   disabled={isDelivering || collectingOrderIds.has(order.id)}
                                   className={`min-h-[44px] py-2.5 px-4 rounded-lg text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 touch-manipulation ${
                                     order.deliveryStatus === 'COLLECTED'
@@ -1632,9 +1663,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   const activeSession = activeSessions.find(
                     (s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
                   );
-                  const tableOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id) : [];
-                  const itemCount = tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0);
-                  const sessionTotal = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+                  const matchingBill = activeSession
+                    ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                    : undefined;
+                  const tableOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
+                  const itemCount = matchingBill?.itemCount !== undefined
+                    ? matchingBill.itemCount
+                    : (table.itemCount !== undefined
+                      ? table.itemCount
+                      : tableOrders.reduce((sum, o) => sum + o.items.reduce((iSum, i) => iSum + i.quantity, 0), 0));
+                  const sessionTotal = matchingBill?.grandTotal !== undefined
+                    ? matchingBill.grandTotal
+                    : (table.sessionTotal !== undefined
+                      ? table.sessionTotal
+                      : tableOrders.reduce((sum, o) => sum + o.totalAmount, 0));
                   const latestOrder = tableOrders[0];
 
                   return (
@@ -1760,10 +1802,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               (s) => (sessId && s.id === sessId) || matchTableNumber(s.tableNumber, tableNum)
             );
             const sessionOrders = activeSession
-              ? orders.filter((o) => o.tableSessionId === activeSession.id)
-              : orders.filter((o) => matchTableNumber(o.tableNumber, tableNum));
+              ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED')
+              : [];
             const calculatedTotal =
-              bill?.grandTotal || sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+              bill?.grandTotal !== undefined
+                ? bill.grandTotal
+                : sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
             const currentPayStatus =
               bill?.paymentStatus ||
               (sessionOrders.length > 0 && sessionOrders.every((o) => o.paymentStatus === 'PAID')
@@ -1991,8 +2035,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             const activeSession = activeSessions.find(
               (s) => s.tableId === selectedTableForView.id && s.status === 'ACTIVE'
             );
-            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id) : [];
-            const sessionTotal = sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
+            const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED') : undefined;
+            const sessionTotal = matchingBill?.grandTotal !== undefined
+              ? matchingBill.grandTotal
+              : (selectedTableForView.sessionTotal !== undefined
+                ? selectedTableForView.sessionTotal
+                : sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0));
             const tableRequests = requests.filter(
               (r) => r.tableNumber.toLowerCase() === selectedTableForView.tableNumber.toLowerCase() && r.status !== 'COMPLETED'
             );
@@ -2100,8 +2149,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             const activeSession = activeSessions.find(
               (s) => (s.tableId === selectedTableForClose.id || matchTableNumber(s.tableNumber, selectedTableForClose.tableNumber)) && s.status !== 'CLOSED'
             );
-            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id) : [];
-            const sessionTotal = sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
+            const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED') : undefined;
+            const sessionTotal = matchingBill?.grandTotal !== undefined
+              ? matchingBill.grandTotal
+              : (selectedTableForView.sessionTotal !== undefined
+                ? selectedTableForView.sessionTotal
+                : sessionOrders.reduce((sum, o) => sum + o.totalAmount, 0));
             const allPaid = sessionOrders.length === 0 || sessionOrders.every((o) => o.paymentStatus === 'PAID' || o.status === 'COMPLETED');
 
             return (

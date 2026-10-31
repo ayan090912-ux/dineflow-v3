@@ -191,6 +191,34 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     active_session_map = {sess.table_id: sess.id for sess in active_sessions}
     active_session_num_map = {sess.table_number: sess.id for sess in active_sessions}
 
+    # Authoritative session order aggregation (Single source of truth for table sessions)
+    active_sess_ids = [s.id for s in active_sessions]
+    session_totals_map = {}
+    if active_sess_ids:
+        from app.modules.orders.models import Order
+        o_stmt = select(Order).where(
+            Order.restaurant_id == canonical_id,
+            Order.table_session_id.in_(active_sess_ids),
+            Order.status != "CANCELLED"
+        )
+        o_res = await db.execute(o_stmt)
+        for ord in o_res.scalars().all():
+            sid = ord.table_session_id
+            if sid not in session_totals_map:
+                session_totals_map[sid] = {
+                    "total_amount": 0.0,
+                    "subtotal": 0.0,
+                    "order_count": 0,
+                    "item_count": 0
+                }
+            session_totals_map[sid]["total_amount"] += float(ord.total_amount or 0.0)
+            session_totals_map[sid]["subtotal"] += float(ord.subtotal or ord.total_amount or 0.0)
+            session_totals_map[sid]["order_count"] += 1
+            if ord.items_json:
+                session_totals_map[sid]["item_count"] += sum(
+                    it.get("quantity", 1) for it in ord.items_json if isinstance(it, dict)
+                )
+
     pub_slug = await _get_restaurant_public_slug(canonical_id, db)
     for t in tables:
         clean_table = _extract_clean_table_number(t.table_number, t.id)
@@ -206,8 +234,15 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
                 t.is_occupied = False
                 t.active_session_id = None
 
-    formatted_tables = [
-        {
+    formatted_tables = []
+    for t in tables:
+        sess_financials = session_totals_map.get(t.active_session_id) if t.active_session_id else None
+        running_tot = round(sess_financials["total_amount"], 2) if sess_financials else 0.0
+        running_subtot = round(sess_financials["subtotal"], 2) if sess_financials else 0.0
+        running_ord_count = sess_financials["order_count"] if sess_financials else 0
+        running_itm_count = sess_financials["item_count"] if sess_financials else 0
+
+        formatted_tables.append({
             "id": t.id,
             "restaurant_id": t.restaurant_id,
             "restaurantId": t.restaurant_id,
@@ -222,6 +257,14 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
             "qrCodeUrl": t.qr_code_url,
             "active_session_id": t.active_session_id,
             "activeSessionId": t.active_session_id,
+            "session_total": running_tot,
+            "sessionTotal": running_tot,
+            "session_subtotal": running_subtot,
+            "sessionSubtotal": running_subtot,
+            "order_count": running_ord_count,
+            "orderCount": running_ord_count,
+            "item_count": running_itm_count,
+            "itemCount": running_itm_count,
             "shape": getattr(t, "shape", None) or "RECTANGLE",
             "is_vip": getattr(t, "is_vip", False) or False,
             "isVip": getattr(t, "is_vip", False) or False,
@@ -230,9 +273,7 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
             "position_y": getattr(t, "position_y", 0) or 0,
             "positionY": getattr(t, "position_y", 0) or 0,
             "rotation": getattr(t, "rotation", 0) or 0,
-        }
-        for t in tables
-    ]
+        })
 
     _TABLES_CACHE[restaurant_id] = (now_t, formatted_tables)
     _TABLES_CACHE[canonical_id] = (now_t, formatted_tables)

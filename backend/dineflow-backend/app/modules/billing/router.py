@@ -418,18 +418,83 @@ async def get_running_table_bill(
     t_candidates = get_table_variants(tbl_num)
 
     # 1. Resolve active TableSession if not explicitly provided
-    if not effective_sess_id and t_candidates:
+    active_sess = None
+    if effective_sess_id:
+        s_stmt = select(TableSession).where(TableSession.id == effective_sess_id)
+        s_res = await db.execute(s_stmt)
+        active_sess = s_res.scalar_one_or_none()
+
+    if not active_sess and t_candidates:
         s_stmt = select(TableSession).where(
             TableSession.restaurant_id == rest.id,
             TableSession.table_number.in_(t_candidates),
-            TableSession.status != "CLOSED"
+            TableSession.status == "ACTIVE"
         ).order_by(TableSession.session_started_at.desc()).limit(1)
         s_res = await db.execute(s_stmt)
         active_sess = s_res.scalar_one_or_none()
         if active_sess:
             effective_sess_id = active_sess.id
 
-    # 2. Check if an existing Bill already exists for this table/session
+    # Requirement 2: An empty table with NO active session must NEVER show a fabricated bill!
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if not active_sess and not effective_sess_id:
+        return {
+            "id": f"provisional-{rest.id}-{tbl_num.lower().replace(' ', '_')}",
+            "restaurantId": rest.id,
+            "restaurant_id": rest.id,
+            "tableId": f"table-{tbl_num}",
+            "table_id": f"table-{tbl_num}",
+            "tableNumber": tbl_num,
+            "table_number": tbl_num,
+            "tableSessionId": None,
+            "table_session_id": None,
+            "invoiceNumber": "Provisional Bill",
+            "invoice_number": "Provisional Bill",
+            "subtotal": 0.0,
+            "discountAmount": 0.0,
+            "discount_amount": 0.0,
+            "discountPercentage": 0.0,
+            "discount_percentage": 0.0,
+            "taxableSubtotal": 0.0,
+            "taxable_subtotal": 0.0,
+            "serviceChargeAmount": 0.0,
+            "service_charge_amount": 0.0,
+            "serviceChargePercentage": 0.0,
+            "service_charge_percentage": 0.0,
+            "taxPercentage": float(rest.tax_percentage or 5.0),
+            "tax_percentage": float(rest.tax_percentage or 5.0),
+            "taxAmount": 0.0,
+            "tax_amount": 0.0,
+            "roundOffAmount": 0.0,
+            "round_off_amount": 0.0,
+            "grandTotal": 0.0,
+            "grand_total": 0.0,
+            "amountPaid": 0.0,
+            "amount_paid": 0.0,
+            "balanceDue": 0.0,
+            "balance_due": 0.0,
+            "status": "OPEN",
+            "paymentStatus": "UNPAID",
+            "payment_status": "UNPAID",
+            "paymentMethod": None,
+            "payment_method": None,
+            "paymentVerifiedBy": None,
+            "payment_verified_by": None,
+            "paymentReference": None,
+            "payment_reference": None,
+            "taxBreakdown": [],
+            "tax_breakdown": [],
+            "tax_breakdown_json": [],
+            "items": [],
+            "items_snapshot_json": [],
+            "orders": [],
+            "orders_snapshot_json": [],
+            "itemCount": 0,
+            "createdAt": now_iso,
+            "created_at": now_iso,
+        }
+
+    # 2. Check if an existing Bill already exists strictly for this active table session
     existing_bill = None
     if effective_sess_id:
         query = select(Bill).where(
@@ -438,10 +503,11 @@ async def get_running_table_bill(
         ).order_by(Bill.created_at.desc()).limit(1)
         b_res = await db.execute(query)
         existing_bill = b_res.scalar_one_or_none()
-    elif t_candidates:
+    elif active_sess and t_candidates:
         query = select(Bill).where(
             Bill.restaurant_id == rest.id,
             Bill.table_number.in_(t_candidates),
+            Bill.created_at >= active_sess.session_started_at
         ).order_by(Bill.created_at.desc()).limit(1)
         b_res = await db.execute(query)
         existing_bill = b_res.scalar_one_or_none()
@@ -455,7 +521,7 @@ async def get_running_table_bill(
         rest=rest,
         table_number=tbl_num,
         table_session_id=effective_sess_id or (existing_bill.table_session_id if existing_bill else None),
-        table_id=existing_bill.table_id if existing_bill else None,
+        table_id=existing_bill.table_id if existing_bill else (active_sess.table_id if active_sess else None),
         discount_percentage=existing_bill.discount_percentage if existing_bill else 0.0,
         discount_amount=existing_bill.discount_amount if existing_bill else 0.0,
         service_charge_percentage=existing_bill.service_charge_percentage if existing_bill else None,

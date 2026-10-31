@@ -27,7 +27,11 @@ class OrderItemInputSchema(BaseModel):
     price: Optional[float] = None
     quantity: int = 1
     notes: Optional[str] = ""
-    targetDestination: Optional[str] = "KITCHEN"
+    targetDestination: Optional[str] = None
+    target_destination: Optional[str] = None
+    fulfillmentStation: Optional[str] = None
+    fulfillment_station: Optional[str] = None
+    station: Optional[str] = None
     isAlcoholic: Optional[bool] = False
     category: Optional[str] = None
     categoryId: Optional[str] = None
@@ -65,6 +69,7 @@ class RedeemPickupCodeSchema(BaseModel):
 
 class UpdateOrderStatusSchema(BaseModel):
     status: Optional[str] = None
+    station: Optional[str] = None
     kitchenStatus: Optional[str] = None
     barStatus: Optional[str] = None
     hookahStatus: Optional[str] = None
@@ -101,7 +106,14 @@ def resolve_item_station(it: Any) -> str:
     """Canonical single-source-of-truth station routing for an order item."""
     if not isinstance(it, dict):
         return "KITCHEN"
-    dest = (it.get("targetDestination") or it.get("target_destination") or it.get("station") or "").upper()
+    dest = (
+        it.get("targetDestination")
+        or it.get("target_destination")
+        or it.get("fulfillmentStation")
+        or it.get("fulfillment_station")
+        or it.get("station")
+        or ""
+    ).upper()
     if dest in ("HOOKAH", "SHISHA"):
         return "HOOKAH"
     if dest == "BAR" or it.get("isAlcoholic") is True or it.get("is_alcoholic") is True:
@@ -292,7 +304,14 @@ class CachedRestaurant:
         has_bar: bool = True,
         has_hookah: bool = True,
         has_waiter: bool = True,
-        enabled_modules: Optional[list] = None
+        enabled_modules: Optional[list] = None,
+        tax_percentage: Optional[float] = 5.0,
+        service_charge_percentage: Optional[float] = 0.0,
+        service_charge_enabled: bool = False,
+        invoice_prefix: Optional[str] = "INV-",
+        invoice_starting_number: Optional[int] = 1001,
+        slug: Optional[str] = None,
+        name: Optional[str] = None,
     ):
         self.id = id
         self.lifecycle_status = lifecycle_status
@@ -303,6 +322,13 @@ class CachedRestaurant:
         self.has_hookah = has_hookah
         self.has_waiter = has_waiter
         self.enabled_modules = enabled_modules or ["kitchen", "bar", "hookah", "waiter", "billing"]
+        self.tax_percentage = tax_percentage if tax_percentage is not None else 5.0
+        self.service_charge_percentage = service_charge_percentage if service_charge_percentage is not None else 0.0
+        self.service_charge_enabled = service_charge_enabled or False
+        self.invoice_prefix = invoice_prefix or "INV-"
+        self.invoice_starting_number = invoice_starting_number or 1001
+        self.slug = slug
+        self.name = name
 
 class CachedTax:
     def __init__(self, id: str, name: str, type: str, rate: float, fixed_amount: float, is_inclusive: bool, status: str, applicable_order_types: list, applies_to: str):
@@ -386,7 +412,14 @@ async def create_order(
                 has_bar=getattr(db_rest, "has_bar", True),
                 has_hookah=getattr(db_rest, "has_hookah", True),
                 has_waiter=getattr(db_rest, "has_waiter", True),
-                enabled_modules=getattr(db_rest, "enabled_modules", None)
+                enabled_modules=getattr(db_rest, "enabled_modules", None),
+                tax_percentage=getattr(db_rest, "tax_percentage", 5.0),
+                service_charge_percentage=getattr(db_rest, "service_charge_percentage", 0.0),
+                service_charge_enabled=getattr(db_rest, "service_charge_enabled", False),
+                invoice_prefix=getattr(db_rest, "invoice_prefix", "INV-"),
+                invoice_starting_number=getattr(db_rest, "invoice_starting_number", 1001),
+                slug=getattr(db_rest, "slug", None),
+                name=getattr(db_rest, "name", None),
             )
             _ORDER_RESTAURANT_CACHE[payload.restaurantId] = (now_mono, restaurant)
             _ORDER_RESTAURANT_CACHE[restaurant.id] = (now_mono, restaurant)
@@ -918,7 +951,7 @@ async def create_order(
                 if tbl_target:
                     tbl_target.status = "OCCUPIED"
                     tbl_target.is_occupied = True
-                    tbl_target.active_session_id = session_id
+                    tbl_target.active_session_id = actual_session_id or session_id
                     from app.modules.tables.router import invalidate_tables_cache
                     invalidate_tables_cache(restaurant.id)
             except Exception as tbl_err:
@@ -1021,6 +1054,41 @@ async def create_order(
             )
             # Instantly update Active Tables across Owner, Waiter, and Customer terminals (ordinary orders only)
             if not payload.eventId and (tbl_id or tbl_num):
+                bill_data = None
+                try:
+                    bill_data = await BillingService.calculate_table_bill_data(
+                        rest=restaurant,
+                        table_number=tbl_num,
+                        table_session_id=actual_session_id,
+                        table_id=tbl_id,
+                        db=db
+                    )
+                    if actual_session_id:
+                        open_bill_stmt = select(Bill).where(
+                            Bill.restaurant_id == restaurant.id,
+                            Bill.table_session_id == actual_session_id,
+                            Bill.status.notin_(["CLOSED", "CANCELLED", "PAID"])
+                        ).order_by(Bill.created_at.desc()).limit(1)
+                        ob_res = await db.execute(open_bill_stmt)
+                        open_bill_rec = ob_res.scalar_one_or_none()
+                        if open_bill_rec:
+                            open_bill_rec.subtotal = bill_data["subtotal"]
+                            open_bill_rec.tax_amount = bill_data["taxAmount"]
+                            open_bill_rec.grand_total = bill_data["grandTotal"]
+                            open_bill_rec.amount_due = bill_data["balanceDue"]
+                            open_bill_rec.items_snapshot_json = bill_data["items"]
+                            open_bill_rec.orders_snapshot_json = bill_data["orders"]
+                            open_bill_rec.tax_breakdown_json = bill_data["taxBreakdown"]
+                            await db.commit()
+                except Exception as b_sync_err:
+                    print("[BILL_SYNC_NOTICE] Bill sync handled:", b_sync_err)
+
+                running_grand_total = float(bill_data["grandTotal"]) if bill_data else total
+                running_subtotal = float(bill_data["subtotal"]) if bill_data else subtotal
+                running_balance = float(bill_data["balanceDue"]) if bill_data else total
+                running_count = len(bill_data["orders"]) if bill_data else 1
+                running_items = int(bill_data["itemCount"]) if bill_data else len(items_list_dict)
+
                 table_evt_payload = {
                     "restaurant_id": restaurant.id,
                     "restaurantId": restaurant.id,
@@ -1031,14 +1099,24 @@ async def create_order(
                     "status": "OCCUPIED",
                     "is_occupied": True,
                     "isOccupied": True,
-                    "table_session_id": session_id,
-                    "tableSessionId": session_id,
+                    "table_session_id": actual_session_id,
+                    "tableSessionId": actual_session_id,
                     "order_id": order_id,
                     "orderId": order_id,
                     "order_number": order_num,
                     "orderNumber": order_num,
-                    "total_amount": total,
-                    "totalAmount": total,
+                    "order_total": total,
+                    "total_amount": running_grand_total,
+                    "totalAmount": running_grand_total,
+                    "subtotal": running_subtotal,
+                    "grand_total": running_grand_total,
+                    "grandTotal": running_grand_total,
+                    "balance_due": running_balance,
+                    "balanceDue": running_balance,
+                    "order_count": running_count,
+                    "orderCount": running_count,
+                    "item_count": running_items,
+                    "itemCount": running_items,
                     "timestamp": now_utc.isoformat(),
                 }
                 await ws_manager.broadcast_event(
@@ -1053,6 +1131,13 @@ async def create_order(
                     payload=table_evt_payload,
                     target_audience=["WAITER", "OWNER", "CUSTOMER"]
                 )
+                if bill_data:
+                    await ws_manager.broadcast_event(
+                        restaurant_id=restaurant.id,
+                        event_type="bill_updated",
+                        payload=bill_data,
+                        target_audience=["WAITER", "OWNER", "CUSTOMER"]
+                    )
         except Exception as ws_err:
             print("[WS_BROADCAST_NOTICE] order_created / table_updated:", ws_err)
 
@@ -1440,6 +1525,14 @@ async def update_order_status(
         has_h_items = (order.hookah_status is not None)
 
     # Station-specific mutation role authorization
+    req_station = (payload.station or "").upper() if payload.station else None
+    if req_station == "HOOKAH" and not payload.hookahStatus and target_status:
+        payload.hookahStatus = target_status
+    elif req_station == "BAR" and not payload.barStatus and target_status:
+        payload.barStatus = target_status
+    elif req_station == "KITCHEN" and not payload.kitchenStatus and target_status:
+        payload.kitchenStatus = target_status
+
     if payload.hookahStatus:
         allowed_hookah_roles = [
             "HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
@@ -1469,7 +1562,7 @@ async def update_order_status(
         order.bar_status = payload.barStatus
 
     eff_kitchen_status = payload.kitchenStatus
-    if eff_kitchen_status is None and target_status in ["READY", "PREPARING", "ACCEPTED"] and has_k_items:
+    if eff_kitchen_status is None and target_status in ["READY", "PREPARING", "ACCEPTED"] and has_k_items and not req_station:
         eff_kitchen_status = target_status
 
     if eff_kitchen_status:
@@ -1487,19 +1580,40 @@ async def update_order_status(
         order.kitchen_status = eff_kitchen_status
 
     # Reconcile overall status:
-    # Terminal delivery/cancellation lifecycle:
-    if target_status in ["DELIVERED", "COMPLETED", "SERVED", "OUT_FOR_DELIVERY", "CANCELLED"] and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "RUNNER", "STAFF"]:
-        order.status = target_status
-        if target_status in ["DELIVERED", "COMPLETED", "SERVED"]:
-            order.delivered_at = datetime.now(timezone.utc)
-            order.delivery_status = "DELIVERED"
-            if order.kitchen_status in ["PENDING", "ACCEPTED", "PREPARING", "READY"]:
-                order.kitchen_status = "COMPLETED"
-            if order.bar_status in ["PENDING", "ACCEPTED", "PREPARING", "READY"]:
-                order.bar_status = "COMPLETED"
-            if order.hookah_status in ["PENDING", "ACCEPTED", "PREPARING", "READY"]:
-                order.hookah_status = "COMPLETED"
+    # If no specific station was targeted and target_status is explicitly DELIVERED/COMPLETED/CANCELLED
+    if not req_station and target_status in ["DELIVERED", "COMPLETED", "SERVED", "OUT_FOR_DELIVERY", "CANCELLED"] and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "RUNNER", "STAFF"]:
+        if target_status == "CANCELLED":
+            order.status = "CANCELLED"
+            order.delivery_status = "CANCELLED"
+        elif target_status in ["DELIVERED", "COMPLETED", "SERVED"]:
+            # Check if any stations are still in PREPARING
+            has_pending = (
+                (has_k_items and order.kitchen_status in ["PENDING", "ACCEPTED", "PREPARING"]) or
+                (has_b_items and order.bar_status in ["PENDING", "ACCEPTED", "PREPARING"]) or
+                (has_h_items and order.hookah_status in ["PENDING", "ACCEPTED", "PREPARING"])
+            )
+            if not has_pending:
+                order.status = "COMPLETED"
+                order.delivery_status = "DELIVERED"
+                order.delivered_at = datetime.now(timezone.utc)
+                if has_k_items:
+                    order.kitchen_status = "COMPLETED"
+                if has_b_items:
+                    order.bar_status = "COMPLETED"
+                if has_h_items:
+                    order.hookah_status = "COMPLETED"
+            else:
+                # Only mark stations that are currently READY as completed
+                if has_k_items and order.kitchen_status in ["READY", "READY_FOR_PICKUP"]:
+                    order.kitchen_status = "COMPLETED"
+                if has_b_items and order.bar_status in ["READY", "READY_FOR_PICKUP"]:
+                    order.bar_status = "COMPLETED"
+                if has_h_items and order.hookah_status in ["READY", "READY_FOR_PICKUP"]:
+                    order.hookah_status = "COMPLETED"
+                order.status = "PREPARING"
+                order.delivery_status = "PARTIALLY_DELIVERED"
         elif target_status == "OUT_FOR_DELIVERY":
+            order.status = "OUT_FOR_DELIVERY"
             order.delivery_status = "OUT_FOR_DELIVERY"
     else:
         k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"])
@@ -1510,15 +1624,34 @@ async def update_order_status(
         b_ready = (not has_b_items) or (order.bar_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"])
         h_ready = (not has_h_items) or (order.hookah_status in ["READY", "COMPLETED", "DELIVERED", "SERVED"])
 
-        if k_comp and b_comp and h_comp:
+        if target_status == "CANCELLED":
+            order.status = "CANCELLED"
+            order.delivery_status = "CANCELLED"
+        elif k_comp and b_comp and h_comp:
             order.status = "COMPLETED"
+            order.delivery_status = "DELIVERED"
+            if not order.delivered_at:
+                order.delivered_at = datetime.now(timezone.utc)
         elif k_ready and b_ready and h_ready:
             order.status = "READY"
+            if any([
+                order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"],
+                order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"],
+                order.hookah_status in ["COMPLETED", "DELIVERED", "SERVED"],
+            ]):
+                order.delivery_status = "PARTIALLY_DELIVERED"
+        elif any([
+            order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"],
+            order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"],
+            order.hookah_status in ["COMPLETED", "DELIVERED", "SERVED"],
+        ]):
+            order.status = "PREPARING"
+            order.delivery_status = "PARTIALLY_DELIVERED"
         elif (has_k_items and order.kitchen_status in ["PREPARING", "READY"]) or (has_b_items and order.bar_status in ["PREPARING", "READY"]) or (has_h_items and order.hookah_status in ["PREPARING", "READY"]):
             order.status = "PREPARING"
         elif (has_k_items and order.kitchen_status == "ACCEPTED") or (has_b_items and order.bar_status == "ACCEPTED") or (has_h_items and order.hookah_status == "ACCEPTED") or target_status == "ACCEPTED":
             order.status = "ACCEPTED"
-        elif target_status and target_status not in ["READY", "COMPLETED"]:
+        elif target_status and target_status not in ["READY", "COMPLETED", "DELIVERED", "SERVED"]:
             order.status = target_status
 
     is_evt_order = (
@@ -1545,6 +1678,11 @@ async def update_order_status(
 
     await db.commit()
     print(f"[ORDER_STATUS_UPDATED] order_id={order_id} status={order.status} kitchen_status={order.kitchen_status} bar_status={order.bar_status} hookah_status={order.hookah_status} payment_status={order.payment_status}")
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(order.restaurant_id)
+    except Exception:
+        pass
     await db.refresh(order)
     resp_data = format_order_response(order)
 
@@ -1780,6 +1918,11 @@ async def request_waiter_for_order(
         db.add(serv_req)
 
     await db.commit()
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(order.restaurant_id)
+    except Exception:
+        pass
     await db.refresh(order)
     await db.refresh(serv_req)
 
@@ -1889,6 +2032,11 @@ async def collect_order(
         updated_req_dicts.append(format_request_dict(r))
 
     await db.commit()
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(order.restaurant_id)
+    except Exception:
+        pass
     await db.refresh(order)
 
     order_dict = format_order_response(order)
@@ -1988,12 +2136,24 @@ async def deliver_order(
     elif target_station == "HOOKAH":
         order.hookah_status = "COMPLETED"
     else:
-        if has_k_items:
+        # If no station specified, only complete stations that are currently READY
+        ready_found = False
+        if has_k_items and order.kitchen_status in ["READY", "READY_FOR_PICKUP"]:
             order.kitchen_status = "COMPLETED"
-        if has_b_items:
+            ready_found = True
+        if has_b_items and order.bar_status in ["READY", "READY_FOR_PICKUP"]:
             order.bar_status = "COMPLETED"
-        if has_h_items:
+            ready_found = True
+        if has_h_items and order.hookah_status in ["READY", "READY_FOR_PICKUP"]:
             order.hookah_status = "COMPLETED"
+            ready_found = True
+        if not ready_found:
+            if has_k_items:
+                order.kitchen_status = "COMPLETED"
+            if has_b_items:
+                order.bar_status = "COMPLETED"
+            if has_h_items:
+                order.hookah_status = "COMPLETED"
 
     k_comp = (not has_k_items) or (order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"])
     b_comp = (not has_b_items) or (order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"])
@@ -2025,6 +2185,11 @@ async def deliver_order(
         completed_req_dicts.append(format_request_dict(r))
 
     await db.commit()
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(order.restaurant_id)
+    except Exception:
+        pass
     await db.refresh(order)
 
     order_dict = format_order_response(order)
@@ -2308,6 +2473,11 @@ async def redeem_pickup_code(
     order.status = "COMPLETED"
 
     await db.commit()
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(order.restaurant_id)
+    except Exception:
+        pass
     await db.refresh(order)
 
     resp_data = format_order_response(order)

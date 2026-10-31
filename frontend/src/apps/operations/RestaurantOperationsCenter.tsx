@@ -990,10 +990,12 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       const session = activeSessionsList.find(
                         (s) => s.tableId === tbl.id || (s.tableNumber && s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
                       );
-                      const tableOrders = orders.filter(
-                        (o) => (o.tableId === tbl.id || o.tableNumber === tbl.tableNumber) && o.status !== 'CANCELLED'
-                      );
-                      const runningTotal = tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                      const tableOrders = session
+                        ? orders.filter((o) => o.tableSessionId === session.id && o.status !== 'CANCELLED')
+                        : [];
+                      const runningTotal = tbl.sessionTotal !== undefined
+                        ? tbl.sessionTotal
+                        : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
                       return (
                         <div
@@ -1255,10 +1257,12 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                   (s) => s.tableId === tbl.id || (s.tableNumber && s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
                 );
                 const isOccupied = Boolean(session);
-                const tableOrders = orders.filter(
-                  (o) => (o.tableId === tbl.id || o.tableNumber === tbl.tableNumber) && o.status !== 'CANCELLED'
-                );
-                const runningTotal = tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                const tableOrders = session
+                  ? orders.filter((o) => o.tableSessionId === session.id && o.status !== 'CANCELLED')
+                  : [];
+                const runningTotal = tbl.sessionTotal !== undefined
+                  ? tbl.sessionTotal
+                  : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
                 return (
                   <Card
@@ -1571,10 +1575,12 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 const session = activeSessionsList.find(
                   (s) => s.tableId === tbl.id || (s.tableNumber && s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
                 );
-                const tableOrders = orders.filter(
-                  (o) => (o.tableId === tbl.id || o.tableNumber === tbl.tableNumber) && o.status !== 'CANCELLED'
-                );
-                const runningTotal = tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                const tableOrders = session
+                  ? orders.filter((o) => o.tableSessionId === session.id && o.status !== 'CANCELLED')
+                  : [];
+                const runningTotal = tbl.sessionTotal !== undefined
+                  ? tbl.sessionTotal
+                  : tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
                 return (
                   <Card key={tbl.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
