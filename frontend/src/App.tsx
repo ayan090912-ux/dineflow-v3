@@ -2027,8 +2027,8 @@ function AppContent() {
   }, [cleanPath, currentUser, currentRestaurant, kitchenOrders, activeOwnerData, checkWorkspaceAccess, navigateTo, handleLogout, domainResolution, resolvedTenant, tenantResolutionState, authState, authError]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <div className="flex-1 flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans w-full max-w-full overflow-x-hidden">
+      <div className="flex-1 flex flex-col w-full max-w-full overflow-x-hidden">
         <Suspense fallback={<RouteLoadingFallback />}>
           {renderRoute}
         </Suspense>

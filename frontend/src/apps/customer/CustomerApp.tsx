@@ -826,7 +826,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (restaurantError === 'RESTAURANT_NOT_FOUND') {
     return (
-      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 w-full max-w-md mx-auto border-x border-white/[0.08] relative font-sans box-border overflow-x-hidden">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
         <div className="space-y-6 text-center my-auto">
           <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
@@ -848,7 +848,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (tableError === 'TABLE_NOT_FOUND') {
     return (
-      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 w-full max-w-md mx-auto border-x border-white/[0.08] relative font-sans box-border overflow-x-hidden">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
         <div className="space-y-6 text-center my-auto">
           <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
@@ -873,7 +873,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (isTableReserved) {
     return (
-      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 w-full max-w-md mx-auto border-x border-white/[0.08] relative font-sans box-border overflow-x-hidden">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
         <div className="space-y-6 text-center my-auto">
@@ -921,7 +921,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   if (isSessionEnded) {
     return (
-      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 max-w-md mx-auto border-x border-white/[0.08] relative font-sans">
+      <div className="min-h-screen bg-[#0b0d11] text-[#f0f2f5] flex flex-col justify-between p-6 w-full max-w-md mx-auto border-x border-white/[0.08] relative font-sans box-border overflow-x-hidden">
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
         <div className="space-y-6 text-center my-auto">
@@ -968,26 +968,24 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const isHookahTheme = currentMenuTab === 'HOOKAH';
 
   return (
-    <div className="min-h-screen font-sans pb-52 max-w-md mx-auto relative border-x border-white/[0.08] bg-[#080A0D] text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden">
-      {/* Dynamic Ambient Background Glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+    <div className="min-h-screen font-sans pb-52 w-full max-w-md mx-auto relative border-x border-white/[0.08] bg-[#080A0D] text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border">
+      {/* Dynamic Ambient Background Glows - strictly bounded to viewport width */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 w-full max-w-full">
         <div
-          className={`absolute -top-32 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full blur-[130px] transition-all duration-700 pointer-events-none ${
+          className={`absolute -top-20 left-1/2 -translate-x-1/2 w-72 sm:w-96 h-72 sm:h-96 rounded-full blur-[90px] transition-all duration-700 pointer-events-none opacity-50 ${
             isHookahTheme
-              ? 'bg-amber-500/12'
+              ? 'bg-amber-500/15'
               : isBarTheme
-              ? 'bg-purple-600/15'
-              : 'bg-amber-400/10'
+              ? 'bg-purple-600/18'
+              : 'bg-amber-400/12'
           }`}
         />
-        <div className="absolute top-1/2 -right-32 w-80 h-80 rounded-full bg-blue-500/5 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-20 -left-20 w-80 h-80 rounded-full bg-amber-500/5 blur-[120px] pointer-events-none" />
       </div>
 
       <ToastContainer position="top" toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
       {/* Atmospheric Luxury Venue Hero */}
-      <div className="relative h-44 sm:h-48 w-full bg-[#11151B] overflow-hidden z-10">
+      <div className="relative h-44 sm:h-48 w-full max-w-full bg-[#11151B] overflow-hidden z-10 box-border">
         <img
           src={
             isHookahTheme
@@ -997,7 +995,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               : theme.bannerUrl
           }
           alt={theme.restaurantName}
-          className="w-full h-full object-cover brightness-[0.65] transition-all duration-700 scale-105"
+          className="w-full h-full object-cover brightness-[0.65] transition-all duration-700"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#080A0D] via-[#080A0D]/65 to-black/30" />
 
@@ -1005,7 +1003,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         <div className="absolute top-3.5 left-3.5 right-3.5 z-10 flex items-center justify-between">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-white font-mono font-medium shadow-md">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            <span>{currentRestaurant?.hasTables === false ? 'Counter Pickup' : selectedTableNum}</span>
+            <span className="truncate">{currentRestaurant?.hasTables === false ? 'Counter Pickup' : selectedTableNum}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1047,11 +1045,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Quick Action Sticky Liquid-Glass Dock */}
       {currentRestaurant?.hasTables !== false ? (
-        <div className="sticky top-0 z-30 px-3.5 py-2.5 bg-[#080A0D]/85 backdrop-blur-2xl border-b border-white/[0.08] shadow-lg">
-          <div className="grid grid-cols-3 gap-2 liquid-glass p-1.5 rounded-2xl">
+        <div className="sticky top-0 z-30 px-3 py-2 bg-[#080A0D]/90 backdrop-blur-2xl border-b border-white/[0.08] shadow-lg w-full max-w-full box-border">
+          <div className="grid grid-cols-3 gap-1.5 liquid-glass p-1 rounded-2xl w-full">
             <button
               onClick={handleCallWaiter}
-              className="h-10 px-2 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98"
+              className="h-10 px-1.5 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0"
             >
               <PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="truncate">Call Staff</span>
@@ -1059,7 +1057,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setIsOrderStatusModalOpen(true)}
-              className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 ${
+              className={`h-10 px-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 ${
                 customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0
                   ? 'bg-amber-500/15 border border-amber-500/35 text-amber-300 shadow-[0_0_12px_rgba(245,166,35,0.2)]'
                   : 'text-white/85 hover:text-white hover:bg-white/[0.08]'
@@ -1068,7 +1066,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="truncate">Orders</span>
               {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-bold font-mono">
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-bold font-mono shrink-0">
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').length}
                 </span>
               )}
@@ -1076,7 +1074,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setIsBillModalOpen(true)}
-              className="h-10 px-2 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98"
+              className="h-10 px-1.5 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0"
             >
               <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span className="truncate">Bill</span>
@@ -1084,7 +1082,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           </div>
         </div>
       ) : (
-        <div className="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.08] text-white/70 flex items-center justify-between text-xs font-mono sticky top-0 z-30 backdrop-blur-xl">
+        <div className="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.08] text-white/70 flex items-center justify-between text-xs font-mono sticky top-0 z-30 backdrop-blur-xl w-full max-w-full box-border">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
             <span>Counter Pickup Ordering</span>
@@ -1095,32 +1093,32 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Food ⇄ Bar ⇄ Hookah Segmented Switcher */}
       {(hasBarDivision || hasHookahDivision) && (
-        <div className="px-4 pt-3.5 pb-1 relative z-10">
-          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1.5 liquid-glass-strong rounded-2xl text-xs font-medium gap-1.5`}>
+        <div className="px-3.5 pt-3 pb-1 relative z-10 w-full max-w-full box-border">
+          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1 liquid-glass-strong rounded-2xl text-xs font-medium gap-1 w-full`}>
             <button
               onClick={() => handleSwitchMenuTab('FOOD')}
-              className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 font-bold ${
+              className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 ${
                 currentMenuTab === 'FOOD'
                   ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-[0_4px_16px_rgba(245,166,35,0.35)]'
                   : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
               }`}
             >
-              <Utensils className="w-3.5 h-3.5" />
-              <span>Food</span>
+              <Utensils className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Food</span>
             </button>
 
             {hasBarDivision && (
               <button
                 onClick={() => handleSwitchMenuTab('BAR')}
-                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 font-bold ${
+                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 ${
                   currentMenuTab === 'BAR'
                     ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-[0_4px_16px_rgba(168,85,247,0.35)]'
                     : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
                 }`}
               >
-                <Wine className="w-3.5 h-3.5 text-purple-200" />
-                <span>Bar</span>
-                <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                <Wine className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                <span className="truncate">Bar</span>
+                <span className={`text-[9px] px-1 py-0.2 rounded font-mono shrink-0 ${
                   currentMenuTab === 'BAR' ? 'bg-black/30 text-white' : 'bg-purple-500/15 text-purple-300 border border-purple-500/25'
                 }`}>
                   21+
@@ -1131,15 +1129,15 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             {hasHookahDivision && (
               <button
                 onClick={() => handleSwitchMenuTab('HOOKAH')}
-                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 font-bold ${
+                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 ${
                   currentMenuTab === 'HOOKAH'
                     ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-[0_4px_16px_rgba(217,119,6,0.35)]'
                     : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
                 }`}
               >
-                <Flame className="w-3.5 h-3.5 text-amber-200" />
-                <span>Hookah</span>
-                <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                <Flame className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                <span className="truncate">Hookah</span>
+                <span className={`text-[9px] px-1 py-0.2 rounded font-mono shrink-0 ${
                   currentMenuTab === 'HOOKAH' ? 'bg-black/30 text-white' : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
                 }`}>
                   18+
@@ -1152,22 +1150,22 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Non-blocking Single Confirmation Banner after order checkout */}
       {latestPlacedOrder && (
-        <div className="mx-4 mt-3.5 p-3.5 rounded-2xl liquid-glass border border-emerald-500/35 flex items-start justify-between gap-3 shadow-lg relative z-10">
-          <div className="flex items-start gap-2.5 min-w-0">
+        <div className="mx-3.5 mt-3 p-3 rounded-2xl liquid-glass border border-emerald-500/35 flex items-start justify-between gap-3 shadow-lg relative z-10 w-[calc(100%-1.75rem)] box-border">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5 shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-emerald-300 truncate">
                 Order #{latestPlacedOrder.displayOrderNumber || latestPlacedOrder.orderNumber || (latestPlacedOrder.id.length > 8 ? latestPlacedOrder.id.slice(-4) : latestPlacedOrder.id)} Transmitted!
               </p>
-              <p className="text-[11px] text-white/70 mt-0.5">
-                Sent directly to preparation pass. Table: <strong className="text-white">{selectedTableNum}</strong>
+              <p className="text-[11px] text-white/70 mt-0.5 truncate">
+                Sent to preparation pass. Table: <strong className="text-white">{selectedTableNum}</strong>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setIsOrderStatusModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95"
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95"
             >
               Track
             </button>
@@ -1184,22 +1182,22 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Non-intrusive legal notice when viewing Bar / Hookah */}
       {currentMenuTab === 'BAR' && (
-        <div className="mx-4 mt-2.5 p-2.5 rounded-xl liquid-glass border-purple-500/25 text-[11px] text-purple-200 flex items-center gap-2 relative z-10">
+        <div className="mx-3.5 mt-2.5 p-2.5 rounded-xl liquid-glass border-purple-500/25 text-[11px] text-purple-200 flex items-center gap-2 relative z-10 w-[calc(100%-1.75rem)] box-border">
           <Wine className="w-4 h-4 text-purple-400 shrink-0" />
-          <span>Craft Bar Catalog · 21+ Government ID required upon table service.</span>
+          <span className="truncate">Craft Bar · 21+ Government ID required upon service.</span>
         </div>
       )}
       {currentMenuTab === 'HOOKAH' && (
-        <div className="mx-4 mt-2.5 p-2.5 rounded-xl liquid-glass border-amber-500/25 text-[11px] text-amber-200 flex items-center gap-2 relative z-10">
+        <div className="mx-3.5 mt-2.5 p-2.5 rounded-xl liquid-glass border-amber-500/25 text-[11px] text-amber-200 flex items-center gap-2 relative z-10 w-[calc(100%-1.75rem)] box-border">
           <Flame className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>Hookah & Shisha Lounge Catalog · Statutory adult age (18+) required upon table service.</span>
+          <span className="truncate">Hookah Lounge · Statutory adult age (18+) required upon service.</span>
         </div>
       )}
 
       {/* Menu Filter Tabs & Search */}
-      <div className="p-4 space-y-3.5 relative z-10">
+      <div className="p-3.5 space-y-3 relative z-10 w-full max-w-full box-border">
         {/* Search Input with 16px font-size to prevent iOS auto-zoom */}
-        <div className="relative liquid-glass rounded-2xl border border-white/[0.10] focus-within:border-amber-400/60 focus-within:shadow-[0_0_16px_rgba(245,166,35,0.15)] transition-all">
+        <div className="relative liquid-glass rounded-2xl border border-white/[0.10] focus-within:border-amber-400/60 focus-within:shadow-[0_0_16px_rgba(245,166,35,0.15)] transition-all w-full box-border">
           <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-white/40" />
           <input
             type="text"
@@ -1207,7 +1205,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={
               isBarTheme
-                ? 'Search cocktails, wine, spirits, craft beers...'
+                ? 'Search cocktails, wine, spirits...'
                 : isHookahTheme
                 ? 'Search shisha flavours, blends...'
                 : 'Search dishes, appetizers, desserts...'
@@ -1227,10 +1225,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
         {/* Dietary Veg/Non-Veg Quick Filter */}
         {!isBarTheme && (
-          <div className="flex items-center gap-1.5 p-1 liquid-glass rounded-xl text-xs">
+          <div className="flex items-center gap-1 p-1 liquid-glass rounded-xl text-xs w-full box-border">
             <button
               onClick={() => setDietaryFilter('ALL')}
-              className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors text-center ${
+              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors text-center truncate ${
                 dietaryFilter === 'ALL' ? 'bg-white/[0.10] text-white font-semibold' : 'text-white/40 hover:text-white'
               }`}
             >
@@ -1239,35 +1237,35 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setDietaryFilter('VEG')}
-              className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate ${
                 dietaryFilter === 'VEG'
                   ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
                   : 'text-white/40 hover:text-emerald-400'
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-              <span>Veg Only</span>
+              <span className="truncate">Veg Only</span>
             </button>
 
             <button
               onClick={() => setDietaryFilter('NON_VEG')}
-              className={`flex-1 py-1.5 px-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate ${
                 dietaryFilter === 'NON_VEG'
                   ? 'bg-rose-500/15 text-rose-300 font-semibold border border-rose-500/30'
                   : 'text-white/40 hover:text-rose-400'
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
-              <span>Non-Veg</span>
+              <span className="truncate">Non-Veg</span>
             </button>
           </div>
         )}
 
         {/* Categories Horizontal Scroll with Liquid-Glass Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth w-full max-w-full min-w-0">
           <button
             onClick={() => setActiveCategory('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 shrink-0 ${
               activeCategory === 'all'
                 ? isHookahTheme
                   ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-[0_2px_12px_rgba(217,119,6,0.35)]'
@@ -1313,7 +1311,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 shrink-0 ${
                 activeCategory === cat.id
                   ? isHookahTheme
                     ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white font-semibold shadow-[0_2px_12px_rgba(217,119,6,0.35)]'
@@ -1329,7 +1327,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         </div>
 
         {/* Menu Items List with Liquid Glass Cards */}
-        <div className="space-y-3.5">
+        <div className="space-y-3 w-full max-w-full box-border">
           {filteredItems.map((item) => {
             const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
             const isAvailable = item.isAvailable !== false;
@@ -1340,7 +1338,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             return (
               <div
                 key={item.id}
-                className={`p-3.5 sm:p-4 flex gap-3.5 transition-all duration-300 rounded-2xl liquid-glass-card shadow-sm ${
+                className={`p-3 sm:p-4 flex gap-3 transition-all duration-300 rounded-2xl liquid-glass-card shadow-sm w-full max-w-full box-border ${
                   isAvailable
                     ? 'hover:border-white/[0.18] hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)]'
                     : 'opacity-50 border-white/[0.04]'
@@ -1351,7 +1349,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     src={item.image}
                     alt={item.name}
                     loading="lazy"
-                    className="w-22 h-22 sm:w-24 sm:h-24 rounded-xl object-cover border border-white/[0.08] bg-[#11151B]"
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover border border-white/[0.08] bg-[#11151B]"
                   />
                   {item.isAlcoholic && (
                     <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-white/90 border border-white/10 backdrop-blur-sm">
@@ -1361,9 +1359,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 </div>
 
                 <div className="flex-1 min-w-0 flex flex-col justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-start justify-between gap-1.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         {!isBarTheme && !item.isAlcoholic && (
                           <span
                             className={`inline-flex items-center justify-center border p-0.5 rounded-[3px] shrink-0 ${
@@ -1387,82 +1385,84 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     </div>
 
                     {item.brand && (
-                      <p className="text-[10px] text-amber-400/90 font-mono mt-0.5">{item.brand}</p>
+                      <p className="text-[10px] text-amber-400/90 font-mono mt-0.5 truncate">{item.brand}</p>
                     )}
                     <p className="text-xs text-white/50 line-clamp-2 mt-1 leading-relaxed">{item.description}</p>
                     {(item.glassSize || item.bottleSize) && (
-                      <p className="text-[10px] text-white/40 font-mono mt-0.5">
+                      <p className="text-[10px] text-white/40 font-mono mt-0.5 truncate">
                         Serving: {item.glassSize || item.bottleSize}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06]">
-                    <span className="text-xs sm:text-sm font-mono font-bold text-amber-400">
+                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06] gap-2">
+                    <span className="text-xs sm:text-sm font-mono font-bold text-amber-400 shrink-0">
                       {formatPrice(item.price)}
                     </span>
 
-                    {isAvailable ? (
-                      inCart ? (
-                        <div
-                          className="flex items-center gap-1.5 liquid-glass-pill border-amber-500/40 rounded-xl p-0.5 shadow-inner"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity - 1)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
-                            aria-label="Decrease quantity"
+                    <div className="shrink-0">
+                      {isAvailable ? (
+                        inCart ? (
+                          <div
+                            className="flex items-center gap-1.5 liquid-glass-pill border-amber-500/40 rounded-xl p-0.5 shadow-inner"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="font-mono text-xs font-bold text-white min-w-[20px] text-center">
-                            {inCart.quantity}
-                          </span>
-                          <button
-                            onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity + 1)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
-                            aria-label="Increase quantity"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDirectAddItem(item);
-                          }}
-                          className={`h-8 px-3.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all duration-300 active:scale-95 shadow-sm ${
-                            isJustAdded
-                              ? 'bg-emerald-500 text-slate-950 font-bold scale-105 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
-                              : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold hover:shadow-[0_2px_12px_rgba(245,166,35,0.3)]'
-                          }`}
-                        >
-                          {isJustAdded ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Added</span>
-                            </>
-                          ) : (
-                            <>
+                            <button
+                              onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity - 1)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                              aria-label="Decrease quantity"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="font-mono text-xs font-bold text-white min-w-[20px] text-center">
+                              {inCart.quantity}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity + 1)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                              aria-label="Increase quantity"
+                            >
                               <Plus className="w-3.5 h-3.5" />
-                              <span>{hasOptions ? 'Options' : 'Add'}</span>
-                            </>
-                          )}
-                        </button>
-                      )
-                    ) : (
-                      <span className="text-[10px] font-mono py-1 px-2.5 rounded-xl font-medium bg-white/[0.04] text-white/40 border border-white/[0.06] cursor-not-allowed">
-                        Sold Out
-                      </span>
-                    )}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDirectAddItem(item);
+                            }}
+                            className={`h-8 px-3 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all duration-300 active:scale-95 shadow-sm ${
+                              isJustAdded
+                                ? 'bg-emerald-500 text-slate-950 font-bold scale-105 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
+                                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold hover:shadow-[0_2px_12px_rgba(245,166,35,0.3)]'
+                            }`}
+                          >
+                            {isJustAdded ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Added</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>{hasOptions ? 'Options' : 'Add'}</span>
+                              </>
+                            )}
+                          </button>
+                        )
+                      ) : (
+                        <span className="text-[10px] font-mono py-1 px-2 rounded-xl font-medium bg-white/[0.04] text-white/40 border border-white/[0.06] cursor-not-allowed">
+                          Sold Out
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             );
           })}
           {filteredItems.length === 0 && (
-            <div className="p-8 text-center liquid-glass border border-dashed border-white/[0.08] rounded-2xl text-white/40 text-xs space-y-2">
+            <div className="p-8 text-center liquid-glass border border-dashed border-white/[0.08] rounded-2xl text-white/40 text-xs space-y-2 w-full box-border">
               {isHookahTheme ? (
                 <>
                   <Flame className="w-8 h-8 text-amber-400 mx-auto opacity-70" />
@@ -1496,7 +1496,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Floating Cart Liquid-Glass Sticky Dock */}
       {totalCartCount > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 z-40 max-w-md mx-auto safe-bottom">
+        <div className="fixed bottom-4 inset-x-0 mx-auto w-[calc(100%-2rem)] max-w-md z-40 safe-bottom">
           <button
             onClick={() => setIsCartOpen(true)}
             className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-bold p-3.5 rounded-2xl shadow-[0_12px_36px_rgba(245,166,35,0.4)] border border-amber-300/40 flex items-center justify-between transition-all active:scale-[0.99] group"
@@ -1849,7 +1849,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* STICKY FLOATING ACTIVE SESSION ORDER STATUS BAR */}
       {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
         <div
-          className={`fixed left-4 right-4 max-w-md mx-auto z-40 transition-all duration-300 safe-bottom ${
+          className={`fixed inset-x-0 mx-auto w-[calc(100%-2rem)] max-w-md z-40 transition-all duration-300 safe-bottom ${
             totalCartCount > 0 ? 'bottom-20' : 'bottom-4'
           }`}
         >
