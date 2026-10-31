@@ -334,19 +334,6 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const [barViewMode, setBarViewMode] = useState<'items' | 'orders'>('items');
   const [hookahViewMode, setHookahViewMode] = useState<'items' | 'orders'>('items');
 
-  console.log('[DayManagementView DEBUG]', JSON.stringify({
-    hasCurrentBusinessDay: !!currentBusinessDay,
-    currentBusinessDayId: currentBusinessDay?.id,
-    currentBusinessDayStatus: currentBusinessDay?.status,
-    currentBusinessDayGross: (currentBusinessDay as any)?.gross_sales ?? (currentBusinessDay as any)?.grossSales,
-    currentBusinessDayOrderVal: (currentBusinessDay as any)?.order_value ?? (currentBusinessDay as any)?.orderValue,
-    hasSections: !!currentBusinessDay?.sections,
-    sectionsKitchen: currentBusinessDay?.sections?.kitchen?.sales,
-    sectionsBar: currentBusinessDay?.sections?.bar?.sales,
-    sectionsHookah: currentBusinessDay?.sections?.hookah?.sales,
-    ordersCount: orders?.length,
-    restaurantId: currentRestaurant?.id,
-  }));
 
   // Precheck & Rollover Modal
   const [isPrecheckOpen, setIsPrecheckOpen] = useState(false);

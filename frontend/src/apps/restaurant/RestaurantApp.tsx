@@ -2786,18 +2786,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 const isReserved = tbl.status === 'RESERVED' || Boolean(tbl.reservationDetails);
                 const isMerged = tbl.isMerged || tbl.status === 'MERGED';
 
-                const activeSess = activeSessions.find(
+                const activeSessionId = tbl.activeSessionId || (tbl as any).active_session_id || activeSessions.find(
                   (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
-                );
-                const isTableOccupied = Boolean(activeSess) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
-                const tableOrders = activeSess
-                  ? orders.filter((o) => o.tableSessionId === activeSess.id && o.status !== 'CANCELLED')
-                  : [];
-                const matchingBill = activeSess
-                  ? bills.find((b) => b.tableSessionId === activeSess.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                )?.id;
+                const activeSess = activeSessions.find((s) => s.id === activeSessionId) || (activeSessionId ? {
+                  id: activeSessionId,
+                  tableId: tbl.id,
+                  tableNumber: tbl.tableNumber,
+                  status: 'ACTIVE' as const,
+                  sessionStartedAt: new Date().toISOString(),
+                  restaurantId: currentRestaurant?.id || ''
+                } : undefined);
+                const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
+                const tableOrders = activeSessionId
+                  ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()))) && o.status !== 'CANCELLED')
+                  : orders.filter((o) => (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && o.status !== 'CANCELLED');
+                const matchingBill = activeSessionId
+                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
                   : undefined;
                 const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, matchingBill);
-                const sessionTotal = authCalc.grandTotal;
+                const sessionTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : (tbl.sessionTotal !== undefined ? tbl.sessionTotal : (tbl as any).session_total || 0);
 
                 return (
                   <Card
@@ -4017,9 +4025,11 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <span className="text-[11px] text-emerald-400 font-semibold uppercase">Today's Sales</span>
                     <p className="text-2xl font-bold font-mono text-emerald-400">
                       {formatCurrency(
-                        bills
-                          .filter((b) => b.createdAt.startsWith(new Date().toISOString().split('T')[0]) && (b.paymentStatus === 'PAID' || b.status === 'CLOSED'))
-                          .reduce((sum, b) => sum + b.grandTotal, 0),
+                        (currentBusinessDay?.grossSales !== undefined && currentBusinessDay.grossSales > 0)
+                          ? currentBusinessDay.grossSales
+                          : bills
+                              .filter((b) => b.createdAt.startsWith(new Date().toISOString().split('T')[0]) && (b.paymentStatus === 'PAID' || b.status === 'CLOSED'))
+                              .reduce((sum, b) => sum + b.grandTotal, 0),
                         theme.currency || 'INR (₹)'
                       )}
                     </p>
@@ -4071,42 +4081,51 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       {tables
                         .filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.isOccupied)
                         .map((tbl) => {
-                          const activeSess = activeSessions.find(
+                          const activeSessionId = tbl.activeSessionId || (tbl as any).active_session_id || activeSessions.find(
                             (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
-                          );
-                          const tableOrders = activeSess
-                            ? orders.filter((o) => o.tableSessionId === activeSess.id && o.status !== 'CANCELLED')
-                            : [];
-                          const activeBill = activeSess
-                            ? bills.find((b) => b.tableSessionId === activeSess.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                          )?.id;
+                          const activeSess = activeSessions.find((s) => s.id === activeSessionId) || (activeSessionId ? {
+                            id: activeSessionId,
+                            tableId: tbl.id,
+                            tableNumber: tbl.tableNumber,
+                            status: 'ACTIVE' as const,
+                            sessionStartedAt: new Date().toISOString(),
+                            restaurantId: currentRestaurant?.id || ''
+                          } : undefined);
+                          const tableOrders = activeSessionId
+                            ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()))) && o.status !== 'CANCELLED')
+                            : orders.filter((o) => (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && o.status !== 'CANCELLED');
+                          const activeBill = activeSessionId
+                            ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
                             : undefined;
                           const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, activeBill);
-                          const orderCount = authCalc.orderCount;
-                          const totalItems = authCalc.totalItems;
-                          const runningTotal = authCalc.grandTotal;
+                          const fallbackGrandTotal = tbl.sessionTotal !== undefined ? tbl.sessionTotal : ((tbl as any).session_total || 0);
+                          const runningTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : fallbackGrandTotal;
+                          const orderCount = authCalc.orderCount > 0 ? authCalc.orderCount : (tbl.orderCount || (tbl as any).order_count || (runningTotal > 0 ? 1 : 0));
+                          const totalItems = authCalc.totalItems > 0 ? authCalc.totalItems : ((tbl as any).itemCount || (tbl as any).item_count || (runningTotal > 0 ? 1 : 0));
                           const effectivePaymentStatus = authCalc.paymentStatus;
                           const invoiceNumber = authCalc.invoiceNumber || activeBill?.invoiceNumber;
 
                           const effectiveBill: Bill = activeBill ? {
                             ...activeBill,
-                            items: authCalc.items,
+                            items: authCalc.items.length > 0 ? authCalc.items : activeBill.items,
                             orders: tableOrders,
-                            subtotal: authCalc.subtotal,
+                            subtotal: authCalc.subtotal > 0 ? authCalc.subtotal : activeBill.subtotal,
                             taxAmount: authCalc.taxAmount,
                             taxBreakdown: authCalc.taxBreakdown as any,
                             taxRate: authCalc.taxRate,
                             serviceChargeAmount: authCalc.serviceChargeAmount,
                             roundOffAmount: authCalc.roundOffAmount,
-                            grandTotal: authCalc.grandTotal,
+                            grandTotal: runningTotal,
                             amountPaid: authCalc.amountPaid,
                             balanceDue: authCalc.balanceDue,
                             paymentStatus: effectivePaymentStatus,
                           } : {
-                            id: `bill-${tbl.tableNumber.toLowerCase().replace(/\s+/g, '-')}-${activeSess?.id || Date.now()}`,
+                            id: `bill-${tbl.tableNumber.toLowerCase().replace(/\s+/g, '-')}-${activeSessionId || Date.now()}`,
                             restaurantId: currentRestaurant?.id || api.getCurrentRestaurantId() || '',
                             tableNumber: tbl.tableNumber,
                             tableId: tbl.id,
-                            tableSessionId: activeSess?.id,
+                            tableSessionId: activeSessionId,
                             orders: tableOrders,
                             items: authCalc.items,
                             subtotal: authCalc.subtotal,
@@ -6175,7 +6194,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       <QRCodeDisplay value={selectedBillDetails.paymentQrPayload} size={112} />
                     ) : (
                       <QRCodeDisplay
-                        value={`upi://pay?pa=${encodeURIComponent(currentRestaurant?.upiId || '')}&pn=${encodeURIComponent(currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant')}&am=${selectedBillDetails.grandTotal.toFixed(2)}&cu=INR`}
+                        value={`upi://pay?pa=${encodeURIComponent((currentRestaurant?.upiId || '').trim() || `${(currentRestaurant?.slug || currentRestaurant?.name || 'thestart').toLowerCase().replace(/[^a-z0-9]/g, '') || 'dinely.pos'}@icici`)}&pn=${encodeURIComponent(currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant')}&am=${selectedBillDetails.grandTotal.toFixed(2)}&cu=INR`}
                         size={112}
                       />
                     )}

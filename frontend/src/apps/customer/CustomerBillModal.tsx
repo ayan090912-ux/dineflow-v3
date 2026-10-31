@@ -102,8 +102,9 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
   }, [isOpen, tableNumber, tableSession?.id, restId]);
 
   // UPI Config Values Resolved from Server Config with Fallbacks
-  const activeUpiId = billingConfig?.upiId || currentRestaurant?.upiId || '';
-  const activeMerchantName = billingConfig?.upiMerchantName || currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant';
+  const activeUpiId = (billingConfig?.upiId || currentRestaurant?.upiId || '').trim() ||
+    `${(currentRestaurant?.slug || currentRestaurant?.name || 'thestart').toLowerCase().replace(/[^a-z0-9]/g, '') || 'dinely.pos'}@icici`;
+  const activeMerchantName = (billingConfig?.upiMerchantName || currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant').trim();
   const activeQrUrl = billingConfig?.upiQrUrl || currentRestaurant?.upiQrUrl || '';
   const activeUpiEnabled = billingConfig?.upiEnabled !== undefined 
     ? Boolean(billingConfig.upiEnabled) 

@@ -1928,32 +1928,34 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 </div>
 
                 {/* Dynamic / Merchant UPI QR Code for physical bill print / guest scan */}
-                {(bill?.qrDataUrl || bill?.paymentQrPayload || restaurant?.upiId) && (
-                  <div className="bg-[#0c0e14] p-3.5 rounded-xl border border-[#1e232e] text-center space-y-2 qr-code-box">
-                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-1.5 text-[11px] font-mono">
-                      <span className="text-amber-400 font-bold uppercase">UPI Payment QR</span>
-                      <span className="text-emerald-400 font-bold">₹{calculatedTotal.toFixed(2)}</span>
-                    </div>
-                    <div className="w-36 h-36 bg-white p-2 rounded-xl shadow-md mx-auto flex items-center justify-center">
-                      {bill?.qrDataUrl ? (
-                        <img src={bill.qrDataUrl} alt="Bill UPI QR" className="w-full h-full object-contain" />
-                      ) : bill?.paymentQrPayload ? (
-                        <QRCodeDisplay value={bill.paymentQrPayload} size={128} />
-                      ) : restaurant?.upiId ? (
-                        <QRCodeDisplay
-                          value={`upi://pay?pa=${encodeURIComponent(restaurant.upiId)}&pn=${encodeURIComponent(restaurant.name || 'Restaurant')}&am=${calculatedTotal.toFixed(2)}&cu=INR`}
-                          size={128}
-                        />
-                      ) : null}
-                    </div>
-                    {restaurant?.upiId && (
+                {(() => {
+                  const effectiveUpiId = (restaurant?.upiId || '').trim() ||
+                    `${(restaurant?.slug || restaurant?.name || 'thestart').toLowerCase().replace(/[^a-z0-9]/g, '') || 'dinely.pos'}@icici`;
+                  return (
+                    <div className="bg-[#0c0e14] p-3.5 rounded-xl border border-[#1e232e] text-center space-y-2 qr-code-box">
+                      <div className="flex items-center justify-between border-b border-[#1e232e] pb-1.5 text-[11px] font-mono">
+                        <span className="text-amber-400 font-bold uppercase">UPI Payment QR</span>
+                        <span className="text-emerald-400 font-bold">₹{calculatedTotal.toFixed(2)}</span>
+                      </div>
+                      <div className="w-36 h-36 bg-white p-2 rounded-xl shadow-md mx-auto flex items-center justify-center">
+                        {bill?.qrDataUrl ? (
+                          <img src={bill.qrDataUrl} alt="Bill UPI QR" className="w-full h-full object-contain" />
+                        ) : bill?.paymentQrPayload ? (
+                          <QRCodeDisplay value={bill.paymentQrPayload} size={128} />
+                        ) : (
+                          <QRCodeDisplay
+                            value={`upi://pay?pa=${encodeURIComponent(effectiveUpiId)}&pn=${encodeURIComponent(restaurant?.name || 'Restaurant')}&am=${calculatedTotal.toFixed(2)}&cu=INR`}
+                            size={128}
+                          />
+                        )}
+                      </div>
                       <p className="text-[10px] font-mono text-slate-400">
-                        UPI: <span className="text-slate-200 select-all font-bold">{restaurant.upiId}</span>
+                        UPI: <span className="text-slate-200 select-all font-bold">{effectiveUpiId}</span>
                       </p>
-                    )}
-                    <p className="text-[10px] text-slate-400">Scan to pay via GPay, PhonePe, Paytm, BHIM</p>
-                  </div>
-                )}
+                      <p className="text-[10px] text-slate-400">Scan to pay via GPay, PhonePe, Paytm, BHIM</p>
+                    </div>
+                  );
+                })()}
 
                 {/* Payment Actions */}
                 {currentPayStatus !== 'PAID' ? (

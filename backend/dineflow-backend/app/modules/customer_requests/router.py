@@ -163,18 +163,26 @@ async def get_customer_requests(
 
     # If caller has authentication, enforce tenant authorization
     if caller.is_authenticated and not caller.is_admin:
-        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
-            from app.modules.restaurants.models import Restaurant
-            res_r = await db.execute(select(Restaurant).where(Restaurant.id == canonical_rest_id))
-            r_obj = res_r.scalar_one_or_none()
-            if not r_obj or not (
-                (caller.uid and r_obj.owner_uid == caller.uid) or
-                (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
-            ):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
-            if caller.restaurant_id and caller.restaurant_id != canonical_rest_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
+        caller_tid = caller.tenant_id or caller.restaurant_id
+        is_same_tenant = bool(caller_tid and caller_tid.lower() == canonical_rest_id.lower())
+        if not is_same_tenant:
+            if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+                from app.modules.restaurants.models import Restaurant
+                res_r = await db.execute(select(Restaurant).where(Restaurant.id == canonical_rest_id))
+                r_obj = res_r.scalar_one_or_none()
+                if not r_obj or not (
+                    (caller.uid and r_obj.owner_uid == caller.uid) or
+                    (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
+                ):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
+            elif caller.role in [
+                "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR",
+                "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "STAFF"
+            ]:
+                if caller.restaurant_id and caller.restaurant_id != canonical_rest_id:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
+            else:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized for customer requests")
 
     query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == canonical_rest_id)
     if status_filter:
@@ -242,19 +250,25 @@ async def update_customer_request(
         )
 
     if not caller.is_admin:
-        if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
-            res_r = await db.execute(select(Restaurant).where(Restaurant.id == req.restaurant_id))
-            r_obj = res_r.scalar_one_or_none()
-            if not r_obj or not (
-                (caller.uid and r_obj.owner_uid == caller.uid) or
-                (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
-            ):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "MANAGER"]:
-            if caller.restaurant_id and caller.restaurant_id != req.restaurant_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
-        else:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update service requests")
+        caller_tid = caller.tenant_id or caller.restaurant_id
+        is_same_tenant = bool(caller_tid and caller_tid.lower() == req.restaurant_id.lower())
+        if not is_same_tenant:
+            if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
+                res_r = await db.execute(select(Restaurant).where(Restaurant.id == req.restaurant_id))
+                r_obj = res_r.scalar_one_or_none()
+                if not r_obj or not (
+                    (caller.uid and r_obj.owner_uid == caller.uid) or
+                    (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
+                ):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
+            elif caller.role in [
+                "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR",
+                "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "STAFF"
+            ]:
+                if caller.restaurant_id and caller.restaurant_id != req.restaurant_id:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
+            else:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update service requests")
 
     new_status = payload.status.upper()
     current_status = req.status.upper()
