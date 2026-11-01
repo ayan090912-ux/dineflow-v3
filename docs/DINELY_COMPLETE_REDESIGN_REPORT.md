@@ -82,14 +82,36 @@ This production engagement executed a full-scale frontend architecture and UI/UX
 
 ### G. Kitchen KDS (Bump Board & Pass)
 - **Artifact:** [`76_production_kitchen_kds.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/76_production_kitchen_kds.png)
-- **Verification:** Kitchen bump board reflecting independent station lifecycle. Dishes previously prepared are completed, while beverage and shisha orders remain in their designated stations.
+- **Verification:** Upgraded to Day Management Bento design with ambient halogen backdrops, glowing emerald chef hat container, Top Operational Metadata Bar (`Station: Kitchen (Culinary) LIVE KDS`), 4-column Bento KPI row (Incoming Queue, In Preparation, Ready at Pass, Shift Dispatched), and high-contrast `#12151b` ticket bump cards with 1-click action buttons.
+
+### H. POS & QR Orders Feed
+- **Artifact:** [`77_production_orders_stream.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/77_production_orders_stream.png)
+- **Verification:** Upgraded with amber shopping bag container, Operational Metadata Bar (`Feed Status: Real-time Station Dispatch CONNECTED`), Bento KPI row (Total Stream Orders 61, Pending Acceptance 0, In Kitchen / Bar 1, Delivered to Guests 60), and real-time station tags (`KITCHEN`, `BAR`, `HOOKAH`) with 1-click stage actions.
+
+### I. Raw Material Inventory & Stock Terminal
+- **Artifact:** [`78_production_inventory_stock.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/78_production_inventory_stock.png)
+- **Verification:** Styled with cyan package container, Operational Metadata Bar (`Terminal: Raw Material Inventory & Vendors`), Bento KPI cards (Total Tracked Items, Low Stock Alerts, Total Inventory Value, Active Suppliers), and `liquid-glass-card` stock datatables.
+
+### J. Table Floorplan & Standees
+- **Artifact:** [`79_production_floorplan.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/79_production_floorplan.png)
+- **Verification:** Bento KPI row (Total Tables 14, Available 12, Reserved 0, Merged Groups 0, Occupied 2). Table 03 prominently displays active status with accurate running bill of ₹1,847.00.
+
+### K. Executive Overview Dashboard
+- **Artifact:** [`80_production_overview_dashboard.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/80_production_overview_dashboard.png)
+- **Verification:** Bento KPI row featuring Today's Total Sales, Active Orders, Floor Occupancy, and Fulfilled Today, followed by Bar & Beverage station breakdown analytics.
+
+### L. Billing, Taxes & Invoices (Live POS & Invoicing)
+- **Artifact:** [`81_production_billing_updated.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/81_production_billing_updated.png)
+- **Verification:** Bento KPI row with Today's Sales, Total Receipts, Paid Invoices, and Pending/Open Bills. Table 03 card upgraded to Day Management card styling showing `RUNNING TOTAL: ₹1,847.00 ACTIVE (1 Orders, 4 Items)` with emerald `Record Manual Payment` button, in 100% synchronicity with Customer Mobile and Waiter OS.
 
 ---
 
 ## 4. Verification Checkpoint Summary
 - **Backend Tests:** 369 passed, 1 skipped, 0 failures (`backend/dineflow-backend/.venv/bin/pytest`)
 - **TypeScript Typecheck:** 0 errors (`npm --prefix frontend run typecheck`)
-- **Vite Production Build:** 0 errors (`npm --prefix frontend run build`, 2.20s)
+- **Vite Production Build:** 0 errors (`npm --prefix frontend run build`, 1.96s)
+- **Deployed Commit:** `423f6ba` (Branch: `security-hardening-cleanup`)
+- **Docker Container Status on AWS EC2 (`i-0997b0b381dfb3fd0`):** `dinely_web` (Recreated & Started), `dinely_backend` (Healthy)
 - **Live HTTP Health Probes:**
   - `https://dinely.food/healthz`: HTTP 200 (healthy)
   - `https://dinely.food/readyz`: HTTP 200 (ready)
