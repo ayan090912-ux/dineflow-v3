@@ -233,6 +233,86 @@ async function main() {
   fs.writeFileSync(p8, Buffer.from(shot8.data, 'base64'));
   console.log('Saved:', p8);
 
+  // Test 9: POS Orders Stream
+  console.log('[TEST 9] Verifying POS & QR Orders Stream...');
+  await client.send('Runtime.evaluate', {
+    expression: `(() => {
+      const tab = Array.from(document.querySelectorAll('button')).find(el => el.textContent && el.textContent.includes('POS Orders'));
+      if (tab) tab.click();
+      return !!tab;
+    })()`,
+  });
+  await sleep(3000);
+
+  const shot9 = await client.send('Page.captureScreenshot', { format: 'png' });
+  const p9 = path.join(ARTIFACT_DIR, '77_production_orders_stream.png');
+  fs.writeFileSync(p9, Buffer.from(shot9.data, 'base64'));
+  console.log('Saved:', p9);
+
+  // Test 10: Inventory Stock
+  console.log('[TEST 10] Verifying Raw Material Inventory Stock Terminal...');
+  await client.send('Runtime.evaluate', {
+    expression: `(() => {
+      const tab = Array.from(document.querySelectorAll('button')).find(el => el.textContent && el.textContent.includes('Inventory Stock'));
+      if (tab) tab.click();
+      return !!tab;
+    })()`,
+  });
+  await sleep(3000);
+
+  const shot10 = await client.send('Page.captureScreenshot', { format: 'png' });
+  const p10 = path.join(ARTIFACT_DIR, '78_production_inventory_stock.png');
+  fs.writeFileSync(p10, Buffer.from(shot10.data, 'base64'));
+  console.log('Saved:', p10);
+
+  // Test 11: Floorplan & QR
+  console.log('[TEST 11] Verifying Table Floorplan & QR Codes...');
+  await client.send('Runtime.evaluate', {
+    expression: `(() => {
+      const tab = Array.from(document.querySelectorAll('button')).find(el => el.textContent && el.textContent.includes('Floorplan & QR'));
+      if (tab) tab.click();
+      return !!tab;
+    })()`,
+  });
+  await sleep(3000);
+
+  const shot11 = await client.send('Page.captureScreenshot', { format: 'png' });
+  const p11 = path.join(ARTIFACT_DIR, '79_production_floorplan.png');
+  fs.writeFileSync(p11, Buffer.from(shot11.data, 'base64'));
+  console.log('Saved:', p11);
+
+  // Test 12: Executive Overview Dashboard
+  console.log('[TEST 12] Verifying Executive Overview Dashboard...');
+  await client.send('Runtime.evaluate', {
+    expression: `(() => {
+      const tab = Array.from(document.querySelectorAll('button')).find(el => el.textContent && el.textContent.includes('Overview'));
+      if (tab) tab.click();
+      return !!tab;
+    })()`,
+  });
+  await sleep(3000);
+
+  const shot12 = await client.send('Page.captureScreenshot', { format: 'png' });
+  const p12 = path.join(ARTIFACT_DIR, '80_production_overview_dashboard.png');
+  fs.writeFileSync(p12, Buffer.from(shot12.data, 'base64'));
+  console.log('Saved:', p12);
+
+  // Test 13: Billing, Taxes & Invoices (with updated Bento cards)
+  console.log('[TEST 13] Verifying Billing, Taxes & Invoices (Bento Cards)...');
+  await client.send('Runtime.evaluate', {
+    expression: `(() => {
+      const tab = Array.from(document.querySelectorAll('button')).find(el => el.textContent && el.textContent.includes('Billing & Invoices'));
+      if (tab) tab.click();
+      return !!tab;
+    })()`,
+  });
+  await sleep(3000);
+
+  const shot13 = await client.send('Page.captureScreenshot', { format: 'png' });
+  const p13 = path.join(ARTIFACT_DIR, '81_production_billing_updated.png');
+  fs.writeFileSync(p13, Buffer.from(shot13.data, 'base64'));
+  console.log('Saved:', p13);
+
   client.ws.close();
   chrome.kill();
   console.log('ALL SCREENSHOT VERIFICATIONS COMPLETED SUCCESSFULLY!');
