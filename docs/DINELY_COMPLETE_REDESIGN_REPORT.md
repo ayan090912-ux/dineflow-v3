@@ -94,3 +94,4 @@ This production engagement executed a full-scale frontend architecture and UI/UX
   - `https://dinely.food/healthz`: HTTP 200 (healthy)
   - `https://dinely.food/readyz`: HTTP 200 (ready)
   - `https://the-start.dinely.food/customer?table=03`: HTTP 200
+

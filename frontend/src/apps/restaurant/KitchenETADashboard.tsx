@@ -33,6 +33,7 @@ import {
   HelpCircle,
   Activity,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, SearchInput, StatsCard, Avatar, DinelyLogo } from '../../packages/ui';
 import { Order, OrderItem, getFulfillmentStation } from '../../packages/types';
@@ -746,147 +747,193 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const overdueCount = (orders || []).filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && calculateRemainingTime(o).isOverdue).length;
 
   return (
-    <div className="bg-[#0b0d11] text-slate-100 flex flex-col font-sans relative w-full rounded-2xl overflow-hidden border border-[#1e232e]">
-      {/* Toast Banner */}
+    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans relative w-full overflow-x-hidden selection:bg-emerald-500 selection:text-white pb-12">
+      {/* AMBIENT BACKGROUND GLOWS */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute -top-40 left-1/3 w-[500px] h-[500px] rounded-full blur-[140px] bg-emerald-500/10 opacity-70" />
+        <div className="absolute top-[40%] -right-20 w-[450px] h-[450px] rounded-full blur-[130px] bg-sky-600/10 opacity-60" />
+      </div>
+
+      {/* Toast Feedback */}
       {toast && (
-        <div className="fixed top-6 right-6 z-50 p-3.5 rounded-xl bg-emerald-500 text-slate-950 font-semibold text-xs shadow-2xl flex items-center gap-2 border border-emerald-400">
+        <div className="fixed top-6 right-6 z-50 p-3.5 rounded-2xl bg-emerald-500/90 backdrop-blur-xl text-slate-950 font-bold text-xs shadow-2xl flex items-center gap-2 border border-emerald-300">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toast.msg}</span>
         </div>
       )}
 
-      {/* TOP COMPACT KITCHEN CONTROL HEADER */}
-      <div className="bg-[#0e1117] border-b border-[#1e232e] px-5 py-4 space-y-3.5">
-        {/* Row 1: Title, Status Pills, Actions */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
-              <ChefHat className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <DinelyLogo size="sm" />
-                <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-2 uppercase">
-                  {restaurant?.name || 'THE START'}
-                </h1>
-                <Badge variant="brand">KITCHEN TERMINAL</Badge>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Hot line order fulfillment & ticket pipeline
-              </p>
-            </div>
+      {/* HEADER BAR */}
+      <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+        {/* Brand Header */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+            <ChefHat className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
           </div>
-
-          {/* Quick Stats & Controls Bar */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Ticket Counter Pills */}
-            <div className="flex items-center gap-2 bg-[#12151b] px-3 py-1.5 rounded-lg border border-[#1e232e] text-xs font-mono font-medium shrink-0">
-              <span className="text-amber-400">{pendingOrders.length} New</span>
-              <span className="text-slate-600">/</span>
-              <span className="text-sky-400">{inKitchenOrders.length} Cooking</span>
-              <span className="text-slate-600">/</span>
-              <span className="text-emerald-400">{readyOrders.length} Ready</span>
-              {overdueCount > 0 && (
-                <>
-                  <span className="text-slate-600">/</span>
-                  <span className="text-rose-400 font-bold">
-                    {overdueCount} Late
-                  </span>
-                </>
-              )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+              <DinelyLogo size="sm" />
+              <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">
+                {restaurant?.name || 'THE START'}
+              </h1>
+              <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 bg-emerald-500/25 text-emerald-300 border border-emerald-400/40">
+                KITCHEN
+              </Badge>
+              <Badge variant="outline" className="hidden xs:inline-flex text-emerald-300 border-emerald-400/30 text-[9px] sm:text-[10px] font-mono">
+                CULINARY KDS
+              </Badge>
+              <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+              </span>
             </div>
-
-            {/* Audio Toggle */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsMuted(!isMuted)}
-              className={`border-[#1e232e] bg-[#12151b] text-xs h-8 ${isMuted ? 'text-slate-500' : 'text-slate-300 hover:text-white'}`}
-              icon={isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-            >
-              {isMuted ? 'Muted' : 'Audio On'}
-            </Button>
-
-            {/* Delay Broadcast */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsDelayModalOpen(true)}
-              className="border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-xs h-8"
-              icon={<AlertTriangle className="w-3.5 h-3.5" />}
-            >
-              Delay Alert
-            </Button>
-
-            {/* Recall Order */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsRecallModalOpen(true)}
-              className="border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white text-xs h-8"
-              icon={<RotateCcw className="w-3.5 h-3.5" />}
-            >
-              Recall ({bumpedHistory.length})
-            </Button>
-
-            {/* Clock */}
-            <div className="font-mono text-xs text-slate-300 bg-[#12151b] px-2.5 py-1.5 rounded-lg border border-[#1e232e] shrink-0">
-              {currentTime}
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                await api.logout();
-                if (onLogout) onLogout();
-                else window.location.href = '/kitchen/login';
-              }}
-              className="border-[#1e232e] bg-[#12151b] text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 text-xs h-8"
-            >
-              Logout
-            </Button>
+            <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
+              Authoritative culinary bump board, active cooking timers, and runner pass dispatch
+            </p>
           </div>
         </div>
 
-        {/* Real Operational Stats Bar */}
-        {(() => {
-          const foodOrders = (orders || []).filter((o) =>
-            (o.items || []).some((i) => getFulfillmentStation(i) === 'KITCHEN')
-          );
-          const received = foodOrders.filter((o) => o.kitchenStatus === 'PENDING' || (!o.kitchenStatus && (o.status === 'PENDING' || o.status === 'CONFIRMED'))).length;
-          const preparing = foodOrders.filter((o) => o.kitchenStatus === 'PREPARING' || o.kitchenStatus === 'ACCEPTED' || (!o.kitchenStatus && (o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'IN_PREPARATION'))).length;
-          const ready = foodOrders.filter((o) => o.kitchenStatus === 'READY' || (!o.kitchenStatus && o.status === 'READY')).length;
-          const completed = foodOrders.filter((o) => o.kitchenStatus === 'COMPLETED' || (!o.kitchenStatus && (o.status === 'DELIVERED' || o.status === 'COMPLETED'))).length;
-
-          return (
-            <div className="pt-2.5 border-t border-[#1e232e] flex flex-wrap items-center justify-between gap-2.5 text-xs font-mono">
-              <span className="text-slate-400 font-sans flex items-center gap-1.5 uppercase text-[11px] tracking-wider font-medium">
-                <Activity className="w-3.5 h-3.5 text-emerald-400" /> Kitchen Flow:
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
-                  <span>Queued:</span> <span className="font-bold text-amber-400">{received}</span>
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
-                  <span>Cooking:</span> <span className="font-bold text-sky-400">{preparing}</span>
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
-                  <span>Ready at Pass:</span> <span className="font-bold text-emerald-400">{ready}</span>
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-300 bg-[#12151b] border border-[#1e232e] px-2 py-0.5 rounded text-[11px]">
-                  <span>Completed:</span> <span className="font-bold text-slate-300">{completed}</span>
-                </span>
-              </div>
+        {/* Staff Shift Info & Utility Actions */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
+            <Avatar src="https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=100" name="Head Chef" size="sm" />
+            <div className="hidden xs:block">
+              <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Kitchen Staff</p>
+              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
             </div>
-          );
-        })()}
+          </div>
 
-        {/* Row 2: Operational Stage Filters & Search Bar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-2.5 border-t border-[#1e232e]">
+          {/* Clock */}
+          <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="font-tabular">{currentTime}</span>
+          </div>
+
+          {/* Audio Chime Toggle */}
+          <button
+            onClick={() => setIsMuted(!isMuted)}
+            className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
+            title={isMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
+          >
+            {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+          </button>
+
+          {/* Delay Alert */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsDelayModalOpen(true)}
+            className="text-xs bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-300 flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+            icon={<AlertTriangle className="w-3.5 h-3.5" />}
+          >
+            <span className="hidden sm:inline">Delay Alert</span>
+          </Button>
+
+          {/* Recall Modal */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsRecallModalOpen(true)}
+            className="text-xs bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+            icon={<RotateCcw className="w-3.5 h-3.5" />}
+          >
+            <span>Recall ({bumpedHistory.length})</span>
+          </Button>
+
+          {/* Logout / Exit */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              await api.logout();
+              if (onLogout) onLogout();
+              else window.location.href = '/kitchen/login';
+            }}
+            className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline">Sign Out</span>
+          </Button>
+        </div>
+      </header>
+
+      {/* MAIN CONTAINER */}
+      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 flex-1 relative z-10">
+        {/* OPERATIONAL METADATA BAR */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs font-mono text-slate-300">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-500">Station:</span>
+            <span className="font-bold text-white text-sm">Kitchen (Culinary)</span>
+            <Badge variant="success" className="text-[10px]">
+              LIVE KDS
+            </Badge>
+          </div>
+          <div className="flex items-center gap-4 text-slate-400 text-[11px]">
+            <span className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-emerald-400" />
+              <span>{currentTime}</span>
+            </span>
+            <span>Total Active: <strong className="text-amber-300">{pendingOrders.length + inKitchenOrders.length + readyOrders.length}</strong></span>
+            <span>In Cooking: <strong className="text-sky-300">{inKitchenOrders.length}</strong></span>
+            <span>Ready at Pass: <strong className="text-emerald-300">{readyOrders.length}</strong></span>
+          </div>
+        </div>
+
+        {/* TOP BENTO KPI CARDS ROW */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3.5">
+          {/* Card 1: Incoming Queue */}
+          <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
+              1. Incoming Queue
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
+              {pendingOrders.length}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              Awaiting prep acceptance
+            </span>
+          </Card>
+
+          {/* Card 2: In Preparation */}
+          <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
+              2. In Preparation
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
+              {inKitchenOrders.length}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              Active cooking & ETA timers
+            </span>
+          </Card>
+
+          {/* Card 3: Ready at Pass */}
+          <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
+              3. Ready at Pass
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
+              {readyOrders.length}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              Plated • Runner dispatch
+            </span>
+          </Card>
+
+          {/* Card 4: Overdue or Dispatched */}
+          <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+              {overdueCount > 0 ? 'Rush Alert' : 'Shift Dispatched'}
+            </span>
+            <p className={`text-xl lg:text-2xl font-bold font-mono tracking-tight ${overdueCount > 0 ? 'text-rose-400' : 'text-white'}`}>
+              {overdueCount > 0 ? `${overdueCount} Late` : `${completedOrders.length} Cleared`}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              {overdueCount > 0 ? 'Exceeded target cooking time' : 'Dispatched tickets'}
+            </span>
+          </Card>
+        </div>
+
+        {/* STAGE FILTERS & SEARCH BAR */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 rounded-2xl">
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 md:pb-0">
             {[
               { id: 'ALL', label: 'All Active Tickets', icon: <Flame className="w-3.5 h-3.5 text-emerald-400" />, badge: pendingOrders.length + inKitchenOrders.length + readyOrders.length },
@@ -898,7 +945,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setKitchenFilter(tab.id as any)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
                   kitchenFilter === tab.id
                     ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
                     : 'bg-[#12151b] text-slate-400 hover:text-slate-200 border border-[#1e232e]'
@@ -907,7 +954,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 {tab.icon}
                 <span>{tab.label}</span>
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="px-1.5 py-0.2 rounded-md text-[10px] font-mono font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                     {tab.badge}
                   </span>
                 )}
@@ -924,24 +971,23 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             />
           </div>
         </div>
-      </div>
 
-      {/* MAIN CONTENT AREA: ONE-SCREEN OPERATIONAL BOARD */}
-      <div className="p-5 overflow-y-auto w-full">
-        {/* VIEW: LIVE OPERATIONAL PIPELINE */}
-        {kitchenFilter !== 'COMPLETED' ? (
-          <div className={kitchenFilter === 'ALL' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"}>
-            {/* COLUMN 1: NEW INCOMING ORDERS */}
-            {(kitchenFilter === 'ALL' || kitchenFilter === 'NEW') && (
-              <div className="space-y-3.5">
-                <div className="p-2.5 bg-[#12151b] rounded-xl border border-[#1e232e] flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                    <Bell className="w-3.5 h-3.5 text-amber-400" /> 1. Incoming Queue ({pendingOrders.length})
-                  </span>
-                  <span className="text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded">
-                    {pendingOrders.length}
-                  </span>
-                </div>
+        {/* ONE-SCREEN OPERATIONAL BOARD */}
+        <div className="w-full">
+          {/* VIEW: LIVE OPERATIONAL PIPELINE */}
+          {kitchenFilter !== 'COMPLETED' ? (
+            <div className={kitchenFilter === 'ALL' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"}>
+              {/* COLUMN 1: NEW INCOMING ORDERS */}
+              {(kitchenFilter === 'ALL' || kitchenFilter === 'NEW') && (
+                <div className="space-y-3.5 bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-2xl shadow-sm">
+                  <div className="p-2.5 bg-[#0e1117] rounded-xl border border-[#1e232e] flex justify-between items-center">
+                    <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                      <Bell className="w-3.5 h-3.5 text-amber-400" /> 1. Incoming Queue ({pendingOrders.length})
+                    </span>
+                    <span className="text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded">
+                      {pendingOrders.length}
+                    </span>
+                  </div>
 
                 {pendingOrders.length === 0 ? (
                   <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] text-slate-500 text-xs">
@@ -955,7 +1001,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     return (
                       <div
                         key={order.id}
-                        className="bg-[#12151b] border border-amber-500/40 hover:border-amber-400 p-4 space-y-3 shadow-md transition-all rounded-xl"
+                        className="bg-[#0e1117]/80 border border-white/[0.08] hover:border-amber-400/50 p-4 space-y-3 shadow-md transition-all rounded-xl liquid-glass-card"
                       >
                         <div className="flex justify-between items-start">
                           <div>
@@ -1093,8 +1139,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 2: ACTIVE COOKING STATION */}
             {(kitchenFilter === 'ALL' || kitchenFilter === 'COOKING') && (
-              <div className="space-y-3.5">
-                <div className="p-2.5 bg-[#12151b] rounded-xl border border-[#1e232e] flex justify-between items-center">
+              <div className="space-y-3.5 bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-2xl shadow-sm">
+                <div className="p-2.5 bg-[#0e1117] rounded-xl border border-[#1e232e] flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                     <Flame className="w-3.5 h-3.5 text-sky-400" /> 2. Active Cooking Grid ({inKitchenOrders.length})
                   </span>
@@ -1115,10 +1161,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     return (
                       <div
                         key={order.id}
-                        className={`p-4 space-y-3 transition-all rounded-xl border ${
+                        className={`p-4 space-y-3 transition-all rounded-xl border liquid-glass-card ${
                           isOverdue
-                            ? 'border-rose-500/80 bg-rose-950/20'
-                            : 'border-[#1e232e] bg-[#12151b]'
+                            ? 'border-rose-500/80 bg-rose-950/20 shadow-[0_0_16px_rgba(244,63,94,0.15)]'
+                            : 'border-white/[0.08] hover:border-sky-500/30 bg-[#0e1117]/80'
                         }`}
                       >
                         <div className="flex justify-between items-start">
@@ -1215,7 +1261,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           variant="brand"
                           size="sm"
                           disabled={processingOrderIds.has(order.id)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-xs transition-colors"
+                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-xs transition-colors shadow-sm"
                           onClick={() => handleMarkReady(order)}
                           icon={<CheckCircle2 className="w-3.5 h-3.5" />}
                         >
@@ -1230,8 +1276,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 3: PLATED & READY FOR PASS PICKUP */}
             {(kitchenFilter === 'ALL' || kitchenFilter === 'READY') && (
-              <div className="space-y-3.5">
-                <div className="p-2.5 bg-[#12151b] rounded-xl border border-[#1e232e] flex justify-between items-center">
+              <div className="space-y-3.5 bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-2xl shadow-sm">
+                <div className="p-2.5 bg-[#0e1117] rounded-xl border border-[#1e232e] flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> 3. Plated & Ready ({readyOrders.length})
                   </span>
@@ -1250,7 +1296,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                   readyOrders.map((order) => (
                     <div
                       key={order.id}
-                      className="bg-[#12151b] border border-emerald-500/40 p-4 space-y-3 shadow-md rounded-xl"
+                      className="bg-[#0e1117]/80 border border-emerald-500/40 p-4 space-y-3 shadow-md rounded-xl liquid-glass-card"
                     >
                       <div className="flex justify-between items-start">
                         <div>
@@ -1300,8 +1346,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           </div>
         ) : (
           /* VIEW: COMPLETED SHIFT ORDERS HISTORY */
-          <div className="p-4 space-y-5">
-            <div className="flex items-center justify-between">
+          <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-2xl space-y-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
               <div>
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Completed Shift Orders
@@ -1331,7 +1377,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 {completedOrders.map((order) => {
                   const kitchenItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
                   return (
-                    <div key={order.id} className="bg-[#12151b] border border-[#1e232e] p-4 space-y-3 rounded-xl hover:border-[#2a3243] transition-colors">
+                    <div key={order.id} className="bg-[#0e1117] border border-[#1e232e] p-4 space-y-3 rounded-xl hover:border-[#2a3243] transition-colors liquid-glass-card">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-white text-sm">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>
@@ -1369,7 +1415,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             )}
           </div>
         )}
-      </div>
+        </div>
+      </main>
 
       {/* MODAL 1: ACCEPT ORDER & SMART ETA */}
       {selectedOrderToAccept && (

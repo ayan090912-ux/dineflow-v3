@@ -22,8 +22,9 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Filter,
+  LogOut,
 } from 'lucide-react';
-import { Badge, Button, Card, Modal, DinelyLogo } from '../../packages/ui';
+import { Badge, Button, Card, Modal, DinelyLogo, Avatar } from '../../packages/ui';
 import { InventoryItem, Supplier } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
@@ -258,16 +259,22 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
   });
 
   return (
-    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white pb-12 w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans relative w-full overflow-x-hidden selection:bg-emerald-500 selection:text-white pb-12">
+      {/* AMBIENT BACKGROUND GLOWS */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute -top-40 left-1/3 w-[500px] h-[500px] rounded-full blur-[140px] bg-emerald-500/10 opacity-70" />
+        <div className="absolute top-[40%] -right-20 w-[450px] h-[450px] rounded-full blur-[130px] bg-sky-600/10 opacity-60" />
+      </div>
+
       {/* Toast Feedback */}
       {toast && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top duration-200 ${
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top duration-200 liquid-glass ${
             toast.type === 'success'
-              ? 'bg-[#12151b] border-emerald-500/40 text-emerald-300'
+              ? 'border-emerald-400/40 text-emerald-300'
               : toast.type === 'warning'
-              ? 'bg-[#12151b] border-amber-500/40 text-amber-300'
-              : 'bg-[#12151b] border-[#1e232e] text-slate-200'
+              ? 'border-amber-400/40 text-amber-300'
+              : 'border-white/20 text-slate-200'
           }`}
         >
           <Sparkles className="w-4 h-4 shrink-0 text-emerald-400" />
@@ -275,52 +282,66 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
         </div>
       )}
 
-      {/* Header OS Control Bar */}
-      <header className="sticky top-0 z-40 bg-[#0e1117] border-b border-[#1e232e] px-4 sm:px-6 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
-            <Package className="w-5 h-5 text-emerald-400" />
+      {/* HEADER BAR */}
+      <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+        {/* Brand Header */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+            <Package className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
               <DinelyLogo size="sm" />
-              <h1 className="text-sm sm:text-base font-bold text-white tracking-tight uppercase truncate">
+              <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">
                 {restaurant?.name || 'THE START'}
               </h1>
-              <Badge variant="brand">INVENTORY</Badge>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1.5">
+              <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 bg-emerald-500/25 text-emerald-300 border border-emerald-400/40">
+                INVENTORY
+              </Badge>
+              <Badge variant="outline" className="hidden xs:inline-flex text-emerald-300 border-emerald-400/30 text-[9px] sm:text-[10px] font-mono">
+                STOCK OS
+              </Badge>
+              <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
               </span>
             </div>
-            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
+            <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
               Kitchen & bar raw materials, stock levels, and vendor management
             </p>
           </div>
         </div>
 
         {/* Right Header Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-between sm:justify-end">
-          {/* Live Clock */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#12151b] border border-[#1e232e] text-xs font-mono text-slate-300">
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span>{currentTime || '12:00 PM'}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
+            <Avatar src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100" name="Inventory Manager" size="sm" />
+            <div className="hidden xs:block">
+              <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Inventory Staff</p>
+              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
+            </div>
+          </div>
+
+          {/* Clock */}
+          <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="font-tabular">{currentTime || '12:00 PM'}</span>
           </div>
 
           <button
             onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className="p-2 rounded-xl bg-[#12151b] border border-[#1e232e] text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
             title={isAudioMuted ? 'Unmute Sound' : 'Mute Sound'}
           >
-            {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+            {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
           </button>
 
           <Button
             onClick={() => setIsAddSupplierModalOpen(true)}
             variant="outline"
             size="sm"
-            className="text-xs flex items-center gap-1.5 px-2.5 sm:px-3"
+            className="text-xs bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
           >
-            <Building2 className="w-4 h-4 text-slate-300" />
+            <Building2 className="w-3.5 h-3.5 text-slate-300" />
             <span className="hidden sm:inline">+ Add Supplier</span>
             <span className="sm:hidden">+ Supplier</span>
           </Button>
@@ -329,108 +350,120 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
             onClick={() => setIsAddStockModalOpen(true)}
             variant="brand"
             size="sm"
-            className="text-xs flex items-center gap-1.5 px-2.5 sm:px-3"
+            className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95 shadow-sm"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Add Raw Material</span>
             <span className="sm:hidden">+ Material</span>
           </Button>
 
           {onLogout && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onLogout}
-              className="text-xs text-slate-400 hover:text-rose-400 px-2 py-1 transition-colors ml-auto sm:ml-0"
+              className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
             >
-              Exit Terminal
-            </button>
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Sign Out</span>
+            </Button>
           )}
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 flex-1">
-        {/* Metric Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
-                Total Stock Items
-              </span>
-              <Package className="w-4 h-4 text-slate-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-white">{items.length}</span>
-              <span className="text-xs text-slate-400 font-mono">
-                ({kitchenItems.length} Kitchen • {barItems.length} Bar)
-              </span>
-            </div>
+      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 flex-1 relative z-10">
+        {/* OPERATIONAL METADATA BAR */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs font-mono text-slate-300">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-500">Terminal:</span>
+            <span className="font-bold text-white text-sm">Raw Material Inventory & Vendors</span>
+            <Badge variant="success" className="text-[10px]">
+              LIVE INVENTORY OS
+            </Badge>
+          </div>
+          <div className="flex items-center gap-4 text-slate-400 text-[11px]">
+            <span className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-emerald-400" />
+              <span>{currentTime}</span>
+            </span>
+            <span>Total Stock: <strong className="text-white">{items.length} items</strong></span>
+            <span>Low Stock: <strong className={lowStockItems.length > 0 ? "text-rose-400" : "text-emerald-400"}>{lowStockItems.length} alerts</strong></span>
+            <span>Valuation: <strong className="text-emerald-300">{formatCurrency(totalValue)}</strong></span>
+          </div>
+        </div>
+
+        {/* BENTO KPI CARDS (Matching Day Management tokens) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3.5">
+          <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+              Total Stock Items
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
+              {items.length}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              {kitchenItems.length} Kitchen • {barItems.length} Bar
+            </span>
           </Card>
 
-          <Card className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
-                Low Stock Alerts
-              </span>
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-amber-400">
-                {lowStockItems.length}
-              </span>
-              <span className="text-xs text-slate-400">Below min reorder</span>
-            </div>
+          <Card className="liquid-glass-card border border-rose-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-rose-400 uppercase font-semibold block">
+              Low Stock Alerts
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-rose-400 tracking-tight">
+              {lowStockItems.length}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              Below min reorder threshold
+            </span>
           </Card>
 
-          <Card className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
-                Total Inventory Value
-              </span>
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-bold font-mono text-emerald-400">
-                {formatCurrency(totalValue)}
-              </span>
-            </div>
+          <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
+              Total Inventory Value
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
+              {formatCurrency(totalValue)}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              Valued at current unit cost
+            </span>
           </Card>
 
           <Card
             onClick={() => setActiveTab('SUPPLIERS')}
-            className="p-4 bg-[#12151b] border-[#1e232e] rounded-xl hover:border-[#2d3545] transition-all cursor-pointer group"
+            className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm cursor-pointer group hover:border-sky-400/50 transition-all"
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
-                Active Suppliers
-              </span>
-              <Building2 className="w-4 h-4 text-sky-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-white">{suppliers.length}</span>
-              <span className="text-xs text-emerald-400 group-hover:underline">
-                Manage Vendors →
-              </span>
-            </div>
+            <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
+              Active Suppliers
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
+              {suppliers.length}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 group-hover:text-sky-300 transition-colors block">
+              Manage verified vendors →
+            </span>
           </Card>
         </div>
 
         {/* Tab & Search Filter Navigation */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0e1117] p-2 rounded-xl border border-[#1e232e]">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 rounded-2xl">
           {/* Tabs */}
-          <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto p-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 sm:pb-0">
             {[
               { id: 'ALL', label: `All Raw Stock (${items.length})`, icon: <Package className="w-3.5 h-3.5" /> },
-              { id: 'KITCHEN', label: `Kitchen Inventory (${kitchenItems.length})`, icon: <ChefHat className="w-3.5 h-3.5" /> },
-              { id: 'BAR', label: `Bar Inventory (${barItems.length})`, icon: <GlassWater className="w-3.5 h-3.5" /> },
-              { id: 'SUPPLIERS', label: `Suppliers Directory (${suppliers.length})`, icon: <Building2 className="w-3.5 h-3.5" /> },
+              { id: 'KITCHEN', label: `Kitchen (${kitchenItems.length})`, icon: <ChefHat className="w-3.5 h-3.5" /> },
+              { id: 'BAR', label: `Bar (${barItems.length})`, icon: <GlassWater className="w-3.5 h-3.5" /> },
+              { id: 'SUPPLIERS', label: `Suppliers (${suppliers.length})`, icon: <Building2 className="w-3.5 h-3.5" /> },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   activeTab === tab.id
                     ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b] border border-transparent'
+                    : 'text-slate-400 hover:text-slate-200 bg-[#12151b] border border-[#1e232e]'
                 }`}
               >
                 {tab.icon}
@@ -447,7 +480,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search stock, category, supplier..."
-              className="w-full pl-9 pr-3 py-2 text-xs bg-[#12151b] border border-[#1e232e] rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/50"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-[#0e1117] border border-[#1e232e] rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/50"
             />
           </div>
         </div>
@@ -534,7 +567,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
           </div>
         ) : (
           /* CONTENT VIEW: INVENTORY RAW MATERIALS TABLE */
-          <Card className="bg-[#0e1117] border-[#1e232e] rounded-xl overflow-hidden shadow-xs">
+          <Card className="liquid-glass-card border border-white/[0.08] rounded-2xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>

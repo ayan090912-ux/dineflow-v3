@@ -48,6 +48,7 @@ import {
   Store,
   Layers,
   Calendar,
+  RefreshCw,
   History,
   UserCheck,
   Link,
@@ -2262,70 +2263,50 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
               return (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-400 font-medium">Today's Total Sales</span>
-                        <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
-                          <DollarSign className="w-4 h-4" />
-                        </div>
-                      </div>
-                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3.5">
+                    <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                      <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">Today's Total Sales</span>
+                      <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
                         {formatCurrency(totalSales, theme.currency)}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                        <span>{dayOrders.length} orders today</span>
+                        <span>{currentBusinessDay?.status === 'OPEN' ? 'Day Open' : 'Day Closed'}</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">{dayOrders.length} orders today</span>
-                        <span className="font-mono text-slate-400">{currentBusinessDay?.status === 'OPEN' ? 'Day Open' : 'Day Closed'}</span>
-                      </div>
-                    </div>
+                    </Card>
 
-                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-400 font-medium">Active Kitchen Orders</span>
-                        <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400">
-                          <ShoppingBag className="w-4 h-4" />
-                        </div>
-                      </div>
-                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                    <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                      <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">Active Orders</span>
+                      <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
                         {orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                        <span>In Preparation / Ready</span>
+                        <span className="text-sky-400">Live KDS</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">In Preparation / Ready</span>
-                        <span className="text-sky-400 font-mono">Live KDS</span>
-                      </div>
-                    </div>
+                    </Card>
 
-                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-400 font-medium">Floor Occupancy</span>
-                        <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400">
-                          <Grid className="w-4 h-4" />
-                        </div>
-                      </div>
-                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                    <Card className="liquid-glass-card border border-purple-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                      <span className="text-[10px] font-mono text-purple-400 uppercase font-semibold block">Floor Occupancy</span>
+                      <p className="text-xl lg:text-2xl font-bold font-mono text-purple-300 tracking-tight">
                         {tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length} <span className="text-sm font-normal text-slate-400">/ {tables.length}</span>
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                        <span>Active Dining</span>
+                        <span className="text-purple-400">{tables.length > 0 ? Math.round((tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length / tables.length) * 100) : 0}%</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Active Dining Sessions</span>
-                        <span className="text-purple-400 font-mono">{tables.length > 0 ? Math.round((tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length / tables.length) * 100) : 0}%</span>
-                      </div>
-                    </div>
+                    </Card>
 
-                    <div className="p-4 rounded-xl bg-[#12151b] border border-[#1e232e] space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-400 font-medium">Fulfilled Today</span>
-                        <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400">
-                          <Clock className="w-4 h-4" />
-                        </div>
-                      </div>
-                      <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                    <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                      <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">Fulfilled Today</span>
+                      <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
                         {completed.length}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                        <span>Completed Orders</span>
+                        <span className={cancelled.length > 0 ? 'text-rose-400' : 'text-slate-500'}>{cancelled.length} cancelled</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Completed Orders</span>
-                        <span className={`font-mono ${cancelled.length > 0 ? 'text-rose-400' : 'text-slate-400'}`}>{cancelled.length} cancelled</span>
-                      </div>
-                    </div>
+                    </Card>
                   </div>
 
                   {/* Bar Operating Analytics (When Bar Module Enabled) */}
@@ -2489,72 +2470,210 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 2: Orders Board */}
         {activeTab === 'orders' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">Live Orders Stream</h3>
-              <Badge variant="brand">{orders.length} Total Orders</Badge>
+            {/* Header Banner */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1e232e] pb-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xl font-bold text-white tracking-tight">POS & QR Orders Stream</h3>
+                    <Badge variant="brand" className="font-mono text-[10px] px-2.5 py-0.5 bg-amber-950/60 text-amber-300 border-amber-800/60">
+                      LIVE ORDERS FEED
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Live chronological order stream from table QR codes, POS, and counter pickups.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => loadData()}
+                  className="border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white text-xs px-3 py-2 font-mono"
+                  icon={<RefreshCw className="w-3.5 h-3.5" />}
+                >
+                  Refresh Stream
+                </Button>
+              </div>
             </div>
 
-            <DataTable<Order>
-              data={orders}
-              keyExtractor={(o) => o.id}
-              columns={[
-                { key: 'id', header: 'Order ID', render: (o) => <span className="font-mono font-bold text-white">#{o.id}</span> },
-                { key: 'tableNumber', header: 'Table', render: (o) => <Badge variant="brand">{o.tableNumber}</Badge> },
-                { key: 'customerName', header: 'Customer', render: (o) => <span className="text-xs text-slate-300">{o.customerName || 'Walk-in'}</span> },
-                {
-                  key: 'items',
-                  header: 'Items',
-                  render: (o) => (
-                    <div className="text-xs text-slate-300">
-                      {o.items.map((i) => (
-                        <div key={i.id}>
-                          • {i.quantity}x {i.name}
+            {/* Operational Metadata Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs font-mono text-slate-300">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-500">Feed Status:</span>
+                <span className="font-bold text-white text-sm">Real-time Station Dispatch</span>
+                <Badge variant="success" className="text-[10px]">CONNECTED</Badge>
+              </div>
+              <div className="flex items-center gap-4 text-slate-400 text-[11px]">
+                <span>Total Orders: <strong className="text-white">{orders.length}</strong></span>
+                <span>Active Preparation: <strong className="text-sky-300">{orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length}</strong></span>
+                <span>Fulfilled: <strong className="text-emerald-300">{orders.filter(o => o.status === 'DELIVERED' || o.status === 'COMPLETED').length}</strong></span>
+              </div>
+            </div>
+
+            {/* Bento KPI Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3.5">
+              <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+                  Total Stream Orders
+                </span>
+                <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
+                  {orders.length}
+                </p>
+                <span className="text-[10px] font-mono text-slate-500 block">
+                  All recorded shift orders
+                </span>
+              </Card>
+
+              <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
+                  Pending Acceptance
+                </span>
+                <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
+                  {orders.filter(o => o.status === 'PENDING').length}
+                </p>
+                <span className="text-[10px] font-mono text-slate-500 block">
+                  Awaiting station routing
+                </span>
+              </Card>
+
+              <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
+                  In Kitchen / Bar
+                </span>
+                <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
+                  {orders.filter(o => o.status === 'IN_KITCHEN' || o.status === 'PREPARING' || o.status === 'READY').length}
+                </p>
+                <span className="text-[10px] font-mono text-slate-500 block">
+                  Actively cooking & dispensing
+                </span>
+              </Card>
+
+              <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
+                  Delivered to Guests
+                </span>
+                <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
+                  {orders.filter(o => o.status === 'DELIVERED' || o.status === 'COMPLETED').length}
+                </p>
+                <span className="text-[10px] font-mono text-slate-500 block">
+                  Table service complete
+                </span>
+              </Card>
+            </div>
+
+            {/* Orders Stream Table */}
+            <Card className="liquid-glass-card border border-white/[0.08] rounded-2xl overflow-hidden shadow-sm">
+              <DataTable<Order>
+                data={orders}
+                keyExtractor={(o) => o.id}
+                columns={[
+                  {
+                    key: 'id',
+                    header: 'Order Ticket',
+                    render: (o) => (
+                      <div className="font-mono">
+                        <span className="font-bold text-white text-xs">#{o.id.length > 8 ? o.id.slice(-6) : o.id}</span>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                      ))}
-                    </div>
-                  ),
-                },
-                {
-                  key: 'totalAmount',
-                  header: 'Total',
-                  render: (o) => (
-                    <span className="font-mono font-bold text-emerald-400">₹{o.totalAmount.toFixed(2)}</span>
-                  ),
-                },
-                {
-                  key: 'status',
-                  header: 'Kitchen Stage',
-                  render: (o) => (
-                    <Badge variant={o.status === 'DELIVERED' ? 'success' : o.status === 'IN_KITCHEN' ? 'warning' : 'info'}>
-                      {o.status}
-                    </Badge>
-                  ),
-                },
-                {
-                  key: 'actions',
-                  header: 'Actions',
-                  render: (o) => (
-                    <div className="flex gap-1.5">
-                      {o.status === 'PENDING' && (
-                        <Button size="sm" variant="brand" onClick={() => handleUpdateOrderStatus(o.id, 'IN_KITCHEN')}>
-                          Send KDS
-                        </Button>
-                      )}
-                      {o.status === 'IN_KITCHEN' && (
-                        <Button size="sm" variant="secondary" onClick={() => handleUpdateOrderStatus(o.id, 'READY')}>
-                          Mark Ready
-                        </Button>
-                      )}
-                      {o.status === 'READY' && (
-                        <Button size="sm" variant="primary" onClick={() => handleUpdateOrderStatus(o.id, 'DELIVERED')}>
-                          Deliver Table
-                        </Button>
-                      )}
-                    </div>
-                  ),
-                },
-              ]}
-            />
+                      </div>
+                    )
+                  },
+                  {
+                    key: 'tableNumber',
+                    header: 'Table / Guest',
+                    render: (o) => (
+                      <div>
+                        <span className="px-2 py-0.5 rounded-lg bg-white/10 text-white border border-white/20 text-xs font-mono font-bold">
+                          {o.tableNumber && o.tableNumber !== 'COUNTER' ? (o.tableNumber.startsWith('Table') ? o.tableNumber : `Table ${o.tableNumber}`) : 'Counter Pickup'}
+                        </span>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          {o.customerName || 'Walk-in Guest'}
+                        </div>
+                      </div>
+                    )
+                  },
+                  {
+                    key: 'items',
+                    header: 'Ordered Items & Station Routing',
+                    render: (o) => (
+                      <div className="space-y-1">
+                        {o.items.map((i) => {
+                          const station = getFulfillmentStation(i);
+                          return (
+                            <div key={i.id} className="text-xs text-slate-200 flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-bold text-amber-400">{i.quantity}x</span>
+                              <span>{i.name}</span>
+                              <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded ${
+                                station === 'BAR'
+                                  ? 'bg-sky-500/20 text-sky-300 border border-sky-400/30'
+                                  : station === 'HOOKAH'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                              }`}>
+                                {station}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  },
+                  {
+                    key: 'totalAmount',
+                    header: 'Total Value',
+                    render: (o) => (
+                      <span className="font-mono font-bold text-emerald-400 text-sm">
+                        {formatCurrency(o.totalAmount, theme.currency)}
+                      </span>
+                    )
+                  },
+                  {
+                    key: 'status',
+                    header: 'Status',
+                    render: (o) => (
+                      <Badge variant={o.status === 'DELIVERED' ? 'success' : o.status === 'READY' ? 'success' : o.status === 'IN_KITCHEN' ? 'warning' : 'default'} className="font-mono text-[10px]">
+                        {o.status}
+                      </Badge>
+                    )
+                  },
+                  {
+                    key: 'actions',
+                    header: '1-Click Action',
+                    render: (o) => (
+                      <div className="flex gap-1.5">
+                        {o.status === 'PENDING' && (
+                          <Button size="sm" variant="brand" onClick={() => handleUpdateOrderStatus(o.id, 'IN_KITCHEN')} className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1">
+                            Send KDS 🍳
+                          </Button>
+                        )}
+                        {o.status === 'IN_KITCHEN' && (
+                          <Button size="sm" variant="secondary" onClick={() => handleUpdateOrderStatus(o.id, 'READY')} className="text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold px-2.5 py-1">
+                            Mark Ready 🛎️
+                          </Button>
+                        )}
+                        {o.status === 'READY' && (
+                          <Button size="sm" variant="primary" onClick={() => handleUpdateOrderStatus(o.id, 'DELIVERED')} className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1">
+                            Deliver Table ✨
+                          </Button>
+                        )}
+                        {o.status === 'DELIVERED' && (
+                          <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Served
+                          </span>
+                        )}
+                      </div>
+                    )
+                  }
+                ]}
+              />
+            </Card>
           </div>
         )}
 
@@ -2758,38 +2877,43 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
 
             {/* Floorplan Overview KPIs */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
-                <span className="text-[10px] font-mono text-slate-400 uppercase">Total Tables</span>
-                <p className="text-xl font-bold text-white font-mono">{tables.length}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+              <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">Total Tables</span>
+                <p className="text-xl lg:text-2xl font-bold text-white font-mono tracking-tight">{tables.length}</p>
+                <span className="text-[10px] font-mono text-slate-500 block">Registered dining areas</span>
               </Card>
 
-              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
-                <span className="text-[10px] font-mono text-emerald-400 uppercase">Available</span>
-                <p className="text-xl font-bold text-emerald-400 font-mono">
+              <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">Available</span>
+                <p className="text-xl lg:text-2xl font-bold text-emerald-400 font-mono tracking-tight">
                   {tables.filter((t) => t.status !== 'OCCUPIED' && !t.isOccupied && !activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase())) && t.status !== 'RESERVED').length}
                 </p>
+                <span className="text-[10px] font-mono text-slate-500 block">Ready for guest seating</span>
               </Card>
 
-              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
-                <span className="text-[10px] font-mono text-amber-400 uppercase">Reserved</span>
-                <p className="text-xl font-bold text-amber-400 font-mono">
+              <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">Reserved</span>
+                <p className="text-xl lg:text-2xl font-bold text-amber-300 font-mono tracking-tight">
                   {tables.filter((t) => t.status === 'RESERVED').length}
                 </p>
+                <span className="text-[10px] font-mono text-slate-500 block">Upcoming guest bookings</span>
               </Card>
 
-              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1">
-                <span className="text-[10px] font-mono text-sky-400 uppercase">Merged Groups</span>
-                <p className="text-xl font-bold text-sky-400 font-mono">
+              <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">Merged Groups</span>
+                <p className="text-xl lg:text-2xl font-bold text-sky-300 font-mono tracking-tight">
                   {tables.filter((t) => t.isMerged).length}
                 </p>
+                <span className="text-[10px] font-mono text-slate-500 block">Combined table parties</span>
               </Card>
 
-              <Card className="bg-[#12151b] border-[#1e232e] p-3 space-y-1 col-span-2 sm:col-span-1">
-                <span className="text-[10px] font-mono text-rose-400 uppercase">Occupied</span>
-                <p className="text-xl font-bold text-rose-400 font-mono">
+              <Card className="liquid-glass-card border border-rose-500/20 p-4 rounded-2xl space-y-1 col-span-2 sm:col-span-1 shadow-sm">
+                <span className="text-[10px] font-mono text-rose-400 uppercase font-semibold block">Occupied</span>
+                <p className="text-xl lg:text-2xl font-bold text-rose-400 font-mono tracking-tight">
                   {tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length}
                 </p>
+                <span className="text-[10px] font-mono text-slate-500 block">Active dining sessions</span>
               </Card>
             </div>
 
@@ -3616,43 +3740,43 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
 
             {/* Inventory KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
-                <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Tracked Items</span>
-                <p className="text-2xl font-bold font-mono text-white">{inventory.length}</p>
-                <span className="text-[10px] text-slate-500">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3.5">
+              <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">Total Tracked Items</span>
+                <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">{inventory.length}</p>
+                <span className="text-[10px] font-mono text-slate-500 block">
                   {inventory.filter((i) => i.station !== 'BAR').length} Kitchen • {inventory.filter((i) => i.station === 'BAR').length} Bar
                 </span>
               </Card>
 
-              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
-                <span className="text-[11px] text-rose-400 font-semibold uppercase flex items-center gap-1">
+              <Card className="liquid-glass-card border border-rose-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-rose-400 uppercase font-semibold block flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" /> Low Stock Alerts
                 </span>
-                <p className="text-2xl font-bold font-mono text-rose-400">
+                <p className="text-xl lg:text-2xl font-bold font-mono text-rose-400 tracking-tight">
                   {inventory.filter((i) => i.quantity <= i.minThreshold).length}
                 </p>
-                <span className="text-[10px] text-slate-500">At or below reorder threshold</span>
+                <span className="text-[10px] font-mono text-slate-500 block">At or below reorder threshold</span>
               </Card>
 
-              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
-                <span className="text-[11px] text-emerald-400 font-semibold uppercase">Total Inventory Value</span>
-                <p className="text-2xl font-bold font-mono text-emerald-400">
+              <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">Total Inventory Value</span>
+                <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
                   {formatCurrency(inventory.reduce((acc, item) => acc + item.quantity * item.costPerUnit, 0), theme.currency || 'INR (₹)')}
                 </p>
-                <span className="text-[10px] text-slate-500">Valued at current cost</span>
+                <span className="text-[10px] font-mono text-slate-500 block">Valued at current cost</span>
               </Card>
 
               <Card
                 onClick={() => setInventorySubTab('SUPPLIERS')}
-                className="bg-[#12151b] border-[#1e232e] hover:border-emerald-500/50 cursor-pointer transition-all p-4 space-y-1 group"
+                className="liquid-glass-card border border-sky-500/20 hover:border-sky-400/50 cursor-pointer transition-all p-4 rounded-2xl space-y-1 group shadow-sm"
               >
-                <span className="text-[11px] text-emerald-400 font-semibold uppercase flex items-center justify-between">
+                <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block flex items-center justify-between">
                   <span>Active Suppliers</span>
-                  <span className="text-[10px] text-emerald-300 group-hover:underline">Manage →</span>
+                  <span className="text-[10px] font-mono text-sky-300 group-hover:underline">Manage →</span>
                 </span>
-                <p className="text-2xl font-bold font-mono text-white">{suppliers.length}</p>
-                <span className="text-[10px] text-slate-500">Click to view & add suppliers</span>
+                <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">{suppliers.length}</p>
+                <span className="text-[10px] font-mono text-slate-500 block">Verified vendor directory</span>
               </Card>
             </div>
 
@@ -4034,10 +4158,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             {(billingSubTab === 'terminal' || billingSubTab === 'invoices') && (
               <>
                 {/* Billing KPI Metrics */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
-                    <span className="text-[11px] text-emerald-400 font-semibold uppercase">Today's Sales</span>
-                    <p className="text-2xl font-bold font-mono text-emerald-400">
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3.5">
+                  <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                    <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">Today's Sales</span>
+                    <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
                       {formatCurrency(
                         (currentBusinessDay?.grossSales !== undefined && currentBusinessDay.grossSales > 0)
                           ? currentBusinessDay.grossSales
@@ -4047,29 +4171,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         theme.currency || 'INR (₹)'
                       )}
                     </p>
-                    <span className="text-[10px] text-slate-500">Verified paid revenue today</span>
+                    <span className="text-[10px] font-mono text-slate-500 block">Verified paid revenue today</span>
                   </Card>
 
-                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
-                    <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Receipts</span>
-                    <p className="text-2xl font-bold font-mono text-white">{bills.length}</p>
-                    <span className="text-[10px] text-slate-500">Generated invoices & sessions</span>
+                  <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">Total Receipts</span>
+                    <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">{bills.length}</p>
+                    <span className="text-[10px] font-mono text-slate-500 block">Generated invoices & sessions</span>
                   </Card>
 
-                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
-                    <span className="text-[11px] text-emerald-400 font-semibold uppercase">Paid Invoices</span>
-                    <p className="text-2xl font-bold font-mono text-emerald-300">
+                  <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                    <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">Paid Invoices</span>
+                    <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-300 tracking-tight">
                       {bills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').length}
                     </p>
-                    <span className="text-[10px] text-slate-500">Completed table bills</span>
+                    <span className="text-[10px] font-mono text-slate-500 block">Completed table bills</span>
                   </Card>
 
-                  <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-1">
-                    <span className="text-[11px] text-amber-400 font-semibold uppercase">Pending / Open Bills</span>
-                    <p className="text-2xl font-bold font-mono text-amber-300">
+                  <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                    <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">Pending / Open Bills</span>
+                    <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
                       {bills.filter((b) => (b.paymentStatus === 'UNPAID' || b.paymentStatus === 'PAYMENT_PENDING' || b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED') && b.status !== 'CANCELLED' && b.status !== 'CLOSED').length}
                     </p>
-                    <span className="text-[10px] text-slate-500">Active table sessions</span>
+                    <span className="text-[10px] font-mono text-slate-500 block">Active table sessions</span>
                   </Card>
                 </div>
 
@@ -4166,12 +4290,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           return (
                             <Card
                               key={tbl.id}
-                              className={`p-5 rounded-xl border transition-all space-y-4 ${
+                              className={`p-5 rounded-2xl border transition-all space-y-4 liquid-glass-card shadow-sm ${
                                 tbl.status === 'BILL_REQUESTED' || activeBill?.status === 'BILL_REQUESTED'
                                   ? 'bg-amber-950/20 border-amber-500/50 shadow-md shadow-amber-950/20'
                                   : effectivePaymentStatus === 'PAID'
-                                  ? 'bg-emerald-950/20 border-emerald-500/50'
-                                  : 'bg-[#12151b] border-[#1e232e]'
+                                  ? 'bg-emerald-950/20 border-emerald-500/50 shadow-md shadow-emerald-950/20'
+                                  : 'bg-[#12151b] border-white/[0.08] hover:border-white/20'
                               }`}
                             >
                               <div className="flex items-start justify-between">
