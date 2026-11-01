@@ -115,3 +115,4 @@ Every surface now derives strictly from `calculateAuthoritativeSessionBill`:
 3. **Subsequent Additions**: Truffle Fries (₹280), Beer (₹340), Mint Hookah (₹799) added to the same session -> Exactly ₹1,847.00 across Customer App, Floor Plan, Owner Billing, and Waiter Terminal.
 4. **Payment Settlement**: Online UPI or Cash payment flips `paymentStatus` to `PAID` across all screens simultaneously via WebSocket event `payment_status_updated`.
 5. **Table Reset**: Cashier clears table -> Session status becomes `CLOSED`, archiving the bill immutably into Day Management.
+

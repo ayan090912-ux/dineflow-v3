@@ -124,3 +124,4 @@ DineFlow / Dinely v3 has been redesigned from the ground up into a unified, high
 - [`frontend/src/apps/customer/CustomerBillModal.tsx`](file:///Users/ayaan/v3/frontend/src/apps/customer/CustomerBillModal.tsx): Replaced flat dark cards with `.liquid-glass-card`, integrated attached UPI QR and thermal receipt printing.
 - [`frontend/src/apps/restaurant/DayManagementView.tsx`](file:///Users/ayaan/v3/frontend/src/apps/restaurant/DayManagementView.tsx): Upgraded KPI metrics and reconciliation summary cards to liquid glass styling.
 - [`frontend/src/apps/restaurant/RestaurantApp.tsx`](file:///Users/ayaan/v3/frontend/src/apps/restaurant/RestaurantApp.tsx): Removed disruptive order alert toast and integrated robust event deduplication.
+

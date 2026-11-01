@@ -60,3 +60,4 @@ All primary operational endpoints were benchmarked across 25 samples under reali
 2. **Reconnection Exponential Backoff**: WebSocket reconnection follows jittered backoff (`1s`, `2s`, `4s`, max `10s`) with automatic reconnect suppression when the page tab is hidden.
 3. **Event Deduplication Buffer**: Frontend event handlers buffer the last 500 event IDs to prevent duplicate actions on network glitches.
 4. **Clean Unmount**: All terminal event listeners unsubscribe on React component unmount, preventing memory leaks and background audio chimes.
+

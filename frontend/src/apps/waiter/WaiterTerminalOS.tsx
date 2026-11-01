@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Bell,
   Clock,
@@ -714,10 +715,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   // Helper to find matching non-closed bill for a customer request
   const getBillForRequest = (req: CustomerRequest): Bill | undefined => {
     if (req.tableSessionId) {
-      const bySess = bills.find((b) => b.tableSessionId === req.tableSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED');
+      const bySess = bills.find((b) => b.tableSessionId === req.tableSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID');
       if (bySess) return bySess;
     }
-    return bills.find((b) => matchTableNumber(b.tableNumber, req.tableNumber) && b.status !== 'CLOSED' && b.status !== 'CANCELLED');
+    return bills.find((b) => matchTableNumber(b.tableNumber, req.tableNumber) && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID');
   };
 
   // Helper to resolve amount for a customer request
@@ -726,10 +727,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     const sess = activeSessions.find(
       (s) => (req.tableSessionId && s.id === req.tableSessionId) || (s.status !== 'CLOSED' && matchTableNumber(s.tableNumber, req.tableNumber))
     );
-    if (sess) {
-      const tableOrders = orders.filter((o) => o.tableSessionId === sess.id && o.status !== 'CANCELLED');
-      const total = tableOrders.reduce((sum, o) => sum + (o.totalAmount || o.subtotal || 0), 0);
-      return total;
+    const tableOrders = sess
+      ? orders.filter((o) => (o.tableSessionId === sess.id || (matchTableNumber(o.tableNumber, req.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+      : orders.filter((o) => matchTableNumber(o.tableNumber, req.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
+    if (tableOrders.length > 0) {
+      return calculateAuthoritativeSessionBill(tableOrders, restaurant).grandTotal;
     }
     return 0;
   };
@@ -1667,9 +1669,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     (s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
                   );
                   const matchingBill = activeSession
-                    ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+                    ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
                     : undefined;
-                  const tableOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
+                  const tableOrders = activeSession
+                    ? orders.filter((o) => (o.tableSessionId === activeSession.id || (matchTableNumber(o.tableNumber, table.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+                    : orders.filter((o) => matchTableNumber(o.tableNumber, table.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
                   const authCalc = calculateAuthoritativeSessionBill(tableOrders, restaurant, matchingBill);
                   const itemCount = authCalc.totalItems;
                   const sessionTotal = authCalc.grandTotal;
@@ -1941,11 +1945,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         {bill?.qrDataUrl ? (
                           <img src={bill.qrDataUrl} alt="Bill UPI QR" className="w-full h-full object-contain" />
                         ) : bill?.paymentQrPayload ? (
-                          <QRCodeDisplay value={bill.paymentQrPayload} size={128} />
+                          <QRCodeSVG value={bill.paymentQrPayload} size={128} level="M" />
                         ) : (
-                          <QRCodeDisplay
+                          <QRCodeSVG
                             value={`upi://pay?pa=${encodeURIComponent(effectiveUpiId)}&pn=${encodeURIComponent(restaurant?.name || 'Restaurant')}&am=${calculatedTotal.toFixed(2)}&cu=INR`}
                             size={128}
+                            level="M"
                           />
                         )}
                       </div>
@@ -2082,8 +2087,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             const activeSession = activeSessions.find(
               (s) => s.tableId === selectedTableForView.id && s.status === 'ACTIVE'
             );
-            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
-            const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED') : undefined;
+            const sessionOrders = activeSession
+              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+              : orders.filter((o) => matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
+            const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID') : undefined;
             const authCalc = calculateAuthoritativeSessionBill(sessionOrders, restaurant, matchingBill);
             const sessionTotal = authCalc.grandTotal;
             const tableRequests = requests.filter(
@@ -2193,8 +2200,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             const activeSession = activeSessions.find(
               (s) => (s.tableId === selectedTableForClose.id || matchTableNumber(s.tableNumber, selectedTableForClose.tableNumber)) && s.status !== 'CLOSED'
             );
-            const sessionOrders = activeSession ? orders.filter((o) => o.tableSessionId === activeSession.id && o.status !== 'CANCELLED') : [];
-            const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED') : undefined;
+            const sessionOrders = activeSession
+              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+              : orders.filter((o) => matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
+            const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID') : undefined;
             const authCalc = calculateAuthoritativeSessionBill(sessionOrders, restaurant, matchingBill);
             const sessionTotal = authCalc.grandTotal;
             const allPaid = sessionOrders.length === 0 || sessionOrders.every((o) => o.paymentStatus === 'PAID' || o.status === 'COMPLETED');

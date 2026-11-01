@@ -186,7 +186,12 @@ async def get_customer_requests(
                 "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR",
                 "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "STAFF"
             ]:
-                if caller.restaurant_id and caller.restaurant_id != canonical_rest_id:
+                caller_canon = caller.restaurant_id
+                try:
+                    caller_canon = await resolve_canonical_restaurant_id(caller.restaurant_id, db)
+                except Exception:
+                    pass
+                if caller_canon and caller_canon.lower() != canonical_rest_id.lower():
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cross-tenant access denied. Staff does not belong to this restaurant")
             else:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized for customer requests")
@@ -272,7 +277,13 @@ async def update_customer_request(
                 "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR",
                 "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "STAFF"
             ]:
-                if caller.restaurant_id and caller.restaurant_id != req.restaurant_id:
+                caller_canon = caller.restaurant_id
+                try:
+                    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+                    caller_canon = await resolve_canonical_restaurant_id(caller.restaurant_id, db)
+                except Exception:
+                    pass
+                if caller_canon and caller_canon.lower() != req.restaurant_id.lower():
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cross-tenant access denied. Staff does not belong to this restaurant")
             else:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update service requests")

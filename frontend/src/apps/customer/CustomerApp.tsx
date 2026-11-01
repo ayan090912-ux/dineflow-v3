@@ -971,14 +971,29 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     <div className="min-h-screen font-sans pb-52 w-full max-w-full sm:max-w-md mx-auto relative sm:border-x border-white/[0.08] bg-[#080A0D] text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border min-w-0">
       {/* Dynamic Ambient Background Glows - strictly bounded to viewport width */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 w-full max-w-full">
+        {/* Top Radiant Atmospheric Amber Halo */}
         <div
-          className={`absolute -top-20 left-1/2 -translate-x-1/2 w-72 sm:w-96 h-72 sm:h-96 rounded-full blur-[90px] transition-all duration-700 pointer-events-none opacity-50 ${
+          className={`absolute -top-16 left-1/2 -translate-x-1/2 w-[360px] h-[360px] rounded-full blur-[100px] transition-all duration-700 pointer-events-none opacity-60 ${
             isHookahTheme
-              ? 'bg-amber-500/15'
+              ? 'bg-gradient-to-b from-amber-500/25 via-orange-600/15 to-transparent'
               : isBarTheme
-              ? 'bg-purple-600/18'
-              : 'bg-amber-400/12'
+              ? 'bg-gradient-to-b from-purple-600/30 via-indigo-600/15 to-transparent'
+              : 'bg-gradient-to-b from-amber-500/25 via-amber-400/12 to-transparent'
           }`}
+        />
+        {/* Mid-Screen Ambient Luminous Light Well */}
+        <div
+          className={`absolute top-[40%] -right-[20%] w-[280px] h-[320px] rounded-full blur-[110px] pointer-events-none opacity-45 ${
+            isHookahTheme
+              ? 'bg-gradient-to-tr from-amber-600/20 via-rose-500/10 to-transparent'
+              : isBarTheme
+              ? 'bg-gradient-to-tr from-indigo-500/25 via-pink-500/10 to-transparent'
+              : 'bg-gradient-to-tr from-amber-500/20 via-orange-400/10 to-transparent'
+          }`}
+        />
+        {/* Lower Canvas Spatial Depth Orb */}
+        <div
+          className="absolute top-[70%] -left-[20%] w-[300px] h-[320px] rounded-full blur-[110px] bg-gradient-to-tr from-emerald-500/10 via-amber-500/10 to-transparent pointer-events-none opacity-40"
         />
       </div>
 

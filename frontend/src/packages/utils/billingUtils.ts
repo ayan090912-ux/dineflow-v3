@@ -28,7 +28,33 @@ export function calculateAuthoritativeSessionBill(
   restaurant?: Partial<Restaurant> | null,
   existingBill?: Bill | null
 ): AuthoritativeSessionCalculation {
+  const configuredTaxPct = typeof restaurant?.taxPercentage === 'number' ? restaurant.taxPercentage : 5.0;
+  const scPct = (restaurant?.serviceChargeEnabled && typeof restaurant?.serviceChargePercentage === 'number')
+    ? restaurant.serviceChargePercentage
+    : 0.0;
+
   const cleanOrders = (tableOrders || []).filter((o) => o.status !== 'CANCELLED');
+  if (cleanOrders.length === 0) {
+    return {
+      subtotal: 0,
+      taxRate: configuredTaxPct,
+      taxAmount: 0,
+      taxBreakdown: [],
+      serviceChargePercentage: scPct,
+      serviceChargeAmount: 0,
+      roundOffAmount: 0,
+      grandTotal: 0,
+      amountPaid: 0,
+      balanceDue: 0,
+      paymentStatus: 'UNPAID',
+      orderCount: 0,
+      totalItems: 0,
+      items: [],
+      invoiceNumber: undefined,
+      hasUnpaidOrders: false,
+    };
+  }
+
   const itemMap = new Map<string, BillItem>();
 
   cleanOrders.forEach((ord) => {
@@ -58,13 +84,9 @@ export function calculateAuthoritativeSessionBill(
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
   const subtotal = Math.round(items.reduce((sum, i) => sum + i.totalPrice, 0) * 100) / 100;
 
-  const configuredTaxPct = typeof restaurant?.taxPercentage === 'number' ? restaurant.taxPercentage : 5.0;
   const taxRateDecimal = configuredTaxPct / 100.0;
   const taxableSubtotal = subtotal;
 
-  const scPct = (restaurant?.serviceChargeEnabled && typeof restaurant?.serviceChargePercentage === 'number')
-    ? restaurant.serviceChargePercentage
-    : 0.0;
   const serviceChargeAmount = scPct > 0 ? Math.round(taxableSubtotal * (scPct / 100.0) * 100) / 100 : 0.0;
   const taxAmount = Math.round(taxableSubtotal * taxRateDecimal * 100) / 100;
 

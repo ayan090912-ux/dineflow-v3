@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, and_
 
 from app.core.database.connection import get_db
 from app.modules.tables.models import Table, TableSession
@@ -194,30 +194,47 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
     # Authoritative session order aggregation (Single source of truth for table sessions)
     active_sess_ids = [s.id for s in active_sessions]
     session_totals_map = {}
-    if active_sess_ids:
+    if active_sess_ids or tables:
         from app.modules.orders.models import Order
-        o_stmt = select(Order).where(
-            Order.restaurant_id == canonical_id,
-            Order.table_session_id.in_(active_sess_ids),
-            Order.status != "CANCELLED"
-        )
-        o_res = await db.execute(o_stmt)
-        for ord in o_res.scalars().all():
-            sid = ord.table_session_id
-            if sid not in session_totals_map:
-                session_totals_map[sid] = {
-                    "total_amount": 0.0,
-                    "subtotal": 0.0,
-                    "order_count": 0,
-                    "item_count": 0
-                }
-            session_totals_map[sid]["total_amount"] += float(ord.total_amount or 0.0)
-            session_totals_map[sid]["subtotal"] += float(ord.subtotal or ord.total_amount or 0.0)
-            session_totals_map[sid]["order_count"] += 1
-            if ord.items_json:
-                session_totals_map[sid]["item_count"] += sum(
-                    it.get("quantity", 1) for it in ord.items_json if isinstance(it, dict)
-                )
+        table_nums = [t.table_number for t in tables if t.table_number]
+        table_num_to_sess_id = {}
+        for t in tables:
+            s_id = active_session_map.get(t.id) or active_session_num_map.get(t.table_number)
+            if s_id:
+                table_num_to_sess_id[t.table_number] = s_id
+
+        o_filters = []
+        if active_sess_ids:
+            o_filters.append(Order.table_session_id.in_(active_sess_ids))
+        if table_nums:
+            o_filters.append(and_(Order.table_number.in_(table_nums), Order.payment_status != "PAID"))
+
+        if o_filters:
+            o_stmt = select(Order).where(
+                Order.restaurant_id == canonical_id,
+                or_(*o_filters),
+                Order.status.notin_(["CANCELLED", "VOID"])
+            )
+            o_res = await db.execute(o_stmt)
+            for ord in o_res.scalars().all():
+                sid = ord.table_session_id
+                if not sid and ord.table_number in table_num_to_sess_id:
+                    sid = table_num_to_sess_id[ord.table_number]
+                if sid and sid in active_sess_ids:
+                    if sid not in session_totals_map:
+                        session_totals_map[sid] = {
+                            "total_amount": 0.0,
+                            "subtotal": 0.0,
+                            "order_count": 0,
+                            "item_count": 0
+                        }
+                    session_totals_map[sid]["total_amount"] += float(ord.total_amount or 0.0)
+                    session_totals_map[sid]["subtotal"] += float(ord.subtotal or ord.total_amount or 0.0)
+                    session_totals_map[sid]["order_count"] += 1
+                    if ord.items_json:
+                        session_totals_map[sid]["item_count"] += sum(
+                            it.get("quantity", 1) for it in ord.items_json if isinstance(it, dict)
+                        )
 
     pub_slug = await _get_restaurant_public_slug(canonical_id, db)
     for t in tables:

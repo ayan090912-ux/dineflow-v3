@@ -83,6 +83,7 @@ import {
   ProductSwitcher,
 } from '../../packages/ui';
 import { useTheme } from '../../packages/theme/ThemeEngine';
+import { QRCodeSVG } from 'qrcode.react';
 import { CURRENCY_OPTIONS, getCurrencySymbol, formatCurrency } from '../../packages/utils/currency';
 import { api } from '../../packages/api/client';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl } from '../../packages/utils/tenantResolver';
@@ -2812,10 +2813,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 } : undefined);
                 const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
                 const tableOrders = activeSessionId
-                  ? orders.filter((o) => o.tableSessionId === activeSessionId && o.status !== 'CANCELLED')
+                  ? orders.filter((o) => (o.tableSessionId === activeSessionId || (matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
                   : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                 const matchingBill = activeSessionId
-                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.status !== 'PAID')
+                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
                   : undefined;
                 const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, matchingBill);
                 const sessionTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : (tbl.sessionTotal !== undefined ? tbl.sessionTotal : (tbl as any).session_total || 0);
@@ -4107,18 +4108,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             restaurantId: currentRestaurant?.id || ''
                           } : undefined);
                           const tableOrders = activeSessionId
-                            ? orders.filter((o) => o.tableSessionId === activeSessionId && o.status !== 'CANCELLED')
+                            ? orders.filter((o) => (o.tableSessionId === activeSessionId || (matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
                             : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                           const activeBill = activeSessionId
-                            ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.status !== 'PAID')
+                            ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
                             : undefined;
                           const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, activeBill);
                           const fallbackGrandTotal = tbl.sessionTotal !== undefined ? tbl.sessionTotal : ((tbl as any).session_total || 0);
                           const runningTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : fallbackGrandTotal;
                           const orderCount = authCalc.orderCount > 0 ? authCalc.orderCount : (tbl.orderCount || (tbl as any).order_count || (runningTotal > 0 ? 1 : 0));
                           const totalItems = authCalc.totalItems > 0 ? authCalc.totalItems : ((tbl as any).itemCount || (tbl as any).item_count || (runningTotal > 0 ? 1 : 0));
-                          const effectivePaymentStatus = authCalc.paymentStatus;
-                          const invoiceNumber = authCalc.invoiceNumber || activeBill?.invoiceNumber;
+                          const effectivePaymentStatus = (runningTotal > 0 && tableOrders.length > 0 && !authCalc.hasUnpaidOrders && authCalc.balanceDue <= 0)
+                            ? 'PAID'
+                            : (authCalc.amountPaid > 0 && authCalc.balanceDue > 0)
+                            ? 'PARTIALLY_PAID'
+                            : 'UNPAID';
+                          const invoiceNumber = activeBill?.invoiceNumber || (effectivePaymentStatus === 'PAID' ? authCalc.invoiceNumber : undefined);
 
                           const effectiveBill: Bill = activeBill ? {
                             ...activeBill,
@@ -6212,11 +6217,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     {selectedBillDetails.qrDataUrl ? (
                       <img src={selectedBillDetails.qrDataUrl} alt="Bill UPI QR" className="w-full h-full object-contain" />
                     ) : selectedBillDetails.paymentQrPayload ? (
-                      <QRCodeDisplay value={selectedBillDetails.paymentQrPayload} size={112} />
+                      <QRCodeSVG value={selectedBillDetails.paymentQrPayload} size={112} level="M" />
                     ) : (
-                      <QRCodeDisplay
+                      <QRCodeSVG
                         value={`upi://pay?pa=${encodeURIComponent((currentRestaurant?.upiId || '').trim() || `${(currentRestaurant?.slug || currentRestaurant?.name || 'thestart').toLowerCase().replace(/[^a-z0-9]/g, '') || 'dinely.pos'}@icici`)}&pn=${encodeURIComponent(currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant')}&am=${selectedBillDetails.grandTotal.toFixed(2)}&cu=INR`}
                         size={112}
+                        level="M"
                       />
                     )}
                   </div>

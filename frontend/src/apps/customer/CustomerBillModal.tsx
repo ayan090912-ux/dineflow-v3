@@ -17,6 +17,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Modal, Button, Badge, Card, QRCodeDisplay } from '../../packages/ui';
+import { QRCodeSVG } from 'qrcode.react';
 import { Bill, Restaurant, TableSession, PaymentMethod, BillingConfig } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
@@ -422,9 +423,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                       className="w-full h-full object-contain"
                     />
                   ) : bill.paymentQrPayload ? (
-                    <QRCodeDisplay
+                    <QRCodeSVG
                       value={bill.paymentQrPayload}
                       size={144}
+                      level="M"
                     />
                   ) : activeQrUrl ? (
                     <img
@@ -433,9 +435,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                       className="w-full h-full object-contain"
                     />
                   ) : activeUpiId ? (
-                    <QRCodeDisplay
+                    <QRCodeSVG
                       value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${bill.grandTotal.toFixed(2)}&cu=INR`}
                       size={144}
+                      level="M"
                     />
                   ) : null}
                 </div>
@@ -541,9 +544,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                 </div>
               ) : bill?.paymentQrPayload ? (
                 <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg mx-auto flex items-center justify-center">
-                  <QRCodeDisplay
+                  <QRCodeSVG
                     value={bill.paymentQrPayload}
                     size={168}
+                    level="M"
                   />
                 </div>
               ) : activeQrUrl ? (
@@ -556,9 +560,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                 </div>
               ) : activeUpiId ? (
                 <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg mx-auto flex items-center justify-center">
-                  <QRCodeDisplay
+                  <QRCodeSVG
                     value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${(bill?.grandTotal || 0).toFixed(2)}&cu=INR`}
                     size={168}
+                    level="M"
                   />
                 </div>
               ) : null}
