@@ -999,43 +999,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     }
   };
 
-  // Financial & Operational Metrics for Waiter Bento Row & Reconciliation
-  const waiterMetrics = useMemo(() => {
-    let activeGuestValue = 0;
-    let kitchenReadyCount = 0;
-    let barReadyCount = 0;
-    let hookahReadyCount = 0;
-
-    readyPlatesList.forEach((o) => {
-      if (o.kitchenStatus === 'READY' || (!o.kitchenStatus && o.status === 'READY')) kitchenReadyCount++;
-      if (o.barStatus === 'READY') barReadyCount++;
-      if (o.hookahStatus === 'READY') hookahReadyCount++;
-    });
-
-    // Sum active session values / open orders
-    orders.forEach((o) => {
-      if (o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID') {
-        activeGuestValue += Number(o.totalAmount) || 0;
-      }
-    });
-
-    const occupiedTables = tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied).length;
-    const settledBills = bills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').length;
-
-    return {
-      activeGuestValue,
-      kitchenReadyCount,
-      barReadyCount,
-      hookahReadyCount,
-      totalReadyCount: readyPlatesList.length,
-      pendingCallsCount: pendingCallsList.length,
-      activeSessionsCount: activeSessions.length,
-      occupiedTables,
-      settledBills,
-      totalFloorActions: readyPlatesList.length + pendingCallsList.length,
-    };
-  }, [orders, tables, bills, readyPlatesList, pendingCallsList, activeSessions]);
-
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased relative selection:bg-emerald-500/30">
       {/* Background Ambient Radial Glow */}
@@ -1154,168 +1117,36 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       )}
 
       {/* ONE-SCREEN WAITER OPERATIONAL INTERFACE */}
-      <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-3.5 sm:space-y-4 relative z-10">
-        {/* OPERATIONAL METADATA BAR */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs font-mono text-slate-300">
-          <div className="flex items-center gap-3">
-            <span className="text-slate-500">Station:</span>
-            <span className="font-bold text-white text-sm">Waiter Floor & Service Calls</span>
-            <Badge variant="brand" className="text-[10px] bg-emerald-500/20 text-emerald-300 border-emerald-400/30">
-              LIVE FLOOR
-            </Badge>
-          </div>
-          <div className="flex items-center gap-4 text-slate-400 text-[11px]">
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-3 h-3 text-emerald-400" />
-              <span>{currentTime}</span>
-            </span>
-            <span>Pending Actions: <strong className="text-amber-300">{waiterMetrics.totalFloorActions}</strong></span>
-            <span>Open Sessions: <strong className="text-sky-300">{waiterMetrics.activeSessionsCount}</strong></span>
-            <span>Sync: <strong className="text-slate-300">REALTIME WS</strong></span>
-          </div>
-        </div>
-
-        {/* TOP BENTO KPI CARDS ROW */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
-          {/* Card 1: Running Guest Value */}
-          <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
-              Running Guest Value
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
-              ₹{waiterMetrics.activeGuestValue.toFixed(2)}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Unsettled table orders
-            </span>
-          </Card>
-
-          {/* Card 2: Service Calls */}
-          <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
-              Service Calls
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
-              {waiterMetrics.pendingCallsCount}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Guest calls & requests
-            </span>
-          </Card>
-
-          {/* Card 3: Ready at Pass */}
-          <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
-              Ready at Pass
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
-              {waiterMetrics.totalReadyCount}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Kitchen • Bar • Hookah
-            </span>
-          </Card>
-
-          {/* Card 4: Active Sessions */}
-          <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
-              Active Sessions
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
-              {waiterMetrics.activeSessionsCount}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Open dining sessions
-            </span>
-          </Card>
-
-          {/* Card 5: Settled Bills */}
-          <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
-              Settled Bills
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
-              {waiterMetrics.settledBills}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Paid invoices today
-            </span>
-          </Card>
-
-          {/* Card 6: Occupied Tables */}
-          <Card className="liquid-glass-card border border-purple-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-purple-400 uppercase font-semibold block">
-              Occupied Tables
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-purple-300 tracking-tight">
-              {waiterMetrics.occupiedTables}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Floor dining capacity
-            </span>
-          </Card>
-        </div>
-
-        {/* COMBINED OPERATIONAL RECONCILIATION SUMMARY BOX */}
-        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
-                Daily Operational Service Actions Reconciliation
-              </span>
-              <div className="flex items-baseline gap-2 flex-wrap font-mono">
-                <span className="text-xs text-slate-400">Kitchen Pass:</span>
-                <span className="text-sm font-bold text-sky-400">{waiterMetrics.kitchenReadyCount}</span>
-                <span className="text-slate-600">+</span>
-                <span className="text-xs text-slate-400">Bar Pass:</span>
-                <span className="text-sm font-bold text-purple-400">{waiterMetrics.barReadyCount}</span>
-                <span className="text-slate-600">+</span>
-                <span className="text-xs text-slate-400">Guest Calls:</span>
-                <span className="text-sm font-bold text-amber-400">{waiterMetrics.pendingCallsCount}</span>
-                <span className="text-slate-600">=</span>
-                <span className="text-base font-bold text-white bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700">
-                  {waiterMetrics.totalFloorActions} Tasks
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="success" className="font-mono text-[11px] px-3 py-1 bg-emerald-950/60 text-emerald-400 border-emerald-800/60 flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Zero Double-Counting Verified</span>
-              </Badge>
-            </div>
-          </div>
-        </Card>
-
+      <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 relative z-10">
         {/* TOP OPERATIONAL BAR: Stage Selector, Live Counts, Search & Refresh */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 rounded-2xl">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setWaiterView('floor')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold uppercase transition-all shrink-0 cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
                 waiterView === 'floor'
-                  ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                  : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                  ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
+                  : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
               }`}
             >
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
               <span>Live Floor</span>
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${waiterView === 'floor' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-[#181d27] text-slate-400'}`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${waiterView === 'floor' ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-white/10 text-slate-400'}`}>
                 {readyPlatesList.length + pendingCallsList.length}
               </span>
             </button>
 
             <button
               onClick={() => setWaiterView('tables')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold uppercase transition-all shrink-0 cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
                 waiterView === 'tables'
-                  ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                  : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                  ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.25)]'
+                  : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
               }`}
             >
               <Utensils className="w-3.5 h-3.5 text-sky-400" />
               <span>Tables & Sessions</span>
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${waiterView === 'tables' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 'bg-[#181d27] text-slate-400'}`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${waiterView === 'tables' ? 'bg-sky-500/30 text-sky-200 border border-sky-400/40' : 'bg-white/10 text-slate-400'}`}>
                 {activeTablesList.length}
               </span>
             </button>
@@ -1335,7 +1166,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               size="sm"
               onClick={() => loadData()}
               disabled={isLoading}
-              className="text-xs border-[#1e232e] bg-[#141822] text-slate-300 hover:text-white flex items-center gap-1.5 h-8 shrink-0 rounded-xl"
+              className="text-xs border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white flex items-center gap-1.5 h-8.5 shrink-0 rounded-xl backdrop-blur-md shadow-sm active:scale-95"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -1347,9 +1178,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         {waiterView === 'floor' && (
             <div className="space-y-4">
               {/* Operational View Switcher & Live Queue Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0e1117] p-3 rounded-xl border border-[#1e232e]">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl p-3 sm:p-3.5 rounded-2xl border border-white/10 shadow-lg">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
                   <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
                     One-Screen Operational Floor
                   </span>
@@ -1361,25 +1195,25 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setViewMode('active')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium font-mono transition-colors flex items-center gap-1.5 ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-medium font-mono transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 ${
                       viewMode === 'active'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                        ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
                     }`}
                   >
-                    <Activity className="w-3.5 h-3.5" />
+                    <Activity className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Live Queue ({readyPlatesList.length + pendingCallsList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setViewMode('history')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium font-mono transition-colors flex items-center gap-1.5 ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-medium font-mono transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 ${
                       viewMode === 'history'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                        ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
                     }`}
                   >
-                    <CheckSquare className="w-3.5 h-3.5" />
+                    <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Recent Completed ({recentCompletedHistory.length})</span>
                   </button>
                 </div>
@@ -1436,7 +1270,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 /* LIVE DUAL-SECTION OPERATIONAL FLOOR: Section A (Ready) & Section B (Requests) */
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
                   {/* SECTION A: READY FOR SERVICE */}
-                  <div className="bg-white/[0.04] backdrop-blur-xl border border-white/15 p-4 lg:p-5 rounded-2xl space-y-4 shadow-xl">
+                  <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
                       <div className="flex items-center gap-2">
                         <Flame className="w-4 h-4 text-emerald-400" />
@@ -1453,10 +1287,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     </div>
 
                     {readyPlatesList.length === 0 ? (
-                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-dashed border-white/15 space-y-2">
-                        <Coffee className="w-8 h-8 text-emerald-400/40 mx-auto" />
-                        <p className="text-xs font-bold text-slate-200">No ready tickets at the pass</p>
-                        <p className="text-[11px] text-white/50 max-w-xs mx-auto">
+                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-white/10 space-y-3 backdrop-blur-xl shadow-inner">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(16,185,129,0.18)]">
+                          <Coffee className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <p className="text-sm font-bold text-white">No ready tickets at the pass</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
                           Dishes and beverages will appear here instantly as soon as kitchen, bar, or hookah staff mark them ready.
                         </p>
                       </div>
@@ -1652,7 +1488,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   </div>
 
                   {/* SECTION B: CUSTOMER REQUESTS */}
-                  <div className="bg-white/[0.04] backdrop-blur-xl border border-white/15 p-4 lg:p-5 rounded-2xl space-y-4 shadow-xl">
+                  <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
                       <div className="flex items-center gap-2">
                         <PhoneCall className="w-4 h-4 text-amber-400" />
@@ -1669,10 +1505,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     </div>
 
                     {pendingCallsList.length === 0 ? (
-                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-dashed border-white/15 space-y-2">
-                        <CheckCircle2 className="w-8 h-8 text-emerald-400/40 mx-auto" />
-                        <p className="text-xs font-bold text-slate-200">All customer requests handled</p>
-                        <p className="text-[11px] text-white/50 max-w-xs mx-auto">
+                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-white/10 space-y-3 backdrop-blur-xl shadow-inner">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(245,158,11,0.18)]">
+                          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <p className="text-sm font-bold text-white">All customer requests handled</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
                           Requests for water, napkins, cutlery, table assistance, or bill payments appear here with 1-click fulfillment.
                         </p>
                       </div>
@@ -1830,9 +1668,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             </div>
 
             {activeTablesList.length === 0 ? (
-              <div className="bg-[#0e1117] border border-[#1e232e] p-10 text-center space-y-2 rounded-xl">
-                <Utensils className="w-8 h-8 text-slate-600 mx-auto" />
-                <h3 className="text-sm font-semibold text-white">No active tables right now.</h3>
+              <div className="liquid-glass-card border border-white/10 p-12 text-center space-y-3 rounded-2xl shadow-xl backdrop-blur-2xl">
+                <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(56,189,248,0.18)]">
+                  <Utensils className="w-6 h-6 text-sky-400" />
+                </div>
+                <h3 className="text-sm font-bold text-white">No active tables right now</h3>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
                   All tables are clear and available. When guests scan table QR codes or open sessions, occupied tables will automatically appear here in real-time.
                 </p>

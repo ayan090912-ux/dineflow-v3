@@ -747,45 +747,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
   const overdueCount = (orders || []).filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && calculateRemainingTime(o).isOverdue).length;
 
-  // Financial & Operational Metrics for Kitchen Bento Row & Reconciliation
-  const kitchenMetrics = useMemo(() => {
-    let grossValue = 0;
-    let incomingVal = 0;
-    let inCookingVal = 0;
-    let readyVal = 0;
-
-    const getKitchenItemSum = (orderList: typeof filteredOrders) => {
-      return orderList.reduce((acc, o) => {
-        const kItems = (o.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
-        return acc + kItems.reduce((sub, i) => sub + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0);
-      }, 0);
-    };
-
-    (orders || []).forEach((o) => {
-      const kItems = (o.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
-      grossValue += kItems.reduce((sub, i) => sub + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0);
-    });
-
-    incomingVal = getKitchenItemSum(pendingOrders);
-    inCookingVal = getKitchenItemSum(inKitchenOrders);
-    readyVal = getKitchenItemSum(readyOrders);
-
-    const activeKitchenTables = new Set(
-      [...pendingOrders, ...inKitchenOrders, ...readyOrders]
-        .map((o) => o.tableNumber)
-        .filter(Boolean)
-    ).size;
-
-    return {
-      grossValue,
-      incomingVal,
-      inCookingVal,
-      readyVal,
-      totalActiveValue: incomingVal + inCookingVal + readyVal,
-      activeKitchenTables,
-    };
-  }, [orders, pendingOrders, inKitchenOrders, readyOrders, filteredOrders]);
-
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans relative w-full overflow-x-hidden selection:bg-emerald-500 selection:text-white pb-12">
       {/* AMBIENT BACKGROUND GLOWS */}
@@ -897,140 +858,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
       {/* MAIN CONTAINER */}
       <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 flex-1 relative z-10">
-        {/* OPERATIONAL METADATA BAR */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs font-mono text-slate-300">
-          <div className="flex items-center gap-3">
-            <span className="text-slate-500">Station:</span>
-            <span className="font-bold text-white text-sm">Kitchen (Culinary)</span>
-            <Badge variant="success" className="text-[10px]">
-              LIVE KDS
-            </Badge>
-          </div>
-          <div className="flex items-center gap-4 text-slate-400 text-[11px]">
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-3 h-3 text-emerald-400" />
-              <span>{currentTime}</span>
-            </span>
-            <span>Total Active: <strong className="text-amber-300">{pendingOrders.length + inKitchenOrders.length + readyOrders.length}</strong></span>
-            <span>In Cooking: <strong className="text-sky-300">{inKitchenOrders.length}</strong></span>
-            <span>Ready at Pass: <strong className="text-emerald-300">{readyOrders.length}</strong></span>
-          </div>
-        </div>
-
-        {/* TOP BENTO KPI CARDS ROW */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
-          {/* Card 1: Gross Kitchen Value */}
-          <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
-              Gross Kitchen Value
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
-              ₹{kitchenMetrics.grossValue.toFixed(2)}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Appetizers • Mains • Desserts
-            </span>
-          </Card>
-
-          {/* Card 2: 1. Incoming Queue */}
-          <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
-              1. Incoming Queue
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
-              {pendingOrders.length}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Awaiting prep acceptance
-            </span>
-          </Card>
-
-          {/* Card 3: 2. In Preparation */}
-          <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
-              2. In Preparation
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
-              {inKitchenOrders.length}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Active cooking & timers
-            </span>
-          </Card>
-
-          {/* Card 4: 3. Ready at Pass */}
-          <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
-              3. Ready at Pass
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
-              {readyOrders.length}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Plated • Runner dispatch
-            </span>
-          </Card>
-
-          {/* Card 5: Shift Dispatched / Rush */}
-          <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
-              {overdueCount > 0 ? 'Rush Alert' : 'Shift Dispatched'}
-            </span>
-            <p className={`text-xl lg:text-2xl font-bold font-mono tracking-tight ${overdueCount > 0 ? 'text-rose-400' : 'text-white'}`}>
-              {overdueCount > 0 ? `${overdueCount} Late` : `${completedOrders.length} Cleared`}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              {overdueCount > 0 ? 'Exceeded target cooking time' : 'Dispatched tickets'}
-            </span>
-          </Card>
-
-          {/* Card 6: Active Tables */}
-          <Card className="liquid-glass-card border border-purple-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-            <span className="text-[10px] font-mono text-purple-400 uppercase font-semibold block">
-              Active Tables
-            </span>
-            <p className="text-xl lg:text-2xl font-bold font-mono text-purple-300 tracking-tight">
-              {kitchenMetrics.activeKitchenTables}
-            </p>
-            <span className="text-[10px] font-mono text-slate-500 block">
-              Dining room guest tables
-            </span>
-          </Card>
-        </div>
-
-        {/* COMBINED OPERATIONAL ORDER VALUE RECONCILIATION SUMMARY BOX */}
-        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
-                Daily Operational Order Value Reconciliation
-              </span>
-              <div className="flex items-baseline gap-2 flex-wrap font-mono">
-                <span className="text-xs text-slate-400">Incoming Queue:</span>
-                <span className="text-sm font-bold text-amber-400">₹{kitchenMetrics.incomingVal.toFixed(2)}</span>
-                <span className="text-slate-600">+</span>
-                <span className="text-xs text-slate-400">In Cooking:</span>
-                <span className="text-sm font-bold text-sky-400">₹{kitchenMetrics.inCookingVal.toFixed(2)}</span>
-                <span className="text-slate-600">+</span>
-                <span className="text-xs text-slate-400">Ready at Kitchen Pass:</span>
-                <span className="text-sm font-bold text-purple-400">₹{kitchenMetrics.readyVal.toFixed(2)}</span>
-                <span className="text-slate-600">=</span>
-                <span className="text-base font-bold text-white bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700">
-                  ₹{kitchenMetrics.totalActiveValue.toFixed(2)}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="success" className="font-mono text-[11px] px-3 py-1 bg-emerald-950/60 text-emerald-400 border-emerald-800/60 flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Zero Double-Counting Verified</span>
-              </Badge>
-            </div>
-          </div>
-        </Card>
-
         {/* STAGE FILTERS & SEARCH BAR */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 rounded-2xl">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 md:pb-0">
             {[
               { id: 'ALL', label: 'All Active Tickets', icon: <Flame className="w-3.5 h-3.5 text-emerald-400" />, badge: pendingOrders.length + inKitchenOrders.length + readyOrders.length },
@@ -1042,16 +871,18 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setKitchenFilter(tab.id as any)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
                   kitchenFilter === tab.id
-                    ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                    : 'bg-[#12151b] text-slate-400 hover:text-slate-200 border border-[#1e232e]'
+                    ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                    : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
                 }`}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-md text-[10px] font-mono font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-medium ${
+                    kitchenFilter === tab.id ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-white/10 text-slate-400'
+                  }`}>
                     {tab.badge}
                   </span>
                 )}
