@@ -3,7 +3,7 @@
 **Date:** 2026-11-02  
 **Target Environment:** AWS EC2 Production (`i-0997b0b381dfb3fd0`, ap-south-1)  
 **Public Host:** [https://the-start.dinely.food](https://the-start.dinely.food) / [https://dinely.food](https://dinely.food)  
-**Deployed Commit:** `6d04645` (Branch: `security-hardening-cleanup`)  
+**Deployed Commit:** `ff92b64` (Branch: `security-hardening-cleanup`)  
 **Container State:** `dinely_web` (Up, HTTP 200), `dinely_backend` (Up, healthy, HTTP 200)
 
 ---
@@ -124,10 +124,36 @@ This production engagement executed a full-scale frontend architecture and UI/UX
 - **Backend Tests:** 369 passed, 1 skipped, 0 failures (`backend/dineflow-backend/.venv/bin/pytest`)
 - **TypeScript Typecheck:** 0 errors (`npm --prefix frontend run typecheck`)
 - **Vite Production Build:** 0 errors (`npm --prefix frontend run build`)
-- **Deployed Commit:** `6d04645` (Branch: `security-hardening-cleanup`)
+- **Deployed Commit:** `ff92b64` (Branch: `security-hardening-cleanup`)
 - **Docker Container Status on AWS EC2 (`i-0997b0b381dfb3fd0`):** `dinely_web` (Recreated & Started), `dinely_backend` (Healthy)
 - **Live HTTP Health Probes:**
   - `https://dinely.food/healthz`: HTTP 200 (healthy)
   - `https://dinely.food/readyz`: HTTP 200 (ready)
   - `https://the-start.dinely.food/customer?table=03`: HTTP 200
+
+---
+
+## 5. Terminal Streamlining & Liquid-Glass Polish (Commit `ff92b64`)
+
+Based on user review of live terminals:
+1. **Removed Extra Bento Panels Across Terminals:**
+   - Terminated and removed duplicate Bento KPI cards and reconciliation formula panels from operational staff screens:
+     - `WaiterTerminalOS.tsx` (Removed 6 Bento KPI cards and reconciliation summary)
+     - `KitchenETADashboard.tsx` (Removed 6 Bento KPI cards and reconciliation summary)
+     - `BarTerminal.tsx` (Removed 6 Bento KPI cards and reconciliation summary)
+     - `HookahTerminal.tsx` (Removed 6 Bento KPI cards and reconciliation summary)
+     - `InventoryTerminalOS.tsx` (Removed 6 Bento KPI cards and reconciliation summary)
+     - `RestaurantApp.tsx` (POS Orders stream, Table Floorplan, Menu Catalog, Billing & Invoices)
+   - Preserved authoritative 6 Bento KPI cards and daily reconciliation formula strictly inside `DayManagementView.tsx` where it serves business shift reconciliation.
+
+2. **Liquid-Glass Aesthetic & Working Design Upgrades:**
+   - Restructured terminal working containers with deep `backdrop-blur-2xl`, translucent borders `border-white/10`, and glowing ambient wells (`liquid-glass-card`).
+   - Frosted navigation toolbars with glowing neon active stage pills (Emerald for Kitchen/Waiter, Sky for Bar, Amber for Hookah).
+   - Elevated empty states with glowing neon icon rings (`Coffee` for Waiter Ready Pass, `CheckCircle2` for Customer Requests, `Bell` for Cooking Grid).
+
+3. **Live Production Artifacts Verified:**
+   - **Waiter Terminal:** [`85_production_waiter_glass_clean.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/85_production_waiter_glass_clean.png)
+   - **Kitchen KDS:** [`86_production_kitchen_glass_clean.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/86_production_kitchen_glass_clean.png)
+   - **Bar Terminal:** [`87_production_bar_glass_clean.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/87_production_bar_glass_clean.png)
+
 
