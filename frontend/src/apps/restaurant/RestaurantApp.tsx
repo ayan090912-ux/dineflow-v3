@@ -3493,6 +3493,155 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 </div>
               </div>
 
+              {/* Operational Metadata Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs font-mono text-slate-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-slate-500">Catalog Engine:</span>
+                  <span className="font-bold text-white text-sm">Multi-Station Catalog & Availability</span>
+                  <Badge variant="success" className="text-[10px]">LIVE CATALOG</Badge>
+                </div>
+                <div className="flex items-center gap-4 text-slate-400 text-[11px]">
+                  <span>Active Scope: <strong className="text-white">{activeCatalogMode === 'HOOKAH' ? 'Hookah & Lounge' : activeCatalogMode === 'BAR' ? 'Bar & Spirits' : 'Kitchen Culinary'}</strong></span>
+                  <span>Total Items: <strong className="text-white">{menuItems.length}</strong></span>
+                  <span>In Stock: <strong className="text-emerald-300">{menuItems.filter(item => item.isAvailable !== false).length}</strong></span>
+                  <span>86'd (Sold Out): <strong className="text-rose-300">{menuItems.filter(item => item.isAvailable === false).length}</strong></span>
+                </div>
+              </div>
+
+              {/* Bento KPI Grid & Reconciliation Summary */}
+              {(() => {
+                const totalItems = menuItems.length;
+                const hookahItems = menuItems.filter(
+                  (item) => item.targetDestination === 'HOOKAH' || getFulfillmentStation(item) === 'HOOKAH'
+                ).length;
+                const barItems = menuItems.filter((item) => {
+                  const isHookah = item.targetDestination === 'HOOKAH' || getFulfillmentStation(item) === 'HOOKAH';
+                  return !isHookah && (item.targetDestination === 'BAR' || item.isAlcoholic || (item.barCategory !== undefined && item.barCategory !== null));
+                }).length;
+                const kitchenItems = menuItems.filter((item) => {
+                  const isHookah = item.targetDestination === 'HOOKAH' || getFulfillmentStation(item) === 'HOOKAH';
+                  const isBar = !isHookah && (item.targetDestination === 'BAR' || item.isAlcoholic || (item.barCategory !== undefined && item.barCategory !== null));
+                  return !isHookah && !isBar;
+                }).length;
+                const inStockItems = menuItems.filter((item) => item.isAvailable !== false).length;
+                const outOfStockItems = menuItems.filter((item) => item.isAvailable === false).length;
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+                      {/* Card 1: Total Catalog Items */}
+                      <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                        <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+                          Total Catalog Items
+                        </span>
+                        <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
+                          {totalItems}
+                        </p>
+                        <span className="text-[10px] font-mono text-slate-500 block">
+                          Across all stations
+                        </span>
+                      </Card>
+
+                      {/* Card 2: Kitchen Food */}
+                      <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                        <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
+                          Kitchen Food
+                        </span>
+                        <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
+                          {kitchenItems}
+                        </p>
+                        <span className="text-[10px] font-mono text-slate-500 block">
+                          Culinary KDS routing
+                        </span>
+                      </Card>
+
+                      {/* Card 3: Bar & Spirits */}
+                      <Card className="liquid-glass-card border border-purple-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                        <span className="text-[10px] font-mono text-purple-400 uppercase font-semibold block">
+                          Bar & Spirits
+                        </span>
+                        <p className="text-xl lg:text-2xl font-bold font-mono text-purple-300 tracking-tight">
+                          {barItems}
+                        </p>
+                        <span className="text-[10px] font-mono text-slate-500 block">
+                          Mixology station
+                        </span>
+                      </Card>
+
+                      {/* Card 4: Hookah & Shisha */}
+                      <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                        <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
+                          Hookah & Shisha
+                        </span>
+                        <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
+                          {hookahItems}
+                        </p>
+                        <span className="text-[10px] font-mono text-slate-500 block">
+                          Lounge station
+                        </span>
+                      </Card>
+
+                      {/* Card 5: In Stock (Live on QR) */}
+                      <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                        <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
+                          In Stock (Live)
+                        </span>
+                        <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
+                          {inStockItems}
+                        </p>
+                        <span className="text-[10px] font-mono text-slate-500 block">
+                          Available on QR menu
+                        </span>
+                      </Card>
+
+                      {/* Card 6: 86'd Out of Stock */}
+                      <Card className="liquid-glass-card border border-rose-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                        <span className="text-[10px] font-mono text-rose-400 uppercase font-semibold block">
+                          86'd (Sold Out)
+                        </span>
+                        <p className="text-xl lg:text-2xl font-bold font-mono text-rose-300 tracking-tight">
+                          {outOfStockItems}
+                        </p>
+                        <span className="text-[10px] font-mono text-slate-500 block">
+                          Temporarily hidden
+                        </span>
+                      </Card>
+                    </div>
+
+                    {/* COMBINED OPERATIONAL MENU CATALOG RECONCILIATION SUMMARY BOX */}
+                    <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl shadow-sm">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                            Operational Menu Catalog Reconciliation
+                          </span>
+                          <div className="flex items-baseline gap-2 flex-wrap font-mono">
+                            <span className="text-xs text-slate-400">Kitchen Food:</span>
+                            <span className="text-sm font-bold text-sky-400">{kitchenItems} Items</span>
+                            <span className="text-slate-600">+</span>
+                            <span className="text-xs text-slate-400">Bar Drinks:</span>
+                            <span className="text-sm font-bold text-purple-400">{barItems} Items</span>
+                            <span className="text-slate-600">+</span>
+                            <span className="text-xs text-slate-400">Hookah Blends:</span>
+                            <span className="text-sm font-bold text-amber-400">{hookahItems} Items</span>
+                            <span className="text-slate-600">=</span>
+                            <span className="text-base font-bold text-white bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700">
+                              {totalItems} Total Catalog Items
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="success" className="font-mono text-[11px] px-3 py-1 bg-emerald-950/60 text-emerald-400 border-emerald-800/60 flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Menu Catalog Synced</span>
+                          </Badge>
+                        </div>
+                      </div>
+                    </Card>
+                  </>
+                );
+              })()}
+
             {/* Filter & Search Toolbar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0e1117] p-3 rounded-xl border border-[#1e232e]">
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
