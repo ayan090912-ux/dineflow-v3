@@ -187,7 +187,7 @@ async def get_customer_requests(
                 "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "STAFF"
             ]:
                 if caller.restaurant_id and caller.restaurant_id != canonical_rest_id:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cross-tenant access denied. Staff does not belong to this restaurant")
             else:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized for customer requests")
 
@@ -273,7 +273,7 @@ async def update_customer_request(
                 "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "STAFF"
             ]:
                 if caller.restaurant_id and caller.restaurant_id != req.restaurant_id:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff does not belong to this restaurant")
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cross-tenant access denied. Staff does not belong to this restaurant")
             else:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update service requests")
 

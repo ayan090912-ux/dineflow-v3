@@ -856,7 +856,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
       {/* Top Financial KPI Metrics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
         {/* Gross Order Value */}
-        <Card className="bg-[#12151b] border-[#1e232e] p-4 rounded-xl space-y-1">
+        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
           <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
             Gross Order Value
           </span>
@@ -869,7 +869,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         </Card>
 
         {/* Net Sales */}
-        <Card className="bg-[#12151b] border-[#1e232e] p-4 rounded-xl space-y-1">
+        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
           <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
             Net Sales
           </span>
@@ -882,7 +882,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         </Card>
 
         {/* Collected Revenue */}
-        <Card className="bg-[#12151b] border-[#1e232e] p-4 rounded-xl space-y-1">
+        <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
           <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
             Settled Revenue
           </span>
@@ -895,7 +895,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         </Card>
 
         {/* Outstanding Receivables */}
-        <Card className="bg-[#12151b] border-[#1e232e] p-4 rounded-xl space-y-1">
+        <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
           <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
             Outstanding
           </span>
@@ -908,7 +908,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         </Card>
 
         {/* Total Orders */}
-        <Card className="bg-[#12151b] border-[#1e232e] p-4 rounded-xl space-y-1">
+        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
           <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
             Total Orders
           </span>
@@ -921,7 +921,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         </Card>
 
         {/* Active Tables / Sessions */}
-        <Card className="bg-[#12151b] border-[#1e232e] p-4 rounded-xl space-y-1">
+        <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
           <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
             Active Tables
           </span>
@@ -935,7 +935,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
       </div>
 
       {/* COMBINED OPERATIONAL ORDER VALUE RECONCILIATION SUMMARY BOX */}
-      <Card className="bg-[#10141d] border border-[#1e2736] p-4 rounded-2xl">
+      <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">

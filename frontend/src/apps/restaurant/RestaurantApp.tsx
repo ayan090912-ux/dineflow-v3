@@ -207,6 +207,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'taxes' | 'settings' | 'printers'>('terminal');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const recentToastKeys = useRef<Map<string, number>>(new Map());
+  const handledOrderEventsRef = useRef<Set<string>>(new Set());
 
   const addToast = (type: 'info' | 'success' | 'warning' | 'error' | 'danger', title: string, message?: string) => {
     const key = `${type}:${title}:${message || ''}`;
@@ -668,14 +669,24 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
     const unsubscribe = realtimeBus.subscribe((event) => {
       if (event.type === 'order_created' || event.type === 'OrderCreated') {
-        addToast('info', 'New Customer Order Received! 🛎️', `Table ${event.tableNumber || 'Guest'} placed an order`);
+        const orderId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        if (orderId) {
+          if (handledOrderEventsRef.current.has(orderId)) {
+            return; // Deduplicate repeated events / reconnects
+          }
+          handledOrderEventsRef.current.add(orderId);
+          if (handledOrderEventsRef.current.size > 200) {
+            const first = Array.from(handledOrderEventsRef.current)[0];
+            handledOrderEventsRef.current.delete(first);
+          }
+        }
         const tblNum = (event as any).tableNumber || (event as any).table_number;
         const tblId = (event as any).tableId || (event as any).table_id;
         const sessId = (event as any).tableSessionId || (event as any).table_session_id;
         if (tblNum || tblId) {
           setTables((prev) =>
             prev.map((t) =>
-              (tblId && t.id === tblId) || (tblNum && (t.tableNumber === tblNum || (t as any).number === tblNum))
+              (tblId && t.id === tblId) || (tblNum && matchTableNumber(t.tableNumber, tblNum))
                 ? { ...t, status: 'OCCUPIED', isOccupied: true, activeSessionId: sessId || t.activeSessionId }
                 : t
             )

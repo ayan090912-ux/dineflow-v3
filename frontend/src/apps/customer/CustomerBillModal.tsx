@@ -233,7 +233,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
             <p className="text-white/40 font-mono text-xs">Retrieving bill summary...</p>
           </div>
         ) : !bill || (bill.items || []).length === 0 ? (
-          <div className="p-8 text-center bg-[#0b0d11] rounded-xl border border-white/[0.08] text-white/40 space-y-2">
+          <div className="p-8 text-center liquid-glass-card rounded-2xl border border-white/[0.08] text-white/40 space-y-2">
             <Receipt className="w-8 h-8 text-white/20 mx-auto" />
             <h4 className="font-semibold text-white text-sm">No Orders Placed Yet</h4>
             <p className="text-xs text-white/40">
@@ -243,10 +243,10 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
         ) : (
           <div className="space-y-4">
             {/* RECEIPT HEADER CARD */}
-            <div className="p-4 bg-[#0b0d11] rounded-xl border border-white/[0.08] space-y-3">
+            <div className="p-4 liquid-glass-card rounded-2xl border border-white/[0.08] space-y-3">
               <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center font-bold text-amber-400 shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center font-bold text-amber-400 shrink-0 shadow-sm">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div>
@@ -268,7 +268,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               </div>
 
               {/* Table & Session Metadata */}
-              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-white/[0.02] p-2.5 rounded-lg border border-white/[0.04]">
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-white/[0.03] p-2.5 rounded-xl border border-white/[0.06]">
                 <div>
                   <span className="text-white/40 block text-[10px]">TABLE</span>
                   <span className="font-medium text-white">{formatStandardTableNumber(bill.tableNumber)}</span>
@@ -281,39 +281,39 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
               {/* STATUS BANNER */}
               {bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 flex items-center gap-2">
+                <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-300 flex items-center gap-2 shadow-sm">
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
                   <div>
                     <p className="font-semibold text-xs">Payment Status: PAID</p>
-                    <p className="text-[10px] text-white/50">
+                    <p className="text-[10px] text-white/60">
                       Payment verified & received via {bill.paymentMethod || 'UPI'}. Thank you for dining with us!
                     </p>
                   </div>
                 </div>
               ) : bill.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION' || bill.paymentStatus === 'PAYMENT_PROCESSING' ? (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 flex items-center gap-2">
+                <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 flex items-center gap-2 shadow-sm">
                   <Clock className="w-4 h-4 shrink-0 text-amber-400 animate-pulse" />
                   <div>
                     <p className="font-semibold text-xs">Payment Status: Payment Processing / Verifying...</p>
-                    <p className="text-[10px] text-white/50">
+                    <p className="text-[10px] text-white/60">
                       Payment submitted. Floor staff or gateway verification in progress.
                     </p>
                   </div>
                 </div>
               ) : bill.status === 'BILL_REQUESTED' ? (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 flex items-center justify-between">
+                <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 shrink-0 text-amber-400" />
                     <div>
                       <p className="font-medium text-xs">Bill Requested</p>
-                      <p className="text-[10px] text-white/50">
+                      <p className="text-[10px] text-white/60">
                         Floor staff has been notified and is bringing your receipt to {formatStandardTableNumber(bill.tableNumber)}.
                       </p>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="p-2 bg-white/[0.02] rounded-lg border border-white/[0.04] text-white/40 flex items-center justify-between text-[11px] font-mono">
+                <div className="p-2.5 bg-white/[0.03] rounded-xl border border-white/[0.06] text-white/50 flex items-center justify-between text-[11px] font-mono">
                   <span>Payment Status</span>
                   <span className="text-amber-400 font-medium">Unpaid</span>
                 </div>
@@ -321,7 +321,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
             </div>
 
             {/* ITEMIZED BREAKDOWN TABLE */}
-            <div className="bg-[#0b0d11] rounded-xl border border-white/[0.08] p-4 space-y-3">
+            <div className="liquid-glass-card rounded-2xl border border-white/[0.08] p-4 space-y-3">
               <h4 className="font-medium text-white/50 text-[11px] uppercase tracking-wider font-mono">
                 Itemized Summary
               </h4>
@@ -336,8 +336,13 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                           × {item.quantity}
                         </span>
                         {item.station === 'BAR' && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.06] text-white/60 font-mono border border-white/[0.08]">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30">
                             BAR
+                          </span>
+                        )}
+                        {item.station === 'HOOKAH' && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-300 font-mono border border-orange-500/30">
+                            HOOKAH
                           </span>
                         )}
                       </p>
@@ -354,7 +359,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
               {/* TOTALS & TAX BREAKDOWN */}
               <div className="border-t border-dashed border-white/[0.12] pt-3 space-y-1.5 font-mono text-xs">
-                <div className="flex justify-between text-white/50">
+                <div className="flex justify-between text-white/60">
                   <span>Subtotal</span>
                   <span>{formatCurrency(bill.subtotal)}</span>
                 </div>
@@ -367,7 +372,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                 )}
 
                 {(bill.serviceChargeAmount || 0) > 0 && (
-                  <div className="flex justify-between text-white/40">
+                  <div className="flex justify-between text-white/50">
                     <span>Service Charge ({bill.serviceChargePercentage || 0}%)</span>
                     <span>{formatCurrency(bill.serviceChargeAmount || 0)}</span>
                   </div>
@@ -375,20 +380,20 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
                 {bill.taxBreakdown && bill.taxBreakdown.length > 0 ? (
                   bill.taxBreakdown.map((t, idx) => (
-                    <div key={idx} className="flex justify-between text-white/40">
+                    <div key={idx} className="flex justify-between text-white/50">
                       <span>{(t.name || t.taxName || 'Tax')} ({t.rate || t.taxRate || 0}%{(t.isInclusive || t.is_inclusive) ? ' Included' : ''})</span>
                       <span>{formatCurrency(t.amount || t.taxAmount || 0)}</span>
                     </div>
                   ))
                 ) : (bill.taxAmount || 0) > 0 ? (
-                  <div className="flex justify-between text-white/40">
+                  <div className="flex justify-between text-white/50">
                     <span>GST / Taxes</span>
                     <span>{formatCurrency(bill.taxAmount)}</span>
                   </div>
                 ) : null}
 
                 {bill.roundOffAmount !== undefined && bill.roundOffAmount !== 0 && (
-                  <div className="flex justify-between text-white/40">
+                  <div className="flex justify-between text-white/50">
                     <span>Round Off</span>
                     <span>{bill.roundOffAmount > 0 ? `+${formatCurrency(bill.roundOffAmount)}` : formatCurrency(bill.roundOffAmount)}</span>
                   </div>
@@ -396,14 +401,14 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
                 <div className="flex justify-between text-sm font-semibold text-white pt-2.5 border-t border-white/[0.08]">
                   <span>Total Due</span>
-                  <span className="text-amber-400 text-base font-mono">{formatCurrency(bill.grandTotal)}</span>
+                  <span className="text-amber-400 text-base font-mono font-bold">{formatCurrency(bill.grandTotal)}</span>
                 </div>
               </div>
             </div>
 
             {/* ATTACHED UPI QR PAYMENT SECTION (SHOWN ON BILL & ON PHYSICAL PRINT) */}
             {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (bill.qrDataUrl || bill.paymentQrPayload || activeQrUrl || activeUpiId) && (
-              <div className="bg-[#0b0d11] rounded-xl border border-white/[0.08] p-4 text-center space-y-3 qr-code-box">
+              <div className="liquid-glass-card rounded-2xl border border-white/[0.08] p-4 text-center space-y-3 qr-code-box shadow-md">
                 <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-[11px] font-mono">
                   <span className="text-amber-400 font-semibold uppercase tracking-wider">UPI Payment QR • Scan to Pay</span>
                   <span className="text-white font-bold">{formatCurrency(bill.grandTotal)}</span>
@@ -509,7 +514,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
         title="Pay via UPI QR"
       >
         <div className="space-y-4 text-xs">
-          <div className="p-4 bg-[#0b0d11] rounded-xl border border-white/[0.08] text-center space-y-1">
+          <div className="p-4 liquid-glass-card rounded-2xl border border-white/[0.08] text-center space-y-1">
             <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">Amount Due</span>
             <p className="text-3xl font-bold text-amber-400 font-mono">
               {formatCurrency(bill?.grandTotal || 0)}
@@ -521,7 +526,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
           {/* DYNAMIC OR MERCHANT UPI QR DISPLAY */}
           {(bill?.qrDataUrl || bill?.paymentQrPayload || activeQrUrl || activeUpiId) ? (
-            <div className="bg-[#0b0d11] rounded-xl border border-white/[0.08] p-5 text-center space-y-3">
+            <div className="liquid-glass-card rounded-2xl border border-white/[0.08] p-5 text-center space-y-3">
               <span className="text-[10px] font-mono uppercase tracking-wider text-white/50">
                 {bill?.qrDataUrl || bill?.paymentQrPayload ? 'Bill-Specific Dynamic UPI QR • Scan to Pay' : 'Scan with Any UPI App'}
               </span>

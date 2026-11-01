@@ -143,6 +143,25 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
   }
 
+  .liquid-glass-selected {
+    background: rgba(245, 166, 35, 0.12);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(245, 166, 35, 0.45);
+    box-shadow: 0 8px 24px -4px rgba(245, 166, 35, 0.15), inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  }
+
+  /* Solid Fallback for Browsers Without Backdrop-Filter Support */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .liquid-glass,
+    .liquid-glass-card,
+    .liquid-glass-strong,
+    .liquid-glass-pill,
+    .liquid-glass-selected {
+      background: #11151B !important;
+    }
+  }
+
   .safe-bottom {
     padding-bottom: max(16px, env(safe-area-inset-bottom));
   }

@@ -1632,13 +1632,14 @@ async def update_order_status(
             order.status = "CANCELLED"
             order.delivery_status = "CANCELLED"
         elif target_status in ["DELIVERED", "COMPLETED", "SERVED"]:
+            is_manager_or_owner = caller.is_admin or caller_role in ["OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_MANAGER"]
             # Check if any stations are still in PREPARING
             has_pending = (
                 (has_k_items and order.kitchen_status in ["PENDING", "ACCEPTED", "PREPARING"]) or
                 (has_b_items and order.bar_status in ["PENDING", "ACCEPTED", "PREPARING"]) or
                 (has_h_items and order.hookah_status in ["PENDING", "ACCEPTED", "PREPARING"])
             )
-            if not has_pending:
+            if not has_pending or is_manager_or_owner:
                 order.status = target_status if target_status in ["DELIVERED", "SERVED"] else "COMPLETED"
                 order.delivery_status = "DELIVERED"
                 order.delivered_at = datetime.now(timezone.utc)
