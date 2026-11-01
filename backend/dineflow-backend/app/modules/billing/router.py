@@ -1176,7 +1176,7 @@ async def close_table_settlement(
 
     bill.status = "CLOSED"
 
-    # Close Table Session
+    # Close Table Session and mark session orders as PAID
     if bill.table_session_id:
         sess_stmt = select(TableSession).where(TableSession.id == bill.table_session_id)
         sess_res = await db.execute(sess_stmt)
@@ -1185,6 +1185,12 @@ async def close_table_settlement(
             sess.status = "CLOSED"
             sess.session_closed_at = datetime.now(timezone.utc)
             sess.closed_by_waiter_name = closed_by
+
+        await db.execute(
+            update(Order)
+            .where(Order.restaurant_id == target_rest_id, Order.table_session_id == bill.table_session_id)
+            .values(payment_status="PAID")
+        )
 
     # Free up table
     tbl_stmt = select(Table).where(Table.restaurant_id == target_rest_id, Table.table_number == bill.table_number)

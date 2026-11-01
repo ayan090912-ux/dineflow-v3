@@ -2813,7 +2813,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 } : undefined);
                 const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
                 const tableOrders = activeSessionId
-                  ? orders.filter((o) => (o.tableSessionId === activeSessionId || (matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+                  ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
                   : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                 const matchingBill = activeSessionId
                   ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
@@ -4108,7 +4108,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             restaurantId: currentRestaurant?.id || ''
                           } : undefined);
                           const tableOrders = activeSessionId
-                            ? orders.filter((o) => (o.tableSessionId === activeSessionId || (matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+                            ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
                             : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                           const activeBill = activeSessionId
                             ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')

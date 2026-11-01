@@ -968,32 +968,32 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const isHookahTheme = currentMenuTab === 'HOOKAH';
 
   return (
-    <div className="min-h-screen font-sans pb-52 w-full max-w-full sm:max-w-md mx-auto relative sm:border-x border-white/[0.08] bg-[#080A0D] text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border min-w-0">
+    <div className="min-h-screen font-sans pb-52 w-full max-w-full sm:max-w-md mx-auto relative sm:border-x border-white/[0.12] liquid-glass-viewport text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border min-w-0">
       {/* Dynamic Ambient Background Glows - strictly bounded to viewport width */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 w-full max-w-full">
         {/* Top Radiant Atmospheric Amber Halo */}
         <div
-          className={`absolute -top-16 left-1/2 -translate-x-1/2 w-[360px] h-[360px] rounded-full blur-[100px] transition-all duration-700 pointer-events-none opacity-60 ${
+          className={`absolute -top-12 left-1/2 -translate-x-1/2 w-[380px] h-[380px] rounded-full blur-[90px] transition-all duration-700 pointer-events-none opacity-80 ${
             isHookahTheme
-              ? 'bg-gradient-to-b from-amber-500/25 via-orange-600/15 to-transparent'
+              ? 'bg-gradient-to-b from-amber-500/35 via-orange-600/25 to-transparent'
               : isBarTheme
-              ? 'bg-gradient-to-b from-purple-600/30 via-indigo-600/15 to-transparent'
-              : 'bg-gradient-to-b from-amber-500/25 via-amber-400/12 to-transparent'
+              ? 'bg-gradient-to-b from-purple-600/40 via-indigo-600/25 to-transparent'
+              : 'bg-gradient-to-b from-amber-500/35 via-amber-400/20 to-transparent'
           }`}
         />
         {/* Mid-Screen Ambient Luminous Light Well */}
         <div
-          className={`absolute top-[40%] -right-[20%] w-[280px] h-[320px] rounded-full blur-[110px] pointer-events-none opacity-45 ${
+          className={`absolute top-[35%] -right-[15%] w-[320px] h-[360px] rounded-full blur-[95px] pointer-events-none opacity-65 ${
             isHookahTheme
-              ? 'bg-gradient-to-tr from-amber-600/20 via-rose-500/10 to-transparent'
+              ? 'bg-gradient-to-tr from-amber-600/30 via-rose-500/20 to-transparent'
               : isBarTheme
-              ? 'bg-gradient-to-tr from-indigo-500/25 via-pink-500/10 to-transparent'
-              : 'bg-gradient-to-tr from-amber-500/20 via-orange-400/10 to-transparent'
+              ? 'bg-gradient-to-tr from-indigo-500/35 via-pink-500/20 to-transparent'
+              : 'bg-gradient-to-tr from-amber-500/30 via-orange-400/20 to-transparent'
           }`}
         />
         {/* Lower Canvas Spatial Depth Orb */}
         <div
-          className="absolute top-[70%] -left-[20%] w-[300px] h-[320px] rounded-full blur-[110px] bg-gradient-to-tr from-emerald-500/10 via-amber-500/10 to-transparent pointer-events-none opacity-40"
+          className="absolute top-[65%] -left-[15%] w-[320px] h-[360px] rounded-full blur-[100px] bg-gradient-to-tr from-emerald-500/20 via-amber-500/20 to-transparent pointer-events-none opacity-60"
         />
       </div>
 
@@ -1012,7 +1012,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           alt={theme.restaurantName}
           className="w-full h-full object-cover brightness-[0.65] transition-all duration-700"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080A0D] via-[#080A0D]/65 to-black/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07090D] via-[#07090D]/60 to-black/30" />
 
         {/* Top Header Floating Liquid-Glass Badges */}
         <div className="absolute top-3.5 left-3.5 right-3.5 z-10 flex items-center justify-between">
@@ -1060,11 +1060,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       {/* Quick Action Sticky Liquid-Glass Dock */}
       {currentRestaurant?.hasTables !== false ? (
-        <div className="sticky top-0 z-30 px-3 py-2 bg-[#080A0D]/90 backdrop-blur-2xl border-b border-white/[0.08] shadow-lg w-full max-w-full box-border">
-          <div className="grid grid-cols-3 gap-1 sm:gap-1.5 liquid-glass p-1 rounded-2xl w-full min-w-0 box-border overflow-hidden">
+        <div className="sticky top-0 z-30 px-3.5 py-2.5 bg-[#07090D]/85 backdrop-blur-2xl border-b border-white/[0.10] shadow-xl w-full max-w-full box-border">
+          <div className="grid grid-cols-3 gap-1.5 liquid-glass-strong p-1 rounded-2xl w-full min-w-0 box-border overflow-hidden shadow-lg border border-white/15">
             <button
               onClick={handleCallWaiter}
-              className="h-10 px-1 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 overflow-hidden"
+              className="h-10 px-1 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.10] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 min-w-0 overflow-hidden"
             >
               <PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="truncate">Call Staff</span>
@@ -1072,10 +1072,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setIsOrderStatusModalOpen(true)}
-              className={`h-10 px-1 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 overflow-hidden ${
+              className={`h-10 px-1 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 min-w-0 overflow-hidden ${
                 customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0
-                  ? 'bg-amber-500/15 border border-amber-500/35 text-amber-300 shadow-[0_0_12px_rgba(245,166,35,0.2)]'
-                  : 'text-white/85 hover:text-white hover:bg-white/[0.08]'
+                  ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,166,35,0.25)]'
+                  : 'text-white/85 hover:text-white hover:bg-white/[0.10]'
               }`}
             >
               <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -1089,7 +1089,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setIsBillModalOpen(true)}
-              className="h-10 px-1 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 overflow-hidden"
+              className="h-10 px-1 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.10] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 min-w-0 overflow-hidden"
             >
               <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span className="truncate">Bill</span>
@@ -1097,25 +1097,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           </div>
         </div>
       ) : (
-        <div className="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.08] text-white/70 flex items-center justify-between text-xs font-mono sticky top-0 z-30 backdrop-blur-xl w-full max-w-full box-border">
+        <div className="px-4 py-2.5 bg-white/[0.04] border-b border-white/[0.10] text-white/70 flex items-center justify-between text-xs font-mono sticky top-0 z-30 backdrop-blur-2xl w-full max-w-full box-border">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
             <span>Counter Pickup Ordering</span>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08]">PICKUP</span>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.06] border border-white/[0.10]">PICKUP</span>
         </div>
       )}
 
       {/* Food ⇄ Bar ⇄ Hookah Segmented Switcher */}
       {(hasBarDivision || hasHookahDivision) && (
-        <div className="px-3.5 pt-3 pb-1 relative z-10 w-full max-w-full box-border">
-          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1 liquid-glass-strong rounded-2xl text-xs font-medium gap-1 w-full min-w-0 box-border overflow-hidden`}>
+        <div className="px-3.5 pt-3.5 pb-1 relative z-10 w-full max-w-full box-border">
+          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1.5 liquid-glass-strong rounded-2xl text-xs font-medium gap-1.5 w-full min-w-0 box-border overflow-hidden border border-white/18 shadow-xl`}>
             <button
               onClick={() => handleSwitchMenuTab('FOOD')}
               className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 overflow-hidden ${
                 currentMenuTab === 'FOOD'
-                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-[0_4px_16px_rgba(245,166,35,0.35)]'
-                  : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
+                  ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-slate-950 shadow-[0_4px_16px_rgba(245,166,35,0.45)] border-t border-white/50'
+                  : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
               }`}
             >
               <Utensils className="w-3.5 h-3.5 shrink-0" />
@@ -1127,14 +1127,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 onClick={() => handleSwitchMenuTab('BAR')}
                 className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 overflow-hidden ${
                   currentMenuTab === 'BAR'
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-[0_4px_16px_rgba(168,85,247,0.35)]'
-                    : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
+                    ? 'bg-gradient-to-r from-purple-500 via-purple-600 to-indigo-600 text-white shadow-[0_4px_16px_rgba(168,85,247,0.45)] border-t border-white/40'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
                 }`}
               >
                 <Wine className="w-3.5 h-3.5 text-purple-200 shrink-0" />
                 <span className="truncate">Bar</span>
                 <span className={`text-[9px] px-1 py-0.2 rounded font-mono shrink-0 ${
-                  currentMenuTab === 'BAR' ? 'bg-black/30 text-white' : 'bg-purple-500/15 text-purple-300 border border-purple-500/25'
+                  currentMenuTab === 'BAR' ? 'bg-black/30 text-white' : 'bg-purple-500/20 text-purple-200 border border-purple-500/30'
                 }`}>
                   21+
                 </span>
@@ -1146,14 +1146,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 onClick={() => handleSwitchMenuTab('HOOKAH')}
                 className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 overflow-hidden ${
                   currentMenuTab === 'HOOKAH'
-                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-[0_4px_16px_rgba(217,119,6,0.35)]'
-                    : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
+                    ? 'bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 text-white shadow-[0_4px_16px_rgba(244,63,94,0.45)] border-t border-white/40'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
                 }`}
               >
                 <Flame className="w-3.5 h-3.5 text-amber-200 shrink-0" />
                 <span className="truncate">Hookah</span>
                 <span className={`text-[9px] px-1 py-0.2 rounded font-mono shrink-0 ${
-                  currentMenuTab === 'HOOKAH' ? 'bg-black/30 text-white' : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
+                  currentMenuTab === 'HOOKAH' ? 'bg-black/30 text-white' : 'bg-amber-500/20 text-amber-200 border border-amber-500/30'
                 }`}>
                   18+
                 </span>
@@ -1210,10 +1210,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       )}
 
       {/* Menu Filter Tabs & Search */}
-      <div className="p-3.5 space-y-3 relative z-10 w-full max-w-full box-border">
-        {/* Search Input with 16px font-size to prevent iOS auto-zoom */}
-        <div className="relative liquid-glass rounded-2xl border border-white/[0.10] focus-within:border-amber-400/60 focus-within:shadow-[0_0_16px_rgba(245,166,35,0.15)] transition-all w-full box-border">
-          <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-white/40" />
+      <div className="p-3.5 space-y-3.5 relative z-10 w-full max-w-full box-border">
+        {/* Search Input with Frosted Liquid-Glass Shell */}
+        <div className="relative liquid-glass rounded-2xl border border-white/20 focus-within:border-amber-400 focus-within:shadow-[0_0_24px_rgba(245,158,11,0.3)] transition-all duration-300 w-full box-border shadow-md">
+          <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-white/50" />
           <input
             type="text"
             value={searchQuery}
@@ -1225,12 +1225,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 ? 'Search shisha flavours, blends...'
                 : 'Search dishes, appetizers, desserts...'
             }
-            className="w-full bg-transparent text-white text-[16px] sm:text-xs rounded-2xl pl-10 pr-9 py-2.5 focus:outline-none placeholder:text-white/30 transition-colors"
+            className="w-full bg-transparent text-white text-[16px] sm:text-xs rounded-2xl pl-10 pr-9 py-2.5 focus:outline-none placeholder:text-white/40 transition-colors font-medium"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-3 text-white/40 hover:text-white p-0.5"
+              className="absolute right-3 top-3 text-white/50 hover:text-white p-0.5"
               aria-label="Clear search"
             >
               <X className="w-3.5 h-3.5" />
@@ -1240,11 +1240,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
         {/* Dietary Veg/Non-Veg Quick Filter */}
         {!isBarTheme && (
-          <div className="flex items-center gap-1 p-1 liquid-glass rounded-xl text-xs w-full min-w-0 box-border overflow-hidden">
+          <div className="flex items-center gap-1.5 p-1 liquid-glass-strong rounded-2xl text-xs w-full min-w-0 box-border overflow-hidden border border-white/18 shadow-md">
             <button
               onClick={() => setDietaryFilter('ALL')}
-              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors text-center truncate min-w-0 ${
-                dietaryFilter === 'ALL' ? 'bg-white/[0.10] text-white font-semibold' : 'text-white/40 hover:text-white'
+              className={`flex-1 py-1.5 px-2 rounded-xl font-medium transition-all text-center truncate min-w-0 ${
+                dietaryFilter === 'ALL'
+                  ? 'bg-white/15 text-white font-bold shadow-sm border border-white/20'
+                  : 'text-white/50 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
               All Dishes
@@ -1252,42 +1254,42 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setDietaryFilter('VEG')}
-              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate min-w-0 ${
+              className={`flex-1 py-1.5 px-2 rounded-xl font-medium transition-all flex items-center justify-center gap-1.5 truncate min-w-0 ${
                 dietaryFilter === 'VEG'
-                  ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
-                  : 'text-white/40 hover:text-emerald-400'
+                  ? 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-400/50 shadow-[0_0_12px_rgba(52,211,153,0.3)]'
+                  : 'text-white/50 hover:text-emerald-400 hover:bg-white/[0.06]'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
               <span className="truncate">Veg Only</span>
             </button>
 
             <button
               onClick={() => setDietaryFilter('NON_VEG')}
-              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate min-w-0 ${
+              className={`flex-1 py-1.5 px-2 rounded-xl font-medium transition-all flex items-center justify-center gap-1.5 truncate min-w-0 ${
                 dietaryFilter === 'NON_VEG'
-                  ? 'bg-rose-500/15 text-rose-300 font-semibold border border-rose-500/30'
-                  : 'text-white/40 hover:text-rose-400'
+                  ? 'bg-rose-500/25 text-rose-300 font-bold border border-rose-400/50 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                  : 'text-white/50 hover:text-rose-400 hover:bg-white/[0.06]'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
+              <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0 shadow-[0_0_8px_rgba(244,63,94,0.9)]" />
               <span className="truncate">Non-Veg</span>
             </button>
           </div>
         )}
 
         {/* Categories Horizontal Scroll with Liquid-Glass Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth w-full max-w-full min-w-0">
+        <div className="flex gap-2 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth w-full max-w-full min-w-0">
           <button
             onClick={() => setActiveCategory('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 shrink-0 ${
+            className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all duration-300 shrink-0 ${
               activeCategory === 'all'
                 ? isHookahTheme
-                  ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-[0_2px_12px_rgba(217,119,6,0.35)]'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-[0_4px_16px_rgba(217,119,6,0.45)] border-t border-white/50'
                   : isBarTheme
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-[0_2px_12px_rgba(168,85,247,0.35)]'
-                  : 'bg-amber-500 text-slate-950 shadow-[0_2px_12px_rgba(245,166,35,0.35)]'
-                : 'liquid-glass-pill text-white/60 hover:text-white'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-[0_4px_16px_rgba(168,85,247,0.45)] border-t border-white/50'
+                  : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-slate-950 shadow-[0_4px_16px_rgba(245,158,11,0.45)] border-t border-white/50'
+                : 'liquid-glass-pill text-white/70 hover:text-white border border-white/18'
             }`}
           >
             All {isHookahTheme ? 'Flavours' : isBarTheme ? 'Beverages' : 'Categories'}
@@ -1326,14 +1328,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 shrink-0 ${
+              className={`px-4 py-2 rounded-2xl text-xs whitespace-nowrap transition-all duration-300 shrink-0 ${
                 activeCategory === cat.id
                   ? isHookahTheme
-                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white font-semibold shadow-[0_2px_12px_rgba(217,119,6,0.35)]'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white font-extrabold shadow-[0_4px_16px_rgba(217,119,6,0.45)] border-t border-white/50'
                     : isBarTheme
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold shadow-[0_2px_12px_rgba(168,85,247,0.35)]'
-                    : 'bg-amber-500 text-slate-950 font-bold shadow-[0_2px_12px_rgba(245,166,35,0.35)]'
-                  : 'liquid-glass-pill text-white/60 hover:text-white'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold shadow-[0_4px_16px_rgba(168,85,247,0.45)] border-t border-white/50'
+                    : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-slate-950 font-extrabold shadow-[0_4px_16px_rgba(245,158,11,0.45)] border-t border-white/50'
+                  : 'liquid-glass-pill text-white/70 hover:text-white border border-white/18'
               }`}
             >
               {cat.name}
@@ -1341,8 +1343,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           ))}
         </div>
 
-        {/* Menu Items List with Liquid Glass Cards */}
-        <div className="space-y-3 w-full max-w-full box-border">
+        {/* Menu Items List with Elevated Liquid-Glass Cards */}
+        <div className="space-y-3.5 w-full max-w-full box-border">
           {filteredItems.map((item) => {
             const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
             const isAvailable = item.isAvailable !== false;
@@ -1353,10 +1355,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             return (
               <div
                 key={item.id}
-                className={`p-3 sm:p-4 flex gap-2.5 sm:gap-3 transition-all duration-300 rounded-2xl liquid-glass-card shadow-sm w-full max-w-full min-w-0 box-border overflow-hidden ${
+                className={`p-3 sm:p-4 flex gap-2.5 sm:gap-3 transition-all duration-300 rounded-3xl liquid-glass-card shadow-lg w-full max-w-full min-w-0 box-border overflow-hidden border border-white/18 hover:border-white/30 hover:shadow-[0_16px_40px_rgba(0,0,0,0.6)] ${
                   isAvailable
-                    ? 'hover:border-white/[0.18] hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)]'
-                    : 'opacity-50 border-white/[0.04]'
+                    ? 'active:scale-[0.99]'
+                    : 'opacity-50 border-white/[0.06]'
                 }`}
               >
                 <div className="relative shrink-0">
@@ -1364,35 +1366,38 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     src={item.image}
                     alt={item.name}
                     loading="lazy"
-                    className="w-18 h-18 sm:w-24 sm:h-24 rounded-xl object-cover border border-white/[0.08] bg-[#11151B] shrink-0"
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-white/20 shadow-md bg-[#11151B] shrink-0"
                   />
                   {item.isAlcoholic && (
-                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-white/90 border border-white/10 backdrop-blur-sm">
+                    <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-md text-[9px] font-mono bg-black/85 text-purple-200 border border-purple-500/40 backdrop-blur-md font-bold shadow-md">
                       {item.alcoholPercentage || 40}% ABV
                     </span>
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0 flex flex-col justify-between overflow-hidden">
+                <div className="flex-1 min-w-0 flex flex-col justify-between overflow-hidden py-0.5">
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         {!isBarTheme && !item.isAlcoholic && (
                           <span
-                            className={`inline-flex items-center justify-center border p-0.5 rounded-[3px] shrink-0 ${
-                              isVeg ? 'border-emerald-500/70 bg-emerald-500/10' : 'border-rose-500/70 bg-rose-500/10'
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold font-mono shrink-0 ${
+                              isVeg
+                                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                                : 'border-rose-500/40 bg-rose-500/15 text-rose-300'
                             }`}
                             title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${isVeg ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                            <span className="hidden sm:inline">{isVeg ? 'VEG' : 'NON-VEG'}</span>
                           </span>
                         )}
-                        <h3 className="text-xs sm:text-sm font-semibold text-white tracking-tight truncate">{item.name}</h3>
+                        <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">{item.name}</h3>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
                         {!isAvailable && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">
+                          <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-300 border border-rose-500/40 font-bold">
                             SOLD OUT
                           </span>
                         )}
@@ -1400,18 +1405,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     </div>
 
                     {item.brand && (
-                      <p className="text-[10px] text-amber-400/90 font-mono mt-0.5 truncate">{item.brand}</p>
+                      <p className="text-[10px] text-amber-300/90 font-mono mt-0.5 truncate uppercase tracking-wider">{item.brand}</p>
                     )}
-                    <p className="text-xs text-white/50 line-clamp-2 mt-1 leading-relaxed">{item.description}</p>
+                    <p className="text-xs text-white/60 line-clamp-2 mt-1 leading-relaxed font-normal">{item.description}</p>
                     {(item.glassSize || item.bottleSize) && (
-                      <p className="text-[10px] text-white/40 font-mono mt-0.5 truncate">
+                      <p className="text-[10px] text-white/45 font-mono mt-0.5 truncate">
                         Serving: {item.glassSize || item.bottleSize}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.06] gap-1.5 min-w-0">
-                    <span className="text-xs sm:text-sm font-mono font-bold text-amber-400 shrink-0">
+                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.08] gap-1.5 min-w-0">
+                    <span className="text-sm sm:text-base font-mono font-extrabold text-amber-300 shrink-0 tracking-tight">
                       {formatPrice(item.price)}
                     </span>
 
@@ -1419,25 +1424,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                       {isAvailable ? (
                         inCart ? (
                           <div
-                            className="flex items-center gap-1 liquid-glass-pill border-amber-500/40 rounded-xl p-0.5 shadow-inner shrink-0"
+                            className="flex items-center gap-1 liquid-glass-pill border-amber-400/60 rounded-xl p-1 shadow-md shrink-0"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
                               onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity - 1)}
-                              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-300 hover:bg-white/10 active:scale-90 transition-all"
                               aria-label="Decrease quantity"
                             >
-                              <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              <Minus className="w-3.5 h-3.5 stroke-[3]" />
                             </button>
-                            <span className="font-mono text-xs font-bold text-white min-w-[16px] text-center">
+                            <span className="font-mono text-xs font-extrabold text-white min-w-[18px] text-center">
                               {inCart.quantity}
                             </span>
                             <button
                               onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity + 1)}
-                              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-300 hover:bg-white/10 active:scale-90 transition-all"
                               aria-label="Increase quantity"
                             >
-                              <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              <Plus className="w-3.5 h-3.5 stroke-[3]" />
                             </button>
                           </div>
                         ) : (
@@ -1446,27 +1451,27 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                               e.stopPropagation();
                               handleDirectAddItem(item);
                             }}
-                            className={`h-7 sm:h-8 px-2.5 sm:px-3 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all duration-300 active:scale-95 shadow-sm shrink-0 whitespace-nowrap ${
+                            className={`h-8 sm:h-9 px-3 sm:px-4 min-w-[64px] rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 shadow-md shrink-0 whitespace-nowrap border-t border-white/50 ${
                               isJustAdded
-                                ? 'bg-emerald-500 text-slate-950 font-bold scale-105 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
-                                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold hover:shadow-[0_2px_12px_rgba(245,166,35,0.3)]'
+                                ? 'bg-emerald-500 text-slate-950 scale-105 shadow-[0_0_16px_rgba(16,185,129,0.6)]'
+                                : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 shadow-[0_4px_16px_rgba(245,158,11,0.45)]'
                             }`}
                           >
                             {isJustAdded ? (
                               <>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
                                 <span>Added</span>
                               </>
                             ) : (
                               <>
-                                <Plus className="w-3.5 h-3.5" />
+                                <Plus className="w-3.5 h-3.5 stroke-[3]" />
                                 <span>{hasOptions ? 'Options' : 'Add'}</span>
                               </>
                             )}
                           </button>
                         )
                       ) : (
-                        <span className="text-[10px] font-mono py-1 px-2 rounded-xl font-medium bg-white/[0.04] text-white/40 border border-white/[0.06] cursor-not-allowed shrink-0">
+                        <span className="text-[10px] font-mono py-1 px-2.5 rounded-xl font-medium bg-white/[0.04] text-white/40 border border-white/[0.06] cursor-not-allowed shrink-0">
                           Sold Out
                         </span>
                       )}

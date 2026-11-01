@@ -728,7 +728,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       (s) => (req.tableSessionId && s.id === req.tableSessionId) || (s.status !== 'CLOSED' && matchTableNumber(s.tableNumber, req.tableNumber))
     );
     const tableOrders = sess
-      ? orders.filter((o) => (o.tableSessionId === sess.id || (matchTableNumber(o.tableNumber, req.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+      ? orders.filter((o) => (o.tableSessionId === sess.id || (!o.tableSessionId && matchTableNumber(o.tableNumber, req.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
       : orders.filter((o) => matchTableNumber(o.tableNumber, req.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
     if (tableOrders.length > 0) {
       return calculateAuthoritativeSessionBill(tableOrders, restaurant).grandTotal;
@@ -1672,7 +1672,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
                     : undefined;
                   const tableOrders = activeSession
-                    ? orders.filter((o) => (o.tableSessionId === activeSession.id || (matchTableNumber(o.tableNumber, table.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+                    ? orders.filter((o) => (o.tableSessionId === activeSession.id || (!o.tableSessionId && matchTableNumber(o.tableNumber, table.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
                     : orders.filter((o) => matchTableNumber(o.tableNumber, table.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
                   const authCalc = calculateAuthoritativeSessionBill(tableOrders, restaurant, matchingBill);
                   const itemCount = authCalc.totalItems;
@@ -2088,7 +2088,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               (s) => s.tableId === selectedTableForView.id && s.status === 'ACTIVE'
             );
             const sessionOrders = activeSession
-              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (!o.tableSessionId && matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
               : orders.filter((o) => matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
             const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID') : undefined;
             const authCalc = calculateAuthoritativeSessionBill(sessionOrders, restaurant, matchingBill);
@@ -2201,7 +2201,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               (s) => (s.tableId === selectedTableForClose.id || matchTableNumber(s.tableNumber, selectedTableForClose.tableNumber)) && s.status !== 'CLOSED'
             );
             const sessionOrders = activeSession
-              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (!o.tableSessionId && matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
               : orders.filter((o) => matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
             const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID') : undefined;
             const authCalc = calculateAuthoritativeSessionBill(sessionOrders, restaurant, matchingBill);
