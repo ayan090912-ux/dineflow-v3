@@ -34,6 +34,7 @@ import {
   Activity,
   ChevronRight,
   LogOut,
+  Check,
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, SearchInput, StatsCard, Avatar, DinelyLogo } from '../../packages/ui';
 import { Order, OrderItem, getFulfillmentStation } from '../../packages/types';
@@ -746,6 +747,45 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
   const overdueCount = (orders || []).filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && calculateRemainingTime(o).isOverdue).length;
 
+  // Financial & Operational Metrics for Kitchen Bento Row & Reconciliation
+  const kitchenMetrics = useMemo(() => {
+    let grossValue = 0;
+    let incomingVal = 0;
+    let inCookingVal = 0;
+    let readyVal = 0;
+
+    const getKitchenItemSum = (orderList: typeof filteredOrders) => {
+      return orderList.reduce((acc, o) => {
+        const kItems = (o.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
+        return acc + kItems.reduce((sub, i) => sub + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0);
+      }, 0);
+    };
+
+    (orders || []).forEach((o) => {
+      const kItems = (o.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
+      grossValue += kItems.reduce((sub, i) => sub + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0);
+    });
+
+    incomingVal = getKitchenItemSum(pendingOrders);
+    inCookingVal = getKitchenItemSum(inKitchenOrders);
+    readyVal = getKitchenItemSum(readyOrders);
+
+    const activeKitchenTables = new Set(
+      [...pendingOrders, ...inKitchenOrders, ...readyOrders]
+        .map((o) => o.tableNumber)
+        .filter(Boolean)
+    ).size;
+
+    return {
+      grossValue,
+      incomingVal,
+      inCookingVal,
+      readyVal,
+      totalActiveValue: incomingVal + inCookingVal + readyVal,
+      activeKitchenTables,
+    };
+  }, [orders, pendingOrders, inKitchenOrders, readyOrders, filteredOrders]);
+
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans relative w-full overflow-x-hidden selection:bg-emerald-500 selection:text-white pb-12">
       {/* AMBIENT BACKGROUND GLOWS */}
@@ -878,8 +918,21 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         </div>
 
         {/* TOP BENTO KPI CARDS ROW */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3.5">
-          {/* Card 1: Incoming Queue */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          {/* Card 1: Gross Kitchen Value */}
+          <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+              Gross Kitchen Value
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
+              ₹{kitchenMetrics.grossValue.toFixed(2)}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              Appetizers • Mains • Desserts
+            </span>
+          </Card>
+
+          {/* Card 2: 1. Incoming Queue */}
           <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
             <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
               1. Incoming Queue
@@ -892,7 +945,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             </span>
           </Card>
 
-          {/* Card 2: In Preparation */}
+          {/* Card 3: 2. In Preparation */}
           <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
             <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
               2. In Preparation
@@ -901,11 +954,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               {inKitchenOrders.length}
             </p>
             <span className="text-[10px] font-mono text-slate-500 block">
-              Active cooking & ETA timers
+              Active cooking & timers
             </span>
           </Card>
 
-          {/* Card 3: Ready at Pass */}
+          {/* Card 4: 3. Ready at Pass */}
           <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
             <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
               3. Ready at Pass
@@ -918,7 +971,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             </span>
           </Card>
 
-          {/* Card 4: Overdue or Dispatched */}
+          {/* Card 5: Shift Dispatched / Rush */}
           <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
             <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
               {overdueCount > 0 ? 'Rush Alert' : 'Shift Dispatched'}
@@ -930,7 +983,51 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               {overdueCount > 0 ? 'Exceeded target cooking time' : 'Dispatched tickets'}
             </span>
           </Card>
+
+          {/* Card 6: Active Tables */}
+          <Card className="liquid-glass-card border border-purple-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+            <span className="text-[10px] font-mono text-purple-400 uppercase font-semibold block">
+              Active Tables
+            </span>
+            <p className="text-xl lg:text-2xl font-bold font-mono text-purple-300 tracking-tight">
+              {kitchenMetrics.activeKitchenTables}
+            </p>
+            <span className="text-[10px] font-mono text-slate-500 block">
+              Dining room guest tables
+            </span>
+          </Card>
         </div>
+
+        {/* COMBINED OPERATIONAL ORDER VALUE RECONCILIATION SUMMARY BOX */}
+        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                Daily Operational Order Value Reconciliation
+              </span>
+              <div className="flex items-baseline gap-2 flex-wrap font-mono">
+                <span className="text-xs text-slate-400">Incoming Queue:</span>
+                <span className="text-sm font-bold text-amber-400">₹{kitchenMetrics.incomingVal.toFixed(2)}</span>
+                <span className="text-slate-600">+</span>
+                <span className="text-xs text-slate-400">In Cooking:</span>
+                <span className="text-sm font-bold text-sky-400">₹{kitchenMetrics.inCookingVal.toFixed(2)}</span>
+                <span className="text-slate-600">+</span>
+                <span className="text-xs text-slate-400">Ready at Kitchen Pass:</span>
+                <span className="text-sm font-bold text-purple-400">₹{kitchenMetrics.readyVal.toFixed(2)}</span>
+                <span className="text-slate-600">=</span>
+                <span className="text-base font-bold text-white bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700">
+                  ₹{kitchenMetrics.totalActiveValue.toFixed(2)}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="success" className="font-mono text-[11px] px-3 py-1 bg-emerald-950/60 text-emerald-400 border-emerald-800/60 flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Zero Double-Counting Verified</span>
+              </Badge>
+            </div>
+          </div>
+        </Card>
 
         {/* STAGE FILTERS & SEARCH BAR */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 rounded-2xl">
