@@ -433,7 +433,7 @@ async def get_running_table_bill(
         s_stmt = select(TableSession).where(
             TableSession.restaurant_id == rest.id,
             TableSession.table_number.in_(t_candidates),
-            TableSession.status == "ACTIVE"
+            TableSession.status.in_(["ACTIVE", "PAID"])
         ).order_by(TableSession.session_started_at.desc()).limit(1)
         s_res = await db.execute(s_stmt)
         active_sess = s_res.scalar_one_or_none()

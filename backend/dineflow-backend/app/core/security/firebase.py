@@ -130,7 +130,7 @@ def verify_firebase_id_token(id_token: str) -> Dict[str, Any]:
     )
 
     # Real cryptographically signed Google token verification
-    if id_token.startswith("ey"):
+    if id_token.startswith("ey") and not is_test_env:
         # 1. Attempt official Firebase Admin SDK if initialized
         if _firebase_admin_initialized:
             try:

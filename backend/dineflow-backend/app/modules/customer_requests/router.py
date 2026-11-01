@@ -161,6 +161,13 @@ async def get_customer_requests(
     if not canonical_rest_id:
         return []
 
+    # Strict security: Unauthenticated callers without table session scope are rejected with 401
+    if not caller.is_authenticated and not (table_session_id or table_id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to view restaurant service requests"
+        )
+
     # If caller has authentication, enforce tenant authorization
     if caller.is_authenticated and not caller.is_admin:
         caller_tid = getattr(caller, "restaurant_id", None) or getattr(caller, "tenant_id", None)

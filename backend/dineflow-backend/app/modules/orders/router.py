@@ -476,22 +476,37 @@ async def create_order(
                         detail=f"Table '{payload.tableId}' does not belong to restaurant '{restaurant.id}'"
                     )
                 # Fallback: check if payload.tableId or tbl_num matches table_number
+                t_variants = get_table_variants(tbl_num)
+                candidates = list(set(t_variants + ([payload.tableId] if payload.tableId else [])))
                 res_tbl_check = await db.execute(select(Table).where(
                     (Table.restaurant_id == restaurant.id) &
-                    ((Table.table_number == payload.tableId) | (Table.table_number == tbl_num) | (Table.table_number == f"Table {tbl_num}"))
+                    (Table.table_number.in_(candidates))
                 ))
                 existing_tbl = res_tbl_check.scalar_one_or_none()
         else:
+            t_variants = get_table_variants(tbl_num)
             res_tbl_check = await db.execute(select(Table).where(
                 (Table.restaurant_id == restaurant.id) & 
-                ((Table.table_number == tbl_num) | (Table.table_number == f"Table {tbl_num}"))
+                (Table.table_number.in_(t_variants))
             ))
             existing_tbl = res_tbl_check.scalar_one_or_none()
+
+        if not existing_tbl and tbl_num:
+            # Auto-create table so TableSession NOT NULL foreign key constraint is guaranteed
+            existing_tbl = Table(
+                id=f"tbl-{restaurant.id}-{tbl_num.lower().replace(' ', '_')}",
+                restaurant_id=restaurant.id,
+                table_number=tbl_num,
+                capacity=4,
+                status="OCCUPIED"
+            )
+            db.add(existing_tbl)
+            await db.flush()
 
         actual_session_id = None
         if existing_tbl:
             tbl_id = existing_tbl.id
-            tbl_num = existing_tbl.table_number
+            tbl_num = (payload.tableNumber or "").strip() or existing_tbl.table_number
         else:
             tbl_id = None
 
@@ -814,21 +829,6 @@ async def create_order(
                 target_code = f"C{daily_seq:04d}"
         pickup_code = target_code
 
-        # Rapid-tap duplicate guard for event orders
-        if payload.eventId and (tbl_id or tbl_num):
-            dup_cutoff = now_utc - timedelta(seconds=10)
-            dup_stmt = select(Order).where(
-                Order.restaurant_id == restaurant.id,
-                Order.event_id == payload.eventId,
-                Order.created_at >= dup_cutoff,
-                Order.total_amount == total
-            )
-            dup_res = await db.execute(dup_stmt)
-            for cand in dup_res.scalars().all():
-                if cand.table_number == tbl_num or (tbl_id and cand.table_id == tbl_id):
-                    print(f"[ORDER_RAPID_DUPLICATE_GUARD] Returning existing order {cand.id} to prevent double tap")
-                    return format_order_response(cand, hide_financials=(is_wedding_event and not is_staff_caller))
-
         # Query active OPEN business day for authoritative attribution (cached for 15s)
         cached_bday = _ORDER_BDAY_CACHE.get(restaurant.id)
         if cached_bday and (now_mono - cached_bday[0] < _ORDER_BDAY_CACHE_TTL):
@@ -918,6 +918,21 @@ async def create_order(
             eff_order_type = "EVENT_ORDER" if (evt_obj.event_type and evt_obj.event_type != "WEDDING") else "WEDDING_EVENT"
             eff_event_id = evt_obj.id
             eff_event_name = evt_obj.title
+
+        # Rapid-tap duplicate guard for event orders (after event validity is confirmed)
+        if payload.eventId and (tbl_id or tbl_num):
+            dup_cutoff = now_utc - timedelta(seconds=10)
+            dup_stmt = select(Order).where(
+                Order.restaurant_id == restaurant.id,
+                Order.event_id == payload.eventId,
+                Order.created_at >= dup_cutoff,
+                Order.total_amount == total
+            )
+            dup_res = await db.execute(dup_stmt)
+            for cand in dup_res.scalars().all():
+                if cand.table_number == tbl_num or (tbl_id and cand.table_id == tbl_id):
+                    print(f"[ORDER_RAPID_DUPLICATE_GUARD] Returning existing order {cand.id} to prevent double tap")
+                    return format_order_response(cand, hide_financials=(is_wedding_event and not is_staff_caller))
 
         new_order = Order(
             id=order_id,
@@ -1624,7 +1639,7 @@ async def update_order_status(
                 (has_h_items and order.hookah_status in ["PENDING", "ACCEPTED", "PREPARING"])
             )
             if not has_pending:
-                order.status = "COMPLETED"
+                order.status = target_status if target_status in ["DELIVERED", "SERVED"] else "COMPLETED"
                 order.delivery_status = "DELIVERED"
                 order.delivered_at = datetime.now(timezone.utc)
                 if has_k_items:
@@ -1659,7 +1674,7 @@ async def update_order_status(
             order.status = "CANCELLED"
             order.delivery_status = "CANCELLED"
         elif k_comp and b_comp and h_comp:
-            order.status = "COMPLETED"
+            order.status = target_status if target_status in ["DELIVERED", "SERVED"] else "COMPLETED"
             order.delivery_status = "DELIVERED"
             if not order.delivered_at:
                 order.delivered_at = datetime.now(timezone.utc)

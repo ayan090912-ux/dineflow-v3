@@ -968,7 +968,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const isHookahTheme = currentMenuTab === 'HOOKAH';
 
   return (
-    <div className="min-h-screen font-sans pb-52 w-full max-w-md mx-auto relative border-x border-white/[0.08] bg-[#080A0D] text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border">
+    <div className="min-h-screen font-sans pb-52 w-full max-w-full sm:max-w-md mx-auto relative sm:border-x border-white/[0.08] bg-[#080A0D] text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border min-w-0">
       {/* Dynamic Ambient Background Glows - strictly bounded to viewport width */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 w-full max-w-full">
         <div
@@ -1046,10 +1046,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Quick Action Sticky Liquid-Glass Dock */}
       {currentRestaurant?.hasTables !== false ? (
         <div className="sticky top-0 z-30 px-3 py-2 bg-[#080A0D]/90 backdrop-blur-2xl border-b border-white/[0.08] shadow-lg w-full max-w-full box-border">
-          <div className="grid grid-cols-3 gap-1.5 liquid-glass p-1 rounded-2xl w-full">
+          <div className="grid grid-cols-3 gap-1 sm:gap-1.5 liquid-glass p-1 rounded-2xl w-full min-w-0 box-border overflow-hidden">
             <button
               onClick={handleCallWaiter}
-              className="h-10 px-1.5 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0"
+              className="h-10 px-1 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 overflow-hidden"
             >
               <PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="truncate">Call Staff</span>
@@ -1057,7 +1057,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setIsOrderStatusModalOpen(true)}
-              className={`h-10 px-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 ${
+              className={`h-10 px-1 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 overflow-hidden ${
                 customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0
                   ? 'bg-amber-500/15 border border-amber-500/35 text-amber-300 shadow-[0_0_12px_rgba(245,166,35,0.2)]'
                   : 'text-white/85 hover:text-white hover:bg-white/[0.08]'
@@ -1074,7 +1074,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setIsBillModalOpen(true)}
-              className="h-10 px-1.5 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0"
+              className="h-10 px-1 rounded-xl text-white/85 hover:text-white hover:bg-white/[0.08] text-xs font-semibold flex items-center justify-center gap-1 transition-all active:scale-98 min-w-0 overflow-hidden"
             >
               <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span className="truncate">Bill</span>
@@ -1094,10 +1094,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Food ⇄ Bar ⇄ Hookah Segmented Switcher */}
       {(hasBarDivision || hasHookahDivision) && (
         <div className="px-3.5 pt-3 pb-1 relative z-10 w-full max-w-full box-border">
-          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1 liquid-glass-strong rounded-2xl text-xs font-medium gap-1 w-full`}>
+          <div className={`grid ${hasBarDivision && hasHookahDivision ? 'grid-cols-3' : 'grid-cols-2'} p-1 liquid-glass-strong rounded-2xl text-xs font-medium gap-1 w-full min-w-0 box-border overflow-hidden`}>
             <button
               onClick={() => handleSwitchMenuTab('FOOD')}
-              className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 ${
+              className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 overflow-hidden ${
                 currentMenuTab === 'FOOD'
                   ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-[0_4px_16px_rgba(245,166,35,0.35)]'
                   : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
@@ -1110,7 +1110,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             {hasBarDivision && (
               <button
                 onClick={() => handleSwitchMenuTab('BAR')}
-                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 ${
+                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 overflow-hidden ${
                   currentMenuTab === 'BAR'
                     ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-[0_4px_16px_rgba(168,85,247,0.35)]'
                     : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
@@ -1129,7 +1129,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             {hasHookahDivision && (
               <button
                 onClick={() => handleSwitchMenuTab('HOOKAH')}
-                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 ${
+                className={`h-10 rounded-xl transition-all duration-300 flex items-center justify-center gap-1 font-bold min-w-0 overflow-hidden ${
                   currentMenuTab === 'HOOKAH'
                     ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-[0_4px_16px_rgba(217,119,6,0.35)]'
                     : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
@@ -1225,10 +1225,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
         {/* Dietary Veg/Non-Veg Quick Filter */}
         {!isBarTheme && (
-          <div className="flex items-center gap-1 p-1 liquid-glass rounded-xl text-xs w-full box-border">
+          <div className="flex items-center gap-1 p-1 liquid-glass rounded-xl text-xs w-full min-w-0 box-border overflow-hidden">
             <button
               onClick={() => setDietaryFilter('ALL')}
-              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors text-center truncate ${
+              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors text-center truncate min-w-0 ${
                 dietaryFilter === 'ALL' ? 'bg-white/[0.10] text-white font-semibold' : 'text-white/40 hover:text-white'
               }`}
             >
@@ -1237,7 +1237,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setDietaryFilter('VEG')}
-              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate ${
+              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate min-w-0 ${
                 dietaryFilter === 'VEG'
                   ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
                   : 'text-white/40 hover:text-emerald-400'
@@ -1249,7 +1249,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={() => setDietaryFilter('NON_VEG')}
-              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate ${
+              className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 truncate min-w-0 ${
                 dietaryFilter === 'NON_VEG'
                   ? 'bg-rose-500/15 text-rose-300 font-semibold border border-rose-500/30'
                   : 'text-white/40 hover:text-rose-400'
@@ -1338,7 +1338,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             return (
               <div
                 key={item.id}
-                className={`p-3 sm:p-4 flex gap-3 transition-all duration-300 rounded-2xl liquid-glass-card shadow-sm w-full max-w-full box-border ${
+                className={`p-3 sm:p-4 flex gap-2.5 sm:gap-3 transition-all duration-300 rounded-2xl liquid-glass-card shadow-sm w-full max-w-full min-w-0 box-border overflow-hidden ${
                   isAvailable
                     ? 'hover:border-white/[0.18] hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)]'
                     : 'opacity-50 border-white/[0.04]'
@@ -1349,7 +1349,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     src={item.image}
                     alt={item.name}
                     loading="lazy"
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover border border-white/[0.08] bg-[#11151B]"
+                    className="w-18 h-18 sm:w-24 sm:h-24 rounded-xl object-cover border border-white/[0.08] bg-[#11151B] shrink-0"
                   />
                   {item.isAlcoholic && (
                     <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-white/90 border border-white/10 backdrop-blur-sm">
@@ -1358,7 +1358,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div className="flex-1 min-w-0 flex flex-col justify-between overflow-hidden">
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -1395,7 +1395,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06] gap-2">
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.06] gap-1.5 min-w-0">
                     <span className="text-xs sm:text-sm font-mono font-bold text-amber-400 shrink-0">
                       {formatPrice(item.price)}
                     </span>
@@ -1404,25 +1404,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                       {isAvailable ? (
                         inCart ? (
                           <div
-                            className="flex items-center gap-1.5 liquid-glass-pill border-amber-500/40 rounded-xl p-0.5 shadow-inner"
+                            className="flex items-center gap-1 liquid-glass-pill border-amber-500/40 rounded-xl p-0.5 shadow-inner shrink-0"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
                               onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity - 1)}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
                               aria-label="Decrease quantity"
                             >
-                              <Minus className="w-3.5 h-3.5" />
+                              <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                             </button>
-                            <span className="font-mono text-xs font-bold text-white min-w-[20px] text-center">
+                            <span className="font-mono text-xs font-bold text-white min-w-[16px] text-center">
                               {inCart.quantity}
                             </span>
                             <button
                               onClick={() => handleUpdateItemQuantity(item.id, inCart.quantity + 1)}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
+                              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-amber-400 hover:bg-white/[0.08] active:scale-95 transition-all"
                               aria-label="Increase quantity"
                             >
-                              <Plus className="w-3.5 h-3.5" />
+                              <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                             </button>
                           </div>
                         ) : (
@@ -1431,7 +1431,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                               e.stopPropagation();
                               handleDirectAddItem(item);
                             }}
-                            className={`h-8 px-3 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all duration-300 active:scale-95 shadow-sm ${
+                            className={`h-7 sm:h-8 px-2.5 sm:px-3 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all duration-300 active:scale-95 shadow-sm shrink-0 whitespace-nowrap ${
                               isJustAdded
                                 ? 'bg-emerald-500 text-slate-950 font-bold scale-105 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
                                 : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold hover:shadow-[0_2px_12px_rgba(245,166,35,0.3)]'
@@ -1451,7 +1451,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                           </button>
                         )
                       ) : (
-                        <span className="text-[10px] font-mono py-1 px-2 rounded-xl font-medium bg-white/[0.04] text-white/40 border border-white/[0.06] cursor-not-allowed">
+                        <span className="text-[10px] font-mono py-1 px-2 rounded-xl font-medium bg-white/[0.04] text-white/40 border border-white/[0.06] cursor-not-allowed shrink-0">
                           Sold Out
                         </span>
                       )}

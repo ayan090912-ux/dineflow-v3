@@ -588,6 +588,20 @@ async def http_exception_handler(request, exc):
         headers=headers
     )
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    correlation_id = getattr(request.state, "correlation_id", None)
+    headers = {"X-Correlation-ID": correlation_id} if correlation_id else {}
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": exc.errors(),
+            "status_code": 422,
+            "correlation_id": correlation_id
+        },
+        headers=headers
+    )
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc):
     correlation_id = getattr(request.state, "correlation_id", None)

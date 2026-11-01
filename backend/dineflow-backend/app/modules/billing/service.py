@@ -175,7 +175,7 @@ class BillingService:
             s_query = select(TableSession).where(
                 TableSession.restaurant_id == rest.id,
                 TableSession.table_number.in_(t_candidates),
-                TableSession.status == "ACTIVE"
+                TableSession.status.in_(["ACTIVE", "PAID"])
             ).order_by(TableSession.session_started_at.desc()).limit(1)
             s_res = await db.execute(s_query)
             actual_session = s_res.scalar_one_or_none()
@@ -185,8 +185,51 @@ class BillingService:
         # 2. Query all non-cancelled orders belonging strictly to this active session
         table_orders: List[Order] = []
         if not sess_id and not actual_session:
-            # Table has no active session -> strictly zero orders (never load historical orders from past sessions!)
-            table_orders = []
+            # Table has no active session -> check for unassigned active orders for this table
+            if t_candidates:
+                unbilled_q = select(Order).where(
+                    Order.restaurant_id == rest.id,
+                    Order.table_number.in_(t_candidates),
+                    Order.status.notin_(["CANCELLED", "VOID"]),
+                    or_(Order.table_session_id.is_(None), Order.table_session_id == "")
+                ).order_by(Order.created_at.asc())
+                u_res = await db.execute(unbilled_q)
+                unassigned_orders = list(u_res.scalars().all())
+                if unassigned_orders:
+                    now_utc = datetime.now(timezone.utc)
+                    sess_id = f"sess-{rest.id}-{tbl_num.lower().replace(' ', '_')}-{int(now_utc.timestamp() * 1000)}"
+                    tbl_row = await db.execute(select(Table).where(
+                        Table.restaurant_id == rest.id,
+                        Table.table_number.in_(t_candidates)
+                    ))
+                    t_obj = tbl_row.scalar_one_or_none()
+                    if not t_obj:
+                        t_obj = Table(
+                            id=f"tbl-{rest.id}-{tbl_num.lower().replace(' ', '_')}",
+                            restaurant_id=rest.id,
+                            table_number=tbl_num,
+                            capacity=4,
+                            status="OCCUPIED"
+                        )
+                        db.add(t_obj)
+                        await db.flush()
+                    actual_session = TableSession(
+                        id=sess_id,
+                        restaurant_id=rest.id,
+                        table_id=t_obj.id,
+                        table_number=t_obj.table_number,
+                        status="ACTIVE",
+                        session_started_at=unassigned_orders[0].created_at or now_utc
+                    )
+                    db.add(actual_session)
+                    await db.flush()
+                    for o in unassigned_orders:
+                        o.table_session_id = actual_session.id
+                    table_orders = unassigned_orders
+                else:
+                    table_orders = []
+            else:
+                table_orders = []
         else:
             orders_query = select(Order).where(
                 Order.restaurant_id == rest.id,

@@ -895,6 +895,12 @@ async def close_business_day(
     await db.commit()
     await db.refresh(current_bday)
 
+    try:
+        from app.modules.orders.router import invalidate_order_bday_cache
+        invalidate_order_bday_cache(rest.id)
+    except Exception:
+        pass
+
     closed_formatted = _format_business_day(current_bday, rest)
     next_business_date = compute_next_business_date(current_bday.business_date) if current_bday.business_date else None
     closed_formatted["next_business_date"] = next_business_date
@@ -1039,6 +1045,12 @@ async def open_business_day(
 
     await db.commit()
     await db.refresh(new_bday)
+
+    try:
+        from app.modules.orders.router import invalidate_order_bday_cache
+        invalidate_order_bday_cache(rest.id)
+    except Exception:
+        pass
 
     formatted = _format_business_day(new_bday, rest)
 

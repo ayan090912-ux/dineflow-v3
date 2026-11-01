@@ -94,6 +94,7 @@ import { HookahTerminal } from '../hookah/HookahTerminal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
 import { calculateAuthoritativeSessionBill } from '../../packages/utils/billingUtils';
+import { matchTableNumber, formatStandardTableNumber } from '../../packages/utils/tableUtils';
 import { TaxManagement } from './TaxManagement';
 import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { ThermalPrinterSettings } from './ThermalPrinterSettings';
@@ -2787,7 +2788,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 const isMerged = tbl.isMerged || tbl.status === 'MERGED';
 
                 const activeSession = activeSessions.find(
-                  (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
+                  (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || matchTableNumber(s.tableNumber, tbl.tableNumber))
                 );
                 const activeSessionId = activeSession?.id || tbl.activeSessionId || (tbl as any).active_session_id;
                 const activeSess = activeSession || (activeSessionId ? {
@@ -2801,7 +2802,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
                 const tableOrders = activeSessionId
                   ? orders.filter((o) => o.tableSessionId === activeSessionId && o.status !== 'CANCELLED')
-                  : orders.filter((o) => (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && o.status !== 'CANCELLED');
+                  : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                 const matchingBill = activeSessionId
                   ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.status !== 'PAID')
                   : undefined;
@@ -4083,7 +4084,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         .filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.isOccupied)
                         .map((tbl) => {
                           const activeSession = activeSessions.find(
-                            (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || s.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase())
+                            (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || matchTableNumber(s.tableNumber, tbl.tableNumber))
                           );
                           const activeSessionId = activeSession?.id || tbl.activeSessionId || (tbl as any).active_session_id;
                           const activeSess = activeSession || (activeSessionId ? {
@@ -4096,7 +4097,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           } : undefined);
                           const tableOrders = activeSessionId
                             ? orders.filter((o) => o.tableSessionId === activeSessionId && o.status !== 'CANCELLED')
-                            : orders.filter((o) => (o.tableId === tbl.id || o.tableNumber.toLowerCase() === tbl.tableNumber.toLowerCase()) && o.status !== 'CANCELLED');
+                            : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                           const activeBill = activeSessionId
                             ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.status !== 'PAID')
                             : undefined;
