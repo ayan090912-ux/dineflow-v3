@@ -141,19 +141,20 @@ Exit code: 0
 
 | Area / Feature | Status | Verification Evidence |
 | :--- | :--- | :--- |
-| **Billing Consistency (Table 03)** | `VERIFIED FIXED` | Session total derived from active orders (₹1,847.00 itemized); historical closed bills (`INV-1024`) strictly excluded from active sessions. Owner Hub shows Table 03 with `ACTIVE` status and exact active running total. |
-| **Attached UPI QR on Bill & Print** | `VERIFIED FIXED` | Rendered with `QRCodeSVG` vector SVG, fully printable with high-contrast CSS and zero clipping. Verified on live mobile customer bill (`71_customer_bill_attached_upi_qr_live.png`). |
-| **Waiter Terminal Requests** | `VERIFIED FIXED` | Staff token slug resolution avoids 403 Forbidden; Table 03 bill request appears live in Section B with `TOTAL PAYABLE ₹10,044.00`, status `UNPAID`, and 1-click Collect Payment (`70_production_verified_waiter_terminal.png`). |
-| **Mobile Liquid Glass Styling** | `VERIFIED FIXED` | Multi-tier atmospheric background orbs provide specular illumination for backdrop-filter blur (`67_production_verified_customer_mobile.png`). |
+| **Billing Consistency (Table 03)** | `VERIFIED FIXED` | Session total derived strictly from active orders (₹1,847.00 itemized); historical closed session orders (82 rows) marked `PAID` in database and excluded from active session filters. Owner Hub and Waiter Terminal both show Table 03 with `ACTIVE` status and exact running total `₹1,847.00` (1 Order, 4 items). |
+| **Attached UPI QR on Bill & Print** | `VERIFIED FIXED` | Rendered with `QRCodeSVG` vector SVG, fully printable with high-contrast CSS and zero clipping. Verified on live mobile customer bill (`68_production_verified_customer_bill.png`). |
+| **Waiter Terminal Requests & Table Sync** | `VERIFIED FIXED` | Tables & Sessions subtab reflects exact Table 03 state: `Active Orders: 1`, `Total Items: 4`, `Current Bill: ₹1847.00` (`73_production_waiter_tables_synced.png`). |
+| **Mobile Liquid Glass Styling & Button Bounds** | `VERIFIED FIXED` | Luminous ambient mesh gradients shine through translucent glass cards. Re-engineered card flex structure eliminates button clipping on mobile viewports (`67_production_verified_customer_mobile.png`, `hasOverflow: false` at 360px). |
 | **Backend Multi-Tenant Security** | `VERIFIED FIXED` | Full 369-test pytest suite passing with canonical isolation intact. |
-| **Production Build Stability** | `VERIFIED FIXED` | TypeScript zero-error clean build in 1.93s; deployed to EC2 container `3e29f065d2e0fea93105eee18b4e9e679540e3aa`. |
+| **Production Build Stability** | `VERIFIED FIXED` | TypeScript zero-error clean build in 2.07s; deployed to EC2 container commit `93891d2b52b60a6484108945470de127d6936b53`. |
 
 ---
 
 ## 6. Visual Evidence Summary
 
-- **Customer Bill with Embedded UPI QR**: [`71_customer_bill_attached_upi_qr_live.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/71_customer_bill_attached_upi_qr_live.png) — Confirms itemized ₹1,847.00 calculation, attached vector UPI QR code (`thestart@icici`), and "Print Bill (with UPI QR)" action.
-- **Waiter Terminal Assistance Section B**: [`70_production_verified_waiter_terminal.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/70_production_verified_waiter_terminal.png) — Confirms Table 03 Bill Call received in real time with status `PENDING`, matching unpaid balance, and 1-click fulfillment.
-- **Owner Operations & Billing Hub**: [`69_production_verified_restaurant_hub.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/69_production_verified_restaurant_hub.png) — Confirms Table 03 shows `ACTIVE` running total, no stale `PAID` badge, and manual payment modal options.
-- **Customer Mobile Menu Liquid Glass**: [`67_production_verified_customer_mobile.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/67_production_verified_customer_mobile.png) — Confirms atmospheric background light wells and specular glass borders.
+- **Customer Mobile Menu Liquid Glass Overhaul**: [`67_production_verified_customer_mobile.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/67_production_verified_customer_mobile.png) — Confirms luminous atmospheric background light wells (amber, violet, emerald), translucent squircle dish cards, glowing "+ Add" buttons with generous margins and zero clipping at 360x780.
+- **Customer Bill with Embedded UPI QR**: [`68_production_verified_customer_bill.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/68_production_verified_customer_bill.png) — Confirms itemized ₹1,847.00 calculation (Subtotal ₹1,759.00 + GST ₹87.95), session `#833981`, attached vector UPI QR code, and instant printable bill action.
+- **Owner Operations & Billing Hub**: [`69_production_verified_restaurant_hub.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/69_production_verified_restaurant_hub.png) — Confirms Table 03 shows `ACTIVE` status, `1 Orders (4 Items)`, and `RUNNING TOTAL: ₹1,847.00`, in 100% agreement with the customer bill.
+- **Waiter Terminal Tables & Sessions Sync**: [`73_production_waiter_tables_synced.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/73_production_waiter_tables_synced.png) — Confirms Table 03 shows `OCCUPIED`, `Session #833981`, `Active Orders: 1`, `Total Items: 4`, and `Current Bill: ₹1847.00`.
+- **Waiter Terminal Live Floor**: [`70_production_verified_waiter_terminal.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/70_production_verified_waiter_terminal.png) — Confirms waiter terminal operational floor active and connected.
 
