@@ -1000,33 +1000,39 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0d11] text-slate-100 flex flex-col font-sans antialiased">
+    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased relative selection:bg-emerald-500/30">
+      {/* Background Ambient Radial Glow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 contain-paint">
+        <div className="absolute -top-24 left-1/4 w-[500px] h-[500px] rounded-full blur-[120px] bg-emerald-600/10 opacity-70" />
+        <div className="absolute top-[40%] -right-20 w-[450px] h-[450px] rounded-full blur-[130px] bg-amber-600/10 opacity-60" />
+      </div>
+
       {/* TOAST NOTIFICATION POPUP */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
           <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium ${
+            className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-medium liquid-glass ${
               toastMessage.type === 'success'
-                ? 'bg-[#12151b] border-emerald-500/40 text-emerald-300'
+                ? 'border-emerald-400/40 text-emerald-300'
                 : toastMessage.type === 'warning'
-                ? 'bg-[#12151b] border-amber-500/40 text-amber-300'
-                : 'bg-[#12151b] border-[#222838] text-slate-200'
+                ? 'border-amber-400/40 text-amber-300'
+                : 'border-white/20 text-slate-200'
             }`}
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <div>
-              <p className="font-semibold text-white">{toastMessage.title}</p>
-              <p className="text-slate-400 text-[11px]">{toastMessage.desc}</p>
+              <p className="font-bold text-white">{toastMessage.title}</p>
+              <p className="text-white/60 text-[11px]">{toastMessage.desc}</p>
             </div>
           </div>
         </div>
       )}
 
       {/* HEADER BAR */}
-      <header className="bg-[#0e1117] border-b border-[#1e232e] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
+      <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
         {/* Brand Header */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[#12151b] border border-[#1e232e] flex items-center justify-center text-slate-200 shrink-0">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-slate-200 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
             <PhoneCall className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
           </div>
           <div className="min-w-0">
@@ -1036,20 +1042,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5">WAITER</Badge>
               <Badge variant="outline" className="hidden xs:inline-flex text-emerald-400 border-emerald-500/30 text-[9px] sm:text-[10px] font-mono">{assignedTerminal}</Badge>
               {wsStatus === 'CONNECTED' ? (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1">
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
                 </span>
               ) : wsStatus === 'RECONNECTING' ? (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 font-medium flex items-center gap-1">
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25 font-bold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Reconnecting
                 </span>
               ) : (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-medium flex items-center gap-1">
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/25 font-bold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
+            <p className="text-[11px] text-white/50 mt-0.5 hidden sm:block">
               Floor service requests, active table sessions & dish delivery
             </p>
           </div>
@@ -1057,24 +1063,24 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
         {/* Authenticated Staff Info & Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
-          <div className="flex items-center gap-1.5 sm:gap-2 bg-[#12151b] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-[#1e232e]">
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
             <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" name={waiterName} size="sm" />
             <div className="hidden xs:block">
-              <p className="font-semibold text-white text-xs truncate max-w-[80px] sm:max-w-none">{waiterName}</p>
-              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono">ON SHIFT</p>
+              <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">{waiterName}</p>
+              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
             </div>
           </div>
 
           {/* Clock */}
-          <div className="hidden md:flex bg-[#12151b] px-2.5 py-1.5 rounded-lg border border-[#1e232e] items-center gap-1.5 font-mono text-slate-300 text-xs">
+          <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span>{currentTime || '08:42 PM'}</span>
+            <span className="font-tabular">{currentTime || '08:42 PM'}</span>
           </div>
 
           {/* Audio Chime Toggle */}
           <button
             onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className="p-1.5 sm:p-2 rounded-lg bg-[#12151b] hover:bg-[#181d27] text-slate-400 hover:text-white transition-colors border border-[#1e232e] h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0"
+            className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
             title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
           >
             {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
@@ -1088,7 +1094,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               if (onLogout) onLogout();
               else window.location.href = '/waiter/login';
             }}
-            className="text-xs bg-[#12151b] border-[#1e232e] hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0"
+            className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span className="hidden xs:inline">Sign Out</span>
@@ -1098,12 +1104,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
       {/* ERROR / RECONNECT BANNER */}
       {isErrorState && (
-        <div className="bg-rose-950/80 border-b border-rose-800 px-3 sm:px-4 py-2 text-xs text-rose-200 flex items-center justify-between gap-3">
+        <div className="bg-rose-950/80 backdrop-blur-md border-b border-rose-800 px-3 sm:px-4 py-2 text-xs text-rose-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             <span className="truncate">Unable to connect to server. Realtime events may be paused.</span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => loadData()} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1 h-6 px-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => loadData()} className="text-xs border-rose-700 hover:bg-rose-900 flex items-center gap-1 h-6 px-2 shrink-0 rounded-lg">
             <RefreshCw className="w-3 h-3" />
             <span>Retry</span>
           </Button>
@@ -1111,36 +1117,36 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       )}
 
       {/* ONE-SCREEN WAITER OPERATIONAL INTERFACE */}
-      <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-3.5 sm:space-y-4 bg-[#0b0d11]">
+      <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-3.5 sm:space-y-4 relative z-10">
         {/* TOP OPERATIONAL BAR: Stage Selector, Live Counts, Search & Refresh */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-[#0e1117] p-2.5 sm:p-3 rounded-xl border border-[#1e232e]">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white/[0.04] backdrop-blur-xl p-2.5 sm:p-3 rounded-2xl border border-white/15 shadow-lg">
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setWaiterView('floor')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-lg text-xs font-mono font-bold uppercase transition-colors shrink-0 touch-manipulation ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all shrink-0 touch-manipulation active:scale-95 ${
                 waiterView === 'floor'
-                  ? 'bg-emerald-500 text-slate-950 border border-emerald-400 shadow-sm'
-                  : 'bg-[#12151b] text-slate-300 hover:text-white border border-[#1e232e]'
+                  ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-slate-950 border-t border-white/40 shadow-[0_4px_16px_rgba(16,185,129,0.35)]'
+                  : 'bg-white/[0.06] text-white/70 hover:text-white border border-white/15'
               }`}
             >
               <Activity className="w-3.5 h-3.5" />
               <span>Live Floor</span>
-              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${waiterView === 'floor' ? 'bg-slate-950/20 text-slate-950' : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${waiterView === 'floor' ? 'bg-slate-950/20 text-slate-950' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
                 {readyPlatesList.length + pendingCallsList.length}
               </span>
             </button>
 
             <button
               onClick={() => setWaiterView('tables')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-lg text-xs font-mono font-bold uppercase transition-colors shrink-0 touch-manipulation ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all shrink-0 touch-manipulation active:scale-95 ${
                 waiterView === 'tables'
-                  ? 'bg-sky-500 text-slate-950 border border-sky-400 shadow-sm'
-                  : 'bg-[#12151b] text-slate-300 hover:text-white border border-[#1e232e]'
+                  ? 'bg-gradient-to-r from-sky-400 to-sky-600 text-slate-950 border-t border-white/40 shadow-[0_4px_16px_rgba(56,189,248,0.35)]'
+                  : 'bg-white/[0.06] text-white/70 hover:text-white border border-white/15'
               }`}
             >
               <Utensils className="w-3.5 h-3.5" />
               <span>Tables & Sessions</span>
-              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${waiterView === 'tables' ? 'bg-slate-950/20 text-slate-950' : 'bg-[#181d27] text-slate-300 border border-[#2d3545]'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${waiterView === 'tables' ? 'bg-slate-950/20 text-slate-950' : 'bg-white/10 text-white/70 border border-white/15'}`}>
                 {activeTablesList.length}
               </span>
             </button>
@@ -1160,7 +1166,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               size="sm"
               onClick={() => loadData()}
               disabled={isLoading}
-              className="text-xs bg-[#12151b] border-[#1e232e] hover:bg-[#181d27] text-slate-300 flex items-center gap-1.5 h-8 shrink-0"
+              className="text-xs bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 flex items-center gap-1.5 h-8 shrink-0 rounded-xl"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -1261,27 +1267,27 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 /* LIVE DUAL-SECTION OPERATIONAL FLOOR: Section A (Ready) & Section B (Requests) */
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
                   {/* SECTION A: READY FOR SERVICE */}
-                  <div className="bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-xl space-y-4">
-                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
+                  <div className="bg-white/[0.04] backdrop-blur-xl border border-white/15 p-4 lg:p-5 rounded-2xl space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
                       <div className="flex items-center gap-2">
                         <Flame className="w-4 h-4 text-emerald-400" />
                         <h2 className="text-sm font-bold text-white uppercase tracking-tight">
                           Section A: Ready for Service
                         </h2>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-bold">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
                           {readyPlatesList.length} Ready
                         </span>
                       </div>
-                      <span className="text-[11px] font-mono text-slate-400">
+                      <span className="text-[11px] font-mono text-white/50">
                         Kitchen, Bar & Hookah Passes
                       </span>
                     </div>
 
                     {readyPlatesList.length === 0 ? (
-                      <div className="p-10 text-center bg-[#0e1117] rounded-xl border border-dashed border-[#1e232e] space-y-2">
-                        <Coffee className="w-7 h-7 text-slate-600 mx-auto" />
-                        <p className="text-xs font-semibold text-slate-300">No ready tickets at the pass</p>
-                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-dashed border-white/15 space-y-2">
+                        <Coffee className="w-8 h-8 text-emerald-400/40 mx-auto" />
+                        <p className="text-xs font-bold text-slate-200">No ready tickets at the pass</p>
+                        <p className="text-[11px] text-white/50 max-w-xs mx-auto">
                           Dishes and beverages will appear here instantly as soon as kitchen, bar, or hookah staff mark them ready.
                         </p>
                       </div>
@@ -1297,54 +1303,54 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                           return (
                             <div
                               key={order.id}
-                              className={`p-4 rounded-xl border transition-colors space-y-3 shadow-xs ${
+                              className={`p-4 rounded-2xl border transition-all duration-300 space-y-3 shadow-xl liquid-glass-card ${
                                 readiness.isCompleteOrderReady
-                                  ? 'bg-[#0e1117] border-emerald-500/40 hover:border-emerald-500/60'
-                                  : 'bg-[#0e1117] border-amber-500/40 hover:border-amber-500/60'
+                                  ? 'border-emerald-400/40 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+                                  : 'border-amber-400/40 hover:border-amber-400/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
                               }`}
                             >
                               {/* Ticket Header */}
                               <div className="flex items-start justify-between gap-2">
                                 <div>
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="px-2.5 py-0.5 rounded bg-[#181d27] text-white border border-[#2d3545] text-xs font-mono font-bold">
+                                    <span className="px-2.5 py-0.5 rounded-lg bg-white/10 text-white border border-white/20 text-xs font-mono font-bold">
                                       {formattedTable}
                                     </span>
-                                    <span className="text-[11px] font-mono text-slate-400">
+                                    <span className="text-[11px] font-mono text-white/50">
                                       #{order.id.slice(-4)}
                                     </span>
                                     {readiness.readyItems.some(r => r.station === 'BAR') && (
-                                      <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-mono font-bold">
+                                      <span className="px-2 py-0.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[10px] font-mono font-bold">
                                         BAR
                                       </span>
                                     )}
                                     {readiness.readyItems.some(r => r.station === 'HOOKAH') && (
-                                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold">
+                                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[10px] font-mono font-bold">
                                         HOOKAH
                                       </span>
                                     )}
                                     {readiness.readyItems.some(r => r.station === 'KITCHEN') && (
-                                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                                      <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono font-bold">
                                         KITCHEN
                                       </span>
                                     )}
                                     {order.deliveryStatus === 'COLLECTED' ? (
-                                      <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                                      <span className="px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-300 border border-sky-400/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                         <Package className="w-3 h-3 text-sky-400" />
                                         Collected by {order.claimedBy || 'Waiter'}
                                       </span>
                                     ) : ((order as any).kitchenWaiterRequested || (order as any).barWaiterRequested || (order as any).hookahWaiterRequested || order.deliveryStatus === 'WAITING_FOR_WAITER') ? (
-                                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1 animate-pulse">
+                                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-mono font-bold flex items-center gap-1 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.3)]">
                                         <Bell className="w-3 h-3 text-amber-400" />
                                         Waiter Requested
                                       </span>
                                     ) : readiness.isCompleteOrderReady ? (
-                                      <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                                      <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                         <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                                         All Items Ready
                                       </span>
                                     ) : (
-                                      <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-400/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                         <Clock className="w-3 h-3 text-amber-400" />
                                         Partial · Other Items In Prep
                                       </span>
@@ -1477,27 +1483,27 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   </div>
 
                   {/* SECTION B: CUSTOMER REQUESTS */}
-                  <div className="bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-xl space-y-4">
-                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
+                  <div className="bg-white/[0.04] backdrop-blur-xl border border-white/15 p-4 lg:p-5 rounded-2xl space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
                       <div className="flex items-center gap-2">
                         <PhoneCall className="w-4 h-4 text-amber-400" />
                         <h2 className="text-sm font-bold text-white uppercase tracking-tight">
                           Section B: Customer Requests
                         </h2>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 font-bold">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 font-bold">
                           {pendingCallsList.length} Active
                         </span>
                       </div>
-                      <span className="text-[11px] font-mono text-slate-400">
+                      <span className="text-[11px] font-mono text-white/50">
                         Live Floor Assistance
                       </span>
                     </div>
 
                     {pendingCallsList.length === 0 ? (
-                      <div className="p-10 text-center bg-[#0e1117] rounded-xl border border-dashed border-[#1e232e] space-y-2">
-                        <CheckCircle2 className="w-7 h-7 text-emerald-400 mx-auto" />
-                        <p className="text-xs font-semibold text-slate-300">All customer requests handled</p>
-                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-dashed border-white/15 space-y-2">
+                        <CheckCircle2 className="w-8 h-8 text-emerald-400/40 mx-auto" />
+                        <p className="text-xs font-bold text-slate-200">All customer requests handled</p>
+                        <p className="text-[11px] text-white/50 max-w-xs mx-auto">
                           Requests for water, napkins, cutlery, table assistance, or bill payments appear here with 1-click fulfillment.
                         </p>
                       </div>
@@ -1514,12 +1520,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                           return (
                             <div
                               key={req.id}
-                              className={`p-4 rounded-xl border transition-colors space-y-3 shadow-xs ${
+                              className={`p-4 rounded-2xl border transition-all duration-300 space-y-3 shadow-xl liquid-glass-card ${
                                 isBillReq
-                                  ? 'bg-amber-950/15 border-amber-500/50 hover:border-amber-400'
+                                  ? 'border-amber-400/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
                                   : isPending
-                                  ? 'bg-[#0e1117] border-amber-500/30 hover:border-amber-500/50'
-                                  : 'bg-[#0e1117] border-sky-500/30 hover:border-sky-500/50'
+                                  ? 'border-amber-400/35 hover:border-amber-400/55'
+                                  : 'border-sky-400/35 hover:border-sky-400/55'
                               }`}
                             >
                               {/* Request Header */}
@@ -1531,36 +1537,36 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                     </span>
                                     {getRequestBadge(req.requestType, req.customTitle)}
                                     <span
-                                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                                      className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border font-bold ${
                                         isPending
-                                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                                          : 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                                          ? 'bg-amber-500/15 text-amber-300 border-amber-400/30'
+                                          : 'bg-sky-500/15 text-sky-300 border-sky-400/30'
                                       }`}
                                     >
                                       {req.status}
                                     </span>
                                   </div>
                                   {req.assignedWaiterName && (
-                                    <p className="text-[11px] text-slate-400 mt-1">
-                                      Assigned: <span className="text-slate-200">{req.assignedWaiterName}</span>
+                                    <p className="text-[11px] text-white/60 mt-1">
+                                      Assigned: <span className="text-slate-200 font-bold">{req.assignedWaiterName}</span>
                                     </p>
                                   )}
                                 </div>
 
-                                <span className="text-[11px] font-mono text-slate-400 bg-[#12151b] px-2 py-0.5 rounded border border-[#1e232e]">
+                                <span className="text-[11px] font-mono text-white/60 bg-white/10 px-2 py-0.5 rounded-lg border border-white/15">
                                   {getTimeElapsed(req.requestedAt)}
                                 </span>
                               </div>
 
                               {/* Bill Context if applicable */}
                               {isBillReq ? (
-                                <div className="bg-[#12151b] p-2.5 rounded-lg border border-[#1e232e] flex justify-between items-center text-xs font-mono">
+                                <div className="bg-white/[0.04] p-3 rounded-xl border border-white/10 flex justify-between items-center text-xs font-mono backdrop-blur-sm">
                                   <div>
-                                    <span className="text-slate-400 block text-[10px]">TOTAL PAYABLE</span>
-                                    <span className="text-emerald-400 font-bold text-sm">₹{billAmt.toFixed(2)}</span>
+                                    <span className="text-white/50 block text-[10px]">TOTAL PAYABLE</span>
+                                    <span className="text-emerald-400 font-bold text-sm font-tabular">₹{billAmt.toFixed(2)}</span>
                                   </div>
                                   <div className="text-right">
-                                    <span className="text-slate-400 block text-[10px]">STATUS</span>
+                                    <span className="text-white/50 block text-[10px]">STATUS</span>
                                     {payStatus === 'PAID' ? (
                                       <span className="text-emerald-400 font-bold text-[11px]">PAID</span>
                                     ) : payStatus === 'PAYMENT_AWAITING_CONFIRMATION' ? (
@@ -1571,7 +1577,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                   </div>
                                 </div>
                               ) : req.customerNotes ? (
-                                <div className="text-xs bg-[#12151b] p-2.5 rounded-lg border border-[#1e232e] text-slate-300 italic">
+                                <div className="text-xs bg-white/[0.04] p-3 rounded-xl border border-white/10 text-white/80 italic">
                                   "{req.customerNotes}"
                                 </div>
                               ) : null}
@@ -1682,7 +1688,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   return (
                     <div
                       key={table.id}
-                      className="bg-[#12151b] border border-[#1e232e] p-4 space-y-3 rounded-xl hover:border-[#2a3243] transition-colors flex flex-col justify-between"
+                      className="bg-white/[0.04] backdrop-blur-xl border border-white/15 p-4 space-y-3 rounded-2xl hover:border-white/30 transition-all duration-300 flex flex-col justify-between shadow-xl liquid-glass-card"
                     >
                       <div className="space-y-3">
                         <div className="flex items-start justify-between">
@@ -1691,45 +1697,45 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                               <span className="text-xl font-bold text-white font-mono tracking-tight">
                                 {table.tableNumber}
                               </span>
-                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30">
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30 font-bold">
                                 OCCUPIED
                               </span>
                             </div>
-                            <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                            <p className="text-[11px] text-white/50 font-mono mt-0.5">
                               {activeSession ? `Session #${activeSession.id.slice(-6)}` : 'Active Session'}
                             </p>
                           </div>
-                          <span className="text-[11px] font-mono text-slate-300 bg-[#0c0e14] border border-[#1e232e] px-2 py-0.5 rounded flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-[11px] font-mono text-white/70 bg-white/10 border border-white/15 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-amber-400" />
                             {getOccupiedDuration(table.sessionStartedAt || activeSession?.sessionStartedAt, latestOrder?.createdAt)}
                           </span>
                         </div>
 
-                        <div className="space-y-1.5 bg-[#0c0e14] p-3 rounded-lg border border-[#1e232e] text-xs font-mono">
-                          <div className="flex justify-between items-center pb-1 border-b border-[#1e232e]">
-                            <span className="text-slate-400">Active Orders:</span>
-                            <span className="font-semibold text-white">{tableOrders.length}</span>
+                        <div className="space-y-1.5 bg-white/[0.04] p-3 rounded-xl border border-white/10 text-xs font-mono backdrop-blur-sm">
+                          <div className="flex justify-between items-center pb-1.5 border-b border-white/10">
+                            <span className="text-white/50">Active Orders:</span>
+                            <span className="font-bold text-white font-tabular">{tableOrders.length}</span>
                           </div>
 
                           <div className="flex justify-between items-center py-0.5">
-                            <span className="text-slate-400">Total Items:</span>
-                            <span className="text-slate-200">{itemCount}</span>
+                            <span className="text-white/50">Total Items:</span>
+                            <span className="text-white font-bold font-tabular">{itemCount}</span>
                           </div>
 
                           <div className="flex justify-between items-center py-0.5">
-                            <span className="text-slate-400">Current Bill:</span>
-                            <span className="font-bold text-emerald-400 text-sm">₹{sessionTotal.toFixed(2)}</span>
+                            <span className="text-white/50">Current Bill:</span>
+                            <span className="font-bold text-emerald-400 text-sm font-tabular">₹{sessionTotal.toFixed(2)}</span>
                           </div>
 
                           {latestOrder && (
-                            <div className="flex flex-col gap-1 py-1.5 border-t border-b border-[#1e232e] text-[11px]">
+                            <div className="flex flex-col gap-1 py-1.5 border-t border-b border-white/10 text-[11px]">
                               {latestOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN') && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-400">Kitchen:</span>
-                                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+                                  <span className="text-white/50">Kitchen:</span>
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
                                     latestOrder.kitchenStatus === 'READY' || (!latestOrder.kitchenStatus && latestOrder.status === 'READY')
-                                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                                      : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
                                   }`}>
                                     {latestOrder.kitchenStatus === 'READY' ? 'READY' : latestOrder.kitchenStatus || 'COOKING'}
                                   </span>
@@ -1737,11 +1743,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                               )}
                               {latestOrder.items.some((i) => getFulfillmentStation(i) === 'BAR') && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-400">Bar:</span>
-                                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+                                  <span className="text-white/50">Bar:</span>
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
                                     latestOrder.barStatus === 'READY' || (!latestOrder.barStatus && latestOrder.status === 'READY')
-                                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                      ? 'bg-purple-500/20 text-purple-300 border border-purple-400/30'
+                                      : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
                                   }`}>
                                     {latestOrder.barStatus === 'READY' ? 'READY' : latestOrder.barStatus || 'PREPARING'}
                                   </span>
@@ -1750,18 +1756,18 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                             </div>
                           )}
 
-                          <div className="flex justify-between items-center pt-1 border-t border-[#1e232e] text-[11px]">
-                            <span className="text-slate-400">Waiter:</span>
-                            <span className="text-slate-200">{table.assignedWaiterName || waiterName}</span>
+                          <div className="flex justify-between items-center pt-1.5 border-t border-white/10 text-[11px]">
+                            <span className="text-white/50">Waiter:</span>
+                            <span className="text-white font-bold">{table.assignedWaiterName || waiterName}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1e232e]">
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-full text-xs py-1.5 bg-[#141822] border-[#222838] hover:bg-[#1a202c] text-slate-200 h-9 font-medium touch-manipulation"
+                          className="w-full text-xs py-1.5 bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 h-9 font-bold touch-manipulation rounded-xl"
                           onClick={() => setSelectedTableForView(table)}
                         >
                           View Details
@@ -1769,7 +1775,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         <Button
                           variant="danger"
                           size="sm"
-                          className="w-full text-xs py-1.5 bg-rose-600 hover:bg-rose-500 text-white h-9 font-bold touch-manipulation"
+                          className="w-full text-xs py-1.5 bg-rose-600/90 hover:bg-rose-500 text-white h-9 font-bold touch-manipulation rounded-xl shadow-[0_2px_8px_rgba(225,29,72,0.3)]"
                           onClick={() => setSelectedTableForClose(table)}
                         >
                           Close Table

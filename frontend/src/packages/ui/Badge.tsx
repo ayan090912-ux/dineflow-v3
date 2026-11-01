@@ -15,14 +15,14 @@ export const Badge: React.FC<BadgeProps> = ({
   ...props
 }) => {
   const variantStyles = {
-    default: 'bg-[#181d27] text-slate-300 border border-[#2d3545]',
-    neutral: 'bg-[#181d27] text-slate-300 border border-[#2d3545]',
-    success: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25',
-    warning: 'bg-amber-500/10 text-amber-400 border border-amber-500/25',
-    danger: 'bg-rose-500/10 text-rose-400 border border-rose-500/25',
-    info: 'bg-sky-500/10 text-sky-400 border border-sky-500/25',
-    outline: 'border border-[#1e232e] text-slate-400 bg-transparent',
-    brand: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+    default: 'bg-white/[0.08] text-slate-200 border border-white/15 backdrop-blur-md',
+    neutral: 'bg-white/[0.08] text-slate-200 border border-white/15 backdrop-blur-md',
+    success: 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.2)]',
+    warning: 'bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]',
+    danger: 'bg-rose-500/20 text-rose-300 border border-rose-400/40 shadow-[0_0_12px_rgba(244,63,94,0.2)]',
+    info: 'bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]',
+    outline: 'border border-white/15 text-slate-300 bg-white/[0.03] backdrop-blur-md',
+    brand: 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.25)]',
   };
 
   const sizeStyles = {
