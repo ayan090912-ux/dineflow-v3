@@ -3,7 +3,7 @@
 **Date:** 2026-11-02  
 **Target Environment:** AWS EC2 Production (`i-0997b0b381dfb3fd0`, ap-south-1)  
 **Public Host:** [https://the-start.dinely.food](https://the-start.dinely.food) / [https://dinely.food](https://dinely.food)  
-**Deployed Commit:** `b8fc676` (Branch: `security-hardening-cleanup`)  
+**Deployed Commit:** `6d04645` (Branch: `security-hardening-cleanup`)  
 **Container State:** `dinely_web` (Up, HTTP 200), `dinely_backend` (Up, healthy, HTTP 200)
 
 ---
@@ -14,7 +14,7 @@ This production engagement executed a full-scale frontend architecture and UI/UX
 
 ### Core Enhancements Delivered:
 1. **Unified Bento KPI Architecture & Operational Reconciliation:**
-   - Standardized the exact visual design system benchmarked in the **Daily Management System** (`the-leo.dinely.food`) across **ALL 9 operational terminals and operational views**:
+   - Standardized the exact visual design system benchmarked in the **Daily Management System** (`the-leo.dinely.food`) across **ALL 10 operational terminals and operational views**:
      - **Kitchen KDS** (`KitchenETADashboard.tsx`)
      - **Bar Terminal** (`BarTerminal.tsx`)
      - **Hookah Lounge Terminal** (`HookahTerminal.tsx`)
@@ -24,9 +24,10 @@ This production engagement executed a full-scale frontend architecture and UI/UX
      - **Billing, Taxes & Invoices** (`RestaurantApp.tsx`)
      - **Dining Room Floorplan & Tables** (`RestaurantApp.tsx`)
      - **Executive Overview Dashboard** (`RestaurantApp.tsx`)
-   - Each terminal features:
+     - **Menu Engineering & Pricing** (`RestaurantApp.tsx`)
+   - Each terminal and management view features:
      1. **6-Column Bento KPI Cards Row:** High-contrast obsidian cards (`liquid-glass-card border border-white/[0.08] p-4 rounded-2xl`), uppercase monospace tracking-wider labels (`text-[10px] font-mono text-slate-400 uppercase font-semibold`), large tabular bold numerals (`text-xl lg:text-2xl font-bold font-mono`), and station accent badges.
-     2. **Operational Reconciliation Summary Box:** Dedicated calculation container displaying station equations (`Kitchen: ₹... + Bar: ₹... + Hookah: ₹... = [ ₹Total ]`) and live badge (`✓ Zero Double-Counting Verified` / `✓ Floor Map Sync Verified`).
+     2. **Operational Reconciliation Summary Box:** Dedicated calculation container displaying station equations (`Kitchen: X + Bar: Y + Hookah: Z = [ Total ]`) and live badge (`✓ Zero Double-Counting Verified` / `✓ Menu Catalog Synced`).
      3. **Operational Metadata Ribbon:** Deep `#12151b` bar with live connection status, cutoffs, and realtime WebSocket synchronization.
      4. **Segmented High-Contrast Controls:** Modern `#181d27` active pills with 1-click tactile action triggers.
 
@@ -109,13 +110,21 @@ This production engagement executed a full-scale frontend architecture and UI/UX
 - **Artifact:** [`81_production_billing_updated.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/81_production_billing_updated.png)
 - **Verification:** Bento KPI row with Today's Sales, Total Receipts, Paid Invoices, and Pending/Open Bills. Table 03 card upgraded to Day Management card styling showing `RUNNING TOTAL: ₹1,847.00 ACTIVE (1 Orders, 4 Items)` with emerald `Record Manual Payment` button, in 100% synchronicity with Customer Mobile and Waiter OS.
 
+### M. Menu Engineering & Pricing
+- **Artifact:** [`82_production_menu_engineering_bento.png`](file:///Users/ayaan/.gemini/antigravity/brain/2f5bb0c8-027a-4080-aeb1-17415c6dc610/82_production_menu_engineering_bento.png)
+- **Verification:** Fully upgraded to the Day Management Bento design system with:
+  1. Top Operational Metadata Bar (`Catalog Engine: Multi-Station Catalog & Availability [LIVE CATALOG]`, Active Scope, Total Items, In Stock, 86'd Out of Stock).
+  2. 6-Column Bento KPI Cards Row: Total Catalog Items, Kitchen Food (Sky Blue), Bar & Spirits (Purple), Hookah & Shisha (Amber), In Stock Live (Emerald), and 86'd Sold Out (Rose).
+  3. Operational Menu Catalog Reconciliation Box: `Kitchen Food: X Items + Bar Drinks: Y Items + Hookah Blends: Z Items = [ Total Catalog Items ]` with `✓ Menu Catalog Synced` badge.
+  4. Preserves all existing functionality: Dietary filtering (All, Veg, Non-Veg), Category filters, Search input, Add Food/Bar/Hookah item modal, and 86'd out-of-stock toggling.
+
 ---
 
 ## 4. Verification Checkpoint Summary
 - **Backend Tests:** 369 passed, 1 skipped, 0 failures (`backend/dineflow-backend/.venv/bin/pytest`)
 - **TypeScript Typecheck:** 0 errors (`npm --prefix frontend run typecheck`)
-- **Vite Production Build:** 0 errors (`npm --prefix frontend run build`, 1.96s)
-- **Deployed Commit:** `423f6ba` (Branch: `security-hardening-cleanup`)
+- **Vite Production Build:** 0 errors (`npm --prefix frontend run build`)
+- **Deployed Commit:** `6d04645` (Branch: `security-hardening-cleanup`)
 - **Docker Container Status on AWS EC2 (`i-0997b0b381dfb3fd0`):** `dinely_web` (Recreated & Started), `dinely_backend` (Healthy)
 - **Live HTTP Health Probes:**
   - `https://dinely.food/healthz`: HTTP 200 (healthy)
