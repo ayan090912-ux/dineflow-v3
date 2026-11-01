@@ -2816,7 +2816,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
                   : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                 const matchingBill = activeSessionId
-                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
+                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
                   : undefined;
                 const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, matchingBill);
                 const sessionTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : (tbl.sessionTotal !== undefined ? tbl.sessionTotal : (tbl as any).session_total || 0);
@@ -4111,7 +4111,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
                             : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                           const activeBill = activeSessionId
-                            ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
+                            ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
                             : undefined;
                           const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, activeBill);
                           const fallbackGrandTotal = tbl.sessionTotal !== undefined ? tbl.sessionTotal : ((tbl as any).session_total || 0);

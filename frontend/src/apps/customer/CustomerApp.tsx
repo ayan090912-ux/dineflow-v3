@@ -969,11 +969,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   return (
     <div className="min-h-screen font-sans pb-52 w-full max-w-full sm:max-w-md mx-auto relative sm:border-x border-white/[0.12] liquid-glass-viewport text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border min-w-0">
-      {/* Dynamic Ambient Background Glows - strictly bounded to viewport width */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 w-full max-w-full">
+      {/* Dynamic Ambient Background Glows - strictly bounded to viewport width with zero overflow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 w-full max-w-full contain-paint">
         {/* Top Radiant Atmospheric Amber Halo */}
         <div
-          className={`absolute -top-12 left-1/2 -translate-x-1/2 w-[380px] h-[380px] rounded-full blur-[90px] transition-all duration-700 pointer-events-none opacity-80 ${
+          className={`absolute -top-12 left-1/2 -translate-x-1/2 w-[340px] sm:w-[380px] h-[340px] sm:h-[380px] rounded-full blur-[90px] transition-all duration-700 pointer-events-none opacity-80 ${
             isHookahTheme
               ? 'bg-gradient-to-b from-amber-500/35 via-orange-600/25 to-transparent'
               : isBarTheme
@@ -983,7 +983,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         />
         {/* Mid-Screen Ambient Luminous Light Well */}
         <div
-          className={`absolute top-[35%] -right-[15%] w-[320px] h-[360px] rounded-full blur-[95px] pointer-events-none opacity-65 ${
+          className={`absolute top-[35%] right-0 translate-x-1/4 w-[280px] sm:w-[320px] h-[320px] sm:h-[360px] rounded-full blur-[95px] pointer-events-none opacity-65 ${
             isHookahTheme
               ? 'bg-gradient-to-tr from-amber-600/30 via-rose-500/20 to-transparent'
               : isBarTheme
@@ -993,7 +993,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         />
         {/* Lower Canvas Spatial Depth Orb */}
         <div
-          className="absolute top-[65%] -left-[15%] w-[320px] h-[360px] rounded-full blur-[100px] bg-gradient-to-tr from-emerald-500/20 via-amber-500/20 to-transparent pointer-events-none opacity-60"
+          className="absolute top-[65%] left-0 -translate-x-1/4 w-[280px] sm:w-[320px] h-[320px] sm:h-[360px] rounded-full blur-[100px] bg-gradient-to-tr from-emerald-500/20 via-amber-500/20 to-transparent pointer-events-none opacity-60"
         />
       </div>
 
@@ -1355,10 +1355,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             return (
               <div
                 key={item.id}
-                className={`p-3 sm:p-4 flex gap-2.5 sm:gap-3 transition-all duration-300 rounded-3xl liquid-glass-card shadow-lg w-full max-w-full min-w-0 box-border overflow-hidden border border-white/18 hover:border-white/30 hover:shadow-[0_16px_40px_rgba(0,0,0,0.6)] ${
+                className={`p-3 sm:p-4 flex gap-2.5 sm:gap-3.5 transition-all duration-300 rounded-3xl liquid-glass-card shadow-xl w-full max-w-full min-w-0 box-border overflow-hidden border border-white/20 hover:border-white/35 hover:shadow-[0_20px_50px_rgba(0,0,0,0.7)] ${
                   isAvailable
                     ? 'active:scale-[0.99]'
-                    : 'opacity-50 border-white/[0.06]'
+                    : 'opacity-50 border-white/[0.08]'
                 }`}
               >
                 <div className="relative shrink-0">
@@ -1366,7 +1366,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     src={item.image}
                     alt={item.name}
                     loading="lazy"
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-white/20 shadow-md bg-[#11151B] shrink-0"
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-white/25 shadow-lg bg-[#11151B] shrink-0 ring-1 ring-white/10"
                   />
                   {item.isAlcoholic && (
                     <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-md text-[9px] font-mono bg-black/85 text-purple-200 border border-purple-500/40 backdrop-blur-md font-bold shadow-md">
@@ -1381,10 +1381,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         {!isBarTheme && !item.isAlcoholic && (
                           <span
-                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold font-mono shrink-0 ${
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold font-mono shrink-0 shadow-sm ${
                               isVeg
-                                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-                                : 'border-rose-500/40 bg-rose-500/15 text-rose-300'
+                                ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
+                                : 'border-rose-500/50 bg-rose-500/20 text-rose-300'
                             }`}
                             title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
                           >
@@ -1392,7 +1392,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                             <span className="hidden sm:inline">{isVeg ? 'VEG' : 'NON-VEG'}</span>
                           </span>
                         )}
-                        <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">{item.name}</h3>
+                        <h3 className="text-[15px] sm:text-base font-bold text-white tracking-tight truncate font-display">{item.name}</h3>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
@@ -1407,7 +1407,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     {item.brand && (
                       <p className="text-[10px] text-amber-300/90 font-mono mt-0.5 truncate uppercase tracking-wider">{item.brand}</p>
                     )}
-                    <p className="text-xs text-white/60 line-clamp-2 mt-1 leading-relaxed font-normal">{item.description}</p>
+                    <p className="text-[11px] sm:text-xs text-white/65 line-clamp-2 mt-1 leading-relaxed font-normal">{item.description}</p>
                     {(item.glassSize || item.bottleSize) && (
                       <p className="text-[10px] text-white/45 font-mono mt-0.5 truncate">
                         Serving: {item.glassSize || item.bottleSize}
@@ -1415,8 +1415,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.08] gap-1.5 min-w-0">
-                    <span className="text-sm sm:text-base font-mono font-extrabold text-amber-300 shrink-0 tracking-tight">
+                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.10] gap-1.5 min-w-0">
+                    <span className="text-sm sm:text-base font-mono font-black text-amber-300 shrink-0 tracking-tight drop-shadow-[0_1px_6px_rgba(245,158,11,0.35)]">
                       {formatPrice(item.price)}
                     </span>
 
@@ -1451,7 +1451,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                               e.stopPropagation();
                               handleDirectAddItem(item);
                             }}
-                            className={`h-8 sm:h-9 px-3 sm:px-4 min-w-[64px] rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 shadow-md shrink-0 whitespace-nowrap border-t border-white/50 ${
+                            className={`h-8 sm:h-9 px-3.5 sm:px-4 min-w-[64px] rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 shadow-lg shrink-0 whitespace-nowrap border-t border-white/60 ${
                               isJustAdded
                                 ? 'bg-emerald-500 text-slate-950 scale-105 shadow-[0_0_16px_rgba(16,185,129,0.6)]'
                                 : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 shadow-[0_4px_16px_rgba(245,158,11,0.45)]'

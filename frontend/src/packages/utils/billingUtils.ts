@@ -107,20 +107,25 @@ export function calculateAuthoritativeSessionBill(
   let amountPaid = 0.0;
   if (existingBill) {
     if (existingBill.paymentStatus === 'PAID') {
-      amountPaid = existingBill.amountPaid || existingBill.grandTotal || 0.0;
+      amountPaid = existingBill.amountPaid || existingBill.grandTotal || grandTotal || 0.0;
     } else if (existingBill.amountPaid) {
       amountPaid = existingBill.amountPaid;
     }
   }
 
-  const hasUnpaidOrders = cleanOrders.some(
-    (o) => (o.paymentStatus as string) !== 'PAID' && (o.paymentStatus as string) !== 'SETTLED'
-  );
+  const isBillFullyPaid = existingBill?.paymentStatus === 'PAID';
+  const hasUnpaidOrders = isBillFullyPaid
+    ? false
+    : cleanOrders.some(
+        (o) => (o.paymentStatus as string) !== 'PAID' && (o.paymentStatus as string) !== 'SETTLED'
+      );
 
   let paymentStatus: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'PAYMENT_PENDING' | 'PAYMENT_VERIFICATION_REQUIRED' = 'UNPAID';
-  const balanceDue = Math.max(0, Math.round((grandTotal - amountPaid) * 100) / 100);
+  const balanceDue = isBillFullyPaid ? 0 : Math.max(0, Math.round((grandTotal - amountPaid) * 100) / 100);
 
-  if (grandTotal === 0 && cleanOrders.length === 0) {
+  if (isBillFullyPaid) {
+    paymentStatus = 'PAID';
+  } else if (grandTotal === 0 && cleanOrders.length === 0) {
     paymentStatus = 'UNPAID';
   } else if (!hasUnpaidOrders && (balanceDue === 0 || amountPaid >= grandTotal)) {
     paymentStatus = 'PAID';
