@@ -985,6 +985,12 @@ async def record_bill_payment(
     except Exception:
         pass
 
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(target_rest_id)
+    except Exception:
+        pass
+
     return {
         **formatted,
         "status": "success",
@@ -1060,6 +1066,12 @@ async def report_customer_payment(
             },
             target_audience=["WAITER", "OWNER", "CUSTOMER"]
         )
+    except Exception:
+        pass
+
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(target_rest_id)
     except Exception:
         pass
 
@@ -1226,6 +1238,12 @@ async def close_table_settlement(
                 "status": "AVAILABLE",
             }
         )
+    except Exception:
+        pass
+
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(target_rest_id)
     except Exception:
         pass
 

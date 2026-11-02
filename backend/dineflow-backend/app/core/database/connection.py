@@ -43,8 +43,8 @@ if "sqlite" not in db_url:
     engine_kwargs.update({
         "pool_size": max(15, settings.DB_POOL_SIZE or 15),
         "max_overflow": max(10, settings.DB_MAX_OVERFLOW or 10),
-        "pool_pre_ping": False,  # Disabled to eliminate extra ~400ms cross-continent round-trip per checkout
-        "pool_recycle": 600,  # 10 minutes: keeps active connection alive without repeated TLS handshakes
+        "pool_pre_ping": True,  # Verifies connection health before checkout, preventing broken pipe / connection reset errors
+        "pool_recycle": 180,  # 3 minutes: recycles connections well before Neon's 5-minute idle scale-to-zero limit
         "pool_timeout": 30,
         "connect_args": connect_args,
     })

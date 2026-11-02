@@ -89,6 +89,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
   const isAudioMutedRef = useRef(false);
   const notifiedOrderIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedRef = useRef(false);
+  const isFetchingRef = useRef(false);
 
   // View mode: 'active' (Dual-Section 1-Screen Floor) or 'history' (Shift Work Audit)
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
@@ -194,8 +195,9 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
             }
             return prev;
           });
+        } else {
+          loadData(false);
         }
-        loadData(false);
       }
     });
 
@@ -205,13 +207,18 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
     };
   }, [restaurant?.id]);
 
-  // Initial load
+  // Initial load and adaptive background fallback polling (30s when CONNECTED, 8s when disconnected)
   useEffect(() => {
     loadData(true);
     loadAuxiliaryData();
-    const interval = setInterval(() => loadData(false), 5000);
+    const pollIntervalMs = wsStatus === 'CONNECTED' ? 30000 : 8000;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadData(false);
+      }
+    }, pollIntervalMs);
     return () => clearInterval(interval);
-  }, [restaurant?.id]);
+  }, [restaurant?.id, wsStatus]);
 
   const loadAuxiliaryData = async () => {
     try {
@@ -247,6 +254,8 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
   };
 
   const loadData = async (isManual = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     if (isManual) setIsLoading(true);
     try {
       const restId = api.getCurrentRestaurantId() || restaurant?.id || undefined;
@@ -278,6 +287,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
       console.error('Failed to load bar orders:', err);
       setIsErrorState(true);
     } finally {
+      isFetchingRef.current = false;
       if (isManual) setIsLoading(false);
     }
   };

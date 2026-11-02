@@ -343,12 +343,15 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSyncError, setIsSyncError] = useState(false);
   const [lastSynchronized, setLastSynchronized] = useState<Date>(new Date());
+  const isPrecheckFetchingRef = useRef(false);
+  const debounceRefreshTimeoutRef = useRef<any>(null);
 
   const restId = currentRestaurant?.id || api.getCurrentRestaurantId();
 
   // Load precheck data
   const loadPrecheck = async () => {
-    if (!restId) return;
+    if (!restId || isPrecheckFetchingRef.current) return;
+    isPrecheckFetchingRef.current = true;
     setIsPrecheckLoading(true);
     try {
       const data = await api.getBusinessDayPrecheck(restId);
@@ -359,6 +362,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
       console.warn('[DayManagementView] Failed to load precheck:', err);
       setIsSyncError(true);
     } finally {
+      isPrecheckFetchingRef.current = false;
       setIsPrecheckLoading(false);
     }
   };
@@ -390,19 +394,25 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
         t === 'table_status_updated' ||
         t === 'TableStatusUpdated'
       ) {
-        loadPrecheck();
-        onRefreshData();
-        setLastSynchronized(new Date());
+        if (debounceRefreshTimeoutRef.current) clearTimeout(debounceRefreshTimeoutRef.current);
+        debounceRefreshTimeoutRef.current = setTimeout(() => {
+          loadPrecheck();
+          onRefreshData();
+          setLastSynchronized(new Date());
+        }, 300);
       }
     });
 
     const heartbeat = setInterval(() => {
-      loadPrecheck();
-      onRefreshData();
-      setLastSynchronized(new Date());
+      if (document.visibilityState === 'visible') {
+        loadPrecheck();
+        onRefreshData();
+        setLastSynchronized(new Date());
+      }
     }, 30000);
 
     return () => {
+      if (debounceRefreshTimeoutRef.current) clearTimeout(debounceRefreshTimeoutRef.current);
       unsubscribe();
       clearInterval(heartbeat);
     };

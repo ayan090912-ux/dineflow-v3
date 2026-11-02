@@ -1187,6 +1187,12 @@ async def create_order(
         except Exception as ws_err:
             print("[WS_BROADCAST_NOTICE] order_created / table_updated:", ws_err)
 
+        try:
+            from app.modules.tables.router import invalidate_tables_cache
+            invalidate_tables_cache(restaurant.id)
+        except Exception:
+            pass
+
         if is_wedding_event and not is_staff_caller:
             return format_order_response(new_order, hide_financials=True)
         return resp_data
@@ -1838,6 +1844,12 @@ async def update_order_status(
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] order_status_updated:", ws_err)
+
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(order.restaurant_id)
+    except Exception:
+        pass
 
     return resp_data
 

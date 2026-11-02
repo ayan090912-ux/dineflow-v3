@@ -256,6 +256,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const notifiedOrderIdsRef = useRef<Set<string>>(new Set());
   // Guards against playing sounds for pre-existing orders on initial page load
   const hasInitializedRef = useRef(false);
+  const isFetchingRef = useRef(false);
 
   // Live Clock Time State
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -343,6 +344,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     // fetchFreshOrders refreshes data silently. It NEVER plays sound.
     // Sounds are ONLY triggered by genuine backend WS events (order_created).
     const fetchFreshOrders = () => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
       const restId = currentRestId || restaurant?.id || undefined;
       const isNotWeddingBusiness = (restaurant as any)?.businessType !== 'WEDDING_ORDERING';
       api.getOrders(restId, { station: 'KITCHEN', excludeEvents: isNotWeddingBusiness }).then((freshOrders) => {
@@ -352,7 +355,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         );
         // Silent data refresh — no sound here, ever
         setOrders(validOrders);
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => {
+        isFetchingRef.current = false;
+      });
     };
 
     // Initial load is silent (populate existing orders without any alert)
@@ -360,7 +365,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     // Mark initialized after first load so subsequent events can play sound
     setTimeout(() => { hasInitializedRef.current = true; }, 2000);
 
-    const pollInterval = setInterval(fetchFreshOrders, 15000);
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchFreshOrders();
+      }
+    }, 15000);
 
     // Per-session event deduplication (stable across re-renders, reset only on full effect re-registration)
     const handledEventIds = new Set<string>();

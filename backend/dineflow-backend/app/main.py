@@ -403,6 +403,17 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_waiter_requested BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS bar_waiter_requested BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS hookah_waiter_requested BOOLEAN DEFAULT FALSE;",
+        "CREATE INDEX IF NOT EXISTS ix_orders_restaurant_created_at ON orders (restaurant_id, created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS ix_orders_restaurant_status ON orders (restaurant_id, status);",
+        "CREATE INDEX IF NOT EXISTS ix_orders_restaurant_kitchen ON orders (restaurant_id, kitchen_status);",
+        "CREATE INDEX IF NOT EXISTS ix_orders_restaurant_bar ON orders (restaurant_id, bar_status);",
+        "CREATE INDEX IF NOT EXISTS ix_orders_restaurant_session ON orders (restaurant_id, table_session_id);",
+        "CREATE INDEX IF NOT EXISTS ix_bills_restaurant_created_at ON bills (restaurant_id, created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS ix_bills_restaurant_status ON bills (restaurant_id, status);",
+        "CREATE INDEX IF NOT EXISTS ix_bills_restaurant_session ON bills (restaurant_id, table_session_id);",
+        "CREATE INDEX IF NOT EXISTS ix_table_sessions_restaurant_status ON table_sessions (restaurant_id, status);",
+        "CREATE INDEX IF NOT EXISTS ix_customer_requests_rest_status ON customer_requests (restaurant_id, status, created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS ix_order_items_order_target ON order_items (order_id, target_destination);",
     ]
     for stmt in schema_patch_statements:
         try:

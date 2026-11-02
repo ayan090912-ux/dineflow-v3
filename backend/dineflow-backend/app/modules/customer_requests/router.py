@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Optional, List
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -155,6 +155,8 @@ async def get_customer_requests(
     active_only: bool = False,
     table_id: Optional[str] = None,
     table_session_id: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
@@ -210,7 +212,7 @@ async def get_customer_requests(
             (CustomerRequestModel.table_id == table_id) |
             (CustomerRequestModel.table_number == table_id)
         )
-    query = query.order_by(CustomerRequestModel.created_at.desc())
+    query = query.order_by(CustomerRequestModel.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(query)
     reqs = result.scalars().all()
 
