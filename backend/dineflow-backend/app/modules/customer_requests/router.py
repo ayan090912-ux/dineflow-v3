@@ -88,7 +88,9 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     req_id = f"req-{int(now_utc.timestamp() * 1000)}"
     req_type = (payload.requestType or "WATER").upper()
     title = payload.customTitle or req_type.replace("_", " ").title()
-    msg = payload.message or payload.customerNotes or f"Table {payload.tableNumber} requested: {title}"
+    clean_tbl = (payload.tableNumber or "").strip()
+    clean_tbl_display = clean_tbl if clean_tbl.lower().startswith("table") else f"Table {clean_tbl}"
+    msg = payload.message or payload.customerNotes or f"{clean_tbl_display} requested: {title}"
 
     session_id = payload.tableSessionId
     if not session_id and (payload.tableId or payload.tableNumber):

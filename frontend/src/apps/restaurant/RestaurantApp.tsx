@@ -734,11 +734,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       ) {
         api.getOrders(restId).then(setOrders).catch(() => {});
       } else if (event.type === 'service_request_created' || event.type === 'WaiterCalled') {
-        addToast('warning', 'Waiter Assistance Call 🔔', `Table ${event.tableNumber || 'Guest'} requested support.`);
+        // Handled cleanly in Section B of Waiter Terminal without intrusive toast
       } else if (event.type === 'table_session_closed' || event.type === 'TableSessionClosed') {
         const tblNum = (event as any).tableNumber || '';
         const sessId = (event as any).tableSessionId || (event as any).sessionId;
-        addToast('info', 'Table Session Closed 🧹', `Table ${tblNum} session ended and set to VACANT.`);
         if (sessId) {
           setActiveSessions((prev) => prev.filter((s) => s.id !== sessId));
         }
@@ -765,9 +764,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         api.getBills(restId).then((b) => setBills(b || [])).catch(() => {});
         api.getCurrentBusinessDay(restId).then(setCurrentBusinessDay).catch(() => {});
         api.getBusinessDayPrecheck(restId).then(setDayClosePrecheck).catch(() => {});
-        addToast('success', 'Payment Received 💰', `Bill payment updated: ₹${payloadData.amount || payloadData.grandTotal || ''} (${newStatus})`);
       } else if (event.type === 'ETAUpdated') {
-        addToast('info', 'ETA Adjusted ⏱️', `Order #${event.orderId} ETA set to ${event.estimatedPrepTimeMinutes}m`);
         setOrders((prev) =>
           prev.map((o) =>
             o.id === event.orderId
@@ -780,7 +777,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           )
         );
       } else if (event.type === 'BusinessDayClosed' || event.type === 'DayClosed') {
-        addToast('warning', 'Business Day Closed 🌅', 'Daily closing summary archived in history.');
         api.invalidateQueryCache('tables');
         api.invalidateQueryCache('active-sessions');
         setActiveSessions([]);
@@ -796,14 +792,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         api.getBusinessDayHistory(restId).then(setBusinessDayHistory).catch(() => {});
         api.getOrders(restId).then(setOrders).catch(() => {});
       } else if (event.type === 'BusinessDayOpened' || event.type === 'DayOpened') {
-        addToast('success', 'New Business Day Opened ☀️', 'Now recording orders for new business day.');
         api.getCurrentBusinessDay(restId).then(setCurrentBusinessDay).catch(() => {});
       } else if (event.type === 'StaffStatusUpdated') {
-        if (event.status === 'ON_CLOCK') {
-          addToast('success', 'Staff Member Online 🟢', `${event.name} (${event.role}) logged in and is now ACTIVE in app.`);
-        } else {
-          addToast('info', 'Staff Member Offline ⚪', `${event.name} logged out.`);
-        }
         setEmployees((prev) =>
           prev.map((emp) => (emp.id === event.employeeId || emp.name === event.name ? { ...emp, isClockedIn: event.status === 'ON_CLOCK' } : emp))
         );
@@ -813,7 +803,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           api.getRestaurantDetails(restId).then((updatedRest) => {
             if (updatedRest) {
               setCurrentRestaurant(updatedRest);
-              addToast('success', 'Restaurant Status Updated', `Status is now ${updatedRest.lifecycleStatus}`);
             }
           }).catch(() => {});
         }
@@ -830,14 +819,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             hasBilling: event.hasBilling !== undefined ? event.hasBilling : prev?.hasBilling,
             hasTables: event.hasTables !== undefined ? event.hasTables : prev?.hasTables,
           }));
-          addToast('info', 'Workspace Updated', 'Restaurant operational terminal configuration was updated.');
         }
       } else if (event.type === 'terminal_registered' || (event as any).type === 'TerminalRegistered') {
         const payload = (event as any).payload || event;
         const tName = payload.terminalName || payload.name || 'Device';
         const tCode = payload.terminalCode || payload.terminal_code || '';
         const msg = payload.message || `New terminal registered: ${tName} (${tCode})`;
-        addToast('success', 'Terminal Registered 📱', msg);
 
         // Native Phone & Browser Notification (Service Worker + Mobile Haptics + Desktop Fallback)
         sendAppNotification('Dinely OS: Terminal Registered 📱', {

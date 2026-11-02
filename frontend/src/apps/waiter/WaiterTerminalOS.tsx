@@ -327,12 +327,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
           if (prev.some((r) => r.id === newReq.id)) return prev;
           return [newReq, ...prev];
         });
-
-        showToast(
-          'Customer Service Call 🛎️',
-          `${tblNum} requested ${String(reqTitle).toLowerCase()}`,
-          'warning'
-        );
       } else if (event.type === 'service_request_updated' || event.type === 'CustomerRequestUpdated') {
         const payloadData = (event as any).payload || (event as any).data || event;
         const reqId = payloadData.id || (event as any).id;
@@ -409,11 +403,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             if (fresh && Array.isArray(fresh)) setOrders(fresh);
           }).catch(() => {});
         }
-        showToast(
-          station ? `${station} Item Ready 🛎️` : 'Order Plated & Ready 🔥',
-          `Order for ${tblNum} is ready for collection`,
-          'success'
-        );
       } else if (event.type === 'order_delivered' || event.type === 'OrderDelivered') {
         const payloadData = (event as any).payload || event;
         const orderId = payloadData.orderId || payloadData.order_id || payloadData.id || (event as any).orderId || (event as any).order_id;
@@ -488,7 +477,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
           setActiveSessions((prev) => prev.filter((s) => s.id !== sessId));
           setRequests((prev) => prev.filter((r) => r.tableSessionId !== sessId));
         }
-        showToast('Table Session Closed 🧹', `Table ${tblNum} session ended`, 'info');
       } else if (event.type === 'table_session_created' || event.type === 'TableSessionCreated' || event.type === 'table_status_updated' || event.type === 'TableStatusUpdated') {
         const sess = (event as any).session || (event as any).payload?.session;
         const tblId = (event as any).tableId || sess?.tableId;
@@ -519,7 +507,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         api.getBills(currentRestaurantId).then((fresh) => {
           if (Array.isArray(fresh)) setBills(fresh);
         }).catch(() => {});
-        showToast('Payment Update 💳', `Bill for ${tblNum} is ${newStatus}`, 'success');
       } else if (event.type === 'BillRequested' || event.type === 'bill_updated') {
         const payloadData = (event as any).payload || event;
         const incomingBill = payloadData.data || payloadData.bill || (payloadData.id ? payloadData : null);
@@ -535,7 +522,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             if (Array.isArray(fresh)) setBills(fresh);
           }).catch(() => {});
         }
-        showToast('Bill Check Request 🧾', `${tblNum} requested final bill`, 'info');
       } else if (event.type === 'DayClosed' || event.type === 'BusinessDayClosed') {
         setRequests([]);
         setActiveSessions([]);
@@ -547,7 +533,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             activeSessionId: undefined,
           }))
         );
-        showToast('Business Day Closed 🌅', 'Live operational queues and active sessions reset for the new day.', 'info');
       }
     });
 
@@ -1009,7 +994,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       </div>
 
       {/* TOAST NOTIFICATION POPUP */}
-      {toastMessage && (
+      {toastMessage && !isEmbedded && (
         <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
           <div
             className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-medium liquid-glass ${
@@ -1597,9 +1582,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                     )}
                                   </div>
                                 </div>
-                              ) : req.customerNotes ? (
+                              ) : (req.customerNotes || req.message) ? (
                                 <div className="text-xs bg-white/[0.04] p-3 rounded-xl border border-white/10 text-white/80 italic">
-                                  "{req.customerNotes}"
+                                  "{(req.customerNotes || req.message || '').replace(/^Table\s+Table\s+/i, 'Table ')}"
                                 </div>
                               ) : null}
 

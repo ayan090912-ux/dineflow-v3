@@ -762,7 +762,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       )}
 
       {/* Toast Feedback */}
-      {toast && (
+      {toast && !isEmbedded && (
         <div className="fixed top-6 right-6 z-50 p-3.5 rounded-2xl bg-emerald-500/90 backdrop-blur-xl text-slate-950 font-bold text-xs shadow-2xl flex items-center gap-2 border border-emerald-300">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toast.msg}</span>
