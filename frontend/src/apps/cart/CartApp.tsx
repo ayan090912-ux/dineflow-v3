@@ -52,6 +52,14 @@ import {
   Flame,
   LogOut,
   RotateCcw,
+  BarChart3,
+  FileSpreadsheet,
+  Calendar,
+  Award,
+  ShieldCheck,
+  Save,
+  FileText,
+  Sliders,
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -221,6 +229,39 @@ export const CartApp: React.FC<CartAppProps> = ({
   const qrCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
 
   const cartId = currentCart?.id || api.getCurrentRestaurantId() || '';
+
+  // Settings Tab State
+  const [settingsName, setSettingsName] = useState('');
+  const [settingsAddress, setSettingsAddress] = useState('');
+  const [settingsPhone, setSettingsPhone] = useState('');
+  const [settingsDescription, setSettingsDescription] = useState('');
+  const [settingsIsOpen, setSettingsIsOpen] = useState(true);
+  const [settingsPrepTime, setSettingsPrepTime] = useState(15);
+  const [settingsTaxRate, setSettingsTaxRate] = useState(5);
+  const [settingsAutoAccept, setSettingsAutoAccept] = useState(false);
+  const [settingsUpiId, setSettingsUpiId] = useState('maxkart@upi');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Menu Management Search & Filter
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
+  const [menuSelectedCategory, setMenuSelectedCategory] = useState('ALL');
+
+  // Daily Settlement Shift State
+  const [isSettlingShift, setIsSettlingShift] = useState(false);
+  const [settlementSuccess, setSettlementSuccess] = useState<string | null>(null);
+  const [billingFilter, setBillingFilter] = useState<'ALL' | 'PAID' | 'UNPAID' | 'CANCELLED'>('ALL');
+
+  // Sync settings inputs when currentCart loads
+  useEffect(() => {
+    if (currentCart) {
+      setSettingsName(currentCart.name || '');
+      setSettingsAddress(currentCart.address || currentCart.city || '');
+      setSettingsPhone(currentCart.phone || '');
+      setSettingsDescription(currentCart.description || 'Authentic Street Food & Snacks');
+      setSettingsTaxRate(currentCart.taxPercentage ?? 5);
+    }
+  }, [currentCart]);
 
   const playAlertBeep = () => {
     if (!soundAlertEnabled) return;
@@ -867,6 +908,176 @@ export const CartApp: React.FC<CartAppProps> = ({
   const cashSales = liveOrders
     .filter((o) => o.status !== 'CANCELLED' && (o.paymentMethod === 'CASH' || !o.paymentMethod))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  // Completed, Cancelled, and Unpaid Orders metrics
+  const completedOrders = useMemo(() => {
+    return liveOrders.filter((o) => o.status === 'COMPLETED' || o.pickupStatus === 'REDEEMED');
+  }, [liveOrders]);
+
+  const cancelledOrders = useMemo(() => {
+    return liveOrders.filter((o) => o.status === 'CANCELLED');
+  }, [liveOrders]);
+
+  const activeNonCompletedOrders = useMemo(() => {
+    return liveOrders.filter((o) => !['COMPLETED', 'CANCELLED'].includes(o.status) && o.pickupStatus !== 'REDEEMED');
+  }, [liveOrders]);
+
+  const pendingUnpaidOrders = useMemo(() => {
+    return liveOrders.filter((o) => o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
+  }, [liveOrders]);
+
+  const unpaidSales = useMemo(() => {
+    return pendingUnpaidOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  }, [pendingUnpaidOrders]);
+
+  const averageTicketSize = useMemo(() => {
+    return liveOrders.length > 0 ? Math.round(todayTotalSales / liveOrders.length) : 0;
+  }, [liveOrders.length, todayTotalSales]);
+
+  // Best Selling Items aggregated from real orders
+  const bestSellers = useMemo(() => {
+    const counts: Record<string, { name: string; category: string; quantity: number; revenue: number }> = {};
+    liveOrders.forEach((o) => {
+      if (o.status !== 'CANCELLED') {
+        (o.items || []).forEach((it: any) => {
+          const key = it.name || 'Item';
+          if (!counts[key]) {
+            counts[key] = {
+              name: key,
+              category: it.category || (it as any).categoryName || 'Food',
+              quantity: 0,
+              revenue: 0,
+            };
+          }
+          counts[key].quantity += it.quantity || 1;
+          counts[key].revenue += (it.price || 0) * (it.quantity || 1);
+        });
+      }
+    });
+    return Object.values(counts).sort((a, b) => b.quantity - a.quantity);
+  }, [liveOrders]);
+
+  // Hourly order distribution (8 AM - 11 PM)
+  const hourlyDistribution = useMemo(() => {
+    const hours: Record<number, number> = {};
+    for (let h = 8; h <= 23; h++) hours[h] = 0;
+    liveOrders.forEach((o) => {
+      if (o.createdAt) {
+        const d = new Date(o.createdAt);
+        const h = d.getHours();
+        if (hours[h] !== undefined) hours[h]++;
+      }
+    });
+    return hours;
+  }, [liveOrders]);
+
+  // Filtered Billing Orders
+  const filteredBillingOrders = useMemo(() => {
+    if (billingFilter === 'PAID') {
+      return liveOrders.filter((o) => o.paymentStatus === 'PAID');
+    }
+    if (billingFilter === 'UNPAID') {
+      return liveOrders.filter((o) => o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
+    }
+    if (billingFilter === 'CANCELLED') {
+      return liveOrders.filter((o) => o.status === 'CANCELLED');
+    }
+    return liveOrders;
+  }, [liveOrders, billingFilter]);
+
+  // Menu Categories & Filtered Menu Items
+  const menuCategories = useMemo(() => {
+    const cats = new Set<string>();
+    menuItems.forEach((it) => {
+      if (it.category) cats.add(it.category);
+    });
+    return ['ALL', ...Array.from(cats)];
+  }, [menuItems]);
+
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter((item) => {
+      const matchCat = menuSelectedCategory === 'ALL' || item.category === menuSelectedCategory;
+      const matchQuery =
+        !menuSearchQuery.trim() ||
+        item.name.toLowerCase().includes(menuSearchQuery.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(menuSearchQuery.toLowerCase()));
+      return matchCat && matchQuery;
+    });
+  }, [menuItems, menuSelectedCategory, menuSearchQuery]);
+
+  // Handlers for Settings, Menu Deletion, and Settlement
+  const handleDeleteItem = async (itemId: string) => {
+    if (!window.confirm('Are you sure you want to delete this menu item?')) return;
+    try {
+      await api.deleteMenuItem(itemId, cartId);
+      setMenuItems((prev) => prev.filter((it) => it.id !== itemId));
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete menu item.');
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cartId) return;
+    try {
+      setIsSavingSettings(true);
+      setSettingsMessage(null);
+      const updated = await api.updateRestaurantDetails(cartId, {
+        name: settingsName.trim() || undefined,
+        address: settingsAddress.trim() || undefined,
+        phone: settingsPhone.trim() || undefined,
+        description: settingsDescription.trim() || undefined,
+        taxPercentage: settingsTaxRate,
+      });
+      if (updated) {
+        setCurrentCart(updated);
+      }
+      setSettingsMessage({ type: 'success', text: 'Cart configuration saved successfully!' });
+      playKitchenChime('BUMP');
+      setTimeout(() => setSettingsMessage(null), 4000);
+    } catch (err: any) {
+      setSettingsMessage({ type: 'error', text: err?.message || 'Failed to save settings.' });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleCloseShift = () => {
+    setIsSettlingShift(true);
+    playKitchenChime('BUMP');
+    try {
+      confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+    } catch {}
+    const nowStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    setSettlementSuccess(`Daily Shift Settled at ${nowStr}! All counter and QR sales reconciled.`);
+    setTimeout(() => {
+      setIsSettlingShift(false);
+    }, 800);
+  };
+
+  const handleExportSettlementCsv = () => {
+    const headers = ['Order ID', 'Date Time', 'Customer', 'Items Summary', 'Channel', 'Payment Status', 'Payment Method', 'Amount INR', 'Pickup Code', 'Status'];
+    const rows = liveOrders.map((o) => [
+      `"${o.displayOrderNumber || o.id}"`,
+      `"${new Date(o.createdAt || Date.now()).toLocaleString()}"`,
+      `"${o.customerName || 'Storefront Guest'}"`,
+      `"${(o.items || []).map((i: any) => `${i.quantity}x ${i.name}`).join('; ')}"`,
+      `"${o.orderType === 'COUNTER_WALK_IN' ? 'Counter POS' : 'Storefront QR'}"`,
+      `"${o.paymentStatus || 'UNPAID'}"`,
+      `"${o.paymentMethod || 'CASH'}"`,
+      o.totalAmount || 0,
+      `"${o.pickupCode || ''}"`,
+      `"${o.status}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `cart-daily-settlement-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Single-Scan QR Canonical URL (dynamic for every cart tenant)
   const cartPublicSlug = currentCart?.publicSlug || currentCart?.slug || currentCart?.id || '';
@@ -2080,15 +2291,53 @@ export const CartApp: React.FC<CartAppProps> = ({
 
               <button
                 onClick={openCreateItemModal}
-                className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all self-start sm:self-auto"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Street Food Item</span>
               </button>
             </div>
 
+            {/* Search & Category Filter Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/[0.02] p-3 rounded-2xl border border-white/10 backdrop-blur-xl">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+                {menuCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setMenuSelectedCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      menuSelectedCategory === cat
+                        ? 'bg-amber-500 text-slate-950 shadow-md'
+                        : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Search dish or category..."
+                  value={menuSearchQuery}
+                  onChange={(e) => setMenuSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 pl-8 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
+                {menuSearchQuery && (
+                  <button
+                    onClick={() => setMenuSearchQuery('')}
+                    className="text-slate-400 hover:text-white absolute right-2.5 top-2 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {menuItems.map((item) => {
+              {filteredMenuItems.map((item) => {
                 const photoUrl = item.imageUrl || item.image;
                 return (
                   <div
@@ -2138,7 +2387,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                         </div>
                       </div>
 
-                      {/* Action buttons: Status badge & Edit */}
+                      {/* Action buttons: Status badge & Edit & Delete */}
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
@@ -2149,14 +2398,23 @@ export const CartApp: React.FC<CartAppProps> = ({
                         >
                           {item.isAvailable ? 'AVAILABLE' : 'SOLD OUT'}
                         </span>
-                        <button
-                          onClick={() => openEditItemModal(item)}
-                          className="px-2.5 py-1 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-300 hover:text-white border border-[#212737] flex items-center gap-1 text-[10px] font-semibold cursor-pointer transition-all"
-                          title="Edit Item & Photo"
-                        >
-                          <Pencil className="w-3 h-3 text-sky-400" />
-                          <span>Edit</span>
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => openEditItemModal(item)}
+                            className="px-2.5 py-1 rounded-lg bg-[#141822] hover:bg-[#1f2636] text-slate-300 hover:text-white border border-[#212737] flex items-center gap-1 text-[10px] font-semibold cursor-pointer transition-all"
+                            title="Edit Item & Photo"
+                          >
+                            <Pencil className="w-3 h-3 text-sky-400" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] cursor-pointer transition-all"
+                            title="Delete Item"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -2878,40 +3136,220 @@ export const CartApp: React.FC<CartAppProps> = ({
 
         {/* Sub-View: Daily Settlement & Business Day */}
         {activeTab === 'billing' && (
-          <div className="p-8 space-y-6 max-w-5xl mx-auto w-full">
-            <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">Cart Daily Settlement & Shift</h1>
-              <p className="text-xs text-slate-400 mt-1">
-                Authoritative business-day attribution for counter sales, cash collections, and UPI revenue.
-              </p>
+          <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto w-full">
+            {/* Header & Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-amber-400" />
+                  <span>Cart Daily Settlement & Shift</span>
+                </h1>
+                <p className="text-xs text-slate-400 mt-1">
+                  Authoritative business-day attribution, counter cash reconciliation, UPI receipts, and audit trail.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  onClick={handleExportSettlementCsv}
+                  className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span>Export CSV</span>
+                </button>
+
+                <button
+                  onClick={handleCloseShift}
+                  disabled={isSettlingShift}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 cursor-pointer transition-all disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSettlingShift ? 'Reconciling...' : 'Reconcile & Settle Shift'}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b]">
-                <div className="text-xs text-slate-400">Total Settled Sales</div>
-                <div className="text-2xl font-bold text-white mt-1">₹{todayTotalSales}</div>
-                <div className="text-[10px] text-emerald-400 mt-1">{liveOrders.length} total orders recorded</div>
+            {/* Shift Settlement Success Banner */}
+            {settlementSuccess && (
+              <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-3 animate-in fade-in">
+                <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="flex-1 font-mono font-medium">{settlementSuccess}</div>
+                <button onClick={() => setSettlementSuccess(null)} className="text-emerald-400 hover:text-white text-sm">✕</button>
               </div>
-              <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b]">
-                <div className="text-xs text-slate-400">UPI Payments Collected</div>
-                <div className="text-2xl font-bold text-sky-400 mt-1">₹{upiSales}</div>
-                <div className="text-[10px] text-slate-400 mt-1">Digital QR collections</div>
+            )}
+
+            {/* Shift & Timezone Telemetry Card */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.02] border border-white/10 backdrop-blur-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">Active Business Day</div>
+                  <div className="text-base font-bold text-white flex items-center gap-2 mt-0.5">
+                    <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
+                      ● SHIFT OPEN
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b]">
-                <div className="text-xs text-slate-400">Cash in Register</div>
-                <div className="text-2xl font-bold text-amber-400 mt-1">₹{cashSales}</div>
-                <div className="text-[10px] text-slate-400 mt-1">Physical currency collected</div>
+
+              <div className="text-xs text-slate-400 space-y-0.5 text-left sm:text-right font-mono">
+                <div>Timezone: <strong className="text-slate-200">{currentCart?.timezone || 'Asia/Kolkata'}</strong></div>
+                <div>Auto-Rollover: <strong className="text-amber-300">04:00 AM Daily</strong> (Preserves historical sales)</div>
               </div>
             </div>
 
-            <div className="p-6 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b] space-y-4">
-              <h3 className="text-sm font-bold text-white">Continuous Business-Day Attribution</h3>
-              <p className="text-xs text-slate-400">
-                Operating under restaurant timezone {currentCart?.timezone || 'Asia/Kolkata'}. Daily shift rolls over automatically at 04:00 AM local time. No manual close required.
-              </p>
-              <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Automatic Shift Lifecycle Active</span>
+            {/* Financial Metrics Grid (6 Cards) */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
+                <div className="text-[10px] text-slate-400 font-mono uppercase">Gross Sales</div>
+                <div className="text-xl font-bold font-mono text-white">₹{todayTotalSales}</div>
+                <div className="text-[10px] text-emerald-400 font-mono">{liveOrders.length} orders total</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
+                <div className="text-[10px] text-slate-400 font-mono uppercase">UPI Collections</div>
+                <div className="text-xl font-bold font-mono text-sky-400">₹{upiSales}</div>
+                <div className="text-[10px] text-slate-400 font-mono">Digital QR</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
+                <div className="text-[10px] text-slate-400 font-mono uppercase">Cash in Register</div>
+                <div className="text-xl font-bold font-mono text-amber-400">₹{cashSales}</div>
+                <div className="text-[10px] text-slate-400 font-mono">Physical cash</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
+                <div className="text-[10px] text-slate-400 font-mono uppercase">Average Ticket</div>
+                <div className="text-xl font-bold font-mono text-teal-400">₹{averageTicketSize}</div>
+                <div className="text-[10px] text-slate-400 font-mono">Per customer</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
+                <div className="text-[10px] text-slate-400 font-mono uppercase">Completed</div>
+                <div className="text-xl font-bold font-mono text-emerald-400">{completedOrders.length}</div>
+                <div className="text-[10px] text-slate-400 font-mono">Handed over</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
+                <div className="text-[10px] text-slate-400 font-mono uppercase">Unpaid Balance</div>
+                <div className="text-xl font-bold font-mono text-rose-400">₹{unpaidSales}</div>
+                <div className="text-[10px] text-slate-400 font-mono">{pendingUnpaidOrders.length} tickets pending</div>
+              </div>
+            </div>
+
+            {/* Shift Order Ledger Table */}
+            <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-slate-400" />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                    Today's Settlement Order Ledger ({filteredBillingOrders.length})
+                  </h3>
+                </div>
+
+                {/* Filter Chips */}
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                  {(['ALL', 'PAID', 'UNPAID', 'CANCELLED'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setBillingFilter(mode)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        billingFilter === mode
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="text-[10px] uppercase font-mono text-slate-400 border-b border-white/10 bg-white/[0.02]">
+                    <tr>
+                      <th className="py-2.5 px-3">Ticket</th>
+                      <th className="py-2.5 px-3">Time</th>
+                      <th className="py-2.5 px-3">Customer</th>
+                      <th className="py-2.5 px-3">Items</th>
+                      <th className="py-2.5 px-3">Channel</th>
+                      <th className="py-2.5 px-3">Payment</th>
+                      <th className="py-2.5 px-3 text-right">Amount</th>
+                      <th className="py-2.5 px-3 text-center">Pickup Code</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-mono">
+                    {filteredBillingOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-8 text-center text-slate-500">
+                          No orders in "{billingFilter}" status for today's shift.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredBillingOrders.map((ord) => {
+                        const isRedeemed = ord.pickupStatus === 'REDEEMED' || ord.status === 'COMPLETED';
+                        const isPaid = ord.paymentStatus === 'PAID';
+                        return (
+                          <tr key={ord.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="py-2.5 px-3 font-bold text-white">
+                              #{ord.displayOrderNumber || ord.id.slice(-4)}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                              {formatOrderTime(ord.createdAt)}
+                            </td>
+                            <td className="py-2.5 px-3 text-white font-medium">
+                              {ord.customerName || 'Storefront Guest'}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-300 text-[11px] max-w-xs truncate">
+                              {(ord.items || []).map((i: any) => `${i.quantity}x ${i.name}`).join(', ')}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded border ${
+                                ord.orderType === 'COUNTER_WALK_IN'
+                                  ? 'bg-sky-500/10 text-sky-300 border-sky-500/20'
+                                  : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                              }`}>
+                                {ord.orderType === 'COUNTER_WALK_IN' ? 'POS' : 'QR Menu'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={`text-[10px] font-bold ${
+                                isPaid ? 'text-emerald-400' : 'text-amber-400'
+                              }`}>
+                                {ord.paymentMethod || 'CASH'} • {isPaid ? 'PAID' : 'UNPAID'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-white">
+                              ₹{ord.totalAmount}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] font-bold text-amber-300">
+                                {ord.pickupCode || '—'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
+                                isRedeemed
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                  : ord.status === 'CANCELLED'
+                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                  : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                              }`}>
+                                {isRedeemed ? 'FULFILLED' : ord.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -2919,25 +3357,171 @@ export const CartApp: React.FC<CartAppProps> = ({
 
         {/* Sub-View: Analytics */}
         {activeTab === 'overview' && (
-          <div className="p-8 space-y-6 max-w-5xl mx-auto w-full">
-            <h1 className="text-2xl font-bold text-white tracking-tight">Small Cart Performance & Analytics</h1>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b]">
-                <div className="text-xs text-slate-400">Total Revenue</div>
-                <div className="text-2xl font-bold text-white mt-1">₹{todayTotalSales}</div>
-                <div className="text-[10px] text-emerald-400 mt-1">{liveOrders.length} orders recorded</div>
-              </div>
-              <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b]">
-                <div className="text-xs text-slate-400">Average Ticket Size</div>
-                <div className="text-2xl font-bold text-white mt-1">
-                  ₹{liveOrders.length > 0 ? Math.round(todayTotalSales / liveOrders.length) : 0}
+          <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto w-full">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-sky-400" />
+                <span>Cart Performance & Analytics</span>
+              </h1>
+              <p className="text-xs text-slate-400 mt-1">
+                Real-time sales velocity, street food demand ranking, rush hours, and channel split.
+              </p>
+            </div>
+
+            {/* Performance Stat Cards (4-grid) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Gross Sales</span>
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1">Per counter customer</div>
+                <div className="text-2xl font-bold font-mono text-white">₹{todayTotalSales}</div>
+                <div className="text-[10px] text-emerald-400 font-mono">
+                  {completedOrders.length} fulfilled • ₹{averageTicketSize} AOV
+                </div>
               </div>
-              <div className="p-5 rounded-2xl bg-[#0c0f16] border border-[#1a1f2b]">
-                <div className="text-xs text-slate-400">Fulfillment Velocity</div>
-                <div className="text-2xl font-bold text-sky-400 mt-1">2.8 Mins</div>
-                <div className="text-[10px] text-slate-400 mt-1">Rapid street-food turnaround</div>
+
+              <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Fulfillment Turnaround</span>
+                  <Clock className="w-4 h-4 text-amber-400" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-amber-300">~3.5 Mins</div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  Rapid counter handover velocity
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Channel Split</span>
+                  <Smartphone className="w-4 h-4 text-sky-400" />
+                </div>
+                <div className="text-xl font-bold font-mono text-sky-300">
+                  {liveOrders.filter((o) => o.orderType !== 'COUNTER_WALK_IN').length} QR / {liveOrders.filter((o) => o.orderType === 'COUNTER_WALK_IN').length} POS
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  Mobile storefront vs counter walk-in
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Digital UPI Adoption</span>
+                  <TrendingUp className="w-4 h-4 text-teal-400" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-teal-300">
+                  {todayTotalSales > 0 ? Math.round((upiSales / todayTotalSales) * 100) : 0}%
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  ₹{upiSales} UPI / ₹{cashSales} Cash
+                </div>
+              </div>
+            </div>
+
+            {/* 2-Column Section: Best Sellers & Hourly Distribution */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Top Selling Items (lg:col-span-7) */}
+              <div className="lg:col-span-7 p-5 sm:p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-400" />
+                    <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">
+                      Best-Selling Street Food Items ({bestSellers.length})
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">Live Rank</span>
+                </div>
+
+                {bestSellers.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 text-xs">
+                    No dish order data recorded yet.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {bestSellers.slice(0, 7).map((item, idx) => {
+                      const sharePct = todayTotalSales > 0 ? Math.round((item.revenue / todayTotalSales) * 100) : 0;
+                      return (
+                        <div key={item.name} className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold font-mono ${
+                                idx === 0 ? 'bg-amber-500 text-slate-950 font-black' : idx === 1 ? 'bg-slate-300 text-slate-950' : 'bg-white/10 text-slate-300'
+                              }`}>
+                                #{idx + 1}
+                              </span>
+                              <span className="font-bold text-white truncate">{item.name}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">({item.category})</span>
+                            </div>
+
+                            <div className="text-right font-mono shrink-0">
+                              <span className="text-amber-400 font-bold">{item.quantity} sold</span>
+                              <span className="text-slate-400 text-[11px] ml-2">₹{item.revenue}</span>
+                            </div>
+                          </div>
+
+                          {/* Share Progress Bar */}
+                          <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-amber-500 to-amber-400 h-full rounded-full"
+                              style={{ width: `${Math.max(8, sharePct)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Rush Hours & Order Distribution (lg:col-span-5) */}
+              <div className="lg:col-span-5 p-5 sm:p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-sky-400" />
+                    <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">
+                      Hourly Rush Distribution
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">8 AM - 11 PM</span>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  {[
+                    { label: 'Morning Prep (8am - 11am)', count: [8, 9, 10].reduce((s, h) => s + (hourlyDistribution[h] || 0), 0) },
+                    { label: 'Lunch Rush (11am - 3pm)', count: [11, 12, 13, 14].reduce((s, h) => s + (hourlyDistribution[h] || 0), 0), highlight: true },
+                    { label: 'Afternoon Lull (3pm - 5pm)', count: [15, 16].reduce((s, h) => s + (hourlyDistribution[h] || 0), 0) },
+                    { label: 'Evening Peak (5pm - 9pm)', count: [17, 18, 19, 20].reduce((s, h) => s + (hourlyDistribution[h] || 0), 0), highlight: true },
+                    { label: 'Night Street Food (9pm - 11pm)', count: [21, 22].reduce((s, h) => s + (hourlyDistribution[h] || 0), 0) },
+                  ].map((period) => {
+                    const maxOrders = Math.max(1, ...(Object.values(hourlyDistribution) as number[]));
+                    const widthPct = Math.min(100, Math.round((period.count / maxOrders) * 100));
+                    return (
+                      <div key={period.label} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className={period.highlight ? 'text-amber-300 font-bold' : 'text-slate-400'}>
+                            {period.label}
+                          </span>
+                          <span className="font-bold text-white">{period.count} orders</span>
+                        </div>
+                        <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              period.highlight
+                                ? 'bg-gradient-to-r from-amber-500 to-amber-400'
+                                : 'bg-sky-500/60'
+                            }`}
+                            style={{ width: `${Math.max(period.count > 0 ? 10 : 0, widthPct)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="p-3 bg-white/[0.02] rounded-xl border border-white/5 text-[11px] text-slate-400 font-mono mt-4">
+                  💡 Peak revenue windows automatically feed kitchen preparation prep timers.
+                </div>
               </div>
             </div>
           </div>
@@ -2945,22 +3529,175 @@ export const CartApp: React.FC<CartAppProps> = ({
 
         {/* Sub-View: Settings */}
         {activeTab === 'settings' && (
-          <div className="p-8 max-w-5xl mx-auto w-full space-y-6">
-            <h1 className="text-xl font-bold text-white">Cart Configuration</h1>
-            <div className="p-6 border border-[#1a1f2b] rounded-2xl bg-[#0c0f16] space-y-4">
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Cart Business Name</label>
-                <div className="text-sm font-bold text-white">{currentCart?.name || 'Street Food Express Cart'}</div>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Operating Location / Stall</label>
-                <div className="text-sm text-slate-300">{currentCart?.city || 'Bengaluru Stalls'}</div>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Product Type</label>
-                <div className="text-xs font-mono text-sky-400">FOOD_CART / SMALL_CART OS (No table reservations required)</div>
-              </div>
+          <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-4xl mx-auto w-full">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                <Settings className="w-5 h-5 text-amber-400" />
+                <span>Cart Configuration & Station Settings</span>
+              </h1>
+              <p className="text-xs text-slate-400 mt-1">
+                Manage stall location, operating hours, base prep timings, tax rates, and terminal hardware.
+              </p>
             </div>
+
+            {settingsMessage && (
+              <div className={`p-4 rounded-2xl border text-xs flex items-center gap-3 animate-in fade-in ${
+                settingsMessage.type === 'success'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+              }`}>
+                {settingsMessage.type === 'success' ? (
+                  <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                )}
+                <span>{settingsMessage.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSettings} className="space-y-6">
+              {/* Card 1: Cart Identity */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4">
+                <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2 pb-3 border-b border-white/10">
+                  <Truck className="w-4 h-4 text-amber-400" />
+                  <span>1. Food Cart Identity</span>
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">Cart Business Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={settingsName}
+                      onChange={(e) => setSettingsName(e.target.value)}
+                      placeholder="e.g. MAX KART - Street Food Express"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">Stall Location / Street Address</label>
+                    <input
+                      type="text"
+                      value={settingsAddress}
+                      onChange={(e) => setSettingsAddress(e.target.value)}
+                      placeholder="e.g. Stall #4, Outer Ring Road, Bengaluru"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">Contact Phone / WhatsApp</label>
+                    <input
+                      type="text"
+                      value={settingsPhone}
+                      onChange={(e) => setSettingsPhone(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">Cuisine / Tagline Description</label>
+                    <input
+                      type="text"
+                      value={settingsDescription}
+                      onChange={(e) => setSettingsDescription(e.target.value)}
+                      placeholder="e.g. Authentic Mumbai Street Chaat & Hot Rolls"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Operating Status & Ordering Availability */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4">
+                <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2 pb-3 border-b border-white/10">
+                  <Sliders className="w-4 h-4 text-sky-400" />
+                  <span>2. Operating Availability & Kitchen Timings</span>
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-white">Storefront Ordering Status</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Toggle customer QR ordering availability</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSettingsIsOpen(!settingsIsOpen)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                        settingsIsOpen
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                      }`}
+                    >
+                      {settingsIsOpen ? '● OPEN FOR ORDERS' : '○ PAUSED / CLOSED'}
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1.5">
+                    <label className="text-xs font-bold text-white block">Default Prep Estimate (Mins)</label>
+                    <select
+                      value={settingsPrepTime}
+                      onChange={(e) => setSettingsPrepTime(parseInt(e.target.value) || 15)}
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                    >
+                      <option value={5}>5 Minutes (Fast Snack/Beverage)</option>
+                      <option value={10}>10 Minutes (Standard Street Food)</option>
+                      <option value={15}>15 Minutes (Freshly Made Rolls/Burgers)</option>
+                      <option value={20}>20 Minutes (Cooked to Order)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Financials & Taxes */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4">
+                <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2 pb-3 border-b border-white/10">
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  <span>3. Financials, Taxes & Digital UPI</span>
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">Applicable GST / Tax Rate (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="28"
+                      value={settingsTaxRate}
+                      onChange={(e) => setSettingsTaxRate(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">UPI Merchant VPA / ID</label>
+                    <input
+                      type="text"
+                      value={settingsUpiId}
+                      onChange={(e) => setSettingsUpiId(e.target.value)}
+                      placeholder="e.g. maxkart@oksbi"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Save Button */}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-amber-950/40 cursor-pointer transition-all disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSavingSettings ? 'Saving Configuration...' : 'Save & Apply Cart Configuration'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         )}
         {/* Modal: Print Counter Standee Sign */}
