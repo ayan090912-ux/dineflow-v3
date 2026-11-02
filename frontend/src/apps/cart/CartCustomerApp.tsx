@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Truck,
   ShoppingBag,
@@ -7,8 +7,6 @@ import {
   Minus,
   CheckCircle2,
   Clock,
-  QrCode,
-  AlertCircle,
   Sparkles,
   Ticket,
   ChevronRight,
@@ -26,12 +24,16 @@ import {
   Leaf,
   UtensilsCrossed,
   ChevronDown,
+  AlertCircle,
+  MapPin,
+  Store,
+  Share2,
+  BellRing,
 } from 'lucide-react';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
 import { DinelyLogo, Button } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
-
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { resolveCartTheme } from './cartThemes';
 
@@ -49,18 +51,23 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
 
-  // Filters
+  // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [dietaryFilter, setDietaryFilter] = useState<'ALL' | 'VEG' | 'NON_VEG'>('ALL');
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
 
   // Basket State: { item: MenuItem, quantity: number, notes?: string }
   const [basket, setBasket] = useState<Array<{ item: MenuItem; quantity: number; notes?: string }>>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   // Customer Checkout Details
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState(() => {
+    return (typeof window !== 'undefined' ? localStorage.getItem('dinely_customer_name') : '') || '';
+  });
+  const [customerPhone, setCustomerPhone] = useState(() => {
+    return (typeof window !== 'undefined' ? localStorage.getItem('dinely_customer_phone') : '') || '';
+  });
   const [orderNotes, setOrderNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'UPI'>('CASH');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,14 +80,45 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   const [isViewingMenu, setIsViewingMenu] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Active Cart Theme
+  // Target Restaurant ID
+  const targetRestId = business?.id || api.getCurrentRestaurantId() || '';
+
+  // Theme resolution
   const activeTheme = useMemo(() => {
     return resolveCartTheme(business?.theme);
   }, [business?.theme]);
 
-  // Load business & menu
-  const targetRestId = business?.id || api.getCurrentRestaurantId() || '';
+  // Restore basket from localStorage
+  useEffect(() => {
+    if (!targetRestId) return;
+    try {
+      const stored = localStorage.getItem(`dinely_cart_basket_${targetRestId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setBasket(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [targetRestId]);
 
+  // Persist basket to localStorage
+  useEffect(() => {
+    if (!targetRestId) return;
+    try {
+      if (basket.length > 0) {
+        localStorage.setItem(`dinely_cart_basket_${targetRestId}`, JSON.stringify(basket));
+      } else {
+        localStorage.removeItem(`dinely_cart_basket_${targetRestId}`);
+      }
+    } catch {
+      // ignore
+    }
+  }, [basket, targetRestId]);
+
+  // Fetch Menu
   const fetchMenu = useCallback(async (restId: string) => {
     if (!restId) return;
     try {
@@ -92,27 +130,34 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
       }
     } catch (err: any) {
       console.warn('Failed to load menu items:', err);
-      setMenuError(err?.message || 'Could not load menu items. Please check connection.');
+      setMenuError(err?.message || 'Could not load menu items. Please check your network connection.');
     } finally {
       setIsLoadingMenu(false);
     }
   }, []);
 
+  // Sync prop business
   useEffect(() => {
     if (propBusiness) {
       setBusiness(propBusiness);
+      api.setCurrentRestaurantId(propBusiness.id);
       fetchMenu(propBusiness.id);
     }
   }, [propBusiness, fetchMenu]);
 
+  // Tenant Resolution
   useEffect(() => {
     async function init() {
       if (!business) {
         try {
           const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-          const queryCartId = searchParams.get('cartId') || searchParams.get('restaurantId') || searchParams.get('cart') || searchParams.get('slug');
+          const queryCartId =
+            searchParams.get('cartId') ||
+            searchParams.get('restaurantId') ||
+            searchParams.get('cart') ||
+            searchParams.get('slug') ||
+            searchParams.get('tenant');
 
-          // Check path pattern: /cart/:id/menu or /cart/:id/storefront
           const pathSegments = typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean) : [];
           let pathCartId: string | undefined;
           if (pathSegments[0] === 'cart' && pathSegments.length >= 3 && (pathSegments[2] === 'menu' || pathSegments[2] === 'storefront')) {
@@ -127,6 +172,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             }
             if (r) {
               setBusiness(r);
+              api.setCurrentRestaurantId(r.id);
               fetchMenu(r.id);
               return;
             }
@@ -134,16 +180,18 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
 
           const domainRes = getTenantFromHostname();
           if (domainRes.isTenantSubdomain && domainRes.slug) {
-            const r = await api.resolveRestaurantBySlug(domainRes.slug);
+            const r = await api.resolveRestaurantBySlug(domainRes.slug).catch(() => null);
             if (r) {
               setBusiness(r);
+              api.setCurrentRestaurantId(r.id);
               fetchMenu(r.id);
               return;
             }
           }
+
           const currId = api.getCurrentRestaurantId();
           if (currId) {
-            const r = await api.getRestaurantDetails(currId);
+            const r = await api.getRestaurantDetails(currId).catch(() => null);
             if (r) {
               setBusiness(r);
               fetchMenu(r.id);
@@ -160,7 +208,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     init();
   }, [business?.id, fetchMenu]);
 
-  // Restore active order from URL (?trackOrder=...) or localStorage
+  // Restore tracked order from URL or localStorage
   useEffect(() => {
     if (!targetRestId) return;
     const searchParams = new URLSearchParams(window.location.search);
@@ -174,13 +222,14 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           const parsed = JSON.parse(stored);
           codeToLookup = parsed.pickupCode || parsed.id;
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
 
     if (codeToLookup) {
-      api.lookupOrderPickupCode(targetRestId, codeToLookup)
+      api
+        .lookupOrderPickupCode(targetRestId, codeToLookup)
         .then((ord) => {
           if (ord) {
             setConfirmedOrder(ord);
@@ -201,7 +250,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           `dinely_active_cart_order_${targetRestId}`,
           JSON.stringify({ id: confirmedOrder.id, pickupCode: confirmedOrder.pickupCode })
         );
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
@@ -211,7 +260,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     if (targetRestId) {
       try {
         localStorage.removeItem(`dinely_active_cart_order_${targetRestId}`);
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
@@ -222,19 +271,30 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     setIsViewingMenu(false);
   };
 
-  // Subscribe to realtime updates for stock and live order status
+  // Real-time bus connection for live order tracking & menu updates
   useEffect(() => {
     if (!targetRestId) return;
 
     realtimeBus.connect(targetRestId, 'CUSTOMER');
 
     const unsubscribe = realtimeBus.subscribe((evt: any) => {
+      if (!evt) return;
       const p = evt.payload || evt.data || evt;
       const evtRestId = p.restaurantId || p.restaurant_id || evt.restaurantId;
-      if (evtRestId && evtRestId !== targetRestId) return;
+      if (
+        evtRestId &&
+        evtRestId !== targetRestId &&
+        business &&
+        evtRestId !== business.id &&
+        evtRestId !== business.slug &&
+        evtRestId !== business.publicSlug
+      ) {
+        return;
+      }
 
       if (
         evt.type === 'menu_item_created' ||
+        evt.type === 'MenuItemCreated' ||
         evt.type === 'menu_item_updated' ||
         evt.type === 'menu_item_deleted' ||
         evt.type === 'stock_update'
@@ -243,16 +303,31 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
       }
 
       if (confirmedOrder) {
-        const orderId = p.orderId || p.id || evt.orderId;
+        const orderId = p.orderId || p.id || evt.orderId || p.order_id;
         if (orderId === confirmedOrder.id) {
-          if (evt.type === 'order_updated' || evt.type === 'order_status_updated' || evt.type === 'order_redeemed') {
+          const t = evt.type;
+          if (
+            t === 'order_updated' ||
+            t === 'OrderUpdated' ||
+            t === 'order_status_updated' ||
+            t === 'OrderStatusUpdated' ||
+            t === 'order_ready' ||
+            t === 'OrderReady' ||
+            t === 'order_redeemed' ||
+            t === 'OrderRedeemed' ||
+            t === 'order_delivered' ||
+            t === 'KitchenStatusUpdated'
+          ) {
             setConfirmedOrder((prev) => {
               if (!prev) return null;
               return {
                 ...prev,
                 status: p.status || prev.status,
-                pickupStatus: p.pickupStatus || (p.pickup_status) || prev.pickupStatus,
-                claimedAt: p.claimedAt || (p.claimed_at) || prev.claimedAt,
+                kitchenStatus: p.kitchenStatus || prev.kitchenStatus,
+                pickupStatus: p.pickupStatus || p.pickup_status || prev.pickupStatus,
+                claimedAt: p.claimedAt || p.claimed_at || prev.claimedAt,
+                paymentStatus: p.paymentStatus || prev.paymentStatus,
+                paymentMethod: p.paymentMethod || prev.paymentMethod,
               };
             });
           }
@@ -261,11 +336,19 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     });
 
     return () => unsubscribe();
-  }, [targetRestId, confirmedOrder, fetchMenu]);
+  }, [targetRestId, business, confirmedOrder, fetchMenu]);
 
-  // Polling fallback when an order is actively waiting for pickup (every 3 seconds)
+  // Polling fallback when order is active (every 3 seconds)
   useEffect(() => {
-    if (!confirmedOrder || !targetRestId || confirmedOrder.pickupStatus === 'REDEEMED' || confirmedOrder.status === 'COMPLETED') return;
+    if (
+      !confirmedOrder ||
+      !targetRestId ||
+      confirmedOrder.pickupStatus === 'REDEEMED' ||
+      confirmedOrder.status === 'COMPLETED' ||
+      confirmedOrder.status === 'CANCELLED'
+    ) {
+      return;
+    }
 
     const interval = setInterval(async () => {
       try {
@@ -273,49 +356,56 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         if (lookup && lookup.id === confirmedOrder.id) {
           setConfirmedOrder(lookup);
         }
-      } catch (e) {
-        // Silent catch for background poll
+      } catch {
+        // silent catch
       }
     }, 3000);
 
     return () => clearInterval(interval);
   }, [confirmedOrder?.id, confirmedOrder?.pickupStatus, confirmedOrder?.status, targetRestId]);
 
-  // Distinct categories
+  // Helper to format raw category keys into clean human-readable titles
+  const formatCategoryTitle = (rawNameOrId?: string): string => {
+    if (!rawNameOrId) return 'General';
+    if (!rawNameOrId.startsWith('cat-') && !rawNameOrId.includes('_')) return rawNameOrId;
+    let clean = rawNameOrId.replace(/^cat-[a-z0-9]+-/, '').replace(/^cat-/, '');
+    clean = clean.replace(/[-_]/g, ' ');
+    return clean.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+
+  // Categories list with human-readable labels
   const categories = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     menuItems.forEach((item) => {
-      const cat = (item as any).categoryName || (item as any).category || item.categoryId;
-      if (cat && typeof cat === 'string') set.add(cat.trim());
+      const catKey = (item as any).categoryName || (item as any).category || item.categoryId || 'General';
+      const cleanLabel = (item as any).categoryName || (item as any).category || formatCategoryTitle(item.categoryId);
+      if (!map.has(catKey)) {
+        map.set(catKey, cleanLabel);
+      }
     });
-    return Array.from(set).sort();
+    return Array.from(map.entries()).map(([key, label]) => ({ key, label }));
   }, [menuItems]);
 
-  // Filtered menu items
+  // Filtered Items
   const filteredItems = useMemo(() => {
     return menuItems.filter((item) => {
-      // 1. Availability filter: show available or display as out of stock
-      // 2. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesName = item.name.toLowerCase().includes(q);
         const matchesDesc = (item.description || '').toLowerCase().includes(q);
         if (!matchesName && !matchesDesc) return false;
       }
-      // 3. Category
       if (selectedCategory !== 'ALL') {
-        const cat = (item as any).categoryName || (item as any).category || item.categoryId;
-        if (cat !== selectedCategory) return false;
+        const catKey = (item as any).categoryName || (item as any).category || item.categoryId;
+        if (catKey !== selectedCategory) return false;
       }
-      // 4. Dietary
       if (dietaryFilter === 'VEG' && item.isVegetarian === false) return false;
       if (dietaryFilter === 'NON_VEG' && item.isVegetarian !== false) return false;
-
       return true;
     });
   }, [menuItems, searchQuery, selectedCategory, dietaryFilter]);
 
-  // Basket Calculations
+  // Basket calculations
   const basketTotal = useMemo(() => {
     return basket.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
   }, [basket]);
@@ -325,15 +415,11 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   }, [basket]);
 
   const handleAddToBasket = (item: MenuItem) => {
-    if (item.isAvailable === false) {
-      return;
-    }
+    if (item.isAvailable === false) return;
     setBasket((prev) => {
       const existing = prev.find((i) => i.item.id === item.id);
       if (existing) {
-        return prev.map((i) =>
-          i.item.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
+        return prev.map((i) => (i.item.id === item.id ? { ...i, quantity: i.quantity + 1 } : i));
       }
       return [...prev, { item, quantity: 1 }];
     });
@@ -353,17 +439,29 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     });
   };
 
-  // Submit Order via real backend API
+  // Submit Order to backend
   const handleSubmitOrder = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (basket.length === 0 || isSubmitting) return;
+
+    if (!customerName.trim()) {
+      setSubmitError('Please enter your name so counter staff can call your order.');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
       setSubmitError(null);
 
-      // Stable idempotency key across double-taps or network retry
-      const clientOrderId = checkoutIdempotencyKey || `ord-cart-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('dinely_customer_name', customerName.trim());
+        if (customerPhone.trim()) {
+          localStorage.setItem('dinely_customer_phone', customerPhone.trim());
+        }
+      }
+
+      const clientOrderId =
+        checkoutIdempotencyKey || `ord-cart-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       if (!checkoutIdempotencyKey) {
         setCheckoutIdempotencyKey(clientOrderId);
       }
@@ -373,11 +471,11 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         restaurantId: targetRestId,
         tableNumber: 'PICKUP',
         orderType: 'TAKEAWAY',
-        customerName: customerName.trim() || 'Cart Guest',
+        customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
         notes: orderNotes.trim() || undefined,
         paymentStatus: 'UNPAID',
-        paymentMethod: 'CASH',
+        paymentMethod: paymentMethod,
         totalAmount: basketTotal,
         items: basket.map((b) => ({
           id: `oi-${b.item.id}-${Date.now()}`,
@@ -398,14 +496,14 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
       setIsCheckoutOpen(false);
       setCheckoutIdempotencyKey(null);
 
-      // Save to localStorage and URL for instant persistence across reload
       if (targetRestId) {
         try {
+          localStorage.removeItem(`dinely_cart_basket_${targetRestId}`);
           localStorage.setItem(
             `dinely_active_cart_order_${targetRestId}`,
             JSON.stringify({ id: created.id, pickupCode: created.pickupCode })
           );
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
@@ -428,6 +526,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   };
 
   const cartName = business?.name || 'MAX KART';
+  const isCartOpen = business?.status !== 'CLOSED';
 
   // -------------------------------------------------------------
   // VIEW: CONFIRMATION / PICKUP COUPON VOUCHER SCREEN
@@ -436,40 +535,54 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
     const isRedeemed = confirmedOrder.pickupStatus === 'REDEEMED' || confirmedOrder.status === 'COMPLETED';
     const isReady = confirmedOrder.status === 'READY';
     const isPreparing = confirmedOrder.status === 'PREPARING';
-    const pickupCode = confirmedOrder.pickupCode || confirmedOrder.displayOrderNumber || `#${confirmedOrder.id.slice(-4).toUpperCase()}`;
-    const prepMinutes = confirmedOrder.estimatedPrepTimeMinutes || (confirmedOrder as any).estimated_prep_time_minutes || 15;
+    const isCancelled = confirmedOrder.status === 'CANCELLED';
+    const pickupCode =
+      confirmedOrder.pickupCode ||
+      confirmedOrder.displayOrderNumber ||
+      `#${confirmedOrder.id.slice(-4).toUpperCase()}`;
+    const prepMinutes =
+      confirmedOrder.estimatedPrepTimeMinutes || (confirmedOrder as any).estimated_prep_time_minutes || 15;
 
     return (
-      <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col justify-between p-4 sm:p-6 font-sans antialiased selection:bg-amber-500 selection:text-black">
-        {/* Header */}
-        <header className="max-w-md w-full mx-auto flex items-center justify-between pb-4 border-b border-slate-800/80">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
-              <Truck className="w-5 h-5" />
+      <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-black relative">
+        {/* Ambient Radial Background Glow */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+          <div className="absolute -top-32 left-1/4 w-[500px] h-[500px] rounded-full blur-[140px] bg-emerald-600/10 opacity-70" />
+          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full blur-[140px] bg-teal-600/10 opacity-60" />
+        </div>
+
+        {/* Top Header */}
+        <header className="sticky top-0 z-40 bg-[#07090e]/80 backdrop-blur-2xl border-b border-white/[0.08] px-4 py-3.5 shadow-xl">
+          <div className="max-w-md w-full mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                <Truck className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-white tracking-tight">{cartName}</h1>
+                <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Pickup Voucher
+                </span>
+              </div>
             </div>
-            <div>
-              <h1 className="text-sm font-bold text-white tracking-wide">{cartName}</h1>
-              <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Live Pickup Voucher
-              </span>
-            </div>
+            <button
+              onClick={() => setIsViewingMenu(true)}
+              className="text-xs px-3.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 transition-all font-semibold border border-white/10 flex items-center gap-1.5 active:scale-95"
+            >
+              <span>Menu</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            </button>
           </div>
-          <button
-            onClick={() => setIsViewingMenu(true)}
-            className="text-xs px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 transition-all font-medium border border-slate-700/50 flex items-center gap-1 cursor-pointer"
-          >
-            <span>Menu</span>
-            <ChevronRight className="w-3 h-3" />
-          </button>
         </header>
 
-        {/* Main Content */}
-        <main className="max-w-md w-full mx-auto my-auto py-6 space-y-5">
-          {/* HIGH VISIBILITY BANNER: READY FOR PICKUP */}
+        {/* Voucher Main Content */}
+        <main className="max-w-md w-full mx-auto px-4 py-6 space-y-4 flex-1 relative z-10">
+          {/* HIGH VISIBILITY CELEBRATION BANNER: READY FOR PICKUP */}
           {isReady && (
-            <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-500/25 via-emerald-600/30 to-emerald-500/25 border-2 border-emerald-400/80 text-emerald-200 shadow-2xl shadow-emerald-950/50 animate-pulse text-center space-y-1">
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-500/25 via-emerald-600/30 to-teal-500/25 border-2 border-emerald-400/80 text-emerald-200 shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-pulse text-center space-y-1">
               <div className="flex items-center justify-center gap-2 text-white font-black text-base sm:text-lg">
-                <Sparkles className="w-5 h-5 text-emerald-300 animate-spin" />
+                <Sparkles className="w-5 h-5 text-emerald-300" />
                 <span>🎉 YOUR FOOD IS READY!</span>
               </div>
               <p className="text-xs text-emerald-300 font-medium">
@@ -478,112 +591,97 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             </div>
           )}
 
-          {/* Coupon Ticket Box */}
-          <div className="relative rounded-3xl bg-gradient-to-b from-[#131722] to-[#0c0f17] border border-amber-500/30 p-6 sm:p-8 text-center shadow-2xl overflow-hidden">
-            {/* Background Glow */}
-            <div className="absolute -top-24 -left-24 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+          {isCancelled && (
+            <div className="p-4 rounded-3xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-center space-y-1">
+              <div className="flex items-center justify-center gap-2 font-bold text-base text-rose-200">
+                <AlertCircle className="w-5 h-5 text-rose-400" />
+                <span>Order Cancelled</span>
+              </div>
+              <p className="text-xs text-rose-400/80">This order was cancelled by the counter staff.</p>
+            </div>
+          )}
 
+          {/* Liquid-Glass Coupon Card */}
+          <div className="rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.12] p-6 sm:p-7 text-center shadow-2xl space-y-5 relative overflow-hidden">
             <div className="space-y-1">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                Your Counter Pickup Coupon
+              <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400 font-bold">
+                Counter Pickup Coupon
               </span>
-              <p className="text-xs text-slate-500">Show this code at the cart counter to collect food</p>
+              <p className="text-xs text-slate-400">Show this code at the cart counter to collect your food</p>
             </div>
 
-            {/* Huge Prominent Voucher Code */}
-            <div className={`my-5 p-5 rounded-2xl relative border-2 border-dashed ${
-              isReady
-                ? 'bg-emerald-500/15 border-emerald-400/80 shadow-lg shadow-emerald-950/30'
-                : 'bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-amber-500/15 border-amber-500/50'
-            }`}>
-              <div className={`text-4xl sm:text-5xl font-black tracking-widest font-mono drop-shadow-md ${
-                isReady ? 'text-emerald-300' : 'text-amber-400'
-              }`}>
+            {/* Huge Prominent Voucher Code Box */}
+            <div
+              className={`p-5 rounded-2xl relative border-2 border-dashed transition-all ${
+                isReady
+                  ? 'bg-emerald-500/15 border-emerald-400/80 shadow-[0_0_24px_rgba(16,185,129,0.3)]'
+                  : 'bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-emerald-500/10 border-emerald-500/40'
+              }`}
+            >
+              <div
+                className={`text-4xl sm:text-5xl font-black tracking-widest font-mono drop-shadow-md ${
+                  isReady ? 'text-emerald-300' : 'text-emerald-400'
+                }`}
+              >
                 {pickupCode}
               </div>
 
               <button
                 onClick={handleCopyCode}
-                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition-all cursor-pointer border border-slate-700/50"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-200 transition-all border border-white/10 active:scale-95"
               >
                 {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedCode ? 'Copied!' : 'Copy Code'}</span>
               </button>
             </div>
 
-            {/* Estimated Prep Time Notice */}
-            <div className="mb-4 flex items-center justify-between text-xs text-slate-400 bg-slate-900/70 p-2.5 rounded-xl border border-slate-800/80">
+            {/* Real preparation time or pickup instruction */}
+            <div className="flex items-center justify-between text-xs text-slate-300 bg-white/[0.03] p-3 rounded-xl border border-white/8">
               <div className="flex items-center gap-1.5 text-slate-300">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Est. Preparation Time:</span>
+                <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Estimated Preparation:</span>
               </div>
-              <span className="font-mono font-bold text-amber-400">
-                ~{prepMinutes} mins
-              </span>
+              <span className="font-mono font-bold text-emerald-400">~{prepMinutes} mins</span>
             </div>
 
-            {/* Status Indicator */}
-            <div className="space-y-3">
-              <div className={`p-3 rounded-2xl border text-xs font-semibold flex items-center justify-center gap-2 ${
-                isRedeemed
-                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                  : isReady
-                  ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-bold'
-                  : isPreparing
-                  ? 'bg-sky-500/15 border-sky-500/40 text-sky-400 animate-pulse'
-                  : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-              }`}>
-                {isRedeemed ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Order Collected & Completed! Enjoy your meal.</span>
-                  </>
-                ) : isReady ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Ready for Pickup • Food is Packaged at Counter</span>
-                  </>
-                ) : isPreparing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 text-sky-400 animate-spin" />
-                    <span>In Kitchen • Fresh Food Being Cooked</span>
-                  </>
-                ) : (
-                  <>
-                    <Clock className="w-4 h-4 text-amber-400" />
-                    <span>Order Received • Sent to Cart Kitchen</span>
-                  </>
-                )}
-              </div>
-
-              {/* 4-Step Progress Stepper */}
-              <div className="grid grid-cols-4 gap-1.5 pt-2 text-[9px] sm:text-[10px] text-center font-bold uppercase tracking-wider">
-                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex flex-col items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+            {/* 4-Step Progress Stepper */}
+            <div className="space-y-2.5 pt-1">
+              <div className="grid grid-cols-4 gap-1.5 text-[9px] sm:text-[10px] text-center font-bold uppercase tracking-wider font-mono">
+                {/* 1. Received */}
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex flex-col items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Received</span>
                 </div>
-                <div className={`p-2 rounded-xl border flex flex-col items-center gap-1 ${
-                  isRedeemed || isReady || isPreparing
-                    ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
-                    : 'bg-slate-800/40 text-slate-500 border-slate-700/30'
-                }`}>
-                  <RefreshCw className={`w-3.5 h-3.5 ${isPreparing ? 'animate-spin' : ''}`} />
+                {/* 2. Cooking */}
+                <div
+                  className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                    isRedeemed || isReady || isPreparing
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-bold'
+                      : 'bg-white/[0.02] text-slate-500 border-white/5'
+                  }`}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isPreparing ? 'animate-spin text-emerald-400' : ''}`} />
                   <span>Cooking</span>
                 </div>
-                <div className={`p-2 rounded-xl border flex flex-col items-center gap-1 ${
-                  isRedeemed || isReady
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-black'
-                    : 'bg-slate-800/40 text-slate-500 border-slate-700/30'
-                }`}>
-                  <Ticket className="w-3.5 h-3.5" />
+                {/* 3. Ready */}
+                <div
+                  className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                    isRedeemed || isReady
+                      ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400/60 font-black shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                      : 'bg-white/[0.02] text-slate-500 border-white/5'
+                  }`}
+                >
+                  <Ticket className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Ready</span>
                 </div>
-                <div className={`p-2 rounded-xl border flex flex-col items-center gap-1 ${
-                  isRedeemed
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                    : 'bg-slate-800/40 text-slate-500 border-slate-700/30'
-                }`}>
+                {/* 4. Collected */}
+                <div
+                  className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                    isRedeemed
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : 'bg-white/[0.02] text-slate-500 border-white/5'
+                  }`}
+                >
                   <Check className="w-3.5 h-3.5" />
                   <span>Done</span>
                 </div>
@@ -591,42 +689,48 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             </div>
 
             {/* Order Items Breakdown */}
-            <div className="mt-6 pt-5 border-t border-slate-800 text-left space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Order Summary</span>
+            <div className="pt-4 border-t border-white/10 text-left space-y-2">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                Order Summary
+              </span>
               <div className="space-y-1.5 text-xs text-slate-300">
                 {confirmedOrder.items?.map((it, idx) => (
                   <div key={idx} className="flex justify-between items-center py-0.5">
                     <span className="truncate">
-                      <span className="font-bold text-white">{it.quantity}x</span> {it.name}
+                      <span className="font-bold text-white font-mono">{it.quantity}x</span> {it.name}
                     </span>
                     <span className="font-mono text-slate-400">₹{(it.price * it.quantity).toFixed(0)}</span>
                   </div>
                 ))}
               </div>
-              <div className="pt-2 flex justify-between items-center border-t border-slate-800/60 font-bold text-sm text-white">
+              <div className="pt-2 flex justify-between items-center border-t border-white/10 font-bold text-sm text-white">
                 <span>Total Amount</span>
-                <span className="text-amber-400 font-mono">₹{confirmedOrder.totalAmount?.toFixed(0) || basketTotal}</span>
+                <span className="text-emerald-400 font-mono text-base">
+                  ₹{confirmedOrder.totalAmount?.toFixed(0) || basketTotal}
+                </span>
               </div>
             </div>
 
-            {/* Customer Details info */}
-            <div className="mt-4 p-3 bg-slate-900/60 rounded-xl text-left text-[11px] text-slate-400 flex items-center justify-between">
+            {/* Customer Details */}
+            <div className="p-3 bg-white/[0.03] rounded-xl text-left text-[11px] text-slate-400 flex items-center justify-between border border-white/8">
               <div>
                 <span className="text-slate-500">Customer:</span>{' '}
                 <span className="text-white font-medium">{confirmedOrder.customerName || customerName}</span>
               </div>
               <div>
                 <span className="text-slate-500">Payment:</span>{' '}
-                <span className="text-amber-300 font-medium">{confirmedOrder.paymentMethod || paymentMethod} (Pay at Pickup)</span>
+                <span className="text-emerald-300 font-medium">
+                  {confirmedOrder.paymentMethod || paymentMethod} (Pay at Pickup)
+                </span>
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-3 space-y-2">
+            <div className="pt-2 space-y-2">
               <button
                 type="button"
                 onClick={() => setIsViewingMenu(true)}
-                className="w-full py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 border border-slate-700/80 transition-all cursor-pointer"
+                className="w-full py-3 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 transition-all active:scale-98"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Browse Menu • Order More</span>
@@ -636,7 +740,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 <button
                   type="button"
                   onClick={handleClearActiveOrder}
-                  className="w-full py-2.5 px-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-98 shadow-[0_4px_16px_rgba(16,185,129,0.4)]"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Start New Order</span>
@@ -646,9 +750,8 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           </div>
         </main>
 
-        {/* Footer */}
-        <footer className="max-w-md w-full mx-auto text-center pt-4 border-t border-slate-800/80 text-[11px] text-slate-500">
-          Powered by <span className="text-slate-300 font-bold">Dinely Small Cart OS</span> • Fast QR Street Food Ordering
+        <footer className="max-w-md w-full mx-auto text-center py-4 border-t border-white/10 text-[11px] text-slate-500 relative z-10">
+          Powered by <span className="text-slate-300 font-bold">Dinely Food Cart OS</span> • Fast QR Street Food Ordering
         </footer>
       </div>
     );
@@ -658,26 +761,34 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   // VIEW: MAIN CUSTOMER MOBILE STOREFRONT
   // -------------------------------------------------------------
   return (
-    <div
-      className="min-h-screen text-slate-100 flex flex-col font-sans antialiased pb-28 transition-colors duration-300"
-      style={{ backgroundColor: activeTheme.backgroundColor }}
-    >
+    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-black relative pb-28">
+      {/* Background Radial Glow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 contain-paint">
+        <div className="absolute -top-32 left-1/3 w-[550px] h-[550px] rounded-full blur-[140px] bg-emerald-600/10 opacity-70" />
+        <div className="absolute top-[40%] -right-24 w-[450px] h-[450px] rounded-full blur-[140px] bg-teal-600/10 opacity-60" />
+      </div>
+
       {/* Sticky Active Order Reminder Banner when customer is browsing menu */}
       {confirmedOrder && isViewingMenu && (
         <div
           onClick={() => setIsViewingMenu(false)}
-          className="sticky top-0 z-50 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 text-slate-950 px-4 py-2.5 flex items-center justify-between shadow-xl cursor-pointer transition-all hover:brightness-105 border-b border-amber-600/50"
+          className="sticky top-0 z-50 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 text-slate-950 px-4 py-2.5 flex items-center justify-between shadow-xl cursor-pointer hover:brightness-105 transition-all border-b border-emerald-600/50"
         >
           <div className="flex items-center gap-2 text-xs font-bold truncate">
             <Ticket className="w-4 h-4 text-slate-950 shrink-0 animate-bounce" />
             <span className="truncate">
-              Active Ticket: <strong className="font-mono text-sm underline">{confirmedOrder.pickupCode || confirmedOrder.id.slice(-4)}</strong>
+              Active Ticket:{' '}
+              <strong className="font-mono text-sm underline">
+                {confirmedOrder.pickupCode || confirmedOrder.id.slice(-4)}
+              </strong>
             </span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ${
-              confirmedOrder.status === 'READY'
-                ? 'bg-emerald-950 text-emerald-300 animate-pulse'
-                : 'bg-slate-950/20 text-slate-950'
-            }`}>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ${
+                confirmedOrder.status === 'READY'
+                  ? 'bg-slate-950 text-emerald-300 animate-pulse'
+                  : 'bg-slate-950/20 text-slate-950'
+              }`}
+            >
               {confirmedOrder.status === 'READY'
                 ? '🎉 FOOD READY!'
                 : confirmedOrder.status === 'PREPARING'
@@ -694,73 +805,120 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         </div>
       )}
 
-      {/* Top Banner / Navigation */}
+      {/* Premium Header */}
       <header
-        className={`sticky ${confirmedOrder && isViewingMenu ? 'top-10' : 'top-0'} z-40 backdrop-blur-md border-b px-4 py-3 transition-colors duration-300`}
-        style={{
-          backgroundColor: `${activeTheme.backgroundColor}ea`,
-          borderColor: activeTheme.cardBorder,
-        }}
+        className={`sticky ${
+          confirmedOrder && isViewingMenu ? 'top-10' : 'top-0'
+        } z-40 bg-[#07090e]/85 backdrop-blur-2xl border-b border-white/[0.08] px-4 py-3 shadow-xl transition-all`}
       >
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center font-black shadow-lg"
-              style={{
-                backgroundColor: activeTheme.badgeBg,
-                color: activeTheme.accentColor,
-                borderColor: activeTheme.badgeBorder,
-                borderWidth: 1,
-              }}
-            >
-              <Truck className="w-5 h-5" style={{ color: activeTheme.accentColor }} />
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          {/* Logo & Identity */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+              <Truck className="w-5 h-5 text-emerald-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-extrabold text-white tracking-tight leading-tight">{cartName}</h1>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-base font-extrabold text-white tracking-tight truncate">{cartName}</h1>
                 <span
-                  className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
-                  style={{
-                    backgroundColor: activeTheme.badgeBg,
-                    color: activeTheme.badgeText,
-                    borderColor: activeTheme.badgeBorder,
-                    borderWidth: 1,
-                  }}
+                  className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono flex items-center gap-1 ${
+                    isCartOpen
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                  }`}
                 >
-                  Open
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${isCartOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}
+                  />
+                  {isCartOpen ? 'Open Now' : 'Closed'}
+                </span>
+                <span className="hidden xs:inline-flex text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-300 border border-white/10 font-mono">
+                  COUNTER PICKUP
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <Sparkles className="w-3 h-3" style={{ color: activeTheme.accentColor }} />
-                <span>{((business?.theme as any)?.tagline) || 'Instant QR Pickup • No App Needed'}</span>
+              <p className="text-[11px] text-white/50 truncate mt-0.5">
+                {((business?.theme as any)?.tagline) || 'Instant QR Pickup • No App Needed'}
               </p>
             </div>
           </div>
 
-          {onNavigateStaff && (
+          {/* Right Header Controls */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={onNavigateStaff}
-              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white transition-all border border-slate-700/40"
-              title="Switch to Staff POS"
+              onClick={() => setIsSearchVisible((v) => !v)}
+              className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-all border border-white/10 active:scale-95"
+              title="Search menu"
             >
-              Staff POS
+              <Search className="w-4 h-4" />
             </button>
-          )}
+
+            {basketCount > 0 && (
+              <button
+                onClick={() => setIsCheckoutOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.35)]"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span className="font-mono font-black">{basketCount}</span>
+              </button>
+            )}
+
+            {onNavigateStaff && (
+              <button
+                onClick={onNavigateStaff}
+                className="hidden sm:inline-flex text-xs px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-400 hover:text-white transition-all border border-white/10"
+              >
+                Staff POS
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-3xl w-full mx-auto px-4 py-4 space-y-4 flex-1">
-        {/* Search Bar & Dietary Filter */}
-        <div className="space-y-3">
-          <div className="relative">
+      {/* Main Container */}
+      <main className="max-w-4xl w-full mx-auto px-4 py-4 space-y-4 flex-1 relative z-10">
+        {/* Compact Hero Card */}
+        <div className="relative rounded-3xl overflow-hidden border border-white/[0.08] bg-gradient-to-r from-emerald-950/30 via-[#0e1420] to-[#0a0d14] p-5 sm:p-6 shadow-2xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono text-[10px] font-bold">
+                  FAST STREET SERVICE
+                </span>
+                <span className="text-white/40 text-xs">•</span>
+                <span className="text-xs text-white/60 font-medium">Order & Pay at Counter</span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                Freshly Prepared Street Food
+              </h2>
+              <p className="text-xs text-slate-400 max-w-lg">
+                Pick your items, review your basket, and receive a single-use pickup voucher instantly on checkout.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="px-3.5 py-2 rounded-2xl bg-white/[0.05] border border-white/10 text-center">
+                <p className="text-[10px] uppercase font-mono text-white/50 font-bold">Avg Prep</p>
+                <p className="text-xs font-mono font-black text-emerald-400">~10-15m</p>
+              </div>
+              <div className="px-3.5 py-2 rounded-2xl bg-white/[0.05] border border-white/10 text-center">
+                <p className="text-[10px] uppercase font-mono text-white/50 font-bold">Service</p>
+                <p className="text-xs font-mono font-black text-teal-300">Takeaway</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible Search Input */}
+        {isSearchVisible && (
+          <div className="relative animate-in fade-in slide-in-from-top-2 duration-200">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              autoFocus
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search burgers, rolls, drinks, snacks..."
-              className="w-full pl-10 pr-4 py-2.5 bg-[#0e121a] border border-slate-800/90 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all shadow-inner"
+              placeholder="Search dishes, rolls, burgers, drinks..."
+              className="w-full pl-10 pr-10 py-2.5 bg-white/[0.05] border border-white/15 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 transition-all shadow-inner backdrop-blur-xl"
             />
             {searchQuery && (
               <button
@@ -771,25 +929,28 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               </button>
             )}
           </div>
+        )}
 
-          {/* Dietary Filter Pills */}
+        {/* Filters Bar: Dietary Toggles & Horizontal Category Chips */}
+        <div className="space-y-2.5">
+          {/* Dietary Filters */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               onClick={() => setDietaryFilter('ALL')}
-              className={`text-xs px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all border ${
+              className={`text-xs px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all border active:scale-95 ${
                 dietaryFilter === 'ALL'
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
-                  : 'bg-[#0e121a] text-slate-400 border-slate-800 hover:border-slate-700'
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
               }`}
             >
               All Items
             </button>
             <button
               onClick={() => setDietaryFilter('VEG')}
-              className={`text-xs px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border ${
+              className={`text-xs px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border active:scale-95 ${
                 dietaryFilter === 'VEG'
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
-                  : 'bg-[#0e121a] text-slate-400 border-slate-800 hover:border-slate-700'
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
@@ -797,10 +958,10 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             </button>
             <button
               onClick={() => setDietaryFilter('NON_VEG')}
-              className={`text-xs px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border ${
+              className={`text-xs px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border active:scale-95 ${
                 dietaryFilter === 'NON_VEG'
-                  ? 'bg-rose-500 text-white border-rose-400 shadow-md shadow-rose-500/20'
-                  : 'bg-[#0e121a] text-slate-400 border-slate-800 hover:border-slate-700'
+                  ? 'bg-rose-500 text-white border-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
@@ -808,63 +969,72 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             </button>
           </div>
 
-          {/* Category Tabs */}
+          {/* Category Navigation Chips */}
           {categories.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-slate-800/60 pt-1">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-white/10 pt-1">
               <button
                 onClick={() => setSelectedCategory('ALL')}
                 className={`text-xs pb-2 font-bold whitespace-nowrap border-b-2 transition-all ${
                   selectedCategory === 'ALL'
-                    ? 'border-amber-400 text-amber-400'
+                    ? 'border-emerald-400 text-emerald-400'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Everything ({menuItems.length})
+                All Categories ({menuItems.length})
               </button>
               {categories.map((cat) => (
                 <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`text-xs pb-2 font-bold whitespace-nowrap border-b-2 transition-all ${
-                    selectedCategory === cat
-                      ? 'border-amber-400 text-amber-400'
+                  key={cat.key}
+                  onClick={() => setSelectedCategory(cat.key)}
+                  className={`text-xs pb-2 font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer ${
+                    selectedCategory === cat.key
+                      ? 'border-emerald-400 text-emerald-400 font-extrabold'
                       : 'border-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {cat}
+                  {cat.label}
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Loading / Error States */}
+        {/* Loading State */}
         {isLoadingMenu && (
-          <div className="py-16 text-center space-y-3">
-            <RefreshCw className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
+          <div className="py-20 text-center space-y-3">
+            <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
             <p className="text-xs text-slate-400">Loading {cartName} menu...</p>
           </div>
         )}
 
+        {/* Error State */}
         {menuError && (
-          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400" />
-            <div className="flex-1">
-              <p className="font-bold">Failed to load menu</p>
-              <p className="text-rose-400/80 mt-0.5">{menuError}</p>
+          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{menuError}</span>
             </div>
             <button
               onClick={() => fetchMenu(targetRestId)}
-              className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 rounded-xl text-xs font-bold text-white transition-all"
+              className="px-3 py-1 bg-rose-500/20 hover:bg-rose-500/30 rounded-lg text-xs font-bold text-white transition-all shrink-0"
             >
               Retry
             </button>
           </div>
         )}
 
-        {/* Menu Grid: Image-led card-style item layout */}
+        {/* Empty Menu State */}
+        {!isLoadingMenu && !menuError && filteredItems.length === 0 && (
+          <div className="py-20 text-center space-y-2 rounded-2xl bg-white/[0.02] border border-white/5 p-6">
+            <ShoppingBag className="w-10 h-10 text-slate-600 mx-auto" />
+            <p className="text-sm font-bold text-slate-300">No items match your filter</p>
+            <p className="text-xs text-slate-500">Try changing categories or clearing search keywords.</p>
+          </div>
+        )}
+
+        {/* Food Item Cards Grid: Responsive 1 col (mobile), 2 col (tablet), 3 col (desktop) */}
         {!isLoadingMenu && !menuError && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
             {filteredItems.map((item) => {
               const inBasket = basket.find((b) => b.item.id === item.id);
               const isOutOfStock = item.isAvailable === false;
@@ -873,14 +1043,16 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               return (
                 <div
                   key={item.id}
-                  className={`rounded-3xl border transition-all flex flex-col justify-between overflow-hidden shadow-lg ${
+                  className={`rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden shadow-xl liquid-glass-card ${
                     isOutOfStock
-                      ? 'bg-[#0b0e14]/50 border-slate-800/40 opacity-60'
-                      : 'bg-gradient-to-b from-[#111622] to-[#0a0d14] border-slate-800/80 hover:border-slate-700/80'
+                      ? 'bg-white/[0.02] border-white/5 opacity-55'
+                      : inBasket
+                      ? 'bg-gradient-to-b from-[#101726] to-[#0a0d14] border-emerald-400/40 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+                      : 'bg-gradient-to-b from-[#101520] to-[#080b12] border-white/10 hover:border-white/20'
                   }`}
                 >
                   {/* Dish Photo or Clean Food Cart Placeholder */}
-                  <div className="relative w-full h-40 bg-[#141925] overflow-hidden">
+                  <div className="relative w-full h-44 bg-[#0d111a] overflow-hidden">
                     {hasPhoto ? (
                       <img
                         src={item.imageUrl || item.image}
@@ -888,7 +1060,6 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                         loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                         onError={(e) => {
-                          // Gracefully fallback to neutral placeholder if broken URL
                           (e.currentTarget as HTMLElement).style.display = 'none';
                           const parent = (e.currentTarget as HTMLElement).parentElement;
                           if (parent) {
@@ -899,40 +1070,46 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                       />
                     ) : null}
 
-                    {/* Neutral Food-Cart Placeholder (no fake random photos) */}
+                    {/* Clean Liquid-Glass Dish Placeholder */}
                     <div
-                      className={`cart-dish-fallback absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-slate-500 bg-gradient-to-br from-[#131722] to-[#0d1017] ${
+                      className={`cart-dish-fallback absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-slate-500 bg-gradient-to-br from-[#101522] to-[#080b12] ${
                         hasPhoto ? 'hidden' : 'flex'
                       }`}
                     >
-                      <div className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shadow-inner">
-                        <UtensilsCrossed className="w-5 h-5 opacity-60" />
+                      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shadow-inner">
+                        <UtensilsCrossed className="w-6 h-6 opacity-60 text-emerald-400" />
                       </div>
-                      <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
-                        {(item as any).categoryName || (item as any).category || 'Street Food'}
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 font-mono">
+                        {(item as any).categoryName || (item as any).category || formatCategoryTitle(item.categoryId) || 'Street Food'}
                       </span>
                     </div>
 
                     {/* Veg / Non-Veg Badge */}
-                    <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-white/10 text-[10px]">
-                      <span className={`w-2.5 h-2.5 rounded-sm border flex items-center justify-center p-0.5 ${
-                        item.isVegetarian !== false ? 'border-emerald-500' : 'border-rose-500'
-                      }`}>
-                        <span className={`w-1 h-1 rounded-full ${item.isVegetarian !== false ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+                    <div className="absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-[10px]">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-sm border flex items-center justify-center p-0.5 ${
+                          item.isVegetarian !== false ? 'border-emerald-500' : 'border-rose-500'
+                        }`}
+                      >
+                        <span
+                          className={`w-1 h-1 rounded-full ${
+                            item.isVegetarian !== false ? 'bg-emerald-400' : 'bg-rose-500'
+                          }`}
+                        />
                       </span>
-                      <span className="text-slate-200 font-bold uppercase text-[9px] tracking-wider">
+                      <span className="text-slate-200 font-bold uppercase text-[9px] tracking-wider font-mono">
                         {item.isVegetarian !== false ? 'VEG' : 'NON-VEG'}
                       </span>
                     </div>
 
-                    {/* Availability Status Badge */}
-                    <div className="absolute top-2.5 right-2.5 z-10">
+                    {/* Stock / Availability Badge */}
+                    <div className="absolute top-3 right-3 z-10">
                       {isOutOfStock ? (
-                        <span className="text-[10px] font-bold text-rose-200 bg-rose-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-rose-400/40 shadow-sm">
+                        <span className="text-[10px] font-bold text-rose-200 bg-rose-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-rose-400/40 shadow-sm font-mono">
                           Sold Out
                         </span>
                       ) : (
-                        <span className="text-[10px] font-semibold text-emerald-200 bg-emerald-600/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-emerald-400/30 shadow-sm">
+                        <span className="text-[10px] font-semibold text-emerald-200 bg-emerald-600/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-emerald-400/30 shadow-sm font-mono">
                           Available
                         </span>
                       )}
@@ -949,20 +1126,20 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                     </div>
 
                     {/* Price & Add to Cart button */}
-                    <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between">
-                      <span className="text-base font-extrabold font-mono text-amber-400">
+                    <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+                      <span className="text-base font-extrabold font-mono text-emerald-400">
                         ₹{item.price.toFixed(0)}
                       </span>
 
                       {isOutOfStock ? (
-                        <span className="text-xs font-bold text-rose-400/90 py-1 px-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                        <span className="text-xs font-bold text-rose-400/90 py-1 px-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 font-mono">
                           Sold Out
                         </span>
                       ) : inBasket ? (
-                        <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-xl p-1">
+                        <div className="flex items-center gap-2 bg-white/[0.06] border border-white/15 rounded-xl p-1 shadow-sm">
                           <button
                             onClick={() => handleUpdateQuantity(item.id, -1)}
-                            className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-200 transition-all cursor-pointer"
+                            className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 transition-all active:scale-95"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
@@ -971,7 +1148,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                           </span>
                           <button
                             onClick={() => handleUpdateQuantity(item.id, 1)}
-                            className="w-7 h-7 rounded-lg bg-amber-500 hover:bg-amber-400 flex items-center justify-center text-slate-950 font-bold transition-all cursor-pointer"
+                            className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center text-slate-950 font-bold transition-all active:scale-95"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -979,7 +1156,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                       ) : (
                         <button
                           onClick={() => handleAddToBasket(item)}
-                          className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10 cursor-pointer"
+                          className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-[0_2px_12px_rgba(16,185,129,0.3)] active:scale-95 font-mono"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Add</span>
@@ -992,14 +1169,6 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             })}
           </div>
         )}
-
-        {!isLoadingMenu && filteredItems.length === 0 && !menuError && (
-          <div className="py-16 text-center space-y-2">
-            <ShoppingBag className="w-10 h-10 text-slate-600 mx-auto" />
-            <p className="text-sm font-bold text-slate-300">No items match your filter</p>
-            <p className="text-xs text-slate-500">Try changing categories or clearing search keywords.</p>
-          </div>
-        )}
       </main>
 
       {/* Floating Bottom Cart Bar */}
@@ -1008,13 +1177,13 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           <div className="max-w-md mx-auto pointer-events-auto">
             <button
               onClick={() => setIsCheckoutOpen(true)}
-              className={`w-full p-3.5 rounded-2xl ${activeTheme.buttonGradient} font-extrabold flex items-center justify-between shadow-2xl hover:brightness-105 active:scale-[0.99] transition-all`}
+              className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 text-slate-950 font-extrabold flex items-center justify-between shadow-[0_8px_30px_rgba(16,185,129,0.5)] hover:brightness-105 active:scale-[0.99] transition-all"
             >
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center text-xs font-mono font-bold">
+                <span className="w-7 h-7 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center text-xs font-mono font-black shadow-inner">
                   {basketCount}
                 </span>
-                <span className="text-sm tracking-wide">View Order</span>
+                <span className="text-sm tracking-tight font-black">View Order Summary</span>
               </div>
               <div className="flex items-center gap-1 text-sm font-mono font-black">
                 <span>₹{basketTotal.toFixed(0)}</span>
@@ -1027,17 +1196,17 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
 
       {/* Checkout Drawer / Modal */}
       {isCheckoutOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full max-w-md bg-[#0c0f17] border border-slate-800 rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full max-w-md bg-[#090d14] border border-white/15 rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
             {/* Drawer Header */}
-            <div className="p-4 border-b border-slate-800/80 flex items-center justify-between bg-[#0e121a]">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/[0.03]">
               <div className="flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-amber-400" />
-                <h2 className="text-sm font-extrabold text-white">Your Pickup Order</h2>
+                <ShoppingBag className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-sm font-black text-white uppercase tracking-tight">Your Pickup Order</h2>
               </div>
               <button
                 onClick={() => setIsCheckoutOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800/70 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-all"
+                className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white flex items-center justify-center transition-all"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1047,19 +1216,21 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             <form onSubmit={handleSubmitOrder} className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Items List */}
               <div className="space-y-2.5">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Review Items</span>
-                <div className="space-y-2 divide-y divide-slate-800/50">
-                  {basket.map(({ item, quantity, notes }) => (
+                <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  Review Selected Items
+                </span>
+                <div className="space-y-2 divide-y divide-white/5">
+                  {basket.map(({ item, quantity }) => (
                     <div key={item.id} className="pt-2 flex items-center justify-between gap-3">
                       <div className="flex-1 truncate">
                         <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                        <span className="text-[11px] text-amber-400 font-mono">₹{item.price.toFixed(0)} each</span>
+                        <span className="text-[11px] text-emerald-400 font-mono">₹{item.price.toFixed(0)} each</span>
                       </div>
-                      <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/60 rounded-xl p-1">
+                      <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl p-1">
                         <button
                           type="button"
                           onClick={() => handleUpdateQuantity(item.id, -1)}
-                          className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-200"
+                          className="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
@@ -1067,7 +1238,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                         <button
                           type="button"
                           onClick={() => handleUpdateQuantity(item.id, 1)}
-                          className="w-6 h-6 rounded-lg bg-amber-500 hover:bg-amber-400 flex items-center justify-center text-slate-950 font-bold"
+                          className="w-6 h-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center text-slate-950 font-bold"
                         >
                           <Plus className="w-3 h-3" />
                         </button>
@@ -1077,35 +1248,53 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 </div>
               </div>
 
-              {/* Payment Notice: Clear Pay at Counter */}
-              <div className="p-3.5 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/25 rounded-2xl flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              {/* Payment Notice */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/25 rounded-2xl flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
                   <Banknote className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="text-xs font-bold text-white">Pay at Counter</p>
-                  <p className="text-[11px] text-amber-300/80 leading-tight mt-0.5">
+                  <p className="text-[11px] text-emerald-300/80 leading-tight mt-0.5">
                     Pay with Cash or UPI upon pickup. No online payment required now.
                   </p>
                 </div>
               </div>
 
-              {/* Optional Customization: Collapsed by Default */}
-              <div className="pt-1">
+              {/* Customer Required Name Field */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-300 block font-mono">
+                  Your Name <span className="text-emerald-400">*</span>
+                </label>
+                <div className="relative">
+                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Enter your name (e.g. Rahul S)"
+                    className="w-full pl-8 pr-3 py-2 bg-white/[0.05] border border-white/15 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+              </div>
+
+              {/* Optional Requests Accordion */}
+              <div>
                 <button
                   type="button"
                   onClick={() => setShowCustomization((prev) => !prev)}
-                  className="w-full py-2 px-3 rounded-xl bg-[#121622] hover:bg-[#181d2c] border border-slate-800 text-[11px] font-medium text-slate-400 hover:text-slate-200 flex items-center justify-between transition-all cursor-pointer"
+                  className="w-full py-2 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[11px] font-medium text-slate-400 hover:text-slate-200 flex items-center justify-between transition-all"
                 >
-                  <span>{showCustomization ? 'Hide optional requests' : '+ Add optional cooking note or mobile number'}</span>
+                  <span>{showCustomization ? 'Hide optional requests' : '+ Add phone or cooking notes'}</span>
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showCustomization ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showCustomization && (
-                  <div className="mt-2.5 p-3 rounded-2xl bg-[#0f131d] border border-slate-800/80 space-y-2.5 animate-fadeIn">
+                  <div className="mt-2.5 p-3 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5 animate-in fade-in duration-200">
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                        Mobile Number (Optional notification)
+                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1 font-mono">
+                        Mobile Number (Optional SMS alert)
                       </label>
                       <div className="relative">
                         <Phone className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1114,21 +1303,21 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
                           placeholder="e.g. 9876543210"
-                          className="w-full pl-8 pr-3 py-1.5 bg-[#141926] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                          className="w-full pl-8 pr-3 py-1.5 bg-white/[0.05] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                        Cooking Notes / Special Request
+                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1 font-mono">
+                        Cooking Notes / Special Requests
                       </label>
                       <input
                         type="text"
                         value={orderNotes}
                         onChange={(e) => setOrderNotes(e.target.value)}
-                        placeholder="e.g. Extra spicy, no onions, pack separately"
-                        className="w-full px-3 py-1.5 bg-[#141926] border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                        placeholder="e.g. Extra crispy, less spicy, pack separately"
+                        className="w-full px-3 py-1.5 bg-white/[0.05] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
                       />
                     </div>
                   </div>
@@ -1136,34 +1325,34 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               </div>
 
               {/* Price Breakdown */}
-              <div className="p-3 bg-slate-900/60 rounded-2xl border border-slate-800/80 space-y-1.5 text-xs">
+              <div className="p-3.5 bg-white/[0.03] rounded-2xl border border-white/10 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-400">
                   <span>Subtotal ({basketCount} items)</span>
                   <span className="font-mono text-slate-200">₹{basketTotal.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Cart Packaging & Pickup</span>
-                  <span className="text-emerald-400 font-bold uppercase text-[10px]">Free</span>
+                  <span className="text-emerald-400 font-bold uppercase text-[10px] font-mono">Free</span>
                 </div>
-                <div className="pt-2 border-t border-slate-800 flex justify-between font-bold text-sm text-white">
+                <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-sm text-white">
                   <span>Total Payable at Counter</span>
-                  <span className="text-amber-400 font-mono text-base">₹{basketTotal.toFixed(0)}</span>
+                  <span className="text-emerald-400 font-mono text-base">₹{basketTotal.toFixed(0)}</span>
                 </div>
               </div>
 
               {submitError && (
                 <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                   <span>{submitError}</span>
                 </div>
               )}
 
-              {/* One Prominent Place Order Button */}
+              {/* Checkout Submit CTA */}
               <div className="pt-1">
                 <button
                   type="submit"
                   disabled={isSubmitting || basket.length === 0}
-                  className={`w-full py-3.5 px-4 rounded-2xl ${activeTheme.buttonGradient} font-black text-sm flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer`}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(16,185,129,0.4)] disabled:opacity-50 hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer font-mono"
                 >
                   {isSubmitting ? (
                     <>

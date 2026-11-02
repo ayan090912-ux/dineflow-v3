@@ -51,10 +51,12 @@ import {
   Filter,
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
+import confetti from 'canvas-confetti';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
 import { DinelyLogo, Button } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
+import { normalizeOrder } from '../../packages/api/core/helpers';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl, getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { CART_THEMES, resolveCartTheme, CartTheme, CartThemeId } from './cartThemes';
 
@@ -114,6 +116,7 @@ export const CartApp: React.FC<CartAppProps> = ({
   const [paymentMode, setPaymentMode] = useState<'UPI' | 'CASH' | 'CARD'>('UPI');
   const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isQuickPosOpen, setIsQuickPosOpen] = useState(false);
 
   // Verification & Redemption State
   const [lookupQuery, setLookupQuery] = useState('');
@@ -309,11 +312,29 @@ export const CartApp: React.FC<CartAppProps> = ({
     realtimeBus.connect(cartId, 'OWNER');
 
     const unsub = realtimeBus.subscribe((evt: any) => {
+      if (!evt) return;
       const p = evt.payload || evt.data || evt;
       const evtRestId = p.restaurantId || p.restaurant_id || evt.restaurantId;
 
-      if (!cartId || !evtRestId || evtRestId === cartId) {
+      const isMatchingRest =
+        !cartId ||
+        !evtRestId ||
+        evtRestId === cartId ||
+        (currentCart && (evtRestId === currentCart.id || evtRestId === currentCart.slug || evtRestId === currentCart.publicSlug));
+
+      if (isMatchingRest) {
         if (evt.type === 'OrderCreated' || evt.type === 'order_created') {
+          const rawOrder = p.order || (p.id ? p : null);
+          if (rawOrder && rawOrder.id) {
+            const norm = normalizeOrder(rawOrder);
+            setLiveOrders((prev) => {
+              const exists = prev.some((o) => o.id === norm.id);
+              if (exists) {
+                return prev.map((o) => (o.id === norm.id ? { ...o, ...norm } : o));
+              }
+              return [norm, ...prev];
+            });
+          }
           const newId = p.orderId || p.id || evt.orderId;
           if (newId && !seenOrderIdsRef.current.has(newId)) {
             seenOrderIdsRef.current.add(newId);
@@ -328,8 +349,18 @@ export const CartApp: React.FC<CartAppProps> = ({
           evt.type === 'order_ready' ||
           evt.type === 'order_delivered'
         ) {
+          const rawOrder = p.order || (p.id ? p : null);
+          if (rawOrder && rawOrder.id) {
+            const norm = normalizeOrder(rawOrder);
+            setLiveOrders((prev) => prev.map((o) => (o.id === norm.id ? { ...o, ...norm } : o)));
+          }
           fetchLiveOrders();
-        } else if (evt.type === 'MenuItemCreated' || evt.type === 'menu_item_created' || evt.type === 'menu_item_updated') {
+        } else if (
+          evt.type === 'MenuItemCreated' ||
+          evt.type === 'menu_item_created' ||
+          evt.type === 'menu_item_updated' ||
+          evt.type === 'stock_update'
+        ) {
           fetchMenuItems();
         }
       }
@@ -415,6 +446,7 @@ export const CartApp: React.FC<CartAppProps> = ({
 
       setLiveOrders((prev) => [created, ...prev.filter((o) => o.id !== created.id)]);
       setBasket([]);
+      setIsQuickPosOpen(false);
       setCheckoutSuccess(`Order ${created.pickupCode || created.displayOrderNumber || '#' + created.id} paid via ${paymentMode}!`);
       setTimeout(() => setCheckoutSuccess(null), 4000);
     } catch (err: any) {
@@ -470,6 +502,15 @@ export const CartApp: React.FC<CartAppProps> = ({
       setLiveOrders((prev) =>
         prev.map((o) => (o.id === redeemed.id ? redeemed : o))
       );
+      try {
+        confetti({
+          particleCount: 70,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      } catch {
+        // Confetti optional
+      }
       setRedemptionSuccess(`Pickup Coupon ${redeemed.pickupCode || codeToRedeem} Verified & Completed! Hand over food to customer.`);
       setLookupQuery('');
       setSelectedOrderForHandover(null);
@@ -721,9 +762,14 @@ export const CartApp: React.FC<CartAppProps> = ({
   const cartPublicSlug = currentCart?.publicSlug || currentCart?.slug || currentCart?.id || '';
   const cartOrderingUrl = useMemo(() => {
     if (!currentCart) return getTenantUrl(null, '/cart/menu');
+    const host = typeof window !== 'undefined' ? window.location.hostname : '';
+    const isLocalOrDev = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || (typeof window !== 'undefined' && window.location.host.includes('render.com'));
+    if (isLocalOrDev && typeof window !== 'undefined') {
+      return `${window.location.origin}/cart/menu?cartId=${encodeURIComponent(currentCart.id)}`;
+    }
     const base = getRestaurantPublicDomain(currentCart);
     if (base && !base.includes('://dinely.food')) {
-      return base;
+      return `${base}/cart/menu`;
     }
     return `https://dinely.food/cart/menu?cartId=${encodeURIComponent(currentCart.id)}`;
   }, [currentCart]);
@@ -828,8 +874,8 @@ export const CartApp: React.FC<CartAppProps> = ({
     }
   };
 
-  const newOrdersCount = liveOrders.filter((o) => o.status === 'PENDING').length;
-  const preparingOrdersCount = liveOrders.filter((o) => o.status === 'ACCEPTED' || o.status === 'PREPARING').length;
+  const newOrdersCount = liveOrders.filter((o) => (o.status === 'PENDING' || o.status === 'NEW') && o.pickupStatus !== 'REDEEMED').length;
+  const preparingOrdersCount = liveOrders.filter((o) => (o.status === 'ACCEPTED' || o.status === 'PREPARING') && o.pickupStatus !== 'REDEEMED').length;
   const readyOrdersCount = liveOrders.filter((o) => o.status === 'READY' && o.pickupStatus !== 'REDEEMED' && o.status !== 'COMPLETED').length;
   const completedOrdersCount = liveOrders.filter((o) => o.status === 'COMPLETED' || o.pickupStatus === 'REDEEMED').length;
   const cancelledOrdersCount = liveOrders.filter((o) => o.status === 'CANCELLED').length;
@@ -839,8 +885,8 @@ export const CartApp: React.FC<CartAppProps> = ({
     return liveOrders.filter((ord) => {
       const isRedeemed = ord.pickupStatus === 'REDEEMED' || ord.status === 'COMPLETED';
       const isCancelled = ord.status === 'CANCELLED';
-      if (terminalFilter === 'NEW') return ord.status === 'PENDING';
-      if (terminalFilter === 'PREPARING') return ord.status === 'ACCEPTED' || ord.status === 'PREPARING';
+      if (terminalFilter === 'NEW') return (ord.status === 'PENDING' || ord.status === 'NEW') && !isRedeemed;
+      if (terminalFilter === 'PREPARING') return (ord.status === 'ACCEPTED' || ord.status === 'PREPARING') && !isRedeemed;
       if (terminalFilter === 'READY') return ord.status === 'READY' && !isRedeemed;
       if (terminalFilter === 'COMPLETED') return isRedeemed;
       if (terminalFilter === 'CANCELLED') return isCancelled;
@@ -1047,38 +1093,60 @@ export const CartApp: React.FC<CartAppProps> = ({
                   <span>{isLiveConnected ? 'Live Feed Connected' : 'Reconnecting...'}</span>
                 </div>
 
-                {/* Audio Alert Toggle */}
-                <button
-                  onClick={() => setSoundAlertEnabled(!soundAlertEnabled)}
-                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all ${
-                    soundAlertEnabled
-                      ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
-                  }`}
-                  title={soundAlertEnabled ? 'Mute incoming order alert sound' : 'Unmute incoming order alert sound'}
-                >
-                  {soundAlertEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-                  <span>{soundAlertEnabled ? 'Sound ON' : 'Muted'}</span>
-                </button>
+                {/* Audio Alert Toggle & Test Chime */}
+                <div className="flex items-center gap-1 bg-[#11151e] border border-[#212737] rounded-xl p-0.5">
+                  <button
+                    onClick={() => {
+                      const next = !soundAlertEnabled;
+                      setSoundAlertEnabled(next);
+                      if (next) playAlertBeep();
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all ${
+                      soundAlertEnabled
+                        ? 'bg-sky-500/15 text-sky-300'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title={soundAlertEnabled ? 'Sound is enabled. Click to mute.' : 'Sound is muted. Click to enable.'}
+                  >
+                    {soundAlertEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                    <span>{soundAlertEnabled ? 'Sound ON' : 'Muted'}</span>
+                  </button>
+                  {soundAlertEnabled && (
+                    <button
+                      onClick={playAlertBeep}
+                      className="px-2 py-1 text-[10px] font-mono font-bold text-slate-400 hover:text-amber-300 border-l border-[#212737] transition-colors cursor-pointer"
+                      title="Test Audio Chime"
+                    >
+                      Test
+                    </button>
+                  )}
+                </div>
 
                 {/* Refresh Orders */}
                 <button
                   onClick={fetchLiveOrders}
                   disabled={isLoadingOrders}
-                  className="p-1.5 rounded-xl bg-[#11151e] border border-[#212737] text-slate-300 hover:text-white cursor-pointer disabled:opacity-50"
+                  className="p-2 rounded-xl bg-[#11151e] border border-[#212737] text-slate-300 hover:text-white cursor-pointer disabled:opacity-50 transition-all hover:border-slate-700"
                   title="Refresh Queue"
                 >
                   <RefreshCw className={`w-4 h-4 ${isLoadingOrders ? 'animate-spin text-sky-400' : ''}`} />
                 </button>
 
-
+                {/* Walk-in Rapid Counter Order Button */}
+                <button
+                  onClick={() => setIsQuickPosOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-sky-950/30 cursor-pointer transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Walk-in Order</span>
+                </button>
 
                 {/* Customer QR Menu Link */}
                 <a
                   href={cartOrderingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all"
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Customer QR Menu</span>
@@ -1086,8 +1154,51 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
             </div>
 
+            {/* Terminal Live Key Metrics Ribbon */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Active Queue</div>
+                  <div className="text-2xl font-black text-amber-400 font-mono mt-0.5">{activeQueueCount}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <BellRing className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Cooking Now</div>
+                  <div className="text-2xl font-black text-indigo-400 font-mono mt-0.5">{preparingOrdersCount}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <ChefHat className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Ready for Pickup</div>
+                  <div className="text-2xl font-black text-emerald-400 font-mono mt-0.5">{readyOrdersCount}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Today's Sales</div>
+                  <div className="text-2xl font-black text-white font-mono mt-0.5">₹{todayTotalSales}</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
             {/* Quick Pickup Code Verification & Lookup Bar */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#111622] to-sky-500/10 border-2 border-amber-500/20 flex flex-col sm:flex-row items-center gap-3 shadow-md">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#111622] to-sky-500/10 border-2 border-amber-500/25 flex flex-col sm:flex-row items-center gap-3 shadow-lg">
               <div className="flex items-center gap-2 text-amber-400 shrink-0">
                 <Ticket className="w-5 h-5 text-amber-400" />
                 <span className="text-xs font-black uppercase tracking-wider">Pickup Code Verification</span>
@@ -1095,7 +1206,7 @@ export const CartApp: React.FC<CartAppProps> = ({
               <div className="flex-1 w-full relative">
                 <input
                   type="text"
-                  placeholder="Enter or scan customer pickup code (e.g. K7P4, C-104, #ORD-1)..."
+                  placeholder="Enter customer pickup code (e.g. K7P4, C-104, #ORD-1)..."
                   value={lookupQuery}
                   onChange={(e) => setLookupQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -1124,7 +1235,7 @@ export const CartApp: React.FC<CartAppProps> = ({
             )}
 
             {redemptionSuccess && (
-              <div className="p-4 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-center gap-3 shadow-md">
+              <div className="p-4 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-center gap-3 shadow-md animate-in fade-in">
                 <Ticket className="w-5 h-5 shrink-0 text-amber-400" />
                 <span className="font-bold">{redemptionSuccess}</span>
               </div>
@@ -1171,30 +1282,107 @@ export const CartApp: React.FC<CartAppProps> = ({
 
             {/* Orders Stream / Empty State */}
             {displayedTerminalOrders.length === 0 ? (
-              <div className="p-12 text-center bg-[#0c0f16] border border-[#1a1f2b] rounded-2xl space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
-                  <BellRing className="w-7 h-7" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-base font-bold text-white">
-                    {terminalFilter === 'ACTIVE'
-                      ? 'No Active Orders in Queue'
-                      : `No Orders in "${terminalFilter}" State`}
-                  </h3>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    When customers scan the QR code and place orders via the Cart Storefront, they will appear here instantly with live sound alerts and unique pickup coupons.
-                  </p>
-                </div>
-                <div className="flex items-center justify-center gap-3 pt-2">
-                  <a
-                    href={cartOrderingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-900/30 transition-all"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Open Customer Storefront</span>
-                  </a>
+              <div className="p-8 sm:p-10 bg-[#0c0f16] border border-[#1a1f2b] rounded-3xl shadow-xl space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                  {/* Left Column: Live QR Preview Card */}
+                  <div className="p-6 rounded-2xl bg-[#07090e] border border-[#1b2230] flex flex-col items-center text-center space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                        ● Storefront QR Live
+                      </span>
+                      <h3 className="text-base font-bold text-white mt-1">Scan to Test Live Ordering</h3>
+                      <p className="text-xs text-slate-400">
+                        Scan with your smartphone camera to open the customer menu.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-white rounded-2xl border-2 border-slate-300 shadow-lg inline-block">
+                      <QRCodeSVG
+                        value={cartOrderingUrl}
+                        size={160}
+                        level="H"
+                        marginSize={1}
+                      />
+                    </div>
+
+                    <div className="w-full flex flex-col gap-2 pt-1">
+                      <a
+                        href={cartOrderingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-900/30 transition-all cursor-pointer"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open Customer Storefront</span>
+                      </a>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(cartOrderingUrl);
+                          alert('Storefront link copied!');
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-[#121620] hover:bg-[#181d2a] border border-[#212737] text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Copy Storefront URL</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Terminal Station Readiness */}
+                  <div className="space-y-4">
+                    <div>
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-3">
+                        <BellRing className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-lg font-bold text-white">
+                        {terminalFilter === 'ACTIVE'
+                          ? 'No Active Orders in Queue'
+                          : `No Orders in "${terminalFilter}" State`}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                        The Food Cart dispatch system is active and listening for incoming orders. New orders will immediately appear here with audio alerts and unique pickup coupons.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-[#080a0f] border border-[#1b2230] space-y-3 text-xs">
+                      <div className="flex items-center justify-between text-slate-300">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>WebSocket Real-Time Dispatch</span>
+                        </div>
+                        <span className="font-mono text-[10px] text-emerald-400 font-bold">CONNECTED</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-300">
+                        <div className="flex items-center gap-2">
+                          <Volume2 className="w-4 h-4 text-sky-400" />
+                          <span>Kitchen Audio Buzzer</span>
+                        </div>
+                        <button
+                          onClick={playAlertBeep}
+                          className="text-[10px] font-mono font-bold text-amber-400 hover:underline cursor-pointer"
+                        >
+                          Test Sound Chime →
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-300">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-amber-400" />
+                          <span>Business Shift Attribution</span>
+                        </div>
+                        <span className="font-mono text-[10px] text-slate-400">AUTO SHIFT</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        onClick={() => setIsQuickPosOpen(true)}
+                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-950/40 cursor-pointer transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Punch Quick Walk-in Counter Order</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1214,10 +1402,10 @@ export const CartApp: React.FC<CartAppProps> = ({
                           : isCancelled
                           ? 'bg-[#0c090a] border-rose-950/40 opacity-70'
                           : ord.status === 'READY'
-                          ? 'bg-[#0d121c] border-emerald-500/40 shadow-xl shadow-emerald-950/20'
+                          ? 'bg-[#0d121c] border-emerald-500/50 shadow-xl shadow-emerald-950/30'
                           : ord.status === 'PREPARING'
-                          ? 'bg-[#0c0f18] border-indigo-500/30 shadow-lg shadow-indigo-950/15'
-                          : 'bg-[#0c0f16] border-[#1d2433] hover:border-amber-500/30 shadow-md'
+                          ? 'bg-[#0c0f18] border-indigo-500/40 shadow-lg shadow-indigo-950/20'
+                          : 'bg-[#0c0f16] border-amber-500/30 shadow-md hover:border-amber-500/50'
                       }`}
                     >
                       {/* Order Card Top Line */}
@@ -1227,8 +1415,12 @@ export const CartApp: React.FC<CartAppProps> = ({
                             <span className="font-mono font-bold text-slate-300">
                               #{ord.displayOrderNumber || ord.id.slice(-4)}
                             </span>
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                              QR Storefront
+                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded border ${
+                              isWalkIn
+                                ? 'bg-sky-500/10 text-sky-300 border-sky-500/20'
+                                : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                            }`}>
+                              {isWalkIn ? 'Walk-in Counter' : 'QR Storefront'}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1243,7 +1435,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                         </div>
 
                         {/* Large High-Visibility Pickup Code Banner */}
-                        <div className={`p-3 rounded-xl border-2 flex items-center justify-between ${
+                        <div className={`p-3.5 rounded-xl border-2 flex items-center justify-between ${
                           isRedeemed
                             ? 'bg-slate-900/60 border-slate-800 text-slate-400'
                             : ord.status === 'READY'
@@ -1254,12 +1446,12 @@ export const CartApp: React.FC<CartAppProps> = ({
                             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                               Pickup Coupon
                             </div>
-                            <div className="text-xl sm:text-2xl font-black font-mono tracking-wider">
+                            <div className="text-2xl sm:text-3xl font-black font-mono tracking-wider">
                               {codeBadge}
                             </div>
                           </div>
                           <div className="text-right">
-                            <span className={`text-[10px] font-bold font-mono px-2 py-1 rounded-md border uppercase ${
+                            <span className={`text-[10px] font-bold font-mono px-2.5 py-1 rounded-md border uppercase ${
                               isRedeemed
                                 ? 'bg-slate-800 text-slate-400 border-slate-700'
                                 : ord.status === 'READY'
@@ -1275,6 +1467,11 @@ export const CartApp: React.FC<CartAppProps> = ({
                               {isRedeemed ? '✓ FULFILLED' : ord.status === 'PENDING' ? 'NEW ORDER' : ord.status}
                             </span>
                           </div>
+                        </div>
+
+                        {/* Customer Info Line */}
+                        <div className="text-xs text-slate-300 font-medium">
+                          Customer: <span className="text-white font-bold">{ord.customerName || 'Storefront Guest'}</span>
                         </div>
 
                         {/* Ordered Items List with Dish Photos */}
@@ -1352,14 +1549,14 @@ export const CartApp: React.FC<CartAppProps> = ({
                                 </span>
                                 <button
                                   onClick={() => handleMarkPaid(ord.id, 'CASH')}
-                                  className="px-1.5 py-0.5 rounded bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[10px] font-bold border border-emerald-500/30 transition-all cursor-pointer"
+                                  className="px-2 py-1 rounded bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[10px] font-bold border border-emerald-500/30 transition-all cursor-pointer"
                                   title="Mark Paid via Cash"
                                 >
                                   Cash
                                 </button>
                                 <button
                                   onClick={() => handleMarkPaid(ord.id, 'UPI')}
-                                  className="px-1.5 py-0.5 rounded bg-sky-600/30 hover:bg-sky-600 text-sky-300 hover:text-white text-[10px] font-bold border border-sky-500/30 transition-all cursor-pointer"
+                                  className="px-2 py-1 rounded bg-sky-600/30 hover:bg-sky-600 text-sky-300 hover:text-white text-[10px] font-bold border border-sky-500/30 transition-all cursor-pointer"
                                   title="Mark Paid via UPI"
                                 >
                                   UPI
@@ -1441,7 +1638,155 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
             )}
 
-            {/* Handover & Code Verification Modal */}
+            {/* Quick Counter POS Walk-in Order Modal */}
+            {isQuickPosOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <div className="bg-[#0e121a] border border-[#212737] rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  {/* Modal Header */}
+                  <div className="p-4 sm:p-5 border-b border-[#1f2636] flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                        <Plus className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-bold text-white">Punch Walk-in Counter Order</h2>
+                        <p className="text-[11px] text-slate-400">Direct register punch. Dispatches immediately to active terminal queue.</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsQuickPosOpen(false)}
+                      className="p-1.5 rounded-xl bg-[#141822] hover:bg-[#1b2230] text-slate-400 hover:text-white transition-all cursor-pointer"
+                    >
+                      <CloseIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Modal Body: Menu Picker */}
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Available Street Menu</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {menuItems.filter((m) => m.isAvailable !== false).map((item) => {
+                        const inBasket = basket.find((b) => b.item.id === item.id);
+                        const qty = inBasket ? inBasket.quantity : 0;
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                              qty > 0
+                                ? 'bg-sky-500/10 border-sky-500/30 text-white'
+                                : 'bg-[#080a0f] border-[#1b2230] hover:border-slate-700 text-slate-300'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold truncate">{item.name}</div>
+                              <div className="text-[11px] font-mono text-sky-400 font-bold">₹{item.price}</div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {qty > 0 ? (
+                                <div className="flex items-center gap-2 bg-[#141822] border border-[#212737] rounded-xl p-1">
+                                  <button
+                                    onClick={() => {
+                                      if (qty <= 1) {
+                                        setBasket((prev) => prev.filter((b) => b.item.id !== item.id));
+                                      } else {
+                                        setBasket((prev) =>
+                                          prev.map((b) =>
+                                            b.item.id === item.id ? { ...b, quantity: b.quantity - 1 } : b
+                                          )
+                                        );
+                                      }
+                                    }}
+                                    className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="font-mono text-xs font-bold px-1 text-white">{qty}</span>
+                                  <button
+                                    onClick={() => {
+                                      setBasket((prev) =>
+                                        prev.map((b) =>
+                                          b.item.id === item.id ? { ...b, quantity: b.quantity + 1 } : b
+                                        )
+                                      );
+                                    }}
+                                    className="w-6 h-6 rounded-lg bg-sky-600 hover:bg-sky-500 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setBasket((prev) => [...prev, { item, quantity: 1 }]);
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-sky-600/30 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/30 text-xs font-bold transition-all cursor-pointer"
+                                >
+                                  + Add
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Modal Footer: Payment & Dispatch */}
+                  <div className="p-4 sm:p-5 border-t border-[#1f2636] bg-[#090c12] space-y-3 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 font-semibold">Payment Method:</span>
+                        <div className="flex items-center gap-1.5 bg-[#121620] p-1 rounded-xl border border-[#212737]">
+                          {(['UPI', 'CASH'] as const).map((m) => (
+                            <button
+                              key={m}
+                              onClick={() => setPaymentMode(m)}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                                paymentMode === m
+                                  ? 'bg-sky-600 text-white shadow-sm'
+                                  : 'text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total</span>
+                        <span className="text-lg font-black font-mono text-white">₹{basketSubtotal}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          setBasket([]);
+                          setIsQuickPosOpen(false);
+                        }}
+                        className="py-2.5 px-4 rounded-xl bg-[#141822] hover:bg-[#1b2230] text-slate-400 hover:text-white text-xs font-bold border border-[#212737] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleQuickCheckout}
+                        disabled={basket.length === 0 || isSubmitting}
+                        className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-950/40 cursor-pointer disabled:opacity-40 transition-all"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>
+                          {isSubmitting
+                            ? 'Dispatching...'
+                            : `Dispatch Walk-in Order • ₹${basketSubtotal} (${paymentMode})`}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {selectedOrderForHandover && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
                 <div className="bg-[#0e121a] border border-[#212737] rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">

@@ -16,6 +16,7 @@ import {
   Loader2,
   ShieldAlert,
   Sparkles,
+  Truck,
 } from 'lucide-react';
 import { DinelyLogo } from '../../packages/ui';
 import { api } from '../../packages/api/client';
@@ -23,7 +24,7 @@ import { signInPlatformAdminWithGoogle } from '../../packages/auth/firebase';
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { AuthPage } from './AuthPage';
 
-export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'hookah' | 'inventory' | 'admin' | 'staff' | 'event';
+export type PortalType = 'restaurant' | 'kitchen' | 'waiter' | 'bar' | 'hookah' | 'inventory' | 'admin' | 'staff' | 'event' | 'cart';
 
 interface RoleLoginPageProps {
   portal: PortalType;
@@ -122,6 +123,15 @@ const PORTAL_CONFIGS: Record<PortalType, PortalConfig> = {
     targetDashboard: '/events/portal',
     identifierLabel: 'Staff Username or Account Email',
     identifierPlaceholder: 'e.g. runner01, chef_sam, or organizer@event.com',
+  },
+  cart: {
+    title: 'Food Cart OS Terminal',
+    subtitle: 'Sign in to access the order receiving terminal & POS',
+    roleBadge: 'CART_TERMINAL',
+    icon: <Truck className="w-5 h-5 text-amber-300" />,
+    targetDashboard: '/cart',
+    identifierLabel: 'Staff Username or Account Email',
+    identifierPlaceholder: 'e.g. cart_lead or owner@foodcart.com',
   },
 };
 

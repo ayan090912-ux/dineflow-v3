@@ -86,6 +86,7 @@ export function getPortalScopeFromPath(pathname?: string): PortalScope {
     p.startsWith('/customer') ||
     p.startsWith('/order') ||
     p.startsWith('/qr') ||
+    p.startsWith('/menu') ||
     p.startsWith('/cart/menu') ||
     p.startsWith('/cart/storefront') ||
     (p.startsWith('/cart/') && (p.endsWith('/menu') || p.endsWith('/storefront'))) ||
@@ -94,6 +95,9 @@ export function getPortalScopeFromPath(pathname?: string): PortalScope {
     p.startsWith('/wedding/guest')
   ) {
     return 'CUSTOMER';
+  }
+  if (p === '/cart' || p.startsWith('/cart/')) {
+    return 'STAFF';
   }
   return 'OWNER';
 }

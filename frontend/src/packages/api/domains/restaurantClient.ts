@@ -1457,24 +1457,38 @@ export class RestaurantClient {
         if (res.ok) {
           const data = await res.json();
           const rawItems = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []);
-          return rawItems.map((m: any) => ({
-            id: m.id,
-            restaurantId: m.restaurant_id || m.restaurantId || targetId,
-            categoryId: m.category_id || m.categoryId,
-            name: m.name,
-            description: m.description || '',
-            price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
-            imageUrl: m.image_url || m.imageUrl || m.image,
-            image: m.image_url || m.imageUrl || m.image,
-            isAvailable: m.is_available !== false && m.isAvailable !== false,
-            isVegetarian: m.is_vegetarian !== false && m.isVegetarian !== false,
-            dietaryType: m.dietary_type || m.dietaryType || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
-            targetDestination: m.target_destination || m.targetDestination || 'KITCHEN',
-            isAlcoholic: m.is_alcoholic || m.isAlcoholic || (m.target_destination === 'BAR'),
-            prepTimeMinutes: m.prep_time_minutes || m.prepTimeMinutes || 15,
-            stockQuantity: m.stock_quantity ?? m.stockQuantity ?? undefined,
-            trackInventory: m.track_inventory ?? m.trackInventory ?? undefined,
-          }));
+          const categoryMap = new Map<string, string>();
+          if (Array.isArray(data.categories)) {
+            data.categories.forEach((c: any) => {
+              if (c && c.id && c.name) {
+                categoryMap.set(c.id, c.name);
+              }
+            });
+          }
+          return rawItems.map((m: any) => {
+            const catId = m.category_id || m.categoryId;
+            const catName = categoryMap.get(catId) || m.category_name || m.categoryName || m.category;
+            return {
+              id: m.id,
+              restaurantId: m.restaurant_id || m.restaurantId || targetId,
+              categoryId: catId,
+              categoryName: catName,
+              category: catName,
+              name: m.name,
+              description: m.description || '',
+              price: typeof m.price === 'number' ? m.price : parseFloat(m.price) || 0,
+              imageUrl: m.image_url || m.imageUrl || m.image,
+              image: m.image_url || m.imageUrl || m.image,
+              isAvailable: m.is_available !== false && m.isAvailable !== false,
+              isVegetarian: m.is_vegetarian !== false && m.isVegetarian !== false,
+              dietaryType: m.dietary_type || m.dietaryType || (m.is_vegetarian !== false ? 'VEG' : 'NON_VEG'),
+              targetDestination: m.target_destination || m.targetDestination || 'KITCHEN',
+              isAlcoholic: m.is_alcoholic || m.isAlcoholic || (m.target_destination === 'BAR'),
+              prepTimeMinutes: m.prep_time_minutes || m.prepTimeMinutes || 15,
+              stockQuantity: m.stock_quantity ?? m.stockQuantity ?? undefined,
+              trackInventory: m.track_inventory ?? m.trackInventory ?? undefined,
+            };
+          });
         }
       } catch (e) {
         console.warn('API fetch for menu items failed:', e);

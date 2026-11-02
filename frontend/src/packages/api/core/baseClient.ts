@@ -503,6 +503,8 @@ export class BaseApiClient {
           (targetScope === 'HOOKAH' ? (localStorage.getItem('dinely_staff_token_hookah') || localStorage.getItem('dinely_staff_token_shisha')) : null) ||
           (targetScope === 'BAR' ? (localStorage.getItem('dinely_staff_token_bar') || localStorage.getItem('dinely_staff_token_bartender')) : null) ||
           (targetScope === 'KITCHEN' ? (localStorage.getItem('dinely_staff_token_kitchen') || localStorage.getItem('dinely_staff_token_chef')) : null) ||
+          (targetScope === 'STAFF' ? (localStorage.getItem('dinely_staff_token_cart') || localStorage.getItem('dinely_staff_token_food_cart')) : null) ||
+          localStorage.getItem('dinely_staff_token_cart') ||
           localStorage.getItem('dinely_staff_token') ||
           sessionStorage.getItem('dinely_staff_token') ||
           localStorage.getItem('dinely_staff_token_staff') ||

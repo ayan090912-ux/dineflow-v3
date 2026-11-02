@@ -164,7 +164,8 @@ async def get_caller_context(
     is_prod = getattr(settings, "ENVIRONMENT", "").lower() in ["production", "prod"]
     if not is_prod:
         ALLOWED_STAFF_HEADER_ROLES = {
-            "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF"
+            "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "CASHIER", "STAFF",
+            "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"
         }
         if x_staff_role and x_staff_restaurant_id:
             norm_role = x_staff_role.strip().upper()
@@ -342,7 +343,8 @@ async def require_tenant_staff_or_owner(
             "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
             "WAITER", "HOST", "SERVER", "CHEF", "COOK", "KITCHEN",
             "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY_MANAGER", "CASHIER",
-            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
+            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF",
+            "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"
         ],
         caller=caller,
         db=db
@@ -359,7 +361,8 @@ async def require_tenant_menu_manager(
         restaurant_id=restaurant_id,
         allowed_roles=[
             "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
-            "MANAGER", "EVENT_MANAGER", "EVENT_COORDINATOR", "CHEF"
+            "MANAGER", "EVENT_MANAGER", "EVENT_COORDINATOR", "CHEF",
+            "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"
         ],
         caller=caller,
         db=db

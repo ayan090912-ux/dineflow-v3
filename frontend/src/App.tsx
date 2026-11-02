@@ -1558,6 +1558,19 @@ function AppContent() {
       );
     }
 
+    if (cleanPath === '/cart/login') {
+      return (
+        <RoleLoginPage
+          portal="cart"
+          onNavigate={navigateTo}
+          onLoginSuccess={(_, user) => {
+            setCurrentUser(user);
+            navigateTo('/cart');
+          }}
+        />
+      );
+    }
+
     if (cleanPath === '/inventory/login') {
       return (
         <RoleLoginPage
@@ -1589,6 +1602,7 @@ function AppContent() {
               r === 'CHEF' || r === 'KITCHEN' ? '/kitchen' :
               r === 'BAR' || r === 'BARTENDER' ? '/bar' :
               r === 'HOOKAH' || r === 'SHISHA' ? '/hookah' :
+              r === 'CART' || r === 'FOOD_CART' || r === 'CART_STAFF' ? '/cart' :
               r === 'INVENTORY' ? '/inventory' : '/billing'
             );
             navigateTo(target);

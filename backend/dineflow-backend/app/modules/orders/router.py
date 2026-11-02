@@ -1076,7 +1076,7 @@ async def create_order(
 
         try:
             from app.modules.websocket.manager import ws_manager
-            order_target_aud = ["CUSTOMER", "OWNER"]
+            order_target_aud = ["CUSTOMER", "OWNER", "CART", "STAFF"]
             if has_kitchen and restaurant.has_kitchen is not False and (not restaurant.enabled_modules or "kitchen" in restaurant.enabled_modules):
                 order_target_aud.append("KITCHEN")
             if has_bar and restaurant.has_bar is not False and (not restaurant.enabled_modules or "bar" in restaurant.enabled_modules):
@@ -1354,7 +1354,7 @@ async def get_restaurant_orders(
                             Order.business_day_id == open_bday.id,
                             and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at),
                             Order.event_id.isnot(None),
-                            Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER"])
+                            Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER", "TAKEAWAY", "COUNTER_WALK_IN", "PICKUP"])
                         )
                     )
             elif effective_station:
@@ -1364,7 +1364,7 @@ async def get_restaurant_orders(
                             Order.business_day_id == open_bday.id,
                             and_(Order.business_day_id.is_(None), Order.created_at >= open_bday.opened_at),
                             Order.event_id.isnot(None),
-                            Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER"])
+                            Order.order_type.in_(["WEDDING_EVENT", "EVENT_ORDER", "TAKEAWAY", "COUNTER_WALK_IN", "PICKUP"])
                         )
                     )
                 else:
@@ -1501,7 +1501,7 @@ async def update_order_status(
             is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
             if not is_owner:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]:
+        elif caller.role in ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         else:
@@ -1620,7 +1620,8 @@ async def update_order_status(
     if eff_kitchen_status:
         allowed_kitchen_roles = [
             "KITCHEN", "CHEF", "COOK", "MANAGER", "OWNER", "RESTAURANT_OWNER", "ADMIN", "SUPER_ADMIN",
-            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF"
+            "EVENT_COORDINATOR", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "STAFF",
+            "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"
         ]
         if eff_kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"]:
             allowed_kitchen_roles.extend(["WAITER", "SERVER", "RUNNER"])
@@ -1633,12 +1634,12 @@ async def update_order_status(
 
     # Reconcile overall status:
     # If no specific station was targeted and target_status is explicitly DELIVERED/COMPLETED/CANCELLED
-    if not req_station and target_status in ["DELIVERED", "COMPLETED", "SERVED", "OUT_FOR_DELIVERY", "CANCELLED"] and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "RUNNER", "STAFF"]:
+    if not req_station and target_status in ["DELIVERED", "COMPLETED", "SERVED", "OUT_FOR_DELIVERY", "CANCELLED"] and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "RUNNER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"]:
         if target_status == "CANCELLED":
             order.status = "CANCELLED"
             order.delivery_status = "CANCELLED"
         elif target_status in ["DELIVERED", "COMPLETED", "SERVED"]:
-            is_manager_or_owner = caller.is_admin or caller_role in ["OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_MANAGER"]
+            is_manager_or_owner = caller.is_admin or caller_role in ["OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_MANAGER", "CART_OWNER", "CART"]
             # Check if any stations are still in PREPARING
             has_pending = (
                 (has_k_items and order.kitchen_status in ["PENDING", "ACCEPTED", "PREPARING"]) or
@@ -1798,7 +1799,7 @@ async def update_order_status(
                 restaurant_id=order.restaurant_id,
                 event_type="order_ready",
                 payload=ready_payload,
-                target_audience=["WAITER", "CUSTOMER", "OWNER"]
+                target_audience=["WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
             )
         if order.status == "DELIVERED":
             delivered_payload = {
@@ -1840,7 +1841,7 @@ async def update_order_status(
             restaurant_id=order.restaurant_id,
             event_type="order_status_updated",
             payload=resp_data,
-            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE] order_status_updated:", ws_err)
@@ -2017,7 +2018,7 @@ async def request_waiter_for_order(
             restaurant_id=order.restaurant_id,
             event_type="order_status_updated",
             payload=order_dict,
-            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
         )
     except Exception as e:
         print("[WS BROADCAST] request_waiter notice:", e)
@@ -2127,7 +2128,7 @@ async def collect_order(
             restaurant_id=order.restaurant_id,
             event_type="order_status_updated",
             payload=order_dict,
-            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
         )
     except Exception as e:
         print("[WS BROADCAST] collect_order notice:", e)
@@ -2281,7 +2282,7 @@ async def deliver_order(
             restaurant_id=order.restaurant_id,
             event_type="order_status_updated",
             payload=order_dict,
-            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER"]
+            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
         )
     except Exception as e:
         print("[WS BROADCAST] deliver_order notice:", e)
@@ -2555,7 +2556,7 @@ async def redeem_pickup_code(
                 "status": "COMPLETED",
                 "data": resp_data,
             },
-            target_audience=["CUSTOMER", "OWNER", "KITCHEN", "WAITER"]
+            target_audience=["CUSTOMER", "OWNER", "KITCHEN", "WAITER", "CART", "STAFF"]
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_REDEEM_NOTICE]:", ws_err)
