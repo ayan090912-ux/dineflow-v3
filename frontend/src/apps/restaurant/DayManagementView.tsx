@@ -835,29 +835,30 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
       )}
 
       {/* Operational Metadata Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs font-mono text-slate-300">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 rounded-2xl text-xs font-mono text-slate-300 shadow-xl">
         <div className="flex items-center gap-3">
-          <span className="text-slate-500">Business Date:</span>
-          <span className="font-bold text-white text-sm">{activeDateDisplay}</span>
-          <Badge variant={activeDay?.status === 'OPEN' ? 'success' : 'default'} className="text-[10px]">
+          <span className="text-slate-400">Business Date:</span>
+          <span className="font-bold text-white text-sm tracking-tight">{activeDateDisplay}</span>
+          <Badge variant={activeDay?.status === 'OPEN' ? 'success' : 'default'} className="text-[10px] bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
             {activeDay?.status || 'OPEN'}
           </Badge>
         </div>
         <div className="flex items-center gap-4 text-slate-400 text-[11px]">
-          <span className="flex items-center gap-1.5">
-            <Clock className="w-3 h-3 text-emerald-400" />
+          <span className="flex items-center gap-1.5 text-slate-300">
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
             <span>{currentLiveTime || tz}</span>
           </span>
-          <span>Cutoff: <strong className="text-amber-300">{nextRolloverAt}</strong></span>
-          <span>Sync: <strong className="text-slate-300">{lastSynchronized.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
+          <span>Cutoff: <strong className="text-amber-400">{nextRolloverAt}</strong></span>
+          <span>Sync: <strong className="text-slate-200">{lastSynchronized.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
         </div>
       </div>
 
       {/* Top Financial KPI Metrics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
         {/* Gross Order Value */}
-        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+        <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 hover:border-white/20 transition-all p-4 rounded-2xl space-y-1.5 shadow-xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.02] rounded-full blur-xl pointer-events-none group-hover:bg-white/[0.04] transition-all" />
+          <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block tracking-wider">
             Gross Order Value
           </span>
           <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
@@ -866,11 +867,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           <span className="text-[10px] font-mono text-slate-500 block">
             Kitchen + Bar + Hookah
           </span>
-        </Card>
+        </div>
 
         {/* Net Sales */}
-        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+        <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 hover:border-white/20 transition-all p-4 rounded-2xl space-y-1.5 shadow-xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.02] rounded-full blur-xl pointer-events-none group-hover:bg-white/[0.04] transition-all" />
+          <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block tracking-wider">
             Net Sales
           </span>
           <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
@@ -879,11 +881,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           <span className="text-[10px] font-mono text-slate-500 block">
             Taxes: {formatCurrency(taxAmount, theme.currency)}
           </span>
-        </Card>
+        </div>
 
         {/* Collected Revenue */}
-        <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-          <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">
+        <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-emerald-500/25 hover:border-emerald-500/40 transition-all p-4 rounded-2xl space-y-1.5 shadow-xl relative overflow-hidden group shadow-emerald-950/20">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/15 transition-all" />
+          <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block tracking-wider">
             Settled Revenue
           </span>
           <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
@@ -892,11 +895,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           <span className="text-[10px] font-mono text-slate-500 block">
             UPI, Card & Cash
           </span>
-        </Card>
+        </div>
 
         {/* Outstanding Receivables */}
-        <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-          <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">
+        <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-amber-500/25 hover:border-amber-500/40 transition-all p-4 rounded-2xl space-y-1.5 shadow-xl relative overflow-hidden group shadow-amber-950/20">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/15 transition-all" />
+          <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block tracking-wider">
             Outstanding
           </span>
           <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
@@ -905,11 +909,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           <span className="text-[10px] font-mono text-slate-500 block">
             Unbilled & Open bills
           </span>
-        </Card>
+        </div>
 
         {/* Total Orders */}
-        <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
-          <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">
+        <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 hover:border-white/20 transition-all p-4 rounded-2xl space-y-1.5 shadow-xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.02] rounded-full blur-xl pointer-events-none group-hover:bg-white/[0.04] transition-all" />
+          <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block tracking-wider">
             Total Orders
           </span>
           <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
@@ -918,11 +923,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           <span className="text-[10px] font-mono text-slate-500 block">
             Across 3 stations
           </span>
-        </Card>
+        </div>
 
         {/* Active Tables / Sessions */}
-        <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
-          <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">
+        <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-sky-500/25 hover:border-sky-500/40 transition-all p-4 rounded-2xl space-y-1.5 shadow-xl relative overflow-hidden group shadow-sky-950/20">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-sky-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-sky-500/15 transition-all" />
+          <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block tracking-wider">
             Active Tables
           </span>
           <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
@@ -931,13 +937,13 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           <span className="text-[10px] font-mono text-slate-500 block">
             {activeSessionsCount} open sessions
           </span>
-        </Card>
+        </div>
       </div>
 
       {/* COMBINED OPERATIONAL ORDER VALUE RECONCILIATION SUMMARY BOX */}
-      <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl shadow-sm">
+      <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 p-4 lg:p-5 rounded-2xl shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
               Daily Operational Order Value Reconciliation
             </span>
@@ -951,39 +957,39 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span className="text-xs text-slate-400">Hookah:</span>
               <span className="text-sm font-bold text-orange-400">{formatCurrency(hookahSection.sales, theme.currency)}</span>
               <span className="text-slate-600">=</span>
-              <span className="text-base font-bold text-white bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700">
+              <span className="text-base font-bold text-white bg-white/[0.05] px-2.5 py-0.5 rounded-lg border border-white/15">
                 {formatCurrency(combinedOrderValue, theme.currency)}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="success" className="font-mono text-[11px] px-3 py-1 bg-emerald-950/60 text-emerald-400 border-emerald-800/60 flex items-center gap-1.5">
+            <Badge variant="success" className="font-mono text-[11px] px-3.5 py-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.15)]">
               <Check className="w-3.5 h-3.5 text-emerald-400" />
               <span>Zero Double-Counting Verified</span>
             </Badge>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* SECTION TABS FILTER */}
-      <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
-        <div className="flex items-center gap-2 overflow-x-auto">
+      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
           <button
             onClick={() => setActiveStationTab('all')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all cursor-pointer ${
               activeStationTab === 'all'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
-                : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >
             All 3 Sections
           </button>
           <button
             onClick={() => setActiveStationTab('kitchen')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeStationTab === 'kitchen'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
-                : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.2)]'
+                : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >
             <ChefHat className="w-3.5 h-3.5" />
@@ -991,10 +997,10 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           </button>
           <button
             onClick={() => setActiveStationTab('bar')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeStationTab === 'bar'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
-                : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >
             <Wine className="w-3.5 h-3.5" />
@@ -1002,10 +1008,10 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           </button>
           <button
             onClick={() => setActiveStationTab('hookah')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeStationTab === 'hookah'
-                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40 shadow-sm'
-                : 'bg-[#12151b] text-slate-400 hover:text-white border border-[#1e232e]'
+                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40 shadow-[0_0_15px_rgba(249,115,22,0.2)]'
+                : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >
             <Flame className="w-3.5 h-3.5" />
@@ -1018,8 +1024,8 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
       <div className="space-y-6">
         {/* ==================== A. KITCHEN SECTION ==================== */}
         {(activeStationTab === 'all' || activeStationTab === 'kitchen') && (
-          <Card className="bg-[#12151b] border-[#1e232e] rounded-2xl p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e232e] pb-3.5">
+          <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-5 lg:p-6 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3.5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
                   <ChefHat className="w-5 h-5" />
@@ -1029,7 +1035,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                     <h3 className="text-base font-bold text-white tracking-tight">
                       A. Kitchen (Culinary)
                     </h3>
-                    <Badge variant="outline" className="font-mono text-[10px] border-sky-800/60 text-sky-400 bg-sky-950/40">
+                    <Badge variant="outline" className="font-mono text-[10px] border-sky-500/30 text-sky-300 bg-sky-500/10">
                       {kitchenSection.ordersCount} Orders
                     </Badge>
                   </div>
@@ -1047,12 +1053,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   </span>
                 </div>
                 {/* Kitchen Sub-tabs */}
-                <div className="flex items-center gap-1 bg-[#0e1117] p-1 rounded-lg border border-[#1e232e]">
+                <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10">
                   <button
                     onClick={() => setKitchenViewMode('items')}
-                    className={`px-2.5 py-1 rounded text-xs transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                       kitchenViewMode === 'items'
-                        ? 'bg-sky-500/20 text-sky-300 font-bold'
+                        ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1060,9 +1066,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   </button>
                   <button
                     onClick={() => setKitchenViewMode('orders')}
-                    className={`px-2.5 py-1 rounded text-xs transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                       kitchenViewMode === 'orders'
-                        ? 'bg-sky-500/20 text-sky-300 font-bold'
+                        ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1082,7 +1088,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 ) : (
                   <table className="w-full text-left font-mono text-xs">
                     <thead>
-                      <tr className="border-b border-[#1e232e] text-[10px] uppercase text-slate-400 tracking-wider">
+                      <tr className="border-b border-white/10 text-[10px] uppercase text-slate-400 tracking-wider">
                         <th className="py-2.5 px-3">Dish Name</th>
                         <th className="py-2.5 px-3 text-right">Qty Sold</th>
                         <th className="py-2.5 px-3 text-right">Unit Price</th>
@@ -1093,9 +1099,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                         <th className="py-2.5 px-3 text-right">Orders</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#1e232e]/60">
+                    <tbody className="divide-y divide-white/[0.06]">
                       {kitchenSection.items.map((it, idx) => (
-                        <tr key={idx} className="hover:bg-[#181d27]/40 transition-colors">
+                        <tr key={idx} className="hover:bg-white/[0.03] transition-colors">
                           <td className="py-2.5 px-3 font-semibold text-white">{it.name}</td>
                           <td className="py-2.5 px-3 text-right text-sky-300 font-bold">{it.quantity}</td>
                           <td className="py-2.5 px-3 text-right text-slate-300">{formatCurrency(it.unitPrice || 0, theme.currency)}</td>
@@ -1110,7 +1116,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t-2 border-[#1e232e] font-bold text-white bg-[#0e1117]/60">
+                      <tr className="border-t-2 border-white/10 font-bold text-white bg-white/[0.02]">
                         <td className="py-2.5 px-3 uppercase text-[11px] text-slate-400">Total Kitchen Dishes</td>
                         <td className="py-2.5 px-3 text-right text-sky-300">{kitchenSection.itemsCount}</td>
                         <td colSpan={2}></td>
@@ -1135,13 +1141,13 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   kitchenSection.orders.map((ord) => (
                     <div
                       key={ord.id}
-                      className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono"
+                      className="p-3.5 bg-white/[0.02] hover:bg-white/[0.04] rounded-xl border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono transition-all"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-white">{ord.orderNumber}</span>
                           <span className="text-slate-400">Table {ord.tableNumber}</span>
-                          <Badge variant="outline" className="text-[10px] border-[#1e232e] text-slate-300">
+                          <Badge variant="outline" className="text-[10px] border-white/10 text-slate-300">
                             {ord.stationStatus}
                           </Badge>
                           <Badge
@@ -1168,13 +1174,13 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 )}
               </div>
             )}
-          </Card>
+          </div>
         )}
 
         {/* ==================== B. BAR SECTION ==================== */}
         {(activeStationTab === 'all' || activeStationTab === 'bar') && (
-          <Card className="bg-[#12151b] border-[#1e232e] rounded-2xl p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e232e] pb-3.5">
+          <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-5 lg:p-6 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3.5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
                   <Wine className="w-5 h-5" />
@@ -1184,7 +1190,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                     <h3 className="text-base font-bold text-white tracking-tight">
                       B. Bar (Beverages)
                     </h3>
-                    <Badge variant="outline" className="font-mono text-[10px] border-purple-800/60 text-purple-400 bg-purple-950/40">
+                    <Badge variant="outline" className="font-mono text-[10px] border-purple-500/30 text-purple-300 bg-purple-500/10">
                       {barSection.ordersCount} Orders
                     </Badge>
                   </div>
@@ -1202,12 +1208,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   </span>
                 </div>
                 {/* Bar Sub-tabs */}
-                <div className="flex items-center gap-1 bg-[#0e1117] p-1 rounded-lg border border-[#1e232e]">
+                <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10">
                   <button
                     onClick={() => setBarViewMode('items')}
-                    className={`px-2.5 py-1 rounded text-xs transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                       barViewMode === 'items'
-                        ? 'bg-purple-500/20 text-purple-300 font-bold'
+                        ? 'bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1215,9 +1221,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   </button>
                   <button
                     onClick={() => setBarViewMode('orders')}
-                    className={`px-2.5 py-1 rounded text-xs transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                       barViewMode === 'orders'
-                        ? 'bg-purple-500/20 text-purple-300 font-bold'
+                        ? 'bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1237,7 +1243,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 ) : (
                   <table className="w-full text-left font-mono text-xs">
                     <thead>
-                      <tr className="border-b border-[#1e232e] text-[10px] uppercase text-slate-400 tracking-wider">
+                      <tr className="border-b border-white/10 text-[10px] uppercase text-slate-400 tracking-wider">
                         <th className="py-2.5 px-3">Beverage Name</th>
                         <th className="py-2.5 px-3 text-right">Qty Sold</th>
                         <th className="py-2.5 px-3 text-right">Unit Price</th>
@@ -1248,9 +1254,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                         <th className="py-2.5 px-3 text-right">Orders</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#1e232e]/60">
+                    <tbody className="divide-y divide-white/[0.06]">
                       {barSection.items.map((it, idx) => (
-                        <tr key={idx} className="hover:bg-[#181d27]/40 transition-colors">
+                        <tr key={idx} className="hover:bg-white/[0.03] transition-colors">
                           <td className="py-2.5 px-3 font-semibold text-white">{it.name}</td>
                           <td className="py-2.5 px-3 text-right text-purple-300 font-bold">{it.quantity}</td>
                           <td className="py-2.5 px-3 text-right text-slate-300">{formatCurrency(it.unitPrice || 0, theme.currency)}</td>
@@ -1265,7 +1271,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t-2 border-[#1e232e] font-bold text-white bg-[#0e1117]/60">
+                      <tr className="border-t-2 border-white/10 font-bold text-white bg-white/[0.02]">
                         <td className="py-2.5 px-3 uppercase text-[11px] text-slate-400">Total Bar Beverages</td>
                         <td className="py-2.5 px-3 text-right text-purple-300">{barSection.itemsCount}</td>
                         <td colSpan={2}></td>
@@ -1290,13 +1296,13 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   barSection.orders.map((ord) => (
                     <div
                       key={ord.id}
-                      className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono"
+                      className="p-3.5 bg-white/[0.02] hover:bg-white/[0.04] rounded-xl border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono transition-all"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-white">{ord.orderNumber}</span>
                           <span className="text-slate-400">Table {ord.tableNumber}</span>
-                          <Badge variant="outline" className="text-[10px] border-[#1e232e] text-slate-300">
+                          <Badge variant="outline" className="text-[10px] border-white/10 text-slate-300">
                             {ord.stationStatus}
                           </Badge>
                           <Badge
@@ -1323,13 +1329,13 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 )}
               </div>
             )}
-          </Card>
+          </div>
         )}
 
         {/* ==================== C. HOOKAH SECTION ==================== */}
         {(activeStationTab === 'all' || activeStationTab === 'hookah') && (
-          <Card className="bg-[#12151b] border-[#1e232e] rounded-2xl p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e232e] pb-3.5">
+          <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-5 lg:p-6 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3.5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20">
                   <Flame className="w-5 h-5" />
@@ -1339,7 +1345,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                     <h3 className="text-base font-bold text-white tracking-tight">
                       C. Hookah (Shisha Lounge)
                     </h3>
-                    <Badge variant="outline" className="font-mono text-[10px] border-orange-800/60 text-orange-400 bg-orange-950/40">
+                    <Badge variant="outline" className="font-mono text-[10px] border-orange-500/30 text-orange-300 bg-orange-500/10">
                       {hookahSection.ordersCount} Orders
                     </Badge>
                   </div>
@@ -1357,12 +1363,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   </span>
                 </div>
                 {/* Hookah Sub-tabs */}
-                <div className="flex items-center gap-1 bg-[#0e1117] p-1 rounded-lg border border-[#1e232e]">
+                <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10">
                   <button
                     onClick={() => setHookahViewMode('items')}
-                    className={`px-2.5 py-1 rounded text-xs transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                       hookahViewMode === 'items'
-                        ? 'bg-orange-500/20 text-orange-300 font-bold'
+                        ? 'bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1370,9 +1376,9 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   </button>
                   <button
                     onClick={() => setHookahViewMode('orders')}
-                    className={`px-2.5 py-1 rounded text-xs transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                       hookahViewMode === 'orders'
-                        ? 'bg-orange-500/20 text-orange-300 font-bold'
+                        ? 'bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30 shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1392,7 +1398,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 ) : (
                   <table className="w-full text-left font-mono text-xs">
                     <thead>
-                      <tr className="border-b border-[#1e232e] text-[10px] uppercase text-slate-400 tracking-wider">
+                      <tr className="border-b border-white/10 text-[10px] uppercase text-slate-400 tracking-wider">
                         <th className="py-2.5 px-3">Product / Pot</th>
                         <th className="py-2.5 px-3">Selected Flavour</th>
                         <th className="py-2.5 px-3 text-right">Qty Sold</th>
@@ -1404,12 +1410,12 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                         <th className="py-2.5 px-3 text-right">Orders</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#1e232e]/60">
+                    <tbody className="divide-y divide-white/[0.06]">
                       {hookahSection.items.map((it, idx) => (
-                        <tr key={idx} className="hover:bg-[#181d27]/40 transition-colors">
+                        <tr key={idx} className="hover:bg-white/[0.03] transition-colors">
                           <td className="py-2.5 px-3 font-semibold text-white">{it.name}</td>
                           <td className="py-2.5 px-3">
-                            <span className="px-2 py-0.5 rounded bg-orange-500/10 text-orange-300 border border-orange-500/20 text-[11px] font-bold">
+                            <span className="px-2.5 py-0.5 rounded-lg bg-orange-500/15 text-orange-300 border border-orange-500/30 text-[11px] font-bold">
                               {it.flavour || 'Standard'}
                             </span>
                           </td>
@@ -1426,7 +1432,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t-2 border-[#1e232e] font-bold text-white bg-[#0e1117]/60">
+                      <tr className="border-t-2 border-white/10 font-bold text-white bg-white/[0.02]">
                         <td className="py-2.5 px-3 uppercase text-[11px] text-slate-400" colSpan={2}>Total Hookahs</td>
                         <td className="py-2.5 px-3 text-right text-orange-300">{hookahSection.itemsCount}</td>
                         <td colSpan={2}></td>
@@ -1451,13 +1457,13 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                   hookahSection.orders.map((ord) => (
                     <div
                       key={ord.id}
-                      className="p-3 bg-[#0e1117] rounded-xl border border-[#1e232e] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono"
+                      className="p-3.5 bg-white/[0.02] hover:bg-white/[0.04] rounded-xl border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono transition-all"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-white">{ord.orderNumber}</span>
                           <span className="text-slate-400">Table {ord.tableNumber}</span>
-                          <Badge variant="outline" className="text-[10px] border-[#1e232e] text-slate-300">
+                          <Badge variant="outline" className="text-[10px] border-white/10 text-slate-300">
                             {ord.stationStatus}
                           </Badge>
                           <Badge
@@ -1484,21 +1490,21 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
                 )}
               </div>
             )}
-          </Card>
+          </div>
         )}
       </div>
 
       {/* FINANCIAL RECONCILIATION LEDGER */}
-      <Card className="bg-[#12151b] border-[#1e232e] p-6 rounded-2xl space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e232e] pb-3.5">
+      <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 p-6 rounded-2xl space-y-5 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3.5">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <TableProperties className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
                 Daily Financial Reconciliation Ledger
-                <Badge variant={outstandingReceivables > 0 ? 'warning' : 'success'} className="font-mono text-[10px]">
+                <Badge variant={outstandingReceivables > 0 ? 'warning' : 'success'} className="font-mono text-[10px] bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
                   {outstandingReceivables > 0 ? 'PENDING RECEIVABLES' : 'BALANCED & AUDITED'}
                 </Badge>
               </h3>
@@ -1511,8 +1517,8 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Left Column: Operational Sales Demand */}
-          <div className="space-y-3 p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] font-mono text-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block border-b border-[#1e232e] pb-1.5">
+          <div className="space-y-3 p-4 bg-white/[0.02] rounded-xl border border-white/10 font-mono text-xs">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block border-b border-white/10 pb-1.5">
               1. Operational Demand (Gross to Net)
             </span>
             <div className="flex justify-between items-center text-slate-300">
@@ -1535,7 +1541,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span>Discounts Applied:</span>
               <span className="text-rose-400">-{formatCurrency(discountAmount, theme.currency)}</span>
             </div>
-            <div className="flex justify-between items-center text-slate-300 border-t border-[#1e232e] pt-2 font-bold">
+            <div className="flex justify-between items-center text-slate-300 border-t border-white/10 pt-2 font-bold">
               <span>Net Sales:</span>
               <span className="text-emerald-400">{formatCurrency(netSales, theme.currency)}</span>
             </div>
@@ -1546,8 +1552,8 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
           </div>
 
           {/* Right Column: Collected Revenue & Outstanding Receivables */}
-          <div className="space-y-3 p-4 bg-[#0e1117] rounded-xl border border-[#1e232e] font-mono text-xs">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block border-b border-[#1e232e] pb-1.5">
+          <div className="space-y-3 p-4 bg-white/[0.02] rounded-xl border border-white/10 font-mono text-xs">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block border-b border-white/10 pb-1.5">
               2. Cash Flow & Receivables
             </span>
             <div className="flex justify-between items-center text-slate-300">
@@ -1562,7 +1568,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span>Settled Cash Revenue:</span>
               <span className="font-bold text-emerald-400">{formatCurrency(cashSales, theme.currency)}</span>
             </div>
-            <div className="flex justify-between items-center text-slate-300 border-t border-[#1e232e] pt-2 font-bold">
+            <div className="flex justify-between items-center text-slate-300 border-t border-white/10 pt-2 font-bold">
               <span>Total Settled Cash Flow:</span>
               <span className="text-emerald-300">{formatCurrency(settledRevenue, theme.currency)}</span>
             </div>
@@ -1574,7 +1580,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span>Unbilled Active Orders:</span>
               <span className="text-amber-300">{formatCurrency(unbilledOrdersAmount, theme.currency)}</span>
             </div>
-            <div className="flex justify-between items-center text-slate-300 border-t border-[#1e232e] pt-2 font-bold">
+            <div className="flex justify-between items-center text-slate-300 border-t border-white/10 pt-2 font-bold">
               <span>Total Outstanding Balance:</span>
               <span className={outstandingReceivables > 0 ? 'text-amber-400' : 'text-slate-400'}>
                 {formatCurrency(outstandingReceivables, theme.currency)}
@@ -1582,7 +1588,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             </div>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* END BUSINESS DAY PRECHECK MODAL */}
       {isPrecheckOpen && (

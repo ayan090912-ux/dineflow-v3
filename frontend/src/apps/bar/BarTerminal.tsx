@@ -75,9 +75,10 @@ const formatElapsed = (timestamp?: string) => {
 interface BarTerminalProps {
   restaurant?: any;
   onLogout?: () => void;
+  isEmbedded?: boolean;
 }
 
-export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }) => {
+export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, isEmbedded = false }) => {
   const restaurantName = restaurant?.name || 'Craft Bar';
   const [orders, setOrders] = useState<Order[]>([]);
   const [completedHistory, setCompletedHistory] = useState<
@@ -517,85 +518,87 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
         </div>
       )}
 
-      {/* HEADER BAR */}
-      <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
-        {/* Brand Header */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-300 shrink-0 shadow-[0_0_12px_rgba(56,189,248,0.25)]">
-            <Wine className="w-4 h-4 sm:w-5 sm:h-5 text-sky-400" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
-              <DinelyLogo size="sm" />
-              <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">
-                {restaurantName}
-              </h1>
-              <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 bg-sky-500/25 text-sky-300 border border-sky-400/40">
-                BAR
-              </Badge>
-              <Badge variant="outline" className="hidden xs:inline-flex text-sky-300 border-sky-400/30 text-[9px] sm:text-[10px] font-mono">
-                MIXOLOGY OS
-              </Badge>
-              {wsStatus === 'CONNECTED' ? (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
-                </span>
-              ) : wsStatus === 'RECONNECTING' ? (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Reconnecting
-                </span>
-              ) : (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
-                </span>
-              )}
+      {/* HEADER BAR (Standalone Mode) */}
+      {!isEmbedded && (
+        <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+          {/* Brand Header */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-300 shrink-0 shadow-[0_0_12px_rgba(56,189,248,0.25)]">
+              <Wine className="w-4 h-4 sm:w-5 sm:h-5 text-sky-400" />
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
-              Craft mixology pass, cocktail orders & beverage dispensing
-            </p>
-          </div>
-        </div>
-
-        {/* Staff Shift Info & Utility Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
-          <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
-            <Avatar src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100" name="Head Bartender" size="sm" />
-            <div className="hidden xs:block">
-              <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Bar Staff</p>
-              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+                <DinelyLogo size="sm" />
+                <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">
+                  {restaurantName}
+                </h1>
+                <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 bg-sky-500/25 text-sky-300 border border-sky-400/40">
+                  BAR
+                </Badge>
+                <Badge variant="outline" className="hidden xs:inline-flex text-sky-300 border-sky-400/30 text-[9px] sm:text-[10px] font-mono">
+                  MIXOLOGY OS
+                </Badge>
+                {wsStatus === 'CONNECTED' ? (
+                  <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+                  </span>
+                ) : wsStatus === 'RECONNECTING' ? (
+                  <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Reconnecting
+                  </span>
+                ) : (
+                  <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
+                Craft mixology pass, cocktail orders & beverage dispensing
+              </p>
             </div>
           </div>
 
-          {/* Clock */}
-          <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
-            <Clock className="w-3.5 h-3.5 text-sky-400" />
-            <span className="font-tabular">{currentTime || '03:20 PM'}</span>
+          {/* Staff Shift Info & Utility Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
+              <Avatar src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100" name="Head Bartender" size="sm" />
+              <div className="hidden xs:block">
+                <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Bar Staff</p>
+                <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
+              </div>
+            </div>
+
+            {/* Clock */}
+            <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
+              <Clock className="w-3.5 h-3.5 text-sky-400" />
+              <span className="font-tabular">{currentTime || '03:20 PM'}</span>
+            </div>
+
+            {/* Audio Chime Toggle */}
+            <button
+              onClick={() => setIsAudioMuted(!isAudioMuted)}
+              className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
+              title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
+            >
+              {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-sky-400" />}
+            </button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await api.logout();
+                if (onLogout) onLogout();
+                else window.location.href = '/staff/login';
+              }}
+              className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Sign Out</span>
+            </Button>
           </div>
-
-          {/* Audio Chime Toggle */}
-          <button
-            onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
-            title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
-          >
-            {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-sky-400" />}
-          </button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              await api.logout();
-              if (onLogout) onLogout();
-              else window.location.href = '/staff/login';
-            }}
-            className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Sign Out</span>
-          </Button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* ERROR / RECONNECT BANNER */}
       {isErrorState && (
@@ -617,7 +620,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
       )}
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 relative z-10">
+      <main className={`flex-1 overflow-y-auto space-y-4 relative z-10 ${isEmbedded ? 'p-0' : 'p-3 sm:p-4 lg:p-6'}`}>
         {/* OPERATIONAL QUEUE FILTERS & ACTIONS */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
           <div className="flex items-center gap-2 overflow-x-auto">
@@ -663,12 +666,23 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
                 className="w-full text-xs"
               />
             </div>
+
+            {isEmbedded && (
+              <button
+                onClick={() => setIsAudioMuted(!isAudioMuted)}
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-8.5 w-8.5 flex items-center justify-center shrink-0 active:scale-95"
+                title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
+              >
+                {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-sky-400" />}
+              </button>
+            )}
+
             <Button
               variant="outline"
               size="sm"
               onClick={() => loadData(true)}
               disabled={isLoading}
-              className="text-xs border-[#1e232e] bg-[#141822] text-slate-300 hover:text-white flex items-center gap-1.5 h-8 shrink-0 rounded-xl"
+              className="text-xs border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white flex items-center gap-1.5 h-8.5 shrink-0 rounded-xl backdrop-blur-md shadow-sm active:scale-95"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -744,10 +758,12 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
               </div>
 
               {activeOrders.length === 0 ? (
-                <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-dashed border-white/15 space-y-2">
-                  <Wine className="w-8 h-8 text-sky-400/40 mx-auto" />
-                  <p className="text-xs font-bold text-slate-200">No active drink orders in queue</p>
-                  <p className="text-[11px] text-white/50 max-w-xs mx-auto">
+                <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+                    <Wine className="w-6 h-6" />
+                  </div>
+                  <p className="font-semibold text-slate-200 text-sm">No active drink orders in queue</p>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
                     Beverage orders from customer QR menus, waiters, or the bar counter will appear here instantly.
                   </p>
                 </div>
@@ -881,10 +897,12 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout }
               </div>
 
               {sentToWaiterOrders.length === 0 ? (
-                <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-dashed border-white/15 space-y-2">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400/40 mx-auto" />
-                  <p className="text-xs font-bold text-slate-200">All drinks collected from bar pass</p>
-                  <p className="text-[11px] text-white/50 max-w-xs mx-auto">
+                <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <p className="font-semibold text-slate-200 text-sm">All drinks collected from bar pass</p>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
                     Beverages marked ready will appear here until floor waiters collect and deliver them to tables.
                   </p>
                 </div>

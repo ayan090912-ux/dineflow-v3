@@ -93,9 +93,10 @@ const playNotificationChime = () => {
 interface WaiterTerminalOSProps {
   restaurant?: Restaurant;
   onLogout?: () => void;
+  isEmbedded?: boolean;
 }
 
-export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, onLogout }) => {
+export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, onLogout, isEmbedded = false }) => {
   const { formatPrice } = useTheme();
 
   // Navigation view state: 'floor' (Default: 1-Screen Live Service Floor) or 'tables' (Floor Management)
@@ -1028,79 +1029,81 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         </div>
       )}
 
-      {/* HEADER BAR */}
-      <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
-        {/* Brand Header */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-slate-200 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
-            <PhoneCall className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
-              <DinelyLogo size="sm" />
-              <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">{restaurantName}</h1>
-              <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5">WAITER</Badge>
-              <Badge variant="outline" className="hidden xs:inline-flex text-emerald-400 border-emerald-500/30 text-[9px] sm:text-[10px] font-mono">{assignedTerminal}</Badge>
-              {wsStatus === 'CONNECTED' ? (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
-                </span>
-              ) : wsStatus === 'RECONNECTING' ? (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Reconnecting
-                </span>
-              ) : (
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/25 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
-                </span>
-              )}
+      {/* HEADER BAR (Standalone Mode) */}
+      {!isEmbedded && (
+        <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+          {/* Brand Header */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-slate-200 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+              <PhoneCall className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
             </div>
-            <p className="text-[11px] text-white/50 mt-0.5 hidden sm:block">
-              Floor service requests, active table sessions & dish delivery
-            </p>
-          </div>
-        </div>
-
-        {/* Authenticated Staff Info & Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
-          <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
-            <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" name={waiterName} size="sm" />
-            <div className="hidden xs:block">
-              <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">{waiterName}</p>
-              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+                <DinelyLogo size="sm" />
+                <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">{restaurantName}</h1>
+                <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5">WAITER</Badge>
+                <Badge variant="outline" className="hidden xs:inline-flex text-emerald-400 border-emerald-500/30 text-[9px] sm:text-[10px] font-mono">{assignedTerminal}</Badge>
+                {wsStatus === 'CONNECTED' ? (
+                  <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+                  </span>
+                ) : wsStatus === 'RECONNECTING' ? (
+                  <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Reconnecting
+                  </span>
+                ) : (
+                  <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/25 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-white/50 mt-0.5 hidden sm:block">
+                Floor service requests, active table sessions & dish delivery
+              </p>
             </div>
           </div>
 
-          {/* Clock */}
-          <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-tabular">{currentTime || '08:42 PM'}</span>
+          {/* Authenticated Staff Info & Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
+              <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" name={waiterName} size="sm" />
+              <div className="hidden xs:block">
+                <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">{waiterName}</p>
+                <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
+              </div>
+            </div>
+
+            {/* Clock */}
+            <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span className="font-tabular">{currentTime || '08:42 PM'}</span>
+            </div>
+
+            {/* Audio Chime Toggle */}
+            <button
+              onClick={() => setIsAudioMuted(!isAudioMuted)}
+              className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
+              title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
+            >
+              {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+            </button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await api.logout();
+                if (onLogout) onLogout();
+                else window.location.href = '/waiter/login';
+              }}
+              className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Sign Out</span>
+            </Button>
           </div>
-
-          {/* Audio Chime Toggle */}
-          <button
-            onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
-            title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
-          >
-            {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-          </button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              await api.logout();
-              if (onLogout) onLogout();
-              else window.location.href = '/waiter/login';
-            }}
-            className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Sign Out</span>
-          </Button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* ERROR / RECONNECT BANNER */}
       {isErrorState && (
@@ -1117,7 +1120,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       )}
 
       {/* ONE-SCREEN WAITER OPERATIONAL INTERFACE */}
-      <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 relative z-10">
+      <main className={`flex-1 overflow-y-auto space-y-4 relative z-10 ${isEmbedded ? 'p-0' : 'p-3 sm:p-4 lg:p-6'}`}>
         {/* TOP OPERATIONAL BAR: Stage Selector, Live Counts, Search & Refresh */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1161,6 +1164,17 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 className="w-full text-xs"
               />
             </div>
+
+            {isEmbedded && (
+              <button
+                onClick={() => setIsAudioMuted(!isAudioMuted)}
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-8.5 w-8.5 flex items-center justify-center shrink-0 active:scale-95"
+                title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
+              >
+                {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+              </button>
+            )}
+
             <Button
               variant="outline"
               size="sm"

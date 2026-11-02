@@ -166,7 +166,7 @@ const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, o
 
   return (
     <>
-      <div className="p-2.5 bg-[#0c0e14] rounded-lg border border-[#1e232e] flex items-center justify-between">
+      <div className="p-3 bg-white/[0.03] rounded-xl border border-white/10 flex items-center justify-between backdrop-blur-sm">
         <div>
           <span className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1">
             {timerData.hasEta ? <Clock className="w-3 h-3 text-orange-400" /> : <Flame className="w-3 h-3 text-sky-400" />}
@@ -186,7 +186,7 @@ const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, o
             <Button
               variant="ghost"
               size="sm"
-              className="p-1.5 text-slate-400 hover:text-white bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
+              className="p-1.5 text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg h-7 w-7 transition-colors"
               onClick={() => onToggleTimer(order.id)}
               title={order.isTimerPaused ? 'Resume Timer' : 'Pause Timer'}
             >
@@ -196,7 +196,7 @@ const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, o
           <Button
             variant="ghost"
             size="sm"
-            className="p-1.5 text-slate-400 hover:text-sky-300 bg-[#12151b] border border-[#1e232e] rounded-lg h-7 w-7"
+            className="p-1.5 text-slate-300 hover:text-sky-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg h-7 w-7 transition-colors"
             onClick={() => onOpenHistory(order)}
             title="View Ticket History"
           >
@@ -206,7 +206,7 @@ const CookingCountdown: React.FC<CookingCountdownProps> = React.memo(({ order, o
       </div>
 
       {timerData.hasEta && (
-        <div className="w-full bg-[#0c0e14] h-1.5 rounded-full overflow-hidden border border-[#1e232e]">
+        <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden border border-white/10">
           <div
             className={`h-full transition-all duration-1000 ${
               timerData.isOverdue ? 'bg-rose-500' : 'bg-emerald-500'
@@ -225,6 +225,7 @@ interface KitchenETADashboardProps {
   onRefreshOrders?: () => void;
   activeRole?: 'KITCHEN' | 'WAITER' | 'OWNER';
   onLogout?: () => void;
+  isEmbedded?: boolean;
 }
 
 export const cleanTableBadge = (tbl?: string): string => {
@@ -238,6 +239,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   onRefreshOrders,
   activeRole = 'KITCHEN',
   onLogout,
+  isEmbedded = false,
 }) => {
   const [orders, setOrders] = useState<Order[]>(initialOrders || []);
   const onRefreshOrdersRef = useRef(onRefreshOrders);
@@ -748,12 +750,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const overdueCount = (orders || []).filter((o) => (o.kitchenStatus === 'PREPARING' || o.status === 'IN_KITCHEN') && calculateRemainingTime(o).isOverdue).length;
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans relative w-full overflow-x-hidden selection:bg-emerald-500 selection:text-white pb-12">
-      {/* AMBIENT BACKGROUND GLOWS */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-40 left-1/3 w-[500px] h-[500px] rounded-full blur-[140px] bg-emerald-500/10 opacity-70" />
-        <div className="absolute top-[40%] -right-20 w-[450px] h-[450px] rounded-full blur-[130px] bg-sky-600/10 opacity-60" />
-      </div>
+    <div className={`text-slate-100 flex flex-col font-sans relative w-full overflow-x-hidden selection:bg-emerald-500 selection:text-white ${
+      isEmbedded ? 'pb-4' : 'min-h-screen bg-[#07090e] pb-12'
+    }`}>
+      {/* AMBIENT BACKGROUND GLOWS (Standalone Mode) */}
+      {!isEmbedded && (
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+          <div className="absolute -top-40 left-1/3 w-[500px] h-[500px] rounded-full blur-[140px] bg-emerald-500/10 opacity-70" />
+          <div className="absolute top-[40%] -right-20 w-[450px] h-[450px] rounded-full blur-[130px] bg-sky-600/10 opacity-60" />
+        </div>
+      )}
 
       {/* Toast Feedback */}
       {toast && (
@@ -763,104 +769,108 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         </div>
       )}
 
-      {/* HEADER BAR */}
-      <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
-        {/* Brand Header */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
-            <ChefHat className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
-              <DinelyLogo size="sm" />
-              <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">
-                {restaurant?.name || 'THE START'}
-              </h1>
-              <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 bg-emerald-500/25 text-emerald-300 border border-emerald-400/40">
-                KITCHEN
-              </Badge>
-              <Badge variant="outline" className="hidden xs:inline-flex text-emerald-300 border-emerald-400/30 text-[9px] sm:text-[10px] font-mono">
-                CULINARY KDS
-              </Badge>
-              <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
-              </span>
+      {/* HEADER BAR (Standalone Terminal Mode) */}
+      {!isEmbedded && (
+        <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+          {/* Brand Header */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+              <ChefHat className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
-              Authoritative culinary bump board, active cooking timers, and runner pass dispatch
-            </p>
-          </div>
-        </div>
-
-        {/* Staff Shift Info & Utility Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
-          <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
-            <Avatar src="https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=100" name="Head Chef" size="sm" />
-            <div className="hidden xs:block">
-              <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Kitchen Staff</p>
-              <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+                <DinelyLogo size="sm" />
+                <h1 className="text-xs sm:text-base font-bold text-white tracking-tight uppercase truncate">
+                  {restaurant?.name || 'THE START'}
+                </h1>
+                <Badge variant="brand" className="text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 bg-emerald-500/25 text-emerald-300 border border-emerald-400/40">
+                  KITCHEN
+                </Badge>
+                <Badge variant="outline" className="hidden xs:inline-flex text-emerald-300 border-emerald-400/30 text-[9px] sm:text-[10px] font-mono">
+                  CULINARY KDS
+                </Badge>
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">
+                Authoritative culinary bump board, active cooking timers, and runner pass dispatch
+              </p>
             </div>
           </div>
 
-          {/* Clock */}
-          <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
-            <Clock className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="font-tabular">{currentTime}</span>
+          {/* Staff Shift Info & Utility Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
+              <Avatar src="https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=100" name="Head Chef" size="sm" />
+              <div className="hidden xs:block">
+                <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Kitchen Staff</p>
+                <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
+              </div>
+            </div>
+
+            {/* Clock */}
+            <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
+              <Clock className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-tabular">{currentTime}</span>
+            </div>
+
+            {/* Audio Chime Toggle */}
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
+              title={isMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
+            >
+              {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+            </button>
+
+            {/* Delay Alert */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDelayModalOpen(true)}
+              className="text-xs bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-300 flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+              icon={<AlertTriangle className="w-3.5 h-3.5" />}
+            >
+              <span className="hidden sm:inline">Delay Alert</span>
+            </Button>
+
+            {/* Recall Modal */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsRecallModalOpen(true)}
+              className="text-xs bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+              icon={<RotateCcw className="w-3.5 h-3.5" />}
+            >
+              <span>Recall ({bumpedHistory.length})</span>
+            </Button>
+
+            {/* Logout / Exit */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await api.logout();
+                if (onLogout) onLogout();
+                else window.location.href = '/kitchen/login';
+              }}
+              className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Sign Out</span>
+            </Button>
           </div>
-
-          {/* Audio Chime Toggle */}
-          <button
-            onClick={() => setIsMuted(!isMuted)}
-            className="p-1.5 sm:p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center shrink-0 active:scale-95"
-            title={isMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
-          >
-            {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-          </button>
-
-          {/* Delay Alert */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsDelayModalOpen(true)}
-            className="text-xs bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-300 flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
-            icon={<AlertTriangle className="w-3.5 h-3.5" />}
-          >
-            <span className="hidden sm:inline">Delay Alert</span>
-          </Button>
-
-          {/* Recall Modal */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsRecallModalOpen(true)}
-            className="text-xs bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
-            icon={<RotateCcw className="w-3.5 h-3.5" />}
-          >
-            <span>Recall ({bumpedHistory.length})</span>
-          </Button>
-
-          {/* Logout / Exit */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              await api.logout();
-              if (onLogout) onLogout();
-              else window.location.href = '/kitchen/login';
-            }}
-            className="text-xs bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20 text-rose-300 flex items-center gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shrink-0 rounded-xl active:scale-95"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Sign Out</span>
-          </Button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* MAIN CONTAINER */}
-      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 flex-1 relative z-10">
+      <main className={`w-full space-y-4 sm:space-y-6 flex-1 relative z-10 ${
+        isEmbedded ? 'p-0' : 'max-w-7xl mx-auto px-3 sm:px-6 pt-4 sm:pt-6'
+      }`}>
         {/* STAGE FILTERS & SEARCH BAR */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 md:pb-0">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 lg:pb-0">
             {[
               { id: 'ALL', label: 'All Active Tickets', icon: <Flame className="w-3.5 h-3.5 text-emerald-400" />, badge: pendingOrders.length + inKitchenOrders.length + readyOrders.length },
               { id: 'NEW', label: '1. New Incoming', icon: <Bell className="w-3.5 h-3.5 text-amber-400" />, badge: pendingOrders.length },
@@ -871,16 +881,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setKitchenFilter(tab.id as any)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
                   kitchenFilter === tab.id
-                    ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                    ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
                     : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
                 }`}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-medium ${
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
                     kitchenFilter === tab.id ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-white/10 text-slate-400'
                   }`}>
                     {tab.badge}
@@ -890,13 +900,47 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             ))}
           </div>
 
-          <div className="w-full md:w-64">
-            <SearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search table, ticket #, dish..."
-              className="w-full text-xs"
-            />
+          <div className="flex items-center gap-2 flex-1 max-w-xl justify-end">
+            <div className="flex-1">
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search table, ticket #, dish..."
+                className="w-full text-xs"
+              />
+            </div>
+
+            {isEmbedded && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-8.5 w-8.5 flex items-center justify-center shrink-0 active:scale-95"
+                  title={isMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
+                >
+                  {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+                </button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsDelayModalOpen(true)}
+                  className="text-xs bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-300 flex items-center gap-1 h-8.5 px-2.5 shrink-0 rounded-xl active:scale-95"
+                  icon={<AlertTriangle className="w-3.5 h-3.5" />}
+                >
+                  <span className="hidden sm:inline">Delay</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsRecallModalOpen(true)}
+                  className="text-xs bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 flex items-center gap-1 h-8.5 px-2.5 shrink-0 rounded-xl active:scale-95"
+                  icon={<RotateCcw className="w-3.5 h-3.5" />}
+                >
+                  <span>Recall ({bumpedHistory.length})</span>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -904,24 +948,34 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         <div className="w-full">
           {/* VIEW: LIVE OPERATIONAL PIPELINE */}
           {kitchenFilter !== 'COMPLETED' ? (
-            <div className={kitchenFilter === 'ALL' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"}>
+            <div className={kitchenFilter === 'ALL' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start"}>
               {/* COLUMN 1: NEW INCOMING ORDERS */}
               {(kitchenFilter === 'ALL' || kitchenFilter === 'NEW') && (
-                <div className="space-y-3.5 bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-2xl shadow-sm">
-                  <div className="p-2.5 bg-[#0e1117] rounded-xl border border-[#1e232e] flex justify-between items-center">
-                    <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                      <Bell className="w-3.5 h-3.5 text-amber-400" /> 1. Incoming Queue ({pendingOrders.length})
-                    </span>
-                    <span className="text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded">
-                      {pendingOrders.length}
+                <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                    <div className="flex items-center gap-2.5">
+                      <Bell className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-bold text-white tracking-wider uppercase font-mono">
+                        1. Incoming Queue
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs">
+                        {pendingOrders.length} New
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
+                      Awaiting Kitchen
                     </span>
                   </div>
 
                 {pendingOrders.length === 0 ? (
-                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] text-slate-500 text-xs">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-500/40 mx-auto mb-2" />
-                    <p className="font-medium text-slate-300">Incoming Queue Clear</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">No unaccepted tickets waiting.</p>
+                  <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                      <Bell className="w-6 h-6" />
+                    </div>
+                    <p className="font-semibold text-slate-200 text-sm">Incoming Queue Clear</p>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                      No unaccepted tickets waiting. New customer and waiter orders appear here instantly.
+                    </p>
                   </div>
                 ) : (
                   pendingOrders.map((order) => {
@@ -929,7 +983,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     return (
                       <div
                         key={order.id}
-                        className="bg-[#0e1117]/80 border border-white/[0.08] hover:border-amber-400/50 p-4 space-y-3 shadow-md transition-all rounded-xl liquid-glass-card"
+                        className="bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-amber-400/50 p-4.5 space-y-3.5 shadow-xl transition-all rounded-2xl liquid-glass-card"
                       >
                         <div className="flex justify-between items-start">
                           <div>
@@ -937,45 +991,45 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                               <span className="font-mono font-bold text-amber-400 text-lg">
                                 {order.id.length > 10 ? `#${order.id.slice(-4)}` : `#${order.id}`}
                               </span>
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                                 NEW
                               </span>
                             </div>
-                            <p className="text-xs text-slate-300 mt-0.5">
+                            <p className="text-xs text-slate-300 mt-1">
                               {order.customerName || 'Walk-in Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
                             </p>
                           </div>
-                          <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
+                          <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-white/10 text-white border border-white/15 shadow-xs">
                             {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter Pickup'}
                           </span>
                         </div>
 
-                        <div className="text-xs text-slate-400 flex items-center justify-between bg-[#0c0e14] p-2 rounded-lg border border-[#1e232e]">
-                          <span>Submitted: <strong className="text-slate-200">{getElapsedMinutes(order.createdAt)} mins ago</strong></span>
-                          <span className="font-mono text-emerald-400 font-medium">₹{order.totalAmount.toFixed(2)}</span>
+                        <div className="text-xs text-slate-300 flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5 font-mono">
+                          <span>Submitted: <strong className="text-white">{getElapsedMinutes(order.createdAt)}m ago</strong></span>
+                          <span className="text-emerald-400 font-bold">₹{order.totalAmount.toFixed(2)}</span>
                         </div>
 
                         {/* Dish Items list with check toggles */}
-                        <div className="space-y-1.5 border-y border-[#1e232e] py-2.5">
+                        <div className="space-y-1.5 border-y border-white/10 py-3">
                           {(() => {
                             const kitchenItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
                             return (
                               <>
-                                <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Dish Items ({kitchenItems.length}):</p>
+                                <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-2">Dish Items ({kitchenItems.length}):</p>
                                 {kitchenItems.map((item) => {
                                   const isChecked = checkedItems[item.id] || false;
                                   return (
                                     <div
                                       key={item.id}
                                       onClick={() => toggleItemCheck(item.id)}
-                                      className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors border ${
+                                      className={`flex items-center justify-between p-2.5 rounded-xl text-xs cursor-pointer transition-all border ${
                                         isChecked
                                           ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 line-through'
-                                          : 'bg-[#0c0e14] border-[#1e232e] text-white hover:border-[#2b3242]'
+                                          : 'bg-white/[0.03] border-white/10 text-white hover:border-white/20 hover:bg-white/[0.06]'
                                       }`}
                                     >
                                       <span className="flex items-center gap-2 font-medium">
-                                        <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] ${isChecked ? 'bg-emerald-500 text-slate-950 border-emerald-400' : 'border-slate-600'}`}>
+                                        <span className={`w-4 h-4 rounded-md border flex items-center justify-center text-[9px] ${isChecked ? 'bg-emerald-500 text-slate-950 border-emerald-400' : 'border-white/30'}`}>
                                           {isChecked && '✓'}
                                         </span>
                                         <span>
@@ -990,7 +1044,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           })()}
 
                           {order.specialInstructions && (
-                            <div className="mt-2 text-xs bg-amber-500/10 text-amber-300 p-2 rounded-lg border border-amber-500/20 flex items-start gap-2">
+                            <div className="mt-2 text-xs bg-amber-500/10 text-amber-300 p-2.5 rounded-xl border border-amber-500/20 flex items-start gap-2">
                               <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
                               <span><strong>Note:</strong> {order.specialInstructions}</span>
                             </div>
@@ -998,13 +1052,13 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         </div>
 
                         {/* Simplified 1-Click Actions + Direct ETA Chips */}
-                        <div className="space-y-2 pt-1">
-                          <div className="flex items-center justify-between gap-1 text-[11px] text-slate-400 bg-[#0c0e14] p-1.5 rounded-lg border border-[#1e232e]">
-                            <span className="font-mono flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-amber-400" />
+                        <div className="space-y-2.5 pt-1">
+                          <div className="flex items-center justify-between gap-1 text-[11px] text-slate-300 bg-white/[0.02] p-2 rounded-xl border border-white/5">
+                            <span className="font-mono flex items-center gap-1.5 text-slate-300">
+                              <Clock className="w-3.5 h-3.5 text-amber-400" />
                               <span>Optional ETA:</span>
                             </span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5">
                               {[10, 15, 20].map((mins) => {
                                 const isSel = selectedEta === mins;
                                 return (
@@ -1017,10 +1071,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                                         [order.id]: isSel ? 0 : mins,
                                       }))
                                     }
-                                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors border ${
+                                    className={`px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all border ${
                                       isSel
-                                        ? 'bg-amber-500 text-slate-950 font-bold border-amber-400'
-                                        : 'bg-[#12151b] text-slate-300 border-[#1e232e] hover:border-slate-500'
+                                        ? 'bg-amber-500 text-slate-950 font-bold border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                                        : 'bg-white/5 text-slate-300 border-white/10 hover:border-white/20 hover:bg-white/10'
                                     }`}
                                   >
                                     +{mins}m
@@ -1035,7 +1089,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                               variant="brand"
                               size="sm"
                               disabled={processingOrderIds.has(order.id)}
-                              className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-all shadow-xs"
+                              className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-98"
                               onClick={() => handleStartPreparing(order, selectedEta || undefined)}
                               icon={<Flame className="w-3.5 h-3.5" />}
                             >
@@ -1049,7 +1103,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                               variant="outline"
                               size="sm"
                               disabled={processingOrderIds.has(order.id)}
-                              className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 px-2.5 py-2 text-xs rounded-lg flex items-center gap-1 font-semibold"
+                              className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 px-3 py-2.5 text-xs rounded-xl flex items-center gap-1.5 font-bold transition-colors"
                               onClick={() => handleMarkReady(order)}
                               title="Instant Ready (Already cooked / cold dish)"
                             >
@@ -1067,21 +1121,31 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 2: ACTIVE COOKING STATION */}
             {(kitchenFilter === 'ALL' || kitchenFilter === 'COOKING') && (
-              <div className="space-y-3.5 bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-2xl shadow-sm">
-                <div className="p-2.5 bg-[#0e1117] rounded-xl border border-[#1e232e] flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                    <Flame className="w-3.5 h-3.5 text-sky-400" /> 2. Active Cooking Grid ({inKitchenOrders.length})
-                  </span>
-                  <span className="text-[10px] font-mono font-medium bg-sky-500/10 text-sky-400 border border-sky-500/25 px-2 py-0.5 rounded">
-                    {inKitchenOrders.length}
+              <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2.5">
+                    <Flame className="w-4 h-4 text-sky-400" />
+                    <span className="text-xs font-bold text-white tracking-wider uppercase font-mono">
+                      2. Active Cooking Grid
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs">
+                      {inKitchenOrders.length} Cooking
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
+                    Live Bump Board
                   </span>
                 </div>
 
                 {inKitchenOrders.length === 0 ? (
-                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] text-slate-500 text-xs">
-                    <Coffee className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-                    <p className="font-medium text-slate-300">Cooking Grid Idle</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Incoming orders appear above for preparation.</p>
+                  <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(14,165,233,0.2)]">
+                      <Flame className="w-6 h-6" />
+                    </div>
+                    <p className="font-semibold text-slate-200 text-sm">Cooking Grid Idle</p>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                      Orders confirmed for preparation appear here with live countdown timers and dish bump checklists.
+                    </p>
                   </div>
                 ) : (
                   inKitchenOrders.map((order) => {
@@ -1089,10 +1153,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     return (
                       <div
                         key={order.id}
-                        className={`p-4 space-y-3 transition-all rounded-xl border liquid-glass-card ${
+                        className={`p-4.5 space-y-3.5 transition-all rounded-2xl border liquid-glass-card backdrop-blur-xl ${
                           isOverdue
-                            ? 'border-rose-500/80 bg-rose-950/20 shadow-[0_0_16px_rgba(244,63,94,0.15)]'
-                            : 'border-white/[0.08] hover:border-sky-500/30 bg-[#0e1117]/80'
+                            ? 'border-rose-500/80 bg-rose-950/20 shadow-[0_0_24px_rgba(244,63,94,0.25)]'
+                            : 'border-white/10 hover:border-sky-500/40 bg-white/[0.04]'
                         }`}
                       >
                         <div className="flex justify-between items-start">
@@ -1100,16 +1164,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-bold text-white text-lg">{order.id.length > 10 ? `#${order.id.slice(-4)}` : `#${order.id}`}</span>
                               {isOverdue && (
-                                <span className="text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                                <span className="text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full animate-pulse">
                                   OVERDUE
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-300 mt-0.5">
+                            <p className="text-xs text-slate-300 mt-1">
                               {order.customerName || 'Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
                             </p>
                           </div>
-                          <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
+                          <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-white/10 text-white border border-white/15 shadow-xs">
                             {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter Pickup'}
                           </span>
                         </div>
@@ -1122,15 +1186,15 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         />
 
                         {/* ETA Quick Adjusters */}
-                        <div className="flex items-center justify-between bg-[#0c0e14] p-1.5 rounded-lg border border-[#1e232e]">
-                          <span className="text-[11px] text-slate-400 font-mono">
+                        <div className="flex items-center justify-between bg-white/[0.02] p-2 rounded-xl border border-white/5">
+                          <span className="text-[11px] text-slate-300 font-mono">
                             {order.estimatedPrepTimeMinutes ? `ETA (${order.estimatedPrepTimeMinutes}m):` : 'Elapsed Prep:'}
                           </span>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <Button
                               variant="outline"
                               size="sm"
-                              className="px-2 py-0.5 text-[10px] border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-6"
+                              className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
                               onClick={() => handleEtaDelta(order.id, 5)}
                             >
                               +5m
@@ -1138,7 +1202,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                             <Button
                               variant="outline"
                               size="sm"
-                              className="px-2 py-0.5 text-[10px] border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-6"
+                              className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
                               onClick={() => handleEtaDelta(order.id, -5)}
                             >
                               -5m
@@ -1146,7 +1210,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                             <Button
                               variant="outline"
                               size="sm"
-                              className="px-2 py-0.5 text-[10px] border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white h-6"
+                              className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
                               onClick={() => {
                                 setSelectedOrderForEta(order);
                                 setCustomEtaInput((order.estimatedPrepTimeMinutes || 15).toString());
@@ -1158,21 +1222,21 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         </div>
 
                         {/* Dish Item Checklist */}
-                        <div className="space-y-1 border-y border-[#1e232e] py-2">
+                        <div className="space-y-1.5 border-y border-white/10 py-3">
                           {(order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((item) => {
                             const isChecked = checkedItems[item.id] || false;
                             return (
                               <div
                                 key={item.id}
                                 onClick={() => toggleItemCheck(item.id)}
-                                className={`flex items-center justify-between p-1.5 rounded-lg text-xs cursor-pointer transition-colors border ${
+                                className={`flex items-center justify-between p-2.5 rounded-xl text-xs cursor-pointer transition-all border ${
                                   isChecked
                                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 line-through'
-                                    : 'bg-[#0c0e14] border-[#1e232e] text-white hover:border-[#2b3242]'
+                                    : 'bg-white/[0.03] border-white/10 text-white hover:border-white/20 hover:bg-white/[0.06]'
                                 }`}
                               >
                                 <span className="flex items-center gap-2 font-medium">
-                                  <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] ${isChecked ? 'bg-emerald-500 text-slate-950 border-emerald-400' : 'border-slate-600'}`}>
+                                  <span className={`w-4 h-4 rounded-md border flex items-center justify-center text-[9px] ${isChecked ? 'bg-emerald-500 text-slate-950 border-emerald-400' : 'border-white/30'}`}>
                                     {isChecked && '✓'}
                                   </span>
                                   <span>
@@ -1189,7 +1253,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           variant="brand"
                           size="sm"
                           disabled={processingOrderIds.has(order.id)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-xs transition-colors shadow-sm"
+                          className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-98"
                           onClick={() => handleMarkReady(order)}
                           icon={<CheckCircle2 className="w-3.5 h-3.5" />}
                         >
@@ -1204,62 +1268,72 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 3: PLATED & READY FOR PASS PICKUP */}
             {(kitchenFilter === 'ALL' || kitchenFilter === 'READY') && (
-              <div className="space-y-3.5 bg-[#12151b] border border-[#1e232e] p-4 lg:p-5 rounded-2xl shadow-sm">
-                <div className="p-2.5 bg-[#0e1117] rounded-xl border border-[#1e232e] flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> 3. Plated & Ready ({readyOrders.length})
-                  </span>
-                  <span className="text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded">
-                    {readyOrders.length}
+              <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-white tracking-wider uppercase font-mono">
+                      3. Plated & Ready
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs">
+                      {readyOrders.length} Ready
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
+                    Pass Pickup Window
                   </span>
                 </div>
 
                 {readyOrders.length === 0 ? (
-                  <div className="p-8 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] text-slate-500 text-xs">
-                    <UtensilsCrossed className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-                    <p className="font-medium text-slate-300">Pass Window Clean</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">No dishes awaiting waiter pickup.</p>
+                  <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                      <UtensilsCrossed className="w-6 h-6" />
+                    </div>
+                    <p className="font-semibold text-slate-200 text-sm">Pass Window Clean</p>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                      No dishes awaiting waiter pickup. Cooked orders marked ready appear here until floor pickup.
+                    </p>
                   </div>
                 ) : (
                   readyOrders.map((order) => (
                     <div
                       key={order.id}
-                      className="bg-[#0e1117]/80 border border-emerald-500/40 p-4 space-y-3 shadow-md rounded-xl liquid-glass-card"
+                      className="bg-white/[0.04] backdrop-blur-xl border border-emerald-500/40 p-4.5 space-y-3.5 shadow-xl rounded-2xl liquid-glass-card shadow-[0_0_20px_rgba(16,185,129,0.1)]"
                     >
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="font-mono font-bold text-emerald-400 text-lg">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>
-                          <p className="text-xs text-emerald-300 font-medium mt-0.5">Plated & Ready for Service</p>
+                          <p className="text-xs text-emerald-300 font-medium mt-1">Plated & Ready for Service</p>
                         </div>
-                        <span className="px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[#1a202c] text-slate-200 border border-[#2d3748]">
+                        <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-white/10 text-white border border-white/15 shadow-xs">
                           {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter Pickup'}
                         </span>
                       </div>
 
-                      <div className="text-xs text-slate-300 bg-[#0c0e14] p-2.5 rounded-lg border border-[#1e232e] space-y-1">
+                      <div className="text-xs text-slate-300 bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-1.5">
                         <p className="text-slate-400 font-mono text-[10px] uppercase mb-1">Items Ready to Serve:</p>
                         {(order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
-                          <div key={i.id} className="text-slate-300 flex justify-between font-medium">
+                          <div key={i.id} className="text-slate-200 flex justify-between font-medium">
                             <span>• {i.quantity}x {i.name}</span>
-                            <span className="text-emerald-400 font-mono text-[10px]">Plated</span>
+                            <span className="text-emerald-400 font-mono text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">Plated</span>
                           </div>
                         ))}
                       </div>
 
                       {((order as any).kitchenWaiterRequested || waiterRequestedOrderIds.has(order.id) || order.deliveryStatus === 'WAITING_FOR_WAITER' || order.deliveryStatus === 'COLLECTED') ? (
-                        <div className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30">
+                        <div className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30">
                           <span className="flex items-center gap-1.5 font-mono">
                             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                             <span>Waiter Requested • Floor Alert Active</span>
                           </span>
-                          <span className="text-[10px] text-amber-400 font-mono bg-amber-500/20 px-1.5 py-0.5 rounded">Dispatched</span>
+                          <span className="text-[10px] text-amber-400 font-mono bg-amber-500/20 px-2 py-0.5 rounded-full">Dispatched</span>
                         </div>
                       ) : (
                         <Button
                           variant="brand"
                           size="sm"
                           disabled={processingOrderIds.has(order.id)}
-                          className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-xs transition-colors shadow-sm"
+                          className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-98"
                           onClick={() => handleRequestWaiter(order)}
                           icon={<Bell className="w-3.5 h-3.5" />}
                         >
@@ -1274,10 +1348,10 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           </div>
         ) : (
           /* VIEW: COMPLETED SHIFT ORDERS HISTORY */
-          <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-2xl space-y-5 shadow-sm">
-            <div className="flex items-center justify-between border-b border-[#1e232e] pb-3">
+          <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-5 shadow-2xl backdrop-blur-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Completed Shift Orders
                 </h3>
                 <p className="text-xs text-slate-400 font-mono mt-0.5">
@@ -1288,28 +1362,30 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => setKitchenFilter('ALL')}
-                className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white"
+                className="text-xs border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white rounded-xl backdrop-blur-md transition-colors"
               >
                 ← Return to Live Orders
               </Button>
             </div>
 
             {completedOrders.length === 0 ? (
-              <div className="bg-[#0e1117] border border-[#1e232e] p-10 text-center text-slate-400 rounded-xl">
-                <CheckCircle2 className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                <p className="font-semibold text-white text-sm">No Completed Kitchen Orders Yet</p>
-                <p className="text-xs text-slate-500 mt-0.5">Completed kitchen tickets will automatically appear in this ledger.</p>
+              <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <p className="font-semibold text-slate-200 text-sm">No Completed Kitchen Orders Yet</p>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">Completed kitchen tickets will automatically appear in this ledger.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {completedOrders.map((order) => {
                   const kitchenItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
                   return (
-                    <div key={order.id} className="bg-[#0e1117] border border-[#1e232e] p-4 space-y-3 rounded-xl hover:border-[#2a3243] transition-colors liquid-glass-card">
+                    <div key={order.id} className="bg-white/[0.03] border border-white/10 p-4 space-y-3 rounded-2xl hover:border-white/20 transition-all liquid-glass-card">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-white text-sm">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>
-                          <span className="bg-[#141822] text-slate-300 border border-[#242c3d] text-[10px] font-mono px-2 py-0.5 rounded">
+                          <span className="bg-white/10 text-slate-200 border border-white/15 text-[10px] font-mono px-2 py-0.5 rounded-full">
                             {(order.tableNumber || '').trim().toLowerCase().startsWith('table') ? order.tableNumber : `Table ${order.tableNumber || ''}`}
                           </span>
                         </div>
@@ -1318,11 +1394,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-300">
                         Guest: {order.customerName || 'Guest'}
                       </p>
 
-                      <div className="p-2.5 bg-[#0c0e14] rounded-lg border border-[#1e232e] space-y-1 font-mono text-xs">
+                      <div className="p-3 bg-white/[0.02] rounded-xl border border-white/5 space-y-1 font-mono text-xs">
                         {kitchenItems.map((item) => (
                           <div key={item.id} className="flex justify-between items-center text-slate-300">
                             <span><strong className="text-orange-400">{item.quantity}x</strong> {item.name}</span>
@@ -1331,8 +1407,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       </div>
 
                       <div className="flex items-center justify-between pt-1 text-[11px]">
-                        <span className="text-slate-500 font-mono">Kitchen Status:</span>
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/30 flex items-center gap-1 font-mono text-[10px]">
+                        <span className="text-slate-400 font-mono">Kitchen Status:</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/30 flex items-center gap-1 font-mono text-[10px]">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" /> COMPLETED
                         </span>
                       </div>

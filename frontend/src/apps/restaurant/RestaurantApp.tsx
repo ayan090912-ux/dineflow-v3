@@ -2637,7 +2637,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab: Waiter Terminal Operating System */}
         {activeTab === 'waiter' && (
           isModuleEnabled(currentRestaurant, 'waiter') ? (
-            <WaiterTerminalOS restaurant={currentRestaurant || activeRestaurant} />
+            <WaiterTerminalOS restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
@@ -2663,7 +2663,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 3: Kitchen Display System (KDS) & ETA Controls */}
         {activeTab === 'kitchen' && (
           isModuleEnabled(currentRestaurant, 'kitchen') ? (
-            <KitchenETADashboard restaurant={currentRestaurant || activeRestaurant} orders={orders} onRefreshOrders={handleRefreshOrders} />
+            <KitchenETADashboard restaurant={currentRestaurant || activeRestaurant} orders={orders} onRefreshOrders={handleRefreshOrders} isEmbedded={true} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
@@ -2689,7 +2689,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 3.5: Bar Terminal */}
         {activeTab === 'bar' && (
           isModuleEnabled(currentRestaurant, 'bar') ? (
-            <BarTerminal restaurant={currentRestaurant || activeRestaurant} />
+            <BarTerminal restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-400 mx-auto flex items-center justify-center">
@@ -2715,7 +2715,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 3.55: Hookah & Shisha Terminal */}
         {activeTab === 'hookah' && (
           isModuleEnabled(currentRestaurant, 'hookah') ? (
-            <HookahTerminal restaurant={currentRestaurant || activeRestaurant} />
+            <HookahTerminal restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
           ) : (
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
               <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
@@ -3110,19 +3110,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                 {/* Sub-Tab Switcher: Food Menu vs Bar Menu vs Hookah (Rendered if Bar or Hookah is enabled for venue) */}
                 {(isBarEnabled || isHookahEnabled) && (
-                  <div className="flex items-center gap-1.5 p-1 bg-[#0e1117] rounded-xl border border-[#1e232e]">
+                  <div className="flex items-center gap-1.5 p-1 bg-white/[0.04] backdrop-blur-md rounded-2xl border border-white/10 shadow-sm">
                     <button
                       onClick={() => {
                         setMenuCatalogMode('FOOD');
                         setSelectedMenuCategory('ALL');
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
                         activeCatalogMode === 'FOOD'
-                          ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                          : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
+                          ? 'bg-white/10 text-white border border-white/20 shadow-xs'
+                          : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent'
                       }`}
                     >
-                      <UtensilsCrossed className="w-3.5 h-3.5" />
+                      <UtensilsCrossed className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Food Menu</span>
                     </button>
 
@@ -3132,13 +3132,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           setMenuCatalogMode('BAR');
                           setSelectedMenuCategory('ALL');
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
                           activeCatalogMode === 'BAR'
-                            ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                            : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
+                            ? 'bg-white/10 text-white border border-white/20 shadow-xs'
+                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent'
                         }`}
                       >
-                        <Wine className="w-3.5 h-3.5 text-emerald-400" />
+                        <Wine className="w-3.5 h-3.5 text-purple-400" />
                         <span>Bar Menu</span>
                       </button>
                     )}
@@ -3149,10 +3149,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                           setMenuCatalogMode('HOOKAH');
                           setSelectedMenuCategory('ALL');
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-2 cursor-pointer ${
                           activeCatalogMode === 'HOOKAH'
-                            ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                            : 'text-slate-400 hover:text-white hover:bg-[#12151b] border border-transparent'
+                            ? 'bg-white/10 text-white border border-white/20 shadow-xs'
+                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent'
                         }`}
                       >
                         <Flame className="w-3.5 h-3.5 text-amber-400" />
@@ -3236,31 +3236,31 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 </div>
 
                 {menuCatalogMode === 'FOOD' && (
-                  <div className="flex items-center gap-1 bg-[#12151b] p-1 rounded-lg border border-[#1e232e] shrink-0">
+                  <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10 shrink-0">
                     <button
                       onClick={() => setDietaryFilter('ALL')}
-                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                        dietaryFilter === 'ALL' ? 'bg-[#181d27] text-white border border-[#2d3545]' : 'text-slate-400 hover:text-white'
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        dietaryFilter === 'ALL' ? 'bg-white/10 text-white border border-white/20' : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       All
                     </button>
                     <button
                       onClick={() => setDietaryFilter('VEG')}
-                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
-                        dietaryFilter === 'VEG' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25' : 'text-slate-400 hover:text-emerald-400'
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                        dietaryFilter === 'VEG' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-emerald-400'
                       }`}
                     >
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
                       <span>Veg</span>
                     </button>
                     <button
                       onClick={() => setDietaryFilter('NON_VEG')}
-                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
-                        dietaryFilter === 'NON_VEG' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/25' : 'text-slate-400 hover:text-rose-400'
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                        dietaryFilter === 'NON_VEG' ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30' : 'text-slate-400 hover:text-rose-400'
                       }`}
                     >
-                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                      <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.5)]" />
                       <span>Non-Veg</span>
                     </button>
                   </div>
@@ -3271,10 +3271,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
                 <button
                   onClick={() => setSelectedMenuCategory('ALL')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                     selectedMenuCategory === 'ALL'
-                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                      : 'bg-[#12151b] border border-[#1e232e] text-slate-300 hover:text-white hover:bg-[#181d27]'
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)] font-semibold'
+                      : 'bg-white/[0.03] backdrop-blur-md border border-white/10 text-slate-300 hover:text-white hover:bg-white/[0.07] hover:border-white/20'
                   }`}
                 >
                   All {menuCatalogMode === 'HOOKAH' ? 'Hookah Flavors' : menuCatalogMode === 'BAR' ? 'Drinks' : 'Items'} ({filteredMenuItems.length})
@@ -3297,10 +3297,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <button
                       key={catName}
                       onClick={() => setSelectedMenuCategory(catName)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                         selectedMenuCategory === catName
-                          ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
-                          : 'bg-[#12151b] border border-[#1e232e] text-slate-300 hover:text-white hover:bg-[#181d27]'
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)] font-semibold'
+                          : 'bg-white/[0.03] backdrop-blur-md border border-white/10 text-slate-300 hover:text-white hover:bg-white/[0.07] hover:border-white/20'
                       }`}
                     >
                       {catName} {count > 0 ? `(${count})` : ''}
@@ -3316,20 +3316,25 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 const categoryObj = foodCategories.find((c) => c.id === item.categoryId || c.name === item.categoryId);
                 const isVeg = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
                 return (
-                  <Card key={item.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-all">
+                  <div
+                    key={item.id}
+                    className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 hover:border-emerald-500/30 hover:shadow-[0_12px_36px_rgba(0,0,0,0.6)] p-4 rounded-2xl space-y-3.5 flex flex-col justify-between transition-all duration-300 group shadow-xl"
+                  >
                     <div>
-                      <div className="relative mb-3 rounded-xl overflow-hidden group">
-                        <img src={item.image} alt={item.name} className="w-full h-40 object-cover group-hover:scale-105 transition-transform duration-300" />
-                        <span className="absolute top-2 left-2 px-2.5 py-1 bg-slate-950/80 backdrop-blur-md rounded-lg text-[10px] font-bold text-slate-200 border border-slate-700">
+                      <div className="relative mb-3 rounded-xl overflow-hidden group/img border border-white/10">
+                        <img src={item.image} alt={item.name} className="w-full h-44 object-cover group-hover/img:scale-105 transition-transform duration-500" />
+                        <span className="absolute top-2.5 left-2.5 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-lg text-[10px] font-bold text-slate-200 border border-white/15">
                           {item.barCategory || categoryObj?.name || 'General'}
                         </span>
-                        <span className={`absolute top-2 right-2 px-2.5 py-1 rounded-lg text-[10px] font-bold backdrop-blur-md ${
-                          item.isAvailable ? 'bg-emerald-500/80 text-white' : 'bg-rose-500/80 text-white'
+                        <span className={`absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg text-[10px] font-bold backdrop-blur-md border ${
+                          item.isAvailable
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                            : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                         }`}>
                           {item.isAvailable ? 'In Stock' : '86ed'}
                         </span>
                         {item.alcoholPercentage && (
-                          <span className="absolute bottom-2 left-2 px-2 py-0.5 bg-purple-950/90 text-purple-300 text-[10px] font-mono font-bold rounded border border-purple-500/40">
+                          <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 bg-purple-950/80 backdrop-blur-md text-purple-300 text-[10px] font-mono font-bold rounded-md border border-purple-500/30">
                             {item.alcoholPercentage}% ABV
                           </span>
                         )}
@@ -3348,67 +3353,64 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                                 <span className={`w-2 h-2 rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                               </span>
                             )}
-                            <h4 className="font-bold text-white text-sm">{item.name}</h4>
+                            <h4 className="font-bold text-white text-sm group-hover:text-emerald-300 transition-colors">{item.name}</h4>
                           </div>
-                          {item.brand && <p className="text-[10px] text-amber-400 font-mono">{item.brand}</p>}
+                          {item.brand && <p className="text-[10px] text-amber-400 font-mono mt-0.5">{item.brand}</p>}
                         </div>
-                        <span className="font-mono font-bold text-rose-400 text-base">{formatCurrency(item.price, theme.currency || 'INR (₹)')}</span>
+                        <span className="font-mono font-bold text-white text-base tracking-tight shrink-0">{formatCurrency(item.price, theme.currency || 'INR (₹)')}</span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                      <Button
-                        variant={item.isAvailable ? 'secondary' : 'brand'}
-                        size="sm"
+                    <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                      <button
                         onClick={() => handleToggleItemAvailability(item)}
-                        className="text-xs"
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer border ${
+                          item.isAvailable
+                            ? 'bg-white/[0.04] hover:bg-rose-500/15 text-slate-300 hover:text-rose-300 border-white/10 hover:border-rose-500/30'
+                            : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                        }`}
                       >
-
                         {item.isAvailable ? 'Mark 86ed' : 'Enable Item'}
-                      </Button>
+                      </button>
 
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
                           onClick={() => handleDuplicateItem(item.id)}
-                          className="hover:bg-slate-800 text-slate-400 hover:text-amber-300 px-2"
+                          className="p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-slate-400 hover:text-amber-300 transition-all cursor-pointer"
                           title="Duplicate Drink / Dish"
                         >
                           <Copy className="w-3.5 h-3.5" />
-                        </Button>
+                        </button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
                           onClick={() => handleOpenEditModal(item)}
-                          className="hover:bg-slate-800 text-slate-300 hover:text-white px-2"
+                          className="p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-slate-400 hover:text-sky-300 transition-all cursor-pointer"
                           title="Edit Menu Item"
                         >
-                          <Edit className="w-3.5 h-3.5 text-blue-400" />
-                        </Button>
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
                           onClick={() => setDeletingItem(item)}
-                          className="hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 px-2"
+                          className="p-2 rounded-xl bg-white/[0.03] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-slate-400 hover:text-rose-400 transition-all cursor-pointer"
                           title="Delete Menu Item"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                        </Button>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-                  </Card>
+                  </div>
                 );
               })}
 
               {filteredMenuItems.length === 0 && (
-                <div className="col-span-full py-12 text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">
-                  <UtensilsCrossed className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                  <p className="text-sm font-semibold text-slate-300">No {menuCatalogMode === 'BAR' ? 'bar drinks' : 'food items'} found</p>
-                  <p className="text-xs text-slate-500 mt-1">Try adjusting your category filter or add a new menu entry.</p>
+                <div className="col-span-full py-16 text-center bg-[#0c1017]/60 backdrop-blur-xl rounded-2xl border border-dashed border-white/10 flex flex-col items-center justify-center">
+                  <div className="w-14 h-14 rounded-full border border-white/15 bg-white/[0.03] flex items-center justify-center text-slate-400 mb-3.5 shadow-inner">
+                    <UtensilsCrossed className="w-6 h-6" />
+                  </div>
+                  <p className="text-sm font-semibold text-white">No {menuCatalogMode === 'BAR' ? 'bar drinks' : 'food items'} found</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm">Try adjusting your search keywords or category filters above.</p>
                   <Button
                     variant="brand"
                     size="sm"
