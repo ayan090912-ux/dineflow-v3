@@ -223,7 +223,9 @@ async def calculate_shift_financial_ledger(
     cancelled_orders = sum(1 for o in shift_orders if o.status == "CANCELLED")
     non_cancelled_orders = [o for o in shift_orders if o.status != "CANCELLED"]
 
-    order_value = round(sum(o.total_amount or 0.0 for o in non_cancelled_orders), 2)
+    order_subtotal = round(sum((getattr(o, "subtotal", 0.0) or (float(o.total_amount or 0.0) - float(getattr(o, "tax_amount", 0.0) or 0.0))) for o in non_cancelled_orders), 2)
+    order_tax = round(sum(float(getattr(o, "tax_amount", 0.0) or 0.0) for o in non_cancelled_orders), 2)
+    order_value = round(sum(float(o.total_amount or 0.0) for o in non_cancelled_orders), 2)
     tables_served_set = set()
 
     # Section accumulators
@@ -514,7 +516,8 @@ async def calculate_shift_financial_ledger(
     cash_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CASH"), 2)
     card_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method == "CARD"), 2)
     upi_sales = round(sum(b.grand_total for b in paid_bills if b.payment_method in ["UPI", "ONLINE_UPI", "QR_CODE"]), 2)
-    tax_amount = round(sum(b.tax_amount for b in paid_bills), 2)
+    paid_tax_amount = round(sum(b.tax_amount for b in paid_bills), 2)
+    effective_tax_amount = order_tax if order_tax > 0 else paid_tax_amount
     discount_amount = round(sum(b.discount_amount for b in paid_bills), 2)
     service_charge_amount = round(sum(getattr(b, "service_charge_amount", 0.0) or 0.0 for b in paid_bills), 2)
 
@@ -539,7 +542,10 @@ async def calculate_shift_financial_ledger(
         unbilled_orders_amount = round(sum(o.total_amount or 0.0 for o in unbilled), 2)
         unbilled_orders_count = len(unbilled)
 
-    net_sales = max(0.0, round(order_value - discount_amount, 2))
+    # Net Sales is net of discounts and exclusive of taxes (matching station item totals)
+    # When orders have explicit tax, order_subtotal = combined_station_value = kitchen + bar + hookah.
+    base_sales = order_subtotal if order_subtotal > 0 else (order_value - effective_tax_amount)
+    net_sales = max(0.0, round(base_sales - discount_amount, 2))
     avg_order_val = round(order_value / total_orders, 2) if total_orders > 0 else 0.0
 
     return {
@@ -557,13 +563,14 @@ async def calculate_shift_financial_ledger(
         "sections": sections,
         "order_value": order_value,
         "gross_sales": order_value,
+        "order_subtotal": base_sales,
         "net_sales": net_sales,
         "settled_sales": settled_revenue,
         "total_sales": settled_revenue,
         "cash_sales": cash_sales,
         "card_sales": card_sales,
         "upi_sales": upi_sales,
-        "tax_amount": tax_amount,
+        "tax_amount": effective_tax_amount,
         "discount_amount": discount_amount,
         "service_charge_amount": service_charge_amount,
         "unpaid_bills_count": len(unpaid_bills),

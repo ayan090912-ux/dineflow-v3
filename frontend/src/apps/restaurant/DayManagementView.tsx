@@ -585,17 +585,29 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
 
   // Authoritative financial ledger numbers
   const backendBday = activeDay as any;
+  const taxAmount = Number(
+    backendBday?.taxAmount ||
+    backendBday?.tax_amount ||
+    (kitchenSection.items.reduce((s: number, it: any) => s + (it.tax_amount || 0), 0) +
+     barSection.items.reduce((s: number, it: any) => s + (it.tax_amount || 0), 0) +
+     hookahSection.items.reduce((s: number, it: any) => s + (it.tax_amount || 0), 0)) ||
+    0
+  );
+  const discountAmount = Number(backendBday?.discountAmount || backendBday?.discount_amount || 0);
   const grossOrderValue = Number(
     backendBday?.orderValue ||
     backendBday?.order_value ||
     backendBday?.grossSales ||
     backendBday?.gross_sales ||
-    combinedOrderValue ||
+    (combinedOrderValue + taxAmount) ||
     0
   );
-  const discountAmount = Number(backendBday?.discountAmount || backendBday?.discount_amount || 0);
-  const netSales = Number(backendBday?.netSales || backendBday?.net_sales || Math.max(0, grossOrderValue - discountAmount));
-  const taxAmount = Number(backendBday?.taxAmount || backendBday?.tax_amount || 0);
+  const netSales = Number(
+    backendBday?.netSales ||
+    backendBday?.net_sales ||
+    combinedOrderValue ||
+    Math.max(0, grossOrderValue - taxAmount - discountAmount)
+  );
   const settledRevenue = Number(
     backendBday?.settledSales ||
     backendBday?.settled_sales ||
@@ -865,7 +877,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             {formatCurrency(grossOrderValue, theme.currency)}
           </p>
           <span className="text-[10px] font-mono text-slate-500 block">
-            Kitchen + Bar + Hookah
+            {taxAmount > 0 ? `Net ${formatCurrency(netSales, theme.currency)} + Tax ${formatCurrency(taxAmount, theme.currency)}` : 'Kitchen + Bar + Hookah'}
           </span>
         </div>
 
@@ -960,6 +972,17 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
               <span className="text-base font-bold text-white bg-white/[0.05] px-2.5 py-0.5 rounded-lg border border-white/15">
                 {formatCurrency(combinedOrderValue, theme.currency)}
               </span>
+              {taxAmount > 0 && (
+                <>
+                  <span className="text-slate-600">+</span>
+                  <span className="text-xs text-slate-400">Tax:</span>
+                  <span className="text-sm font-bold text-emerald-400">{formatCurrency(taxAmount, theme.currency)}</span>
+                  <span className="text-slate-600">=</span>
+                  <span className="text-base font-bold text-emerald-300 bg-emerald-500/10 px-2.5 py-0.5 rounded-lg border border-emerald-500/30">
+                    {formatCurrency(grossOrderValue, theme.currency)} Gross
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
