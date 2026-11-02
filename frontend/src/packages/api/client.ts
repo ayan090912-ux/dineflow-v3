@@ -181,6 +181,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.auth.loginBarTerminal(accessPin, restaurantId);
   }
 
+  async loginCartTerminal(accessPin: string, restaurantId?: string): Promise<any> {
+    return this.auth.loginCartTerminal(accessPin, restaurantId);
+  }
+
   async loginInventoryTerminal(accessPin: string, restaurantId?: string): Promise<any> {
     return this.auth.loginInventoryTerminal(accessPin, restaurantId);
   }

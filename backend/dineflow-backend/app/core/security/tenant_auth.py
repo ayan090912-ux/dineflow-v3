@@ -248,15 +248,23 @@ async def verify_tenant_authorization(
             detail=f"Restaurant '{restaurant_id}' was not found."
         )
 
+    caller_matches_restaurant = bool(
+        caller.restaurant_id and (
+            caller.restaurant_id.strip() == restaurant.id or
+            (restaurant.slug and caller.restaurant_id.strip().lower() == restaurant.slug.lower()) or
+            (restaurant.public_slug and caller.restaurant_id.strip().lower() == restaurant.public_slug.lower())
+        )
+    )
+
     # 2. Strict tenant isolation for staff callers
-    if caller.scope == "STAFF" and caller.restaurant_id and caller.restaurant_id.strip() != restaurant.id:
+    if caller.scope == "STAFF" and caller.restaurant_id and not caller_matches_restaurant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Cross-tenant access forbidden: Staff credentials issued for restaurant '{caller.restaurant_id}' cannot access restaurant '{restaurant.id}'."
         )
 
     # 3. Staff terminal fast-path: authenticated terminal staff callers accessing their own restaurant
-    if (caller.scope == "STAFF" or is_staff_header_auth) and caller.restaurant_id and caller.restaurant_id.strip() == restaurant.id:
+    if (caller.scope == "STAFF" or is_staff_header_auth) and caller_matches_restaurant:
         if allowed_roles:
             norm_allowed = [r.strip().upper() for r in allowed_roles]
             if caller.role not in norm_allowed:

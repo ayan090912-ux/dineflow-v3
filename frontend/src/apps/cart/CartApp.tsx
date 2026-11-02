@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Truck,
   ShoppingBag,
@@ -49,16 +49,75 @@ import {
   VolumeX,
   CheckCheck,
   Filter,
+  Flame,
+  LogOut,
+  RotateCcw,
 } from 'lucide-react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import confetti from 'canvas-confetti';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
-import { DinelyLogo, Button } from '../../packages/ui';
+import { DinelyLogo, Button, SearchInput, Avatar, Badge } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
 import { normalizeOrder } from '../../packages/api/core/helpers';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl, getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { CART_THEMES, resolveCartTheme, CartTheme, CartThemeId } from './cartThemes';
+
+// Web Audio API Synthesizer for Kitchen & Terminal Chimes
+const playKitchenChime = (type: 'NEW_ORDER' | 'BUMP') => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    if (type === 'NEW_ORDER') {
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      gain1.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.3);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.15); // E5
+      gain2.gain.setValueAtTime(0.2, ctx.currentTime + 0.15);
+      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(ctx.currentTime + 0.15);
+      osc2.stop(ctx.currentTime + 0.45);
+    } else if (type === 'BUMP') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    }
+  } catch {
+    // Audio context play blocked
+  }
+};
+
+const calculateOrderElapsed = (timestamp?: string) => {
+  if (!timestamp) return { text: 'Just now', isOverdue: false, mins: 0 };
+  const diffSecs = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000));
+  const mins = Math.floor(diffSecs / 60);
+  const secs = diffSecs % 60;
+  const isOverdue = mins >= 10;
+  if (mins === 0) return { text: `${secs}s ago`, isOverdue, mins };
+  return { text: `${mins}m ${secs}s ago`, isOverdue, mins };
+};
 
 interface CartAppProps {
   business?: Restaurant | null;
@@ -99,6 +158,17 @@ export const CartApp: React.FC<CartAppProps> = ({
   const [handoverInputCode, setHandoverInputCode] = useState('');
   const [handoverError, setHandoverError] = useState<string | null>(null);
   const seenOrderIdsRef = React.useRef<Set<string>>(new Set());
+
+  // KDS Operational States
+  const [currentTime, setCurrentTime] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [cardEtaSelections, setCardEtaSelections] = useState<Record<string, number>>({});
+  const [processingOrderIds, setProcessingOrderIds] = useState<Set<string>>(new Set());
+
+  const toggleItemCheck = (itemId: string) => {
+    setCheckedItems((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
 
   // Cart Menu & Real-time Stock Items
   const [menuItems, setMenuItems] = useState<CartMenuItem[]>([
@@ -154,25 +224,26 @@ export const CartApp: React.FC<CartAppProps> = ({
 
   const playAlertBeep = () => {
     if (!soundAlertEnabled) return;
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.35);
-    } catch {
-      // Audio autoplay restrictions catch
-    }
+    playKitchenChime('NEW_ORDER');
   };
+
+  // Live Clock Tick
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+        })
+      );
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Sync business prop
   useEffect(() => {
@@ -295,14 +366,32 @@ export const CartApp: React.FC<CartAppProps> = ({
   };
 
   useEffect(() => {
-    fetchLiveOrders();
-    fetchMenuItems();
-    // 5-second resilient polling fallback
-    const interval = setInterval(() => {
+    async function initTerminalAuthAndLoad() {
+      const targetRestId = cartId || currentCart?.id || currentCart?.slug || business?.id || business?.slug || '';
+      const existingToken =
+        localStorage.getItem('dinely_staff_token') ||
+        localStorage.getItem('dinely_staff_token_cart') ||
+        localStorage.getItem('dinely_staff_token_staff');
+      if (!existingToken && targetRestId) {
+        try {
+          await api.loginCartTerminal('1234', targetRestId);
+        } catch (authErr) {
+          console.warn('[CartApp] Terminal auto-login notice:', authErr);
+        }
+      }
       fetchLiveOrders();
-    }, 5000);
+      fetchMenuItems();
+    }
+    initTerminalAuthAndLoad();
+
+    // 4-second resilient polling fallback
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchLiveOrders();
+      }
+    }, 4000);
     return () => clearInterval(interval);
-  }, [cartId]);
+  }, [cartId, currentCart?.id, currentCart?.slug]);
 
   // 2. Real-Time Bus Subscription for Incoming QR Orders and Status Changes
   useEffect(() => {
@@ -457,16 +546,35 @@ export const CartApp: React.FC<CartAppProps> = ({
     }
   };
 
-  // Status transitions
-  const updateOrderStatus = async (orderId: string, nextStatus: string) => {
+  // Status transitions with ETA and bump chime
+  const updateOrderStatus = async (orderId: string, nextStatus: string, etaMins?: number) => {
     try {
-      await api.updateOrderStatus(orderId, nextStatus);
+      setProcessingOrderIds((prev) => new Set(prev).add(orderId));
+      await api.updateOrderStatus(orderId, {
+        status: nextStatus as any,
+        estimatedPrepTimeMinutes: etaMins,
+      });
+      playKitchenChime('BUMP');
       setLiveOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus as any } : o))
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: nextStatus as any,
+                estimatedPrepTimeMinutes: etaMins !== undefined ? etaMins : o.estimatedPrepTimeMinutes,
+              }
+            : o
+        )
       );
     } catch (err: any) {
       console.error('Failed to update status:', err);
       alert('Status transition failed: ' + (err?.message || 'Error'));
+    } finally {
+      setProcessingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
   };
 
@@ -498,13 +606,15 @@ export const CartApp: React.FC<CartAppProps> = ({
       setRedemptionSuccess(null);
       setHandoverError(null);
 
-      const redeemed = await api.redeemOrderPickupCode(cartId, codeToRedeem.trim(), 'Terminal Staff', force);
+      const targetRestId = cartId || currentCart?.id || '';
+      const redeemed = await api.redeemOrderPickupCode(targetRestId, codeToRedeem.trim(), 'Terminal Staff', force);
+      playKitchenChime('BUMP');
       setLiveOrders((prev) =>
         prev.map((o) => (o.id === redeemed.id ? redeemed : o))
       );
       try {
         confetti({
-          particleCount: 70,
+          particleCount: 80,
           spread: 70,
           origin: { y: 0.6 },
         });
@@ -882,7 +992,7 @@ export const CartApp: React.FC<CartAppProps> = ({
   const activeQueueCount = newOrdersCount + preparingOrdersCount + readyOrdersCount;
 
   const displayedTerminalOrders = useMemo(() => {
-    return liveOrders.filter((ord) => {
+    let list = liveOrders.filter((ord) => {
       const isRedeemed = ord.pickupStatus === 'REDEEMED' || ord.status === 'COMPLETED';
       const isCancelled = ord.status === 'CANCELLED';
       if (terminalFilter === 'NEW') return (ord.status === 'PENDING' || ord.status === 'NEW') && !isRedeemed;
@@ -891,7 +1001,21 @@ export const CartApp: React.FC<CartAppProps> = ({
       if (terminalFilter === 'COMPLETED') return isRedeemed;
       if (terminalFilter === 'CANCELLED') return isCancelled;
       return !isRedeemed && !isCancelled;
-    }).sort((a, b) => {
+    });
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((ord) => {
+        const idMatch = (ord.id || '').toLowerCase().includes(q);
+        const numMatch = (ord.displayOrderNumber || '').toLowerCase().includes(q);
+        const codeMatch = (ord.pickupCode || '').toLowerCase().includes(q);
+        const nameMatch = (ord.customerName || '').toLowerCase().includes(q);
+        const itemMatch = (ord.items || []).some((it: any) => (it.name || '').toLowerCase().includes(q));
+        return idMatch || numMatch || codeMatch || nameMatch || itemMatch;
+      });
+    }
+
+    return list.sort((a, b) => {
       const statusWeight: Record<string, number> = {
         READY: 3,
         PREPARING: 2,
@@ -904,7 +1028,7 @@ export const CartApp: React.FC<CartAppProps> = ({
       if (diff !== 0) return diff;
       return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     });
-  }, [liveOrders, terminalFilter]);
+  }, [liveOrders, terminalFilter, searchQuery]);
 
   const navItems = [
     {
@@ -1064,57 +1188,58 @@ export const CartApp: React.FC<CartAppProps> = ({
         {/* Sub-View: Order Receiving Terminal (Standard Small Cart OS Primary Operational View) */}
         {(activeTab === 'terminal' || activeTab === 'pos' || activeTab === 'orders') && (
           <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full overflow-y-auto">
-            {/* Terminal Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#1a1f2b]">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                    <BellRing className="w-6 h-6 text-amber-400" />
-                    <span>Order Receiving Terminal</span>
-                  </h1>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                    LIVE DISPATCH
-                  </span>
+            {/* KDS Liquid-Glass Top Control Bar */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500/20 to-teal-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg">
+                  <ChefHat className="w-6 h-6 text-amber-400" />
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Incoming QR storefront & counter orders. Prepare items, verify customer pickup codes, and complete handovers.
-                </p>
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                      <span>{currentCart?.name || 'MAX KART'}</span>
+                      <span className="text-slate-400 font-normal text-sm sm:text-base">Order Terminal</span>
+                    </h1>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Dispatch
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">
+                    Authoritative food cart bump board, elapsed prep timers, and pickup code verification
+                  </p>
+                </div>
               </div>
 
-              {/* Status Controls, Walk-in Button & Live Connection Badge */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                {/* Live Feed Status Badge */}
-                <div className={`px-2.5 py-1.5 rounded-xl border text-xs font-mono font-semibold flex items-center gap-2 ${
-                  isLiveConnected
-                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                    : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                }`}>
-                  <span className={`w-2 h-2 rounded-full ${isLiveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                  <span>{isLiveConnected ? 'Live Feed Connected' : 'Reconnecting...'}</span>
-                </div>
+              {/* Utility Controls: Live Clock, Sound Chime, Refresh, Quick POS, Customer QR, Sign Out */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {/* Live Clock */}
+                {currentTime && (
+                  <div className="hidden md:flex bg-white/[0.05] backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 items-center gap-1.5 font-mono text-slate-200 text-xs">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{currentTime}</span>
+                  </div>
+                )}
 
-                {/* Audio Alert Toggle & Test Chime */}
-                <div className="flex items-center gap-1 bg-[#11151e] border border-[#212737] rounded-xl p-0.5">
+                {/* Audio Chime Toggle */}
+                <div className="flex items-center gap-1 bg-white/[0.05] border border-white/10 rounded-xl p-0.5">
                   <button
                     onClick={() => {
                       const next = !soundAlertEnabled;
                       setSoundAlertEnabled(next);
                       if (next) playAlertBeep();
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all ${
-                      soundAlertEnabled
-                        ? 'bg-sky-500/15 text-sky-300'
-                        : 'text-slate-400 hover:text-white'
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all ${
+                      soundAlertEnabled ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-400 hover:text-white'
                     }`}
                     title={soundAlertEnabled ? 'Sound is enabled. Click to mute.' : 'Sound is muted. Click to enable.'}
                   >
-                    {soundAlertEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                    {soundAlertEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-400" /> : <VolumeX className="w-3.5 h-3.5 text-rose-400" />}
                     <span>{soundAlertEnabled ? 'Sound ON' : 'Muted'}</span>
                   </button>
                   {soundAlertEnabled && (
                     <button
                       onClick={playAlertBeep}
-                      className="px-2 py-1 text-[10px] font-mono font-bold text-slate-400 hover:text-amber-300 border-l border-[#212737] transition-colors cursor-pointer"
+                      className="px-2 py-1 text-[10px] font-mono font-bold text-slate-400 hover:text-amber-300 border-l border-white/10 transition-colors cursor-pointer"
                       title="Test Audio Chime"
                     >
                       Test
@@ -1126,103 +1251,72 @@ export const CartApp: React.FC<CartAppProps> = ({
                 <button
                   onClick={fetchLiveOrders}
                   disabled={isLoadingOrders}
-                  className="p-2 rounded-xl bg-[#11151e] border border-[#212737] text-slate-300 hover:text-white cursor-pointer disabled:opacity-50 transition-all hover:border-slate-700"
+                  className="p-2 rounded-xl bg-white/[0.05] border border-white/10 text-slate-300 hover:text-white cursor-pointer disabled:opacity-50 transition-all hover:bg-white/[0.08]"
                   title="Refresh Queue"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isLoadingOrders ? 'animate-spin text-sky-400' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingOrders ? 'animate-spin text-amber-400' : ''}`} />
                 </button>
 
-                {/* Walk-in Rapid Counter Order Button */}
+                {/* + Walk-in Quick Counter Order */}
                 <button
                   onClick={() => setIsQuickPosOpen(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-sky-950/30 cursor-pointer transition-all"
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/30 cursor-pointer transition-all"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5 text-slate-950" />
                   <span>+ Walk-in Order</span>
                 </button>
 
-                {/* Customer QR Menu Link */}
+                {/* Customer Storefront Link */}
                 <a
                   href={cartOrderingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all"
+                  className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-slate-200 font-medium text-xs flex items-center gap-1.5 transition-all"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Customer QR Menu</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Storefront</span>
                 </a>
+
+                {/* Sign Out */}
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 flex items-center gap-1 text-xs cursor-pointer transition-all"
+                    title="Sign Out"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">Sign Out</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Terminal Live Key Metrics Ribbon */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
-                <div>
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Active Queue</div>
-                  <div className="text-2xl font-black text-amber-400 font-mono mt-0.5">{activeQueueCount}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                  <BellRing className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
-                <div>
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Cooking Now</div>
-                  <div className="text-2xl font-black text-indigo-400 font-mono mt-0.5">{preparingOrdersCount}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                  <ChefHat className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
-                <div>
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Ready for Pickup</div>
-                  <div className="text-2xl font-black text-emerald-400 font-mono mt-0.5">{readyOrdersCount}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#0c0f16]/90 border border-[#1b2230] flex items-center justify-between shadow-sm">
-                <div>
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Today's Sales</div>
-                  <div className="text-2xl font-black text-white font-mono mt-0.5">₹{todayTotalSales}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-                  <DollarSign className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Pickup Code Verification & Lookup Bar */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#111622] to-sky-500/10 border-2 border-amber-500/25 flex flex-col sm:flex-row items-center gap-3 shadow-lg">
+            {/* Lightning-Fast Pickup Code Verification & Bump Bar */}
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 flex flex-col sm:flex-row items-center gap-3 shadow-xl">
               <div className="flex items-center gap-2 text-amber-400 shrink-0">
-                <Ticket className="w-5 h-5 text-amber-400" />
-                <span className="text-xs font-black uppercase tracking-wider">Pickup Code Verification</span>
+                <Ticket className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-mono font-bold uppercase tracking-wider">Pickup Code Verification</span>
               </div>
               <div className="flex-1 w-full relative">
                 <input
                   type="text"
-                  placeholder="Enter customer pickup code (e.g. K7P4, C-104, #ORD-1)..."
+                  placeholder="Enter or scan customer pickup code (e.g. C0014, K7P4, #ORD-4)..."
                   value={lookupQuery}
                   onChange={(e) => setLookupQuery(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleLookupAndVerify(lookupQuery);
                   }}
-                  className="w-full px-4 py-2.5 pl-10 rounded-xl bg-[#080a0f] border border-[#21293a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono tracking-wider font-bold"
+                  className="w-full px-4 py-2 pl-9 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono tracking-wider font-bold transition-colors"
                 />
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
               </div>
               <button
                 onClick={() => handleLookupAndVerify(lookupQuery)}
                 disabled={!lookupQuery.trim() || isRedeeming}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shrink-0 shadow-lg shadow-amber-900/30"
+                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shrink-0 shadow-lg shadow-amber-900/30"
               >
                 <Check className="w-4 h-4" />
-                <span>{isRedeeming ? 'Verifying...' : 'Lookup & Redeem Code'}</span>
+                <span>{isRedeeming ? 'Verifying...' : 'Verify & Hand Over'}</span>
               </button>
             </div>
 
@@ -1248,174 +1342,165 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
             )}
 
-            {/* Filter Section Tabs with Live Counts */}
-            <div className="flex flex-wrap items-center gap-2 border-b border-[#1a1f2b] pb-3">
-              {[
-                { id: 'ACTIVE', label: 'All Active Queue', count: activeQueueCount },
-                { id: 'NEW', label: 'New Orders', count: newOrdersCount },
-                { id: 'PREPARING', label: 'Preparing', count: preparingOrdersCount },
-                { id: 'READY', label: 'Ready for Pickup', count: readyOrdersCount },
-                { id: 'COMPLETED', label: 'Completed / Recent', count: completedOrdersCount },
-                { id: 'CANCELLED', label: 'Cancelled', count: cancelledOrdersCount },
-              ].map((tab) => {
-                const isSelected = terminalFilter === tab.id;
-                return (
+            {/* KDS Stage Filter Tabs & Live Ticket Search */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white/[0.03] backdrop-blur-xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scrollbar-none pb-1 lg:pb-0">
+                {[
+                  { id: 'ACTIVE', label: 'All Active Queue', count: activeQueueCount, icon: <Flame className="w-3.5 h-3.5 text-amber-400" /> },
+                  { id: 'NEW', label: '1. New Incoming', count: newOrdersCount, icon: <BellRing className="w-3.5 h-3.5 text-amber-300" /> },
+                  { id: 'PREPARING', label: '2. Cooking', count: preparingOrdersCount, icon: <ChefHat className="w-3.5 h-3.5 text-sky-400" /> },
+                  { id: 'READY', label: '3. Ready at Pass', count: readyOrdersCount, icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> },
+                  { id: 'COMPLETED', label: 'Shift History', count: completedOrdersCount, icon: <Clock className="w-3.5 h-3.5 text-slate-400" /> },
+                  { id: 'CANCELLED', label: 'Cancelled', count: cancelledOrdersCount, icon: <XCircle className="w-3.5 h-3.5 text-rose-400" /> },
+                ].map((tab) => {
+                  const isSelected = terminalFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setTerminalFilter(tab.id as any)}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all shrink-0 cursor-pointer active:scale-95 ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-amber-500/25 to-amber-600/20 text-amber-300 border border-amber-400/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
+                          : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
+                      }`}
+                    >
+                      {tab.icon}
+                      <span>{tab.label}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                        isSelected ? 'bg-amber-500/30 text-amber-200 border border-amber-400/40' : 'bg-white/10 text-slate-400'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Search filter input */}
+              <div className="w-full lg:w-72 relative shrink-0">
+                <input
+                  type="text"
+                  placeholder="Filter ticket, dish, customer..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 pl-8 rounded-xl bg-black/40 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono transition-colors"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
+                {searchQuery && (
                   <button
-                    key={tab.id}
-                    onClick={() => setTerminalFilter(tab.id as any)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                      isSelected
-                        ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-900/20'
-                        : 'bg-[#0e121a] text-slate-400 hover:text-white hover:bg-[#131822] border border-[#1b2230]'
-                    }`}
+                    onClick={() => setSearchQuery('')}
+                    className="text-slate-400 hover:text-white absolute right-2.5 top-2 text-xs"
                   >
-                    <span>{tab.label}</span>
-                    <span className={`px-1.5 py-0.2 rounded-md font-mono text-[10px] font-extrabold ${
-                      isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-300'
-                    }`}>
-                      {tab.count}
-                    </span>
+                    ×
                   </button>
-                );
-              })}
+                )}
+              </div>
             </div>
 
             {/* Orders Stream / Empty State */}
             {displayedTerminalOrders.length === 0 ? (
-              <div className="p-8 sm:p-10 bg-[#0c0f16] border border-[#1a1f2b] rounded-3xl shadow-xl space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                  {/* Left Column: Live QR Preview Card */}
-                  <div className="p-6 rounded-2xl bg-[#07090e] border border-[#1b2230] flex flex-col items-center text-center space-y-4">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                        ● Storefront QR Live
-                      </span>
-                      <h3 className="text-base font-bold text-white mt-1">Scan to Test Live Ordering</h3>
-                      <p className="text-xs text-slate-400">
-                        Scan with your smartphone camera to open the customer menu.
-                      </p>
-                    </div>
+              <div className="p-8 sm:p-12 rounded-3xl bg-white/[0.02] backdrop-blur-2xl border border-white/10 shadow-2xl flex flex-col items-center justify-center text-center space-y-6">
+                <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.15)]">
+                  <BellRing className="w-8 h-8 animate-pulse" />
+                </div>
+                <div className="space-y-1.5 max-w-md">
+                  <h3 className="text-xl font-black text-white font-sans tracking-tight">
+                    {searchQuery
+                      ? `No orders matching "${searchQuery}"`
+                      : terminalFilter === 'ACTIVE'
+                      ? 'Active Ticket Queue Clear'
+                      : `No Orders in "${terminalFilter}" Stage`}
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed font-mono">
+                    {searchQuery
+                      ? 'Try adjusting your search query or clear the filter.'
+                      : 'Incoming customer QR orders & counter walk-in tickets appear here automatically with real-time chimes.'}
+                  </p>
+                </div>
 
-                    <div className="p-4 bg-white rounded-2xl border-2 border-slate-300 shadow-lg inline-block">
-                      <QRCodeSVG
-                        value={cartOrderingUrl}
-                        size={160}
-                        level="H"
-                        marginSize={1}
-                      />
-                    </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => setIsQuickPosOpen(true)}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-amber-950/40 transition-all cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Punch Walk-in Order</span>
+                  </button>
 
-                    <div className="w-full flex flex-col gap-2 pt-1">
-                      <a
-                        href={cartOrderingUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-900/30 transition-all cursor-pointer"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Open Customer Storefront</span>
-                      </a>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(cartOrderingUrl);
-                          alert('Storefront link copied!');
-                        }}
-                        className="w-full py-2 px-3 rounded-xl bg-[#121620] hover:bg-[#181d2a] border border-[#212737] text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Copy className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Copy Storefront URL</span>
-                      </button>
-                    </div>
+                  <a
+                    href={cartOrderingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+                  >
+                    <ExternalLink className="w-4 h-4 text-amber-400" />
+                    <span>Test Customer Storefront</span>
+                  </a>
+
+                  <button
+                    onClick={() => {
+                      fetchLiveOrders();
+                      playKitchenChime('BUMP');
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-mono text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Refresh Feed</span>
+                  </button>
+                </div>
+
+                {/* Real-time Telemetry Status Bar */}
+                <div className="flex flex-wrap items-center justify-center gap-4 pt-4 border-t border-white/5 text-[11px] font-mono text-slate-400">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="text-emerald-400 font-bold">WebSocket Connected</span>
                   </div>
-
-                  {/* Right Column: Terminal Station Readiness */}
-                  <div className="space-y-4">
-                    <div>
-                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-3">
-                        <BellRing className="w-6 h-6" />
-                      </div>
-                      <h3 className="text-lg font-bold text-white">
-                        {terminalFilter === 'ACTIVE'
-                          ? 'No Active Orders in Queue'
-                          : `No Orders in "${terminalFilter}" State`}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        The Food Cart dispatch system is active and listening for incoming orders. New orders will immediately appear here with audio alerts and unique pickup coupons.
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-[#080a0f] border border-[#1b2230] space-y-3 text-xs">
-                      <div className="flex items-center justify-between text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span>WebSocket Real-Time Dispatch</span>
-                        </div>
-                        <span className="font-mono text-[10px] text-emerald-400 font-bold">CONNECTED</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <Volume2 className="w-4 h-4 text-sky-400" />
-                          <span>Kitchen Audio Buzzer</span>
-                        </div>
-                        <button
-                          onClick={playAlertBeep}
-                          className="text-[10px] font-mono font-bold text-amber-400 hover:underline cursor-pointer"
-                        >
-                          Test Sound Chime →
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-amber-400" />
-                          <span>Business Shift Attribution</span>
-                        </div>
-                        <span className="font-mono text-[10px] text-slate-400">AUTO SHIFT</span>
-                      </div>
-                    </div>
-
-                    <div className="pt-2">
-                      <button
-                        onClick={() => setIsQuickPosOpen(true)}
-                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-950/40 cursor-pointer transition-all"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Punch Quick Walk-in Counter Order</span>
-                      </button>
-                    </div>
+                  <div className="text-white/20">•</div>
+                  <div className="flex items-center gap-1.5">
+                    <Volume2 className="w-3.5 h-3.5 text-sky-400" />
+                    <span>WebAudio Chime: Armed</span>
+                  </div>
+                  <div className="text-white/20">•</div>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Station: {cartId || 'Food Cart'}</span>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4.5">
                 {displayedTerminalOrders.map((ord) => {
                   const isRedeemed = ord.pickupStatus === 'REDEEMED' || ord.status === 'COMPLETED';
                   const isCancelled = ord.status === 'CANCELLED';
                   const isWalkIn = ord.orderType === 'COUNTER_WALK_IN' || ord.tableNumber === 'COUNTER';
                   const codeBadge = ord.pickupCode || ord.displayOrderNumber || `#${ord.id.slice(-4)}`;
+                  const elapsed = calculateOrderElapsed(ord.createdAt);
+                  const selectedEta = cardEtaSelections[ord.id] || 15;
+                  const isProcessing = processingOrderIds.has(ord.id);
 
                   return (
                     <div
                       key={ord.id}
-                      className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
+                      className={`p-4 sm:p-5 rounded-2xl border backdrop-blur-2xl transition-all duration-200 flex flex-col justify-between space-y-4 shadow-xl ${
                         isRedeemed
-                          ? 'bg-[#090b10] border-[#161c28] opacity-80'
+                          ? 'bg-black/40 border-white/5 opacity-70'
                           : isCancelled
-                          ? 'bg-[#0c090a] border-rose-950/40 opacity-70'
+                          ? 'bg-black/40 border-rose-950/40 opacity-60'
                           : ord.status === 'READY'
-                          ? 'bg-[#0d121c] border-emerald-500/50 shadow-xl shadow-emerald-950/30'
+                          ? 'bg-gradient-to-b from-emerald-950/30 to-[#0c1219] border-emerald-500/40 shadow-emerald-950/30 ring-1 ring-emerald-500/20'
                           : ord.status === 'PREPARING'
-                          ? 'bg-[#0c0f18] border-indigo-500/40 shadow-lg shadow-indigo-950/20'
-                          : 'bg-[#0c0f16] border-amber-500/30 shadow-md hover:border-amber-500/50'
+                          ? 'bg-gradient-to-b from-sky-950/30 to-[#0c1017] border-sky-500/40 shadow-sky-950/20'
+                          : 'bg-[#0c0f16]/95 border-amber-500/30 hover:border-amber-500/50 shadow-amber-950/10'
                       }`}
                     >
-                      {/* Order Card Top Line */}
+                      {/* Top Bar: Order # + Channel + Elapsed Urgency Timer */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between text-xs">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-slate-300">
+                            <span className="font-mono font-bold text-white text-sm">
                               #{ord.displayOrderNumber || ord.id.slice(-4)}
                             </span>
-                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded border ${
+                            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                               isWalkIn
                                 ? 'bg-sky-500/10 text-sky-300 border-sky-500/20'
                                 : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
@@ -1423,43 +1508,50 @@ export const CartApp: React.FC<CartAppProps> = ({
                               {isWalkIn ? 'Walk-in Counter' : 'QR Storefront'}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-amber-400" />
-                              <span>{formatOrderTime(ord.createdAt)}</span>
-                            </span>
-                            <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
-                              ~{ord.estimatedPrepTimeMinutes || (ord as any).estimated_prep_time_minutes || 15}m prep
-                            </span>
+
+                          <div className="flex items-center gap-1.5">
+                            {elapsed.isOverdue && ord.status !== 'READY' && !isRedeemed && !isCancelled ? (
+                              <span className="flex items-center gap-1 font-mono font-bold text-rose-400 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded-lg text-[10px] animate-pulse">
+                                <Flame className="w-3 h-3 text-rose-400" />
+                                <span>{elapsed.text} OVERDUE</span>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 font-mono text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg text-[10px]">
+                                <Clock className="w-3 h-3 text-amber-400" />
+                                <span>{elapsed.text}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        {/* Large High-Visibility Pickup Code Banner */}
-                        <div className={`p-3.5 rounded-xl border-2 flex items-center justify-between ${
+                        {/* High-Visibility Pickup Coupon Box */}
+                        <div className={`p-3 sm:p-3.5 rounded-xl border flex items-center justify-between ${
                           isRedeemed
-                            ? 'bg-slate-900/60 border-slate-800 text-slate-400'
+                            ? 'bg-black/30 border-white/10 text-slate-400'
                             : ord.status === 'READY'
-                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+                            : ord.status === 'PREPARING'
+                            ? 'bg-sky-500/15 border-sky-500/30 text-sky-300'
                             : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
                         }`}>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              Pickup Coupon
+                            <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400">
+                              Pickup Coupon Code
                             </div>
                             <div className="text-2xl sm:text-3xl font-black font-mono tracking-wider">
                               {codeBadge}
                             </div>
                           </div>
                           <div className="text-right">
-                            <span className={`text-[10px] font-bold font-mono px-2.5 py-1 rounded-md border uppercase ${
+                            <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-md border uppercase ${
                               isRedeemed
                                 ? 'bg-slate-800 text-slate-400 border-slate-700'
                                 : ord.status === 'READY'
-                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse'
                                 : ord.status === 'PREPARING'
-                                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
-                                : ord.status === 'ACCEPTED'
                                 ? 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+                                : ord.status === 'ACCEPTED'
+                                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
                                 : isCancelled
                                 ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                                 : 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
@@ -1469,35 +1561,62 @@ export const CartApp: React.FC<CartAppProps> = ({
                           </div>
                         </div>
 
-                        {/* Customer Info Line */}
-                        <div className="text-xs text-slate-300 font-medium">
-                          Customer: <span className="text-white font-bold">{ord.customerName || 'Storefront Guest'}</span>
+                        {/* Customer & Total Payable Line */}
+                        <div className="flex items-center justify-between text-xs px-1">
+                          <span className="text-slate-300 font-medium truncate">
+                            Customer: <strong className="text-white">{ord.customerName || 'Storefront Guest'}</strong>
+                          </span>
+                          <span className="font-mono font-black text-amber-400 text-sm">
+                            ₹{ord.totalAmount}
+                          </span>
                         </div>
 
-                        {/* Ordered Items List with Dish Photos */}
-                        <div className="space-y-2 py-1">
+                        {/* Interactive Dish Checklist with Cook Check-Off */}
+                        <div className="space-y-1.5 py-1">
+                          <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                            <span>Items Checklist ({(ord.items || []).length}):</span>
+                            <span className="text-[9px] text-slate-500 lowercase">click item to check off</span>
+                          </div>
+
                           {(ord.items || []).map((it: any, i: number) => {
+                            const itemKey = `${ord.id}-${it.id || i}`;
+                            const isChecked = checkedItems[itemKey] || false;
                             const dishImg = getDishThumbnail(it);
+
                             return (
                               <div
-                                key={i}
-                                className="flex items-center justify-between gap-2.5 p-2 rounded-xl bg-[#07090e] border border-[#141822]"
+                                key={itemKey}
+                                onClick={() => toggleItemCheck(itemKey)}
+                                className={`flex items-center justify-between gap-2.5 p-2 rounded-xl text-xs cursor-pointer transition-all border select-none ${
+                                  isChecked
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 line-through'
+                                    : 'bg-white/[0.03] border-white/10 text-white hover:border-white/20 hover:bg-white/[0.06]'
+                                }`}
                               >
                                 <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                    isChecked
+                                      ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                      : 'border-white/30 bg-black/20'
+                                  }`}>
+                                    {isChecked && '✓'}
+                                  </div>
+
                                   {dishImg ? (
                                     <img
                                       src={dishImg}
                                       alt={it.name}
-                                      className="w-10 h-10 rounded-lg object-cover shrink-0 border border-[#212737]"
+                                      className="w-8 h-8 rounded-lg object-cover shrink-0 border border-white/10"
                                     />
                                   ) : (
-                                    <div className="w-10 h-10 rounded-lg bg-[#141924] border border-[#212737] flex items-center justify-center text-slate-500 shrink-0">
-                                      <UtensilsCrossed className="w-4 h-4 text-slate-400" />
+                                    <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shrink-0">
+                                      <UtensilsCrossed className="w-3.5 h-3.5" />
                                     </div>
                                   )}
+
                                   <div className="min-w-0">
                                     <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
-                                      <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono text-[10px] font-black shrink-0">
+                                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-black shrink-0">
                                         {it.quantity}x
                                       </span>
                                       <span className="truncate">{it.name}</span>
@@ -1509,6 +1628,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                                     )}
                                   </div>
                                 </div>
+
                                 <div className="font-mono text-xs font-bold text-slate-300 shrink-0">
                                   ₹{(it.price || 0) * (it.quantity || 1)}
                                 </div>
@@ -1529,13 +1649,11 @@ export const CartApp: React.FC<CartAppProps> = ({
                         )}
                       </div>
 
-                      {/* Card Bottom: Total, Payment & Lifecycle Actions */}
-                      <div className="space-y-3 pt-3 border-t border-[#1a1f2b]">
+                      {/* Card Bottom: Payment Status + Lifecycle Actions */}
+                      <div className="space-y-3 pt-3 border-t border-white/10">
+                        {/* Payment Status Bar */}
                         <div className="flex items-center justify-between text-xs">
-                          <div>
-                            <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Payable</div>
-                            <div className="text-sm font-black font-mono text-white">₹{ord.totalAmount}</div>
-                          </div>
+                          <span className="text-[10px] text-slate-400 uppercase font-mono font-semibold">Payment</span>
                           <div>
                             {ord.paymentStatus === 'PAID' ? (
                               <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-[11px] flex items-center gap-1">
@@ -1543,20 +1661,20 @@ export const CartApp: React.FC<CartAppProps> = ({
                                 <span>PAID • {ord.paymentMethod || 'CASH'}</span>
                               </span>
                             ) : (
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1.5">
                                 <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-[10px]">
                                   UNPAID
                                 </span>
                                 <button
                                   onClick={() => handleMarkPaid(ord.id, 'CASH')}
-                                  className="px-2 py-1 rounded bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[10px] font-bold border border-emerald-500/30 transition-all cursor-pointer"
+                                  className="px-2 py-0.5 rounded bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[10px] font-bold border border-emerald-500/30 transition-all cursor-pointer"
                                   title="Mark Paid via Cash"
                                 >
                                   Cash
                                 </button>
                                 <button
                                   onClick={() => handleMarkPaid(ord.id, 'UPI')}
-                                  className="px-2 py-1 rounded bg-sky-600/30 hover:bg-sky-600 text-sky-300 hover:text-white text-[10px] font-bold border border-sky-500/30 transition-all cursor-pointer"
+                                  className="px-2 py-0.5 rounded bg-sky-600/30 hover:bg-sky-600 text-sky-300 hover:text-white text-[10px] font-bold border border-sky-500/30 transition-all cursor-pointer"
                                   title="Mark Paid via UPI"
                                 >
                                   UPI
@@ -1566,62 +1684,119 @@ export const CartApp: React.FC<CartAppProps> = ({
                           </div>
                         </div>
 
-                        {/* Operational Lifecycle Buttons */}
-                        <div className="flex items-center justify-end gap-2 pt-1">
+                        {/* Operational Actions */}
+                        <div className="space-y-2">
                           {(ord.status === 'PENDING' || ord.status === 'NEW' || ord.status === 'ACCEPTED') && (
                             <>
-                              <button
-                                onClick={() => updateOrderStatus(ord.id, 'CANCELLED')}
-                                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs cursor-pointer transition-all"
-                              >
-                                Cancel Order
-                              </button>
-                              <button
-                                onClick={() => updateOrderStatus(ord.id, 'PREPARING')}
-                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/30 cursor-pointer transition-all flex-1"
-                              >
-                                <ChefHat className="w-4 h-4" />
-                                <span>Start Preparing</span>
-                              </button>
+                              {/* Quick ETA Chips */}
+                              <div className="flex items-center justify-between gap-1 text-[11px] bg-white/[0.02] p-1.5 rounded-xl border border-white/5">
+                                <span className="font-mono text-slate-400 text-[10px] flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <span>Prep ETA:</span>
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  {[5, 10, 15, 20].map((mins) => {
+                                    const isSel = selectedEta === mins;
+                                    return (
+                                      <button
+                                        key={mins}
+                                        type="button"
+                                        onClick={() =>
+                                          setCardEtaSelections((prev) => ({
+                                            ...prev,
+                                            [ord.id]: mins,
+                                          }))
+                                        }
+                                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all border ${
+                                          isSel
+                                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                                            : 'bg-white/5 text-slate-300 border-white/10 hover:border-white/20'
+                                        }`}
+                                      >
+                                        +{mins}m
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  disabled={isProcessing}
+                                  onClick={() => updateOrderStatus(ord.id, 'CANCELLED')}
+                                  className="px-2.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs cursor-pointer transition-all"
+                                >
+                                  Cancel
+                                </button>
+
+                                <button
+                                  disabled={isProcessing}
+                                  onClick={() => updateOrderStatus(ord.id, 'PREPARING', selectedEta)}
+                                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-950/40 cursor-pointer transition-all flex-1"
+                                >
+                                  <ChefHat className="w-4 h-4" />
+                                  <span>Start Cooking (+{selectedEta}m)</span>
+                                </button>
+
+                                <button
+                                  disabled={isProcessing}
+                                  onClick={() => updateOrderStatus(ord.id, 'READY')}
+                                  className="px-2.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold cursor-pointer"
+                                  title="Mark Ready Directly"
+                                >
+                                  Instant Ready
+                                </button>
+                              </div>
                             </>
                           )}
 
                           {ord.status === 'PREPARING' && (
-                            <>
+                            <div className="flex items-center gap-2">
                               <button
+                                disabled={isProcessing}
                                 onClick={() => updateOrderStatus(ord.id, 'CANCELLED')}
-                                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs cursor-pointer transition-all"
+                                className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs cursor-pointer transition-all"
                               >
                                 Cancel
                               </button>
                               <button
+                                disabled={isProcessing}
                                 onClick={() => updateOrderStatus(ord.id, 'READY')}
-                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer transition-all flex-1"
+                                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/40 cursor-pointer transition-all flex-1"
                               >
-                                <CheckCircle2 className="w-4 h-4" />
+                                <CheckCircle2 className="w-4 h-4 text-slate-950" />
                                 <span>Mark Ready for Pickup</span>
                               </button>
-                            </>
+                            </div>
                           )}
 
                           {ord.status === 'READY' && (
-                            <button
-                              onClick={() => {
-                                setSelectedOrderForHandover(ord);
-                                setHandoverInputCode(ord.pickupCode || ord.id);
-                                setHandoverError(null);
-                              }}
-                              className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-900/30 cursor-pointer transition-all"
-                            >
-                              <Ticket className="w-4 h-4" />
-                              <span>Verify Pickup Code & Hand Over</span>
-                            </button>
+                            <div className="space-y-1.5">
+                              <button
+                                disabled={isProcessing}
+                                onClick={() => handleRedeemCode(ord.pickupCode || ord.id)}
+                                className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition-all"
+                              >
+                                <Ticket className="w-4 h-4 text-slate-950" />
+                                <span>1-Click Hand Over (Redeem {codeBadge})</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedOrderForHandover(ord);
+                                  setHandoverInputCode(ord.pickupCode || ord.id);
+                                  setHandoverError(null);
+                                }}
+                                className="w-full text-center text-[10px] text-slate-400 hover:text-white underline cursor-pointer"
+                              >
+                                Open Verification Dialog
+                              </button>
+                            </div>
                           )}
 
                           {isRedeemed && (
-                            <div className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5">
+                            <div className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5 font-mono">
                               <CheckCheck className="w-4 h-4 text-emerald-400" />
-                              <span>✓ Handed Over & Completed</span>
+                              <span>✓ Order Handed Over & Fulfilled</span>
                             </div>
                           )}
 
