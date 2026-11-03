@@ -127,6 +127,69 @@ const calculateOrderElapsed = (timestamp?: string) => {
   return { text: `${mins}m ${secs}s ago`, isOverdue, mins };
 };
 
+// ==========================================
+// OPERATIONAL BUSINESS DATE & ROLLOVER HELPERS
+// ==========================================
+export const getOperationalBusinessDate = (
+  timestamp?: string | number | Date,
+  cutoffHour = 4,
+  timeZone = 'Asia/Kolkata'
+): string => {
+  try {
+    const date = timestamp ? new Date(timestamp) : new Date();
+    if (isNaN(date.getTime())) {
+      return new Date().toISOString().slice(0, 10);
+    }
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: 'numeric',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    let year = '';
+    let month = '';
+    let day = '';
+    let hour = 0;
+    for (const part of parts) {
+      if (part.type === 'year') year = part.value;
+      if (part.type === 'month') month = part.value;
+      if (part.type === 'day') day = part.value;
+      if (part.type === 'hour') hour = parseInt(part.value, 10) || 0;
+    }
+    if (hour < cutoffHour) {
+      const d = new Date(Date.UTC(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10) - 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    }
+    return `${year}-${month}-${day}`;
+  } catch {
+    const d = timestamp ? new Date(timestamp) : new Date();
+    return d.toISOString().slice(0, 10);
+  }
+};
+
+export const getPreviousBusinessDate = (dateKey: string): string => {
+  try {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const prev = new Date(Date.UTC(y, m - 1, d - 1, 12, 0, 0));
+    return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}-${String(prev.getUTCDate()).padStart(2, '0')}`;
+  } catch {
+    return dateKey;
+  }
+};
+
+export const formatReadableDate = (dateKey: string): string => {
+  try {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  } catch {
+    return dateKey;
+  }
+};
+
 interface CartAppProps {
   business?: Restaurant | null;
   onNavigate?: (path: string) => void;
@@ -251,6 +314,35 @@ export const CartApp: React.FC<CartAppProps> = ({
   const [isSettlingShift, setIsSettlingShift] = useState(false);
   const [settlementSuccess, setSettlementSuccess] = useState<string | null>(null);
   const [billingFilter, setBillingFilter] = useState<'ALL' | 'PAID' | 'UNPAID' | 'CANCELLED'>('ALL');
+
+  // Real-time Day-Wise Attribution & Automatic Shift Rollover
+  const cartTimezone = currentCart?.timezone || 'Asia/Kolkata';
+  const [activeBusinessDate, setActiveBusinessDate] = useState<string>(() =>
+    getOperationalBusinessDate(new Date(), 4, cartTimezone)
+  );
+  // selectedDateFilter: 'TODAY' | 'YESTERDAY' | 'ALL_TIME' | 'YYYY-MM-DD'
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('TODAY');
+  const [dateRolloverNotice, setDateRolloverNotice] = useState<string | null>(null);
+
+  // Periodic operational business date check for real-time rollover (every 10s)
+  useEffect(() => {
+    const checkRollover = () => {
+      const currentOpDate = getOperationalBusinessDate(new Date(), 4, cartTimezone);
+      if (currentOpDate !== activeBusinessDate) {
+        console.log(`[CartApp] Operational shift rolled over from ${activeBusinessDate} to ${currentOpDate}`);
+        const prevDateLabel = formatReadableDate(activeBusinessDate);
+        const newDateLabel = formatReadableDate(currentOpDate);
+        setActiveBusinessDate(currentOpDate);
+        setDateRolloverNotice(`Operational shift rolled over to ${newDateLabel}. Shift for ${prevDateLabel} has been archived to historical records.`);
+      }
+    };
+    const interval = setInterval(checkRollover, 10000);
+    return () => clearInterval(interval);
+  }, [activeBusinessDate, cartTimezone]);
+
+  const yesterdayBusinessDate = useMemo(() => {
+    return getPreviousBusinessDate(activeBusinessDate);
+  }, [activeBusinessDate]);
 
   // Sync settings inputs when currentCart loads
   useEffect(() => {
@@ -898,46 +990,136 @@ export const CartApp: React.FC<CartAppProps> = ({
     });
   }, [liveOrders, lookupQuery]);
 
-  // Metrics for overview & settlement
-  const todayTotalSales = liveOrders
+  // ==========================================
+  // REAL-TIME DAY-WISE HISTORICAL ENGINE
+  // ==========================================
+
+  // Day-by-Day Historical Records grouped by operational business day
+  const dayWiseRecords = useMemo(() => {
+    const map = new Map<string, { dateKey: string; orders: Order[] }>();
+
+    liveOrders.forEach((order) => {
+      const dateKey = getOperationalBusinessDate(order.createdAt, 4, cartTimezone);
+      if (!map.has(dateKey)) {
+        map.set(dateKey, { dateKey, orders: [] });
+      }
+      map.get(dateKey)!.orders.push(order);
+    });
+
+    // Ensure activeBusinessDate is always present in historical records
+    if (!map.has(activeBusinessDate)) {
+      map.set(activeBusinessDate, { dateKey: activeBusinessDate, orders: [] });
+    }
+
+    const records = Array.from(map.values()).map(({ dateKey, orders }) => {
+      const isToday = dateKey === activeBusinessDate;
+      const isYesterday = dateKey === yesterdayBusinessDate;
+      const validOrders = orders.filter((o) => o.status !== 'CANCELLED');
+      const grossSales = validOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const upiSales = validOrders
+        .filter((o) => o.paymentMethod === 'UPI')
+        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const cashSales = validOrders
+        .filter((o) => o.paymentMethod === 'CASH' || !o.paymentMethod)
+        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const fulfilledCount = orders.filter(
+        (o) => o.status === 'COMPLETED' || o.pickupStatus === 'REDEEMED'
+      ).length;
+      const cancelledCount = orders.filter((o) => o.status === 'CANCELLED').length;
+      const aov = validOrders.length > 0 ? Math.round(grossSales / validOrders.length) : 0;
+      const channelQR = orders.filter((o) => o.orderType !== 'COUNTER_WALK_IN').length;
+      const channelPOS = orders.filter((o) => o.orderType === 'COUNTER_WALK_IN').length;
+
+      const formattedDate = formatReadableDate(dateKey);
+      let shortLabel = formattedDate;
+      if (isToday) {
+        shortLabel = `Today (${formattedDate})`;
+      } else if (isYesterday) {
+        shortLabel = `Yesterday (${formattedDate})`;
+      }
+
+      return {
+        dateKey,
+        formattedDate,
+        shortLabel,
+        isToday,
+        isYesterday,
+        status: isToday ? ('LIVE_SHIFT' as const) : ('SETTLED_ARCHIVED' as const),
+        ordersCount: orders.length,
+        fulfilledCount,
+        cancelledCount,
+        grossSales,
+        upiSales,
+        cashSales,
+        averageOrderValue: aov,
+        channelQR,
+        channelPOS,
+        orders,
+      };
+    });
+
+    return records.sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+  }, [liveOrders, activeBusinessDate, yesterdayBusinessDate, cartTimezone]);
+
+  // Orders filtered by the selected date period (Today / Yesterday / Specific Date / All-Time)
+  const effectiveDateOrders = useMemo(() => {
+    if (selectedDateFilter === 'ALL_TIME') {
+      return liveOrders;
+    }
+    const targetDateKey =
+      selectedDateFilter === 'TODAY'
+        ? activeBusinessDate
+        : selectedDateFilter === 'YESTERDAY'
+        ? yesterdayBusinessDate
+        : selectedDateFilter;
+
+    return liveOrders.filter((o) => {
+      const orderDateKey = getOperationalBusinessDate(o.createdAt, 4, cartTimezone);
+      return orderDateKey === targetDateKey;
+    });
+  }, [liveOrders, selectedDateFilter, activeBusinessDate, yesterdayBusinessDate, cartTimezone]);
+
+  // Dynamic Metrics derived for the selected period
+  const todayTotalSales = effectiveDateOrders
     .filter((o) => o.status !== 'CANCELLED')
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const upiSales = liveOrders
+  const upiSales = effectiveDateOrders
     .filter((o) => o.status !== 'CANCELLED' && o.paymentMethod === 'UPI')
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const cashSales = liveOrders
+  const cashSales = effectiveDateOrders
     .filter((o) => o.status !== 'CANCELLED' && (o.paymentMethod === 'CASH' || !o.paymentMethod))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
   // Completed, Cancelled, and Unpaid Orders metrics
   const completedOrders = useMemo(() => {
-    return liveOrders.filter((o) => o.status === 'COMPLETED' || o.pickupStatus === 'REDEEMED');
-  }, [liveOrders]);
+    return effectiveDateOrders.filter((o) => o.status === 'COMPLETED' || o.pickupStatus === 'REDEEMED');
+  }, [effectiveDateOrders]);
 
   const cancelledOrders = useMemo(() => {
-    return liveOrders.filter((o) => o.status === 'CANCELLED');
-  }, [liveOrders]);
+    return effectiveDateOrders.filter((o) => o.status === 'CANCELLED');
+  }, [effectiveDateOrders]);
 
   const activeNonCompletedOrders = useMemo(() => {
-    return liveOrders.filter((o) => !['COMPLETED', 'CANCELLED'].includes(o.status) && o.pickupStatus !== 'REDEEMED');
-  }, [liveOrders]);
+    return effectiveDateOrders.filter((o) => !['COMPLETED', 'CANCELLED'].includes(o.status) && o.pickupStatus !== 'REDEEMED');
+  }, [effectiveDateOrders]);
 
   const pendingUnpaidOrders = useMemo(() => {
-    return liveOrders.filter((o) => o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
-  }, [liveOrders]);
+    return effectiveDateOrders.filter((o) => o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
+  }, [effectiveDateOrders]);
 
   const unpaidSales = useMemo(() => {
     return pendingUnpaidOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   }, [pendingUnpaidOrders]);
 
   const averageTicketSize = useMemo(() => {
-    return liveOrders.length > 0 ? Math.round(todayTotalSales / liveOrders.length) : 0;
-  }, [liveOrders.length, todayTotalSales]);
+    const validCount = effectiveDateOrders.filter((o) => o.status !== 'CANCELLED').length;
+    return validCount > 0 ? Math.round(todayTotalSales / validCount) : 0;
+  }, [effectiveDateOrders, todayTotalSales]);
 
-  // Best Selling Items aggregated from real orders
+  // Best Selling Items aggregated from effectiveDateOrders
   const bestSellers = useMemo(() => {
     const counts: Record<string, { name: string; category: string; quantity: number; revenue: number }> = {};
-    liveOrders.forEach((o) => {
+    effectiveDateOrders.forEach((o) => {
       if (o.status !== 'CANCELLED') {
         (o.items || []).forEach((it: any) => {
           const key = it.name || 'Item';
@@ -955,13 +1137,13 @@ export const CartApp: React.FC<CartAppProps> = ({
       }
     });
     return Object.values(counts).sort((a, b) => b.quantity - a.quantity);
-  }, [liveOrders]);
+  }, [effectiveDateOrders]);
 
-  // Hourly order distribution (8 AM - 11 PM)
+  // Hourly order distribution (8 AM - 11 PM) for selected date
   const hourlyDistribution = useMemo(() => {
     const hours: Record<number, number> = {};
     for (let h = 8; h <= 23; h++) hours[h] = 0;
-    liveOrders.forEach((o) => {
+    effectiveDateOrders.forEach((o) => {
       if (o.createdAt) {
         const d = new Date(o.createdAt);
         const h = d.getHours();
@@ -969,21 +1151,21 @@ export const CartApp: React.FC<CartAppProps> = ({
       }
     });
     return hours;
-  }, [liveOrders]);
+  }, [effectiveDateOrders]);
 
   // Filtered Billing Orders
   const filteredBillingOrders = useMemo(() => {
     if (billingFilter === 'PAID') {
-      return liveOrders.filter((o) => o.paymentStatus === 'PAID');
+      return effectiveDateOrders.filter((o) => o.paymentStatus === 'PAID');
     }
     if (billingFilter === 'UNPAID') {
-      return liveOrders.filter((o) => o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
+      return effectiveDateOrders.filter((o) => o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
     }
     if (billingFilter === 'CANCELLED') {
-      return liveOrders.filter((o) => o.status === 'CANCELLED');
+      return effectiveDateOrders.filter((o) => o.status === 'CANCELLED');
     }
-    return liveOrders;
-  }, [liveOrders, billingFilter]);
+    return effectiveDateOrders;
+  }, [effectiveDateOrders, billingFilter]);
 
   // Menu Categories & Filtered Menu Items
   const menuCategories = useMemo(() => {
@@ -1057,7 +1239,7 @@ export const CartApp: React.FC<CartAppProps> = ({
 
   const handleExportSettlementCsv = () => {
     const headers = ['Order ID', 'Date Time', 'Customer', 'Items Summary', 'Channel', 'Payment Status', 'Payment Method', 'Amount INR', 'Pickup Code', 'Status'];
-    const rows = liveOrders.map((o) => [
+    const rows = effectiveDateOrders.map((o) => [
       `"${o.displayOrderNumber || o.id}"`,
       `"${new Date(o.createdAt || Date.now()).toLocaleString()}"`,
       `"${o.customerName || 'Storefront Guest'}"`,
@@ -1073,7 +1255,15 @@ export const CartApp: React.FC<CartAppProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `cart-daily-settlement-${new Date().toISOString().slice(0, 10)}.csv`);
+    const dateLabel =
+      selectedDateFilter === 'ALL_TIME'
+        ? 'all-time'
+        : selectedDateFilter === 'TODAY'
+        ? activeBusinessDate
+        : selectedDateFilter === 'YESTERDAY'
+        ? yesterdayBusinessDate
+        : selectedDateFilter;
+    link.setAttribute('download', `cart-daily-settlement-${dateLabel}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -3178,25 +3368,155 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
             )}
 
+            {/* Real-Time Operational Rollover Alert Banner */}
+            {dateRolloverNotice && (
+              <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-3 animate-in fade-in">
+                <RotateCcw className="w-5 h-5 text-amber-400 shrink-0 animate-spin" />
+                <div className="flex-1 font-mono font-medium">{dateRolloverNotice}</div>
+                <button onClick={() => setDateRolloverNotice(null)} className="text-amber-400 hover:text-white text-sm">✕</button>
+              </div>
+            )}
+
+            {/* Day-Wise Operational Shift Selector Bar */}
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Select Shift:</span>
+                </div>
+
+                {/* Today Chip */}
+                <button
+                  onClick={() => setSelectedDateFilter('TODAY')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    selectedDateFilter === 'TODAY'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-950/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-slate-950 animate-pulse' : 'bg-emerald-400'}`} />
+                  <span>Today ({formatReadableDate(activeBusinessDate)})</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-black/20 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
+                    {dayWiseRecords.find((r) => r.isToday)?.ordersCount || 0}
+                  </span>
+                </button>
+
+                {/* Yesterday Chip */}
+                <button
+                  onClick={() => setSelectedDateFilter('YESTERDAY')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    selectedDateFilter === 'YESTERDAY'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-950/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+                  }`}
+                >
+                  <Clock className="w-3 h-3" />
+                  <span>Yesterday ({formatReadableDate(yesterdayBusinessDate)})</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedDateFilter === 'YESTERDAY' ? 'bg-black/20 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
+                    {dayWiseRecords.find((r) => r.isYesterday)?.ordersCount || 0}
+                  </span>
+                </button>
+
+                {/* Past Shift Dates Dropdown */}
+                {dayWiseRecords.filter((r) => !r.isToday && !r.isYesterday).length > 0 && (
+                  <select
+                    value={!['TODAY', 'YESTERDAY', 'ALL_TIME'].includes(selectedDateFilter) ? selectedDateFilter : ''}
+                    onChange={(e) => {
+                      if (e.target.value) setSelectedDateFilter(e.target.value);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-white/5 border border-white/10 transition-all cursor-pointer ${
+                      !['TODAY', 'YESTERDAY', 'ALL_TIME'].includes(selectedDateFilter)
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                        : 'text-slate-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <option value="" disabled className="bg-slate-900 text-slate-400">Past Shift Records...</option>
+                    {dayWiseRecords
+                      .filter((r) => !r.isToday && !r.isYesterday)
+                      .map((r) => (
+                        <option key={r.dateKey} value={r.dateKey} className="bg-slate-900 text-white">
+                          {r.formattedDate} ({r.ordersCount} orders • ₹{r.grossSales})
+                        </option>
+                      ))}
+                  </select>
+                )}
+
+                {/* All-Time Chip */}
+                <button
+                  onClick={() => setSelectedDateFilter('ALL_TIME')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedDateFilter === 'ALL_TIME'
+                      ? 'bg-purple-500 text-white shadow-md shadow-purple-950/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>All-Time Ledger ({liveOrders.length})</span>
+                </button>
+              </div>
+
+              {/* Shift Rollover Live Indicator */}
+              <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Shift Rollover: 04:00 AM IST</span>
+                <span className="text-white/20">•</span>
+                <span className="text-slate-300">Live Auto-Updating</span>
+              </div>
+            </div>
+
             {/* Shift & Timezone Telemetry Card */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.02] border border-white/10 backdrop-blur-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                  selectedDateFilter === 'TODAY'
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : selectedDateFilter === 'YESTERDAY'
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                    : selectedDateFilter === 'ALL_TIME'
+                    ? 'bg-purple-500/10 border-purple-500/20 text-purple-400'
+                    : 'bg-sky-500/10 border-sky-500/20 text-sky-400'
+                }`}>
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">Active Business Day</div>
+                  <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                    {selectedDateFilter === 'TODAY'
+                      ? 'Active Live Business Day'
+                      : selectedDateFilter === 'YESTERDAY'
+                      ? 'Yesterday (Settled Record)'
+                      : selectedDateFilter === 'ALL_TIME'
+                      ? 'All-Time Shift Aggregate'
+                      : 'Historical Archived Shift'}
+                  </div>
                   <div className="text-base font-bold text-white flex items-center gap-2 mt-0.5">
-                    <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
-                      ● SHIFT OPEN
+                    <span>
+                      {selectedDateFilter === 'TODAY'
+                        ? formatReadableDate(activeBusinessDate)
+                        : selectedDateFilter === 'YESTERDAY'
+                        ? formatReadableDate(yesterdayBusinessDate)
+                        : selectedDateFilter === 'ALL_TIME'
+                        ? `All Records (${dayWiseRecords.length} Shifts Total)`
+                        : formatReadableDate(selectedDateFilter)}
                     </span>
+                    {selectedDateFilter === 'TODAY' ? (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
+                        ● SHIFT OPEN
+                      </span>
+                    ) : selectedDateFilter === 'ALL_TIME' ? (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30 font-bold">
+                        ● AGGREGATED
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-500/15 text-slate-400 border border-white/10 font-bold">
+                        ✓ SETTLED & ARCHIVED
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
               <div className="text-xs text-slate-400 space-y-0.5 text-left sm:text-right font-mono">
-                <div>Timezone: <strong className="text-slate-200">{currentCart?.timezone || 'Asia/Kolkata'}</strong></div>
+                <div>Timezone: <strong className="text-slate-200">{cartTimezone}</strong></div>
                 <div>Auto-Rollover: <strong className="text-amber-300">04:00 AM Daily</strong> (Preserves historical sales)</div>
               </div>
             </div>
@@ -3206,7 +3526,7 @@ export const CartApp: React.FC<CartAppProps> = ({
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
                 <div className="text-[10px] text-slate-400 font-mono uppercase">Gross Sales</div>
                 <div className="text-xl font-bold font-mono text-white">₹{todayTotalSales}</div>
-                <div className="text-[10px] text-emerald-400 font-mono">{liveOrders.length} orders total</div>
+                <div className="text-[10px] text-emerald-400 font-mono">{effectiveDateOrders.length} orders total</div>
               </div>
 
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1">
@@ -3246,7 +3566,14 @@ export const CartApp: React.FC<CartAppProps> = ({
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-slate-400" />
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-                    Today's Settlement Order Ledger ({filteredBillingOrders.length})
+                    {selectedDateFilter === 'TODAY'
+                      ? "Today's Active Shift"
+                      : selectedDateFilter === 'YESTERDAY'
+                      ? "Yesterday's Settled Shift"
+                      : selectedDateFilter === 'ALL_TIME'
+                      ? 'All-Time Aggregated'
+                      : `${formatReadableDate(selectedDateFilter)} Shift`}{' '}
+                    Settlement Order Ledger ({filteredBillingOrders.length})
                   </h3>
                 </div>
 
@@ -3368,6 +3695,102 @@ export const CartApp: React.FC<CartAppProps> = ({
               </p>
             </div>
 
+            {/* Real-Time Operational Rollover Alert Banner */}
+            {dateRolloverNotice && (
+              <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-3 animate-in fade-in">
+                <RotateCcw className="w-5 h-5 text-amber-400 shrink-0 animate-spin" />
+                <div className="flex-1 font-mono font-medium">{dateRolloverNotice}</div>
+                <button onClick={() => setDateRolloverNotice(null)} className="text-amber-400 hover:text-white text-sm">✕</button>
+              </div>
+            )}
+
+            {/* Day-Wise Operational Shift Selector Bar */}
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Shift Period:</span>
+                </div>
+
+                {/* Today Chip */}
+                <button
+                  onClick={() => setSelectedDateFilter('TODAY')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    selectedDateFilter === 'TODAY'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-950/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-slate-950 animate-pulse' : 'bg-emerald-400'}`} />
+                  <span>Today ({formatReadableDate(activeBusinessDate)})</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-black/20 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
+                    {dayWiseRecords.find((r) => r.isToday)?.ordersCount || 0}
+                  </span>
+                </button>
+
+                {/* Yesterday Chip */}
+                <button
+                  onClick={() => setSelectedDateFilter('YESTERDAY')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    selectedDateFilter === 'YESTERDAY'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-950/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+                  }`}
+                >
+                  <Clock className="w-3 h-3" />
+                  <span>Yesterday ({formatReadableDate(yesterdayBusinessDate)})</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedDateFilter === 'YESTERDAY' ? 'bg-black/20 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
+                    {dayWiseRecords.find((r) => r.isYesterday)?.ordersCount || 0}
+                  </span>
+                </button>
+
+                {/* Past Shift Dates Dropdown */}
+                {dayWiseRecords.filter((r) => !r.isToday && !r.isYesterday).length > 0 && (
+                  <select
+                    value={!['TODAY', 'YESTERDAY', 'ALL_TIME'].includes(selectedDateFilter) ? selectedDateFilter : ''}
+                    onChange={(e) => {
+                      if (e.target.value) setSelectedDateFilter(e.target.value);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-white/5 border border-white/10 transition-all cursor-pointer ${
+                      !['TODAY', 'YESTERDAY', 'ALL_TIME'].includes(selectedDateFilter)
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                        : 'text-slate-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <option value="" disabled className="bg-slate-900 text-slate-400">Past Shift Records...</option>
+                    {dayWiseRecords
+                      .filter((r) => !r.isToday && !r.isYesterday)
+                      .map((r) => (
+                        <option key={r.dateKey} value={r.dateKey} className="bg-slate-900 text-white">
+                          {r.formattedDate} ({r.ordersCount} orders • ₹{r.grossSales})
+                        </option>
+                      ))}
+                  </select>
+                )}
+
+                {/* All-Time Chip */}
+                <button
+                  onClick={() => setSelectedDateFilter('ALL_TIME')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedDateFilter === 'ALL_TIME'
+                      ? 'bg-purple-500 text-white shadow-md shadow-purple-950/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>All-Time Aggregate ({liveOrders.length})</span>
+                </button>
+              </div>
+
+              {/* Shift Rollover Live Telemetry */}
+              <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Shift Rollover: 04:00 AM IST</span>
+                <span className="text-white/20">•</span>
+                <span className="text-slate-300">Live Auto-Updating</span>
+              </div>
+            </div>
+
             {/* Performance Stat Cards (4-grid) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
@@ -3398,7 +3821,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                   <Smartphone className="w-4 h-4 text-sky-400" />
                 </div>
                 <div className="text-xl font-bold font-mono text-sky-300">
-                  {liveOrders.filter((o) => o.orderType !== 'COUNTER_WALK_IN').length} QR / {liveOrders.filter((o) => o.orderType === 'COUNTER_WALK_IN').length} POS
+                  {effectiveDateOrders.filter((o) => o.orderType !== 'COUNTER_WALK_IN').length} QR / {effectiveDateOrders.filter((o) => o.orderType === 'COUNTER_WALK_IN').length} POS
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
                   Mobile storefront vs counter walk-in
@@ -3522,6 +3945,136 @@ export const CartApp: React.FC<CartAppProps> = ({
                 <div className="p-3 bg-white/[0.02] rounded-xl border border-white/5 text-[11px] text-slate-400 font-mono mt-4">
                   💡 Peak revenue windows automatically feed kitchen preparation prep timers.
                 </div>
+              </div>
+            </div>
+
+            {/* Day-by-Day Historical Records & Shift Ledger Table */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                <div>
+                  <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-amber-400" />
+                    <span>Daily Shift History & Historical Records Ledger ({dayWiseRecords.length} Shifts)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Authoritative day-wise segregation. When date changes, today rolls into previous day records in real time.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Real-Time Shift Engine Active
+                  </span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse font-mono">
+                  <thead>
+                    <tr className="border-b border-white/10 text-slate-400 text-[11px]">
+                      <th className="py-2.5 px-3">Business Date</th>
+                      <th className="py-2.5 px-3">Shift Status</th>
+                      <th className="py-2.5 px-3">Orders (Done / Total)</th>
+                      <th className="py-2.5 px-3">Gross Sales</th>
+                      <th className="py-2.5 px-3">Cash vs UPI</th>
+                      <th className="py-2.5 px-3">Average Order</th>
+                      <th className="py-2.5 px-3">Channel (QR / POS)</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {dayWiseRecords.map((record) => {
+                      const isSelected =
+                        (selectedDateFilter === 'TODAY' && record.isToday) ||
+                        (selectedDateFilter === 'YESTERDAY' && record.isYesterday) ||
+                        selectedDateFilter === record.dateKey;
+
+                      return (
+                        <tr
+                          key={record.dateKey}
+                          className={`hover:bg-white/[0.04] transition-colors ${
+                            isSelected ? 'bg-amber-500/10 border-l-2 border-l-amber-400' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-white flex items-center gap-2">
+                              <span>{record.formattedDate}</span>
+                              {record.isToday && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                                  TODAY
+                                </span>
+                              )}
+                              {record.isYesterday && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">
+                                  YESTERDAY
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500">{record.dateKey}</div>
+                          </td>
+
+                          <td className="py-3 px-3">
+                            {record.isToday ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                LIVE ACTIVE SHIFT
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/10 text-[10px] font-bold">
+                                <CheckCircle className="w-3 h-3 text-slate-400" />
+                                SETTLED & ARCHIVED
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <span className="text-white font-bold">{record.fulfilledCount}</span>
+                            <span className="text-slate-400"> / {record.ordersCount}</span>
+                            {record.cancelledCount > 0 && (
+                              <span className="text-rose-400 text-[10px] ml-1">({record.cancelledCount} canc)</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <span className="text-emerald-400 font-bold text-sm">₹{record.grossSales}</span>
+                          </td>
+
+                          <td className="py-3 px-3 text-slate-300">
+                            <span className="text-amber-300">₹{record.cashSales} Cash</span>
+                            <span className="text-slate-500 mx-1">/</span>
+                            <span className="text-sky-300">₹{record.upiSales} UPI</span>
+                          </td>
+
+                          <td className="py-3 px-3 text-slate-300 font-bold">
+                            ₹{record.averageOrderValue}
+                          </td>
+
+                          <td className="py-3 px-3 text-slate-400">
+                            {record.channelQR} QR / {record.channelPOS} POS
+                          </td>
+
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              onClick={() => {
+                                if (record.isToday) setSelectedDateFilter('TODAY');
+                                else if (record.isYesterday) setSelectedDateFilter('YESTERDAY');
+                                else setSelectedDateFilter(record.dateKey);
+                              }}
+                              className={`px-3 py-1 rounded-lg text-[11px] font-bold font-mono transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-amber-400 text-slate-950 shadow-sm'
+                                  : 'bg-white/5 hover:bg-white/15 text-slate-300 border border-white/10'
+                              }`}
+                            >
+                              {isSelected ? 'Viewing' : 'Inspect Day'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
