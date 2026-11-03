@@ -1466,8 +1466,8 @@ export const CartApp: React.FC<CartAppProps> = ({
           <div className="flex items-center justify-between pb-3 border-b border-[#1a1f2b]">
             <DinelyLogo size="sm" />
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded">
-                Food Cart OS
+              <span className="text-[10px] font-medium text-slate-400 bg-white/[0.05] border border-white/10 px-2 py-0.5 rounded">
+                Terminal
               </span>
               <button
                 onClick={() => setIsMobileNavOpen(false)}
@@ -1488,7 +1488,7 @@ export const CartApp: React.FC<CartAppProps> = ({
             className="w-full px-3 py-2 rounded-xl bg-[#11151e] hover:bg-[#181d2a] border border-[#212737] text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-between transition-all cursor-pointer group"
           >
             <div className="flex items-center gap-2">
-              <Grid className="w-3.5 h-3.5 text-sky-400" />
+              <Grid className="w-3.5 h-3.5 text-slate-400" />
               <span>Business Hub</span>
             </div>
             <ArrowLeft className="w-3.5 h-3.5 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
@@ -1496,16 +1496,16 @@ export const CartApp: React.FC<CartAppProps> = ({
 
           {/* Active Cart Identity */}
           <div className="p-3 bg-[#0e121a] border border-[#1d2331] rounded-xl flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-white/[0.05] border border-white/10 flex items-center justify-center text-slate-300 shrink-0">
               <Truck className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <h2 className="text-xs font-bold text-white truncate">
-                {currentCart?.name || 'Street Food Express Cart'}
+                {currentCart?.name || 'MAX KART'}
               </h2>
-              <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
-                <span>{currentCart?.city || 'Counter Station'}</span>
-                <span className="text-emerald-400 font-mono font-bold">● LIVE</span>
+              <p className="text-[10px] text-slate-400 truncate flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>Online</span>
               </p>
             </div>
           </div>
@@ -1545,7 +1545,7 @@ export const CartApp: React.FC<CartAppProps> = ({
 
         {/* Bottom Cart Status */}
         <div className="pt-3 border-t border-[#1a1f2b] flex items-center justify-between text-xs text-slate-400">
-          <span className="text-[10px] font-mono">DineFlow Food Cart v3</span>
+          <span className="text-[10px] text-slate-500 font-medium">Dinely Terminal v3</span>
           {onLogout && (
             <button
               onClick={onLogout}
@@ -1589,82 +1589,52 @@ export const CartApp: React.FC<CartAppProps> = ({
         {/* Sub-View: Order Receiving Terminal (Standard Small Cart OS Primary Operational View) */}
         {(activeTab === 'terminal' || activeTab === 'pos' || activeTab === 'orders') && (
           <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full overflow-y-auto">
-            {/* KDS Liquid-Glass Top Control Bar */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500/20 to-teal-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg">
-                  <ChefHat className="w-6 h-6 text-amber-400" />
+            {/* Top Control Bar (Clean SaaS Terminal Header) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-xl font-bold text-white tracking-tight">Order Terminal</h1>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-white/[0.06] text-slate-300 border border-white/10 font-medium">
+                    {currentCart?.name || 'MAX KART'}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-medium pl-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Online
+                  </span>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                      <span>{currentCart?.name || 'MAX KART'}</span>
-                      <span className="text-slate-400 font-normal text-sm sm:text-base">Order Terminal</span>
-                    </h1>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Dispatch
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">
-                    Authoritative food cart bump board, elapsed prep timers, and pickup code verification
-                  </p>
-                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Incoming orders and ticket management
+                </p>
               </div>
 
-              {/* Utility Controls: Live Clock, Sound Chime, Refresh, Quick POS, Customer QR, Sign Out */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                {/* Live Clock */}
-                {currentTime && (
-                  <div className="hidden md:flex bg-white/[0.05] backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 items-center gap-1.5 font-mono text-slate-200 text-xs">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{currentTime}</span>
-                  </div>
-                )}
-
-                {/* Audio Chime Toggle */}
-                <div className="flex items-center gap-1 bg-white/[0.05] border border-white/10 rounded-xl p-0.5">
-                  <button
-                    onClick={() => {
-                      const next = !soundAlertEnabled;
-                      setSoundAlertEnabled(next);
-                      if (next) playAlertBeep();
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all ${
-                      soundAlertEnabled ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-400 hover:text-white'
-                    }`}
-                    title={soundAlertEnabled ? 'Sound is enabled. Click to mute.' : 'Sound is muted. Click to enable.'}
-                  >
-                    {soundAlertEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-400" /> : <VolumeX className="w-3.5 h-3.5 text-rose-400" />}
-                    <span>{soundAlertEnabled ? 'Sound ON' : 'Muted'}</span>
-                  </button>
-                  {soundAlertEnabled && (
-                    <button
-                      onClick={playAlertBeep}
-                      className="px-2 py-1 text-[10px] font-mono font-bold text-slate-400 hover:text-amber-300 border-l border-white/10 transition-colors cursor-pointer"
-                      title="Test Audio Chime"
-                    >
-                      Test
-                    </button>
-                  )}
-                </div>
+              {/* Action Controls */}
+              <div className="flex items-center gap-2">
+                {/* Audio Alert Toggle */}
+                <button
+                  onClick={() => {
+                    const next = !soundAlertEnabled;
+                    setSoundAlertEnabled(next);
+                    if (next) playAlertBeep();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    soundAlertEnabled
+                      ? 'bg-white/[0.06] border-white/15 text-slate-200'
+                      : 'bg-transparent border-white/10 text-slate-500 hover:text-slate-300'
+                  }`}
+                  title={soundAlertEnabled ? 'Sound alerts enabled' : 'Sound alerts muted'}
+                >
+                  {soundAlertEnabled ? <Volume2 size={14} className="text-emerald-400" /> : <VolumeX size={14} />}
+                  <span>Sound {soundAlertEnabled ? 'On' : 'Muted'}</span>
+                </button>
 
                 {/* Refresh Orders */}
                 <button
                   onClick={fetchLiveOrders}
                   disabled={isLoadingOrders}
-                  className="p-2 rounded-xl bg-white/[0.05] border border-white/10 text-slate-300 hover:text-white cursor-pointer disabled:opacity-50 transition-all hover:bg-white/[0.08]"
+                  className="p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white cursor-pointer disabled:opacity-40 transition-colors"
                   title="Refresh Queue"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingOrders ? 'animate-spin text-amber-400' : ''}`} />
-                </button>
-
-                {/* + Walk-in Quick Counter Order */}
-                <button
-                  onClick={() => setIsQuickPosOpen(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/30 cursor-pointer transition-all"
-                >
-                  <Plus className="w-3.5 h-3.5 text-slate-950" />
-                  <span>+ Walk-in Order</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingOrders ? 'animate-spin' : ''}`} />
                 </button>
 
                 {/* Customer Storefront Link */}
@@ -1672,52 +1642,56 @@ export const CartApp: React.FC<CartAppProps> = ({
                   href={cartOrderingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-slate-200 font-medium text-xs flex items-center gap-1.5 transition-all"
+                  className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white font-medium text-xs flex items-center gap-1.5 transition-colors"
                 >
-                  <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Storefront</span>
+                  <ExternalLink size={13} />
+                  <span>Storefront</span>
                 </a>
+
+                {/* Primary CTA: Walk-in Quick Order */}
+                <button
+                  onClick={() => setIsQuickPosOpen(true)}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  <Plus size={14} strokeWidth={2.5} />
+                  <span>New Order</span>
+                </button>
 
                 {/* Sign Out */}
                 {onLogout && (
                   <button
                     onClick={onLogout}
-                    className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 flex items-center gap-1 text-xs cursor-pointer transition-all"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer ml-1"
                     title="Sign Out"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">Sign Out</span>
+                    <LogOut size={15} />
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Lightning-Fast Pickup Code Verification & Bump Bar */}
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 flex flex-col sm:flex-row items-center gap-3 shadow-xl">
-              <div className="flex items-center gap-2 text-amber-400 shrink-0">
-                <Ticket className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-mono font-bold uppercase tracking-wider">Pickup Code Verification</span>
-              </div>
+            {/* Pickup Code Verification Bar */}
+            <div className="p-2 sm:p-2.5 rounded-xl bg-[#0f131a] border border-white/10 flex flex-col sm:flex-row items-center gap-2">
               <div className="flex-1 w-full relative">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Enter or scan customer pickup code (e.g. C0014, K7P4, #ORD-4)..."
+                  placeholder="Scan or enter pickup code to verify (e.g. C0019, #ORD-4)..."
                   value={lookupQuery}
                   onChange={(e) => setLookupQuery(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleLookupAndVerify(lookupQuery);
                   }}
-                  className="w-full px-4 py-2 pl-9 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono tracking-wider font-bold transition-colors"
+                  className="w-full px-3 py-2 pl-9 rounded-lg bg-white/[0.03] border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-white/30 font-mono tracking-wider transition-colors"
                 />
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
               </div>
               <button
                 onClick={() => handleLookupAndVerify(lookupQuery)}
                 disabled={!lookupQuery.trim() || isRedeeming}
-                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shrink-0 shadow-lg shadow-amber-900/30"
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 transition-colors shrink-0 border border-white/10"
               >
-                <Check className="w-4 h-4" />
-                <span>{isRedeeming ? 'Verifying...' : 'Verify & Hand Over'}</span>
+                <Check className="w-3.5 h-3.5" />
+                <span>{isRedeeming ? 'Verifying...' : 'Verify Pickup'}</span>
               </button>
             </div>
 
@@ -1730,8 +1704,8 @@ export const CartApp: React.FC<CartAppProps> = ({
             )}
 
             {redemptionSuccess && (
-              <div className="p-4 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-center gap-3 shadow-md animate-in fade-in">
-                <Ticket className="w-5 h-5 shrink-0 text-amber-400" />
+              <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-200 text-xs flex items-center gap-3 shadow-md animate-in fade-in">
+                <Ticket className="w-5 h-5 shrink-0 text-emerald-400" />
                 <span className="font-bold">{redemptionSuccess}</span>
               </div>
             )}
@@ -1743,32 +1717,31 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
             )}
 
-            {/* KDS Stage Filter Tabs & Live Ticket Search */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white/[0.03] backdrop-blur-xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scrollbar-none pb-1 lg:pb-0">
+            {/* Queue Filter Tabs & Live Ticket Search */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scrollbar-none">
                 {[
-                  { id: 'ACTIVE', label: 'All Active Queue', count: activeQueueCount, icon: <Flame className="w-3.5 h-3.5 text-amber-400" /> },
-                  { id: 'NEW', label: '1. New Incoming', count: newOrdersCount, icon: <BellRing className="w-3.5 h-3.5 text-amber-300" /> },
-                  { id: 'PREPARING', label: '2. Cooking', count: preparingOrdersCount, icon: <ChefHat className="w-3.5 h-3.5 text-sky-400" /> },
-                  { id: 'READY', label: '3. Ready at Pass', count: readyOrdersCount, icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> },
-                  { id: 'COMPLETED', label: 'Shift History', count: completedOrdersCount, icon: <Clock className="w-3.5 h-3.5 text-slate-400" /> },
-                  { id: 'CANCELLED', label: 'Cancelled', count: cancelledOrdersCount, icon: <XCircle className="w-3.5 h-3.5 text-rose-400" /> },
+                  { id: 'ACTIVE', label: 'All Orders', count: activeQueueCount },
+                  { id: 'NEW', label: 'Incoming', count: newOrdersCount },
+                  { id: 'PREPARING', label: 'In Kitchen', count: preparingOrdersCount },
+                  { id: 'READY', label: 'Ready', count: readyOrdersCount },
+                  { id: 'COMPLETED', label: 'Completed', count: completedOrdersCount },
+                  { id: 'CANCELLED', label: 'Cancelled', count: cancelledOrdersCount },
                 ].map((tab) => {
                   const isSelected = terminalFilter === tab.id;
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setTerminalFilter(tab.id as any)}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all shrink-0 cursor-pointer active:scale-95 ${
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
                         isSelected
-                          ? 'bg-gradient-to-r from-amber-500/25 to-amber-600/20 text-amber-300 border border-amber-400/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
-                          : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
+                          ? 'bg-white/10 text-white font-semibold'
+                          : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
                       }`}
                     >
-                      {tab.icon}
                       <span>{tab.label}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                        isSelected ? 'bg-amber-500/30 text-amber-200 border border-amber-400/40' : 'bg-white/10 text-slate-400'
+                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+                        isSelected ? 'bg-white/20 text-white font-bold' : 'bg-white/5 text-slate-500'
                       }`}>
                         {tab.count}
                       </span>
@@ -1778,19 +1751,19 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
 
               {/* Search filter input */}
-              <div className="w-full lg:w-72 relative shrink-0">
+              <div className="w-full sm:w-60 relative shrink-0">
                 <input
                   type="text"
-                  placeholder="Filter ticket, dish, customer..."
+                  placeholder="Search orders..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 pl-8 rounded-xl bg-black/40 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono transition-colors"
+                  className="w-full px-3 py-1.5 pl-8 rounded-lg bg-white/[0.03] border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-white/25 transition-colors"
                 />
                 <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="text-slate-400 hover:text-white absolute right-2.5 top-2 text-xs"
+                    className="text-slate-400 hover:text-white absolute right-2.5 top-1.5 text-xs"
                   >
                     ×
                   </button>
@@ -1800,72 +1773,39 @@ export const CartApp: React.FC<CartAppProps> = ({
 
             {/* Orders Stream / Empty State */}
             {displayedTerminalOrders.length === 0 ? (
-              <div className="p-8 sm:p-12 rounded-3xl bg-white/[0.02] backdrop-blur-2xl border border-white/10 shadow-2xl flex flex-col items-center justify-center text-center space-y-6">
-                <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.15)]">
-                  <BellRing className="w-8 h-8 animate-pulse" />
+              <div className="p-12 sm:p-16 rounded-2xl bg-[#0e1118]/60 border border-white/[0.08] flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-12 h-12 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-slate-400">
+                  <ShoppingBag className="w-6 h-6 stroke-[1.5]" />
                 </div>
-                <div className="space-y-1.5 max-w-md">
-                  <h3 className="text-xl font-black text-white font-sans tracking-tight">
-                    {searchQuery
-                      ? `No orders matching "${searchQuery}"`
-                      : terminalFilter === 'ACTIVE'
-                      ? 'Active Ticket Queue Clear'
-                      : `No Orders in "${terminalFilter}" Stage`}
+                <div className="space-y-1 max-w-sm">
+                  <h3 className="text-base font-semibold text-white">
+                    {searchQuery ? `No orders found for "${searchQuery}"` : 'No active orders'}
                   </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed font-mono">
+                  <p className="text-xs text-slate-400 leading-normal">
                     {searchQuery
-                      ? 'Try adjusting your search query or clear the filter.'
-                      : 'Incoming customer QR orders & counter walk-in tickets appear here automatically with real-time chimes.'}
+                      ? 'Try searching with a different customer name, token, or order ID.'
+                      : 'New orders placed via QR code or walk-in counter will appear here in real time.'}
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <div className="flex items-center gap-2.5 pt-2">
                   <button
                     onClick={() => setIsQuickPosOpen(true)}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-amber-950/40 transition-all cursor-pointer active:scale-95"
+                    className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>+ Punch Walk-in Order</span>
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>New Order</span>
                   </button>
 
                   <a
                     href={cartOrderingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+                    className="px-3.5 py-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <ExternalLink className="w-4 h-4 text-amber-400" />
-                    <span>Test Customer Storefront</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>View Storefront</span>
                   </a>
-
-                  <button
-                    onClick={() => {
-                      fetchLiveOrders();
-                      playKitchenChime('BUMP');
-                    }}
-                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-mono text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Refresh Feed</span>
-                  </button>
-                </div>
-
-                {/* Real-time Telemetry Status Bar */}
-                <div className="flex flex-wrap items-center justify-center gap-4 pt-4 border-t border-white/5 text-[11px] font-mono text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span className="text-emerald-400 font-bold">WebSocket Connected</span>
-                  </div>
-                  <div className="text-white/20">•</div>
-                  <div className="flex items-center gap-1.5">
-                    <Volume2 className="w-3.5 h-3.5 text-sky-400" />
-                    <span>WebAudio Chime: Armed</span>
-                  </div>
-                  <div className="text-white/20">•</div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Station: {cartId || 'Food Cart'}</span>
-                  </div>
                 </div>
               </div>
             ) : (
