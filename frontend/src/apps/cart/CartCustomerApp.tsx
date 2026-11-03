@@ -96,12 +96,10 @@ export const getStreetFoodDishImage = (item: MenuItem): string => {
 
 interface CartCustomerAppProps {
   business?: Restaurant | null;
-  onNavigateStaff?: () => void;
 }
 
 export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
   business: propBusiness,
-  onNavigateStaff,
 }) => {
   const [business, setBusiness] = useState<Restaurant | null>(propBusiness || null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -881,22 +879,13 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         {/* Top Header Floating Liquid-Glass Badges */}
         <div className="absolute top-3.5 left-3.5 right-3.5 z-10 flex items-center justify-between">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-white font-mono font-medium shadow-md">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            <span className="truncate">{isCartOpen ? 'Counter Station • Open' : 'Currently Closed'}</span>
+            <span className={`w-2 h-2 rounded-full ${isCartOpen ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-400'}`} />
+            <span className="truncate">{isCartOpen ? 'Open for Ordering' : 'Currently Closed'}</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-amber-300 font-mono font-medium shadow-md">
-              Prep: ~10m
-            </span>
-            {onNavigateStaff && (
-              <button
-                onClick={onNavigateStaff}
-                className="px-3 py-1.5 rounded-full liquid-glass-pill hover:bg-white/[0.15] text-[11px] text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
-              >
-                Staff POS
-              </button>
-            )}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-white/70 font-mono font-medium shadow-md">
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>Digital Menu</span>
           </div>
         </div>
 

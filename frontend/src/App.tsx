@@ -921,7 +921,6 @@ function AppContent() {
           return (
             <CartCustomerApp
               business={resolvedTenant}
-              onNavigateStaff={() => navigateTo('/cart')}
             />
           );
         }
@@ -1905,7 +1904,6 @@ function AppContent() {
       return (
         <CartCustomerApp
           business={currentRestaurant}
-          onNavigateStaff={() => navigateTo('/cart')}
         />
       );
     }
