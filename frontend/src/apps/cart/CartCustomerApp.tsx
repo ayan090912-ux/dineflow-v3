@@ -29,6 +29,7 @@ import {
   Store,
   Share2,
   BellRing,
+  Star,
 } from 'lucide-react';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
@@ -36,6 +37,44 @@ import { DinelyLogo, Button } from '../../packages/ui';
 import { realtimeBus } from '../../packages/api/realtime';
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { resolveCartTheme } from './cartThemes';
+
+export const getStreetFoodDishImage = (item: MenuItem): string => {
+  if (item.imageUrl && item.imageUrl.trim().length > 5) return item.imageUrl;
+  if (item.image && item.image.trim().length > 5) return item.image;
+
+  const text = `${item.name} ${item.category || ''} ${(item as any).categoryName || ''} ${item.description || ''}`.toLowerCase();
+
+  if (text.includes('fries') || text.includes('peri') || text.includes('chips') || text.includes('finger')) {
+    return 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('roll') || text.includes('wrap') || text.includes('kathi') || text.includes('frankie')) {
+    return 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('burger') || text.includes('patty') || text.includes('sandwich') || text.includes('slider')) {
+    return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('chaat') || text.includes('puri') || text.includes('samosa') || text.includes('bhel') || text.includes('tikki')) {
+    return 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('noodle') || text.includes('hakka') || text.includes('chow') || text.includes('wok') || text.includes('fried rice') || text.includes('momo') || text.includes('dimsum')) {
+    return 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('coffee') || text.includes('frappe') || text.includes('latte') || text.includes('cappuccino') || text.includes('shake') || text.includes('drink') || text.includes('beverage') || text.includes('lemonade') || text.includes('mojito') || text.includes('tea') || text.includes('chai')) {
+    return 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('brownie') || text.includes('dessert') || text.includes('cake') || text.includes('sweet') || text.includes('chocolate') || text.includes('ice cream')) {
+    return 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('paneer') || text.includes('tikka') || text.includes('curry') || text.includes('gravy')) {
+    return 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('chicken') || text.includes('meat') || text.includes('kebab') || text.includes('wings')) {
+    return 'https://images.unsplash.com/photo-1562967914-608f82629710?w=600&auto=format&fit=crop&q=80';
+  }
+
+  // Universal street food fallback
+  return 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80';
+};
 
 interface CartCustomerAppProps {
   business?: Restaurant | null;
@@ -544,49 +583,49 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
       confirmedOrder.estimatedPrepTimeMinutes || (confirmedOrder as any).estimated_prep_time_minutes || 15;
 
     return (
-      <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-black relative">
-        {/* Ambient Radial Background Glow */}
+      <div className="min-h-screen font-sans pb-12 w-full max-w-full sm:max-w-md mx-auto relative sm:border-x border-white/[0.12] liquid-glass-viewport text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border min-w-0">
+        {/* Dynamic Ambient Radiant Glows */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-          <div className="absolute -top-32 left-1/4 w-[500px] h-[500px] rounded-full blur-[140px] bg-emerald-600/10 opacity-70" />
-          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full blur-[140px] bg-teal-600/10 opacity-60" />
+          <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-[360px] h-[360px] rounded-full blur-[100px] bg-amber-500/25 pointer-events-none opacity-80" />
+          <div className="absolute top-[45%] right-0 translate-x-1/4 w-[300px] h-[300px] rounded-full blur-[110px] bg-amber-500/15 pointer-events-none opacity-60" />
         </div>
 
         {/* Top Header */}
-        <header className="sticky top-0 z-40 bg-[#07090e]/80 backdrop-blur-2xl border-b border-white/[0.08] px-4 py-3.5 shadow-xl">
-          <div className="max-w-md w-full mx-auto flex items-center justify-between">
+        <header className="sticky top-0 z-40 bg-[#0B0F15]/80 backdrop-blur-2xl border-b border-white/[0.08] px-4 py-3.5 shadow-xl">
+          <div className="w-full flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                <Truck className="w-5 h-5 text-emerald-400" />
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-950/40">
+                <Truck className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h1 className="text-sm font-bold text-white tracking-tight">{cartName}</h1>
-                <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 font-mono">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Pickup Voucher
+                <h1 className="text-sm font-black text-white tracking-tight">{cartName}</h1>
+                <span className="text-[11px] text-amber-400 font-semibold flex items-center gap-1.5 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  Live Counter Voucher
                 </span>
               </div>
             </div>
             <button
               onClick={() => setIsViewingMenu(true)}
-              className="text-xs px-3.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 transition-all font-semibold border border-white/10 flex items-center gap-1.5 active:scale-95"
+              className="text-xs px-3.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white transition-all font-bold border border-white/10 flex items-center gap-1.5 active:scale-95 cursor-pointer"
             >
               <span>Menu</span>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronRight className="w-3.5 h-3.5 text-white/50" />
             </button>
           </div>
         </header>
 
         {/* Voucher Main Content */}
-        <main className="max-w-md w-full mx-auto px-4 py-6 space-y-4 flex-1 relative z-10">
+        <main className="w-full px-4 py-5 space-y-4 flex-1 relative z-10">
           {/* HIGH VISIBILITY CELEBRATION BANNER: READY FOR PICKUP */}
           {isReady && (
-            <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-500/25 via-emerald-600/30 to-teal-500/25 border-2 border-emerald-400/80 text-emerald-200 shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-pulse text-center space-y-1">
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/25 via-amber-400/30 to-amber-500/25 border-2 border-amber-400/80 text-amber-100 shadow-[0_0_30px_rgba(245,158,11,0.35)] animate-pulse text-center space-y-1">
               <div className="flex items-center justify-center gap-2 text-white font-black text-base sm:text-lg">
-                <Sparkles className="w-5 h-5 text-emerald-300" />
+                <Sparkles className="w-5 h-5 text-amber-300" />
                 <span>🎉 YOUR FOOD IS READY!</span>
               </div>
-              <p className="text-xs text-emerald-300 font-medium">
-                Please collect your order at the cart counter. Show coupon <b>{pickupCode}</b> to staff.
+              <p className="text-xs text-amber-200/90 font-medium">
+                Please collect your order at the cart counter. Show coupon <b className="font-mono text-white underline">{pickupCode}</b> to staff.
               </p>
             </div>
           )}
@@ -602,25 +641,28 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           )}
 
           {/* Liquid-Glass Coupon Card */}
-          <div className="rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.12] p-6 sm:p-7 text-center shadow-2xl space-y-5 relative overflow-hidden">
-            <div className="space-y-1">
-              <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400 font-bold">
-                Counter Pickup Coupon
+          <div className="rounded-3xl liquid-glass-card border border-white/[0.12] p-5 sm:p-6 text-center shadow-2xl space-y-5 relative overflow-hidden">
+            {/* Ambient inner glow */}
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-48 h-20 bg-amber-500/15 blur-2xl pointer-events-none rounded-full" />
+
+            <div className="space-y-1 relative z-10">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-amber-400 font-bold">
+                Counter Pickup Token
               </span>
-              <p className="text-xs text-slate-400">Show this code at the cart counter to collect your food</p>
+              <p className="text-xs text-white/50">Show this code at the cart counter to collect your food</p>
             </div>
 
             {/* Huge Prominent Voucher Code Box */}
             <div
               className={`p-5 rounded-2xl relative border-2 border-dashed transition-all ${
                 isReady
-                  ? 'bg-emerald-500/15 border-emerald-400/80 shadow-[0_0_24px_rgba(16,185,129,0.3)]'
-                  : 'bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-emerald-500/10 border-emerald-500/40'
+                  ? 'bg-amber-500/20 border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.4)]'
+                  : 'bg-gradient-to-b from-amber-500/10 to-transparent border-amber-500/40 shadow-inner'
               }`}
             >
               <div
                 className={`text-4xl sm:text-5xl font-black tracking-widest font-mono drop-shadow-md ${
-                  isReady ? 'text-emerald-300' : 'text-emerald-400'
+                  isReady ? 'text-amber-300' : 'text-amber-400'
                 }`}
               >
                 {pickupCode}
@@ -628,58 +670,58 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
 
               <button
                 onClick={handleCopyCode}
-                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-200 transition-all border border-white/10 active:scale-95"
+                className="mt-3.5 inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-white transition-all border border-white/10 active:scale-95 cursor-pointer"
               >
-                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedCode ? 'Copied!' : 'Copy Code'}</span>
+                {copiedCode ? <Check className="w-3.5 h-3.5 text-amber-400 stroke-[3]" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCode ? 'Copied to Clipboard!' : 'Copy Code'}</span>
               </button>
             </div>
 
             {/* Real preparation time or pickup instruction */}
-            <div className="flex items-center justify-between text-xs text-slate-300 bg-white/[0.03] p-3 rounded-xl border border-white/8">
-              <div className="flex items-center gap-1.5 text-slate-300">
-                <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Estimated Preparation:</span>
+            <div className="flex items-center justify-between text-xs text-white/70 bg-white/[0.03] p-3 rounded-xl border border-white/[0.08]">
+              <div className="flex items-center gap-1.5 text-white/60">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Estimated Turnaround:</span>
               </div>
-              <span className="font-mono font-bold text-emerald-400">~{prepMinutes} mins</span>
+              <span className="font-mono font-bold text-amber-400">~{prepMinutes} mins</span>
             </div>
 
             {/* 4-Step Progress Stepper */}
-            <div className="space-y-2.5 pt-1">
+            <div className="space-y-2 pt-1">
               <div className="grid grid-cols-4 gap-1.5 text-[9px] sm:text-[10px] text-center font-bold uppercase tracking-wider font-mono">
                 {/* 1. Received */}
-                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex flex-col items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex flex-col items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 stroke-[2.5]" />
                   <span>Received</span>
                 </div>
                 {/* 2. Cooking */}
                 <div
                   className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
                     isRedeemed || isReady || isPreparing
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-bold'
-                      : 'bg-white/[0.02] text-slate-500 border-white/5'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
+                      : 'bg-white/[0.02] text-white/30 border-white/5'
                   }`}
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isPreparing ? 'animate-spin text-emerald-400' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isPreparing ? 'animate-spin text-amber-400' : ''}`} />
                   <span>Cooking</span>
                 </div>
                 {/* 3. Ready */}
                 <div
                   className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
                     isRedeemed || isReady
-                      ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400/60 font-black shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                      : 'bg-white/[0.02] text-slate-500 border-white/5'
+                      ? 'bg-amber-500/30 text-amber-200 border-amber-400/80 font-black shadow-[0_0_15px_rgba(245,158,11,0.4)] animate-pulse'
+                      : 'bg-white/[0.02] text-white/30 border-white/5'
                   }`}
                 >
-                  <Ticket className="w-3.5 h-3.5 text-emerald-400" />
+                  <Ticket className="w-3.5 h-3.5 text-amber-400" />
                   <span>Ready</span>
                 </div>
                 {/* 4. Collected */}
                 <div
                   className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
                     isRedeemed
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                      : 'bg-white/[0.02] text-slate-500 border-white/5'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-white/[0.02] text-white/30 border-white/5'
                   }`}
                 >
                   <Check className="w-3.5 h-3.5" />
@@ -689,38 +731,38 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             </div>
 
             {/* Order Items Breakdown */}
-            <div className="pt-4 border-t border-white/10 text-left space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+            <div className="pt-4 border-t border-white/[0.08] text-left space-y-2">
+              <span className="text-[11px] font-bold text-white/50 uppercase tracking-wider font-mono">
                 Order Summary
               </span>
-              <div className="space-y-1.5 text-xs text-slate-300">
+              <div className="space-y-1.5 text-xs text-white/80">
                 {confirmedOrder.items?.map((it, idx) => (
                   <div key={idx} className="flex justify-between items-center py-0.5">
                     <span className="truncate">
                       <span className="font-bold text-white font-mono">{it.quantity}x</span> {it.name}
                     </span>
-                    <span className="font-mono text-slate-400">₹{(it.price * it.quantity).toFixed(0)}</span>
+                    <span className="font-mono text-white/60">₹{(it.price * it.quantity).toFixed(0)}</span>
                   </div>
                 ))}
               </div>
-              <div className="pt-2 flex justify-between items-center border-t border-white/10 font-bold text-sm text-white">
+              <div className="pt-2 flex justify-between items-center border-t border-white/[0.08] font-bold text-sm text-white">
                 <span>Total Amount</span>
-                <span className="text-emerald-400 font-mono text-base">
+                <span className="text-amber-400 font-mono text-base font-black">
                   ₹{confirmedOrder.totalAmount?.toFixed(0) || basketTotal}
                 </span>
               </div>
             </div>
 
             {/* Customer Details */}
-            <div className="p-3 bg-white/[0.03] rounded-xl text-left text-[11px] text-slate-400 flex items-center justify-between border border-white/8">
+            <div className="p-3 bg-white/[0.03] rounded-xl text-left text-[11px] text-white/60 flex items-center justify-between border border-white/[0.08]">
               <div>
-                <span className="text-slate-500">Customer:</span>{' '}
-                <span className="text-white font-medium">{confirmedOrder.customerName || customerName}</span>
+                <span className="text-white/40">Customer:</span>{' '}
+                <span className="text-white font-semibold">{confirmedOrder.customerName || customerName}</span>
               </div>
               <div>
-                <span className="text-slate-500">Payment:</span>{' '}
-                <span className="text-emerald-300 font-medium">
-                  {confirmedOrder.paymentMethod || paymentMethod} (Pay at Pickup)
+                <span className="text-white/40">Payment:</span>{' '}
+                <span className="text-amber-400 font-semibold font-mono">
+                  {confirmedOrder.paymentMethod || paymentMethod} (Pay at Stall)
                 </span>
               </div>
             </div>
@@ -730,7 +772,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               <button
                 type="button"
                 onClick={() => setIsViewingMenu(true)}
-                className="w-full py-3 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 transition-all active:scale-98"
+                className="w-full py-3 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 transition-all active:scale-98 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Browse Menu • Order More</span>
@@ -740,9 +782,9 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 <button
                   type="button"
                   onClick={handleClearActiveOrder}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-98 shadow-[0_4px_16px_rgba(16,185,129,0.4)]"
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-98 shadow-xl shadow-amber-950/50 cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4 stroke-[3]" />
                   <span>Start New Order</span>
                 </button>
               )}
@@ -750,29 +792,30 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           </div>
         </main>
 
-        <footer className="max-w-md w-full mx-auto text-center py-4 border-t border-white/10 text-[11px] text-slate-500 relative z-10">
-          Powered by <span className="text-slate-300 font-bold">Dinely Food Cart OS</span> • Fast QR Street Food Ordering
+        <footer className="w-full text-center py-4 border-t border-white/[0.08] text-[11px] text-white/40 relative z-10 font-mono">
+          Powered by <span className="text-white font-bold">Dinely Food Cart OS</span> • Rapid Street Food Ordering
         </footer>
       </div>
     );
   }
 
   // -------------------------------------------------------------
-  // VIEW: MAIN CUSTOMER MOBILE STOREFRONT
+  // VIEW: MAIN CUSTOMER MOBILE STOREFRONT (RESTAURANT OS LIQUID GLASS)
   // -------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-black relative pb-28">
-      {/* Background Radial Glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 contain-paint">
-        <div className="absolute -top-32 left-1/3 w-[550px] h-[550px] rounded-full blur-[140px] bg-emerald-600/10 opacity-70" />
-        <div className="absolute top-[40%] -right-24 w-[450px] h-[450px] rounded-full blur-[140px] bg-teal-600/10 opacity-60" />
+    <div className="min-h-screen font-sans pb-36 w-full max-w-full sm:max-w-md mx-auto relative sm:border-x border-white/[0.12] liquid-glass-viewport text-[#F7F7F5] shadow-2xl selection:bg-amber-500/30 overflow-x-hidden box-border min-w-0">
+      {/* Dynamic Ambient Background Glows */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 w-full max-w-full contain-paint">
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-[340px] sm:w-[380px] h-[340px] sm:h-[380px] rounded-full blur-[90px] bg-gradient-to-b from-amber-500/30 via-amber-400/15 to-transparent pointer-events-none opacity-80" />
+        <div className="absolute top-[35%] right-0 translate-x-1/4 w-[280px] sm:w-[320px] h-[320px] sm:h-[360px] rounded-full blur-[95px] bg-gradient-to-tr from-amber-500/25 via-emerald-500/15 to-transparent pointer-events-none opacity-65" />
+        <div className="absolute top-[65%] left-0 -translate-x-1/4 w-[280px] sm:w-[320px] h-[320px] sm:h-[360px] rounded-full blur-[100px] bg-gradient-to-tr from-emerald-500/20 via-amber-500/15 to-transparent pointer-events-none opacity-60" />
       </div>
 
       {/* Sticky Active Order Reminder Banner when customer is browsing menu */}
       {confirmedOrder && isViewingMenu && (
         <div
           onClick={() => setIsViewingMenu(false)}
-          className="sticky top-0 z-50 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 text-slate-950 px-4 py-2.5 flex items-center justify-between shadow-xl cursor-pointer hover:brightness-105 transition-all border-b border-emerald-600/50"
+          className="sticky top-0 z-50 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-4 py-2.5 flex items-center justify-between shadow-xl cursor-pointer hover:brightness-105 transition-all border-b border-amber-600/50"
         >
           <div className="flex items-center gap-2 text-xs font-bold truncate">
             <Ticket className="w-4 h-4 text-slate-950 shrink-0 animate-bounce" />
@@ -785,7 +828,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ${
                 confirmedOrder.status === 'READY'
-                  ? 'bg-slate-950 text-emerald-300 animate-pulse'
+                  ? 'bg-slate-950 text-amber-300 animate-pulse'
                   : 'bg-slate-950/20 text-slate-950'
               }`}
             >
@@ -800,125 +843,141 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           </div>
           <div className="flex items-center gap-1 text-xs font-black shrink-0 ml-2">
             <span>View Ticket</span>
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-4 h-4 stroke-[3]" />
           </div>
         </div>
       )}
 
-      {/* Premium Header */}
-      <header
-        className={`sticky ${
-          confirmedOrder && isViewingMenu ? 'top-10' : 'top-0'
-        } z-40 bg-[#07090e]/85 backdrop-blur-2xl border-b border-white/[0.08] px-4 py-3 shadow-xl transition-all`}
-      >
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
-          {/* Logo & Identity */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-              <Truck className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-sm sm:text-base font-extrabold text-white tracking-tight truncate">{cartName}</h1>
-                <span
-                  className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono flex items-center gap-1 ${
-                    isCartOpen
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${isCartOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}
-                  />
-                  {isCartOpen ? 'Open Now' : 'Closed'}
-                </span>
-                <span className="hidden xs:inline-flex text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-300 border border-white/10 font-mono">
-                  COUNTER PICKUP
-                </span>
-              </div>
-              <p className="text-[11px] text-white/50 truncate mt-0.5">
-                {((business?.theme as any)?.tagline) || 'Instant QR Pickup • No App Needed'}
-              </p>
-            </div>
+      {/* Atmospheric Luxury Street Food Hero */}
+      <div className="relative h-48 sm:h-52 w-full max-w-full bg-[#11151B] overflow-hidden z-10 box-border">
+        <img
+          src={
+            business?.theme?.bannerUrl ||
+            'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&auto=format&fit=crop&q=80'
+          }
+          alt={cartName}
+          className="w-full h-full object-cover brightness-[0.62] transition-all duration-700"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07090D] via-[#07090D]/60 to-black/30" />
+
+        {/* Top Header Floating Liquid-Glass Badges */}
+        <div className="absolute top-3.5 left-3.5 right-3.5 z-10 flex items-center justify-between">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-white font-mono font-medium shadow-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+            <span className="truncate">{isCartOpen ? 'Counter Station • Open' : 'Currently Closed'}</span>
           </div>
 
-          {/* Right Header Controls */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setIsSearchVisible((v) => !v)}
-              className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-all border border-white/10 active:scale-95"
-              title="Search menu"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-
-            {basketCount > 0 && (
-              <button
-                onClick={() => setIsCheckoutOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.35)]"
-              >
-                <ShoppingBag className="w-3.5 h-3.5" />
-                <span className="font-mono font-black">{basketCount}</span>
-              </button>
-            )}
-
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-amber-300 font-mono font-medium shadow-md">
+              Prep: ~10m
+            </span>
             {onNavigateStaff && (
               <button
                 onClick={onNavigateStaff}
-                className="hidden sm:inline-flex text-xs px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-400 hover:text-white transition-all border border-white/10"
+                className="px-3 py-1.5 rounded-full liquid-glass-pill hover:bg-white/[0.15] text-[11px] text-slate-300 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer"
               >
                 Staff POS
               </button>
             )}
           </div>
         </div>
-      </header>
 
-      {/* Main Container */}
-      <main className="max-w-4xl w-full mx-auto px-4 py-4 space-y-4 flex-1 relative z-10">
-        {/* Compact Hero Card */}
-        <div className="relative rounded-3xl overflow-hidden border border-white/[0.08] bg-gradient-to-r from-emerald-950/30 via-[#0e1420] to-[#0a0d14] p-5 sm:p-6 shadow-2xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono text-[10px] font-bold">
-                  FAST STREET SERVICE
-                </span>
-                <span className="text-white/40 text-xs">•</span>
-                <span className="text-xs text-white/60 font-medium">Order & Pay at Counter</span>
+        {/* Cart Branding Header Row */}
+        <div className="absolute bottom-3.5 left-3.5 right-3.5 flex items-end gap-3 z-10">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-white/20 shadow-2xl bg-[#080A0D] shrink-0 flex items-center justify-center">
+            {business?.theme?.logo ? (
+              <img
+                src={business.theme.logo}
+                alt={cartName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-amber-500/20 to-emerald-500/20 flex items-center justify-center text-amber-400">
+                <Truck className="w-7 h-7" />
               </div>
-              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                Freshly Prepared Street Food
-              </h2>
-              <p className="text-xs text-slate-400 max-w-lg">
-                Pick your items, review your basket, and receive a single-use pickup voucher instantly on checkout.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="px-3.5 py-2 rounded-2xl bg-white/[0.05] border border-white/10 text-center">
-                <p className="text-[10px] uppercase font-mono text-white/50 font-bold">Avg Prep</p>
-                <p className="text-xs font-mono font-black text-emerald-400">~10-15m</p>
-              </div>
-              <div className="px-3.5 py-2 rounded-2xl bg-white/[0.05] border border-white/10 text-center">
-                <p className="text-[10px] uppercase font-mono text-white/50 font-bold">Service</p>
-                <p className="text-xs font-mono font-black text-teal-300">Takeaway</p>
-              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base sm:text-xl font-bold text-white tracking-tight truncate drop-shadow-md">
+              {cartName}
+            </h1>
+            <div className="text-[11px] text-white/70 font-medium flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full liquid-glass-pill text-amber-400 font-semibold text-[10px]">
+                <Star className="w-3 h-3 fill-amber-400" />
+                <span>4.9</span>
+              </span>
+              <span>•</span>
+              <span className="text-white/60 truncate">
+                {business?.description || 'Authentic Street Food & Snacks'}
+              </span>
+              <span>•</span>
+              <span className="text-emerald-400 font-mono text-[10px]">Takeaway Pickup</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Quick Action & Category Liquid-Glass Sticky Dock */}
+      <div className="sticky top-0 z-30 px-3.5 py-2.5 bg-[#07090D]/85 backdrop-blur-2xl border-b border-white/[0.10] shadow-xl w-full max-w-full box-border space-y-2">
+        {/* Dietary Filters & Search Button */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+            <button
+              onClick={() => setDietaryFilter('ALL')}
+              className={`text-xs px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all border cursor-pointer active:scale-95 ${
+                dietaryFilter === 'ALL'
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-950/40'
+                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
+              }`}
+            >
+              All Items
+            </button>
+            <button
+              onClick={() => setDietaryFilter('VEG')}
+              className={`text-xs px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer active:scale-95 ${
+                dietaryFilter === 'VEG'
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-950/40'
+                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+              Pure Veg
+            </button>
+            <button
+              onClick={() => setDietaryFilter('NON_VEG')}
+              className={`text-xs px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer active:scale-95 ${
+                dietaryFilter === 'NON_VEG'
+                  ? 'bg-rose-500 text-white border-rose-400 shadow-md shadow-rose-950/40'
+                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+              Non-Veg
+            </button>
+          </div>
+
+          <button
+            onClick={() => setIsSearchVisible((v) => !v)}
+            className={`p-1.5 rounded-xl transition-all border cursor-pointer active:scale-95 ${
+              isSearchVisible ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-white/[0.05] text-slate-300 hover:text-white border-white/10'
+            }`}
+            title="Search dishes"
+          >
+            <Search className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Collapsible Search Input */}
         {isSearchVisible && (
           <div className="relative animate-in fade-in slide-in-from-top-2 duration-200">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               autoFocus
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search dishes, rolls, burgers, drinks..."
-              className="w-full pl-10 pr-10 py-2.5 bg-white/[0.05] border border-white/15 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 transition-all shadow-inner backdrop-blur-xl"
+              placeholder="Search rolls, fries, burgers, drinks..."
+              className="w-full pl-9 pr-9 py-2 bg-white/[0.05] border border-white/15 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition-all shadow-inner backdrop-blur-xl"
             />
             {searchQuery && (
               <button
@@ -931,79 +990,43 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
           </div>
         )}
 
-        {/* Filters Bar: Dietary Toggles & Horizontal Category Chips */}
-        <div className="space-y-2.5">
-          {/* Dietary Filters */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {/* Category Horizontal Scrolling Tabs */}
+        {categories.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none pt-0.5">
             <button
-              onClick={() => setDietaryFilter('ALL')}
-              className={`text-xs px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all border active:scale-95 ${
-                dietaryFilter === 'ALL'
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
+              onClick={() => setSelectedCategory('ALL')}
+              className={`text-[11px] px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all cursor-pointer ${
+                selectedCategory === 'ALL'
+                  ? 'bg-white/15 text-white border border-white/20'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              All Items
+              All ({menuItems.length})
             </button>
-            <button
-              onClick={() => setDietaryFilter('VEG')}
-              className={`text-xs px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border active:scale-95 ${
-                dietaryFilter === 'VEG'
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-              Pure Veg
-            </button>
-            <button
-              onClick={() => setDietaryFilter('NON_VEG')}
-              className={`text-xs px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border active:scale-95 ${
-                dietaryFilter === 'NON_VEG'
-                  ? 'bg-rose-500 text-white border-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
-                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-              Non-Veg
-            </button>
-          </div>
-
-          {/* Category Navigation Chips */}
-          {categories.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-white/10 pt-1">
+            {categories.map((cat) => (
               <button
-                onClick={() => setSelectedCategory('ALL')}
-                className={`text-xs pb-2 font-bold whitespace-nowrap border-b-2 transition-all ${
-                  selectedCategory === 'ALL'
-                    ? 'border-emerald-400 text-emerald-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                key={cat.key}
+                onClick={() => setSelectedCategory(cat.key)}
+                className={`text-[11px] px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategory === cat.key
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'text-slate-400 hover:text-white'
                 }`}
               >
-                All Categories ({menuItems.length})
+                {cat.label}
               </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat.key}
-                  onClick={() => setSelectedCategory(cat.key)}
-                  className={`text-xs pb-2 font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer ${
-                    selectedCategory === cat.key
-                      ? 'border-emerald-400 text-emerald-400 font-extrabold'
-                      : 'border-transparent text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
+      </div>
 
+      {/* Main Dishes List */}
+      <main className="px-3.5 py-4 space-y-3 flex-1 relative z-10 w-full max-w-full box-border">
         {/* Loading State */}
         {isLoadingMenu && (
           <div className="py-20 text-center space-y-3">
-            <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-            <p className="text-xs text-slate-400">Loading {cartName} menu...</p>
+            <RefreshCw className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
+            <p className="text-xs text-slate-400 font-mono">Loading {cartName} menu...</p>
           </div>
         )}
 
@@ -1016,7 +1039,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             </div>
             <button
               onClick={() => fetchMenu(targetRestId)}
-              className="px-3 py-1 bg-rose-500/20 hover:bg-rose-500/30 rounded-lg text-xs font-bold text-white transition-all shrink-0"
+              className="px-3 py-1 bg-rose-500/20 hover:bg-rose-500/30 rounded-lg text-xs font-bold text-white transition-all shrink-0 cursor-pointer"
             >
               Retry
             </button>
@@ -1027,141 +1050,113 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         {!isLoadingMenu && !menuError && filteredItems.length === 0 && (
           <div className="py-20 text-center space-y-2 rounded-2xl bg-white/[0.02] border border-white/5 p-6">
             <ShoppingBag className="w-10 h-10 text-slate-600 mx-auto" />
-            <p className="text-sm font-bold text-slate-300">No items match your filter</p>
+            <p className="text-sm font-bold text-slate-300">No dishes match your filter</p>
             <p className="text-xs text-slate-500">Try changing categories or clearing search keywords.</p>
           </div>
         )}
 
-        {/* Food Item Cards Grid: Responsive 1 col (mobile), 2 col (tablet), 3 col (desktop) */}
+        {/* Food Item Cards: Liquid-Glass Horizontal Layout (Matching Restaurant OS) */}
         {!isLoadingMenu && !menuError && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+          <div className="space-y-3">
             {filteredItems.map((item) => {
               const inBasket = basket.find((b) => b.item.id === item.id);
               const isOutOfStock = item.isAvailable === false;
-              const hasPhoto = Boolean(item.imageUrl || item.image);
+              const isVeg = item.isVegetarian !== false;
+              const dishImage = getStreetFoodDishImage(item);
 
               return (
                 <div
                   key={item.id}
-                  className={`rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden shadow-xl liquid-glass-card ${
-                    isOutOfStock
-                      ? 'bg-white/[0.02] border-white/5 opacity-55'
-                      : inBasket
-                      ? 'bg-gradient-to-b from-[#101726] to-[#0a0d14] border-emerald-400/40 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
-                      : 'bg-gradient-to-b from-[#101520] to-[#080b12] border-white/10 hover:border-white/20'
+                  className={`p-3 sm:p-4 flex gap-3 sm:gap-3.5 transition-all duration-300 rounded-3xl liquid-glass-card shadow-xl w-full max-w-full min-w-0 box-border overflow-hidden border border-white/20 hover:border-white/35 hover:shadow-[0_20px_50px_rgba(0,0,0,0.7)] ${
+                    isOutOfStock ? 'opacity-50 border-white/[0.08]' : 'active:scale-[0.99]'
                   }`}
                 >
-                  {/* Dish Photo or Clean Food Cart Placeholder */}
-                  <div className="relative w-full h-44 bg-[#0d111a] overflow-hidden">
-                    {hasPhoto ? (
-                      <img
-                        src={item.imageUrl || item.image}
-                        alt={item.name}
-                        loading="lazy"
-                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLElement).style.display = 'none';
-                          const parent = (e.currentTarget as HTMLElement).parentElement;
-                          if (parent) {
-                            const fallback = parent.querySelector('.cart-dish-fallback');
-                            if (fallback) (fallback as HTMLElement).classList.remove('hidden');
-                          }
-                        }}
-                      />
-                    ) : null}
-
-                    {/* Clean Liquid-Glass Dish Placeholder */}
-                    <div
-                      className={`cart-dish-fallback absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-slate-500 bg-gradient-to-br from-[#101522] to-[#080b12] ${
-                        hasPhoto ? 'hidden' : 'flex'
-                      }`}
-                    >
-                      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shadow-inner">
-                        <UtensilsCrossed className="w-6 h-6 opacity-60 text-emerald-400" />
-                      </div>
-                      <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 font-mono">
-                        {(item as any).categoryName || (item as any).category || formatCategoryTitle(item.categoryId) || 'Street Food'}
-                      </span>
-                    </div>
-
-                    {/* Veg / Non-Veg Badge */}
-                    <div className="absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-[10px]">
-                      <span
-                        className={`w-2.5 h-2.5 rounded-sm border flex items-center justify-center p-0.5 ${
-                          item.isVegetarian !== false ? 'border-emerald-500' : 'border-rose-500'
-                        }`}
-                      >
-                        <span
-                          className={`w-1 h-1 rounded-full ${
-                            item.isVegetarian !== false ? 'bg-emerald-400' : 'bg-rose-500'
-                          }`}
-                        />
-                      </span>
-                      <span className="text-slate-200 font-bold uppercase text-[9px] tracking-wider font-mono">
-                        {item.isVegetarian !== false ? 'VEG' : 'NON-VEG'}
-                      </span>
-                    </div>
-
-                    {/* Stock / Availability Badge */}
-                    <div className="absolute top-3 right-3 z-10">
-                      {isOutOfStock ? (
-                        <span className="text-[10px] font-bold text-rose-200 bg-rose-600/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-rose-400/40 shadow-sm font-mono">
-                          Sold Out
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-semibold text-emerald-200 bg-emerald-600/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-emerald-400/30 shadow-sm font-mono">
-                          Available
-                        </span>
-                      )}
-                    </div>
+                  {/* High Quality Food Photo */}
+                  <div className="relative shrink-0">
+                    <img
+                      src={dishImage}
+                      alt={item.name}
+                      loading="lazy"
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-white/25 shadow-lg bg-[#11151B] shrink-0 ring-1 ring-white/10"
+                    />
                   </div>
 
-                  {/* Dish Info & Action Bar */}
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                    <div>
-                      <h3 className="text-sm font-extrabold text-white tracking-tight leading-snug">{item.name}</h3>
-                      {item.description ? (
-                        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed mt-1">{item.description}</p>
-                      ) : null}
+                  {/* Dish Details */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between overflow-hidden py-0.5">
+                    <div className="min-w-0">
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold font-mono shrink-0 shadow-sm ${
+                              isVeg
+                                ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
+                                : 'border-rose-500/50 bg-rose-500/20 text-rose-300'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${isVeg ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                            <span>{isVeg ? 'VEG' : 'NON-VEG'}</span>
+                          </span>
+                          <h3 className="text-[15px] sm:text-base font-bold text-white tracking-tight truncate font-display">
+                            {item.name}
+                          </h3>
+                        </div>
+
+                        {isOutOfStock && (
+                          <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-300 border border-rose-500/40 font-bold shrink-0">
+                            SOLD OUT
+                          </span>
+                        )}
+                      </div>
+
+                      {item.description && (
+                        <p className="text-[11px] sm:text-xs text-white/65 line-clamp-2 mt-1 leading-relaxed font-normal">
+                          {item.description}
+                        </p>
+                      )}
                     </div>
 
-                    {/* Price & Add to Cart button */}
-                    <div className="pt-3 border-t border-white/10 flex items-center justify-between">
-                      <span className="text-base font-extrabold font-mono text-emerald-400">
-                        ₹{item.price.toFixed(0)}
+                    {/* Bottom Price & Add/Counter */}
+                    <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.10] gap-1.5 min-w-0">
+                      <span className="text-sm sm:text-base font-mono font-black text-amber-300 shrink-0 tracking-tight drop-shadow-[0_1px_6px_rgba(245,158,11,0.35)]">
+                        ₹{item.price}
                       </span>
 
-                      {isOutOfStock ? (
-                        <span className="text-xs font-bold text-rose-400/90 py-1 px-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 font-mono">
-                          Sold Out
-                        </span>
-                      ) : inBasket ? (
-                        <div className="flex items-center gap-2 bg-white/[0.06] border border-white/15 rounded-xl p-1 shadow-sm">
-                          <button
-                            onClick={() => handleUpdateQuantity(item.id, -1)}
-                            className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 transition-all active:scale-95"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="text-xs font-mono font-bold text-white w-5 text-center">
-                            {inBasket.quantity}
-                          </span>
-                          <button
-                            onClick={() => handleUpdateQuantity(item.id, 1)}
-                            className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center text-slate-950 font-bold transition-all active:scale-95"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleAddToBasket(item)}
-                          className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-[0_2px_12px_rgba(16,185,129,0.3)] active:scale-95 font-mono"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add</span>
-                        </button>
-                      )}
+                      <div className="shrink-0">
+                        {!isOutOfStock && (
+                          inBasket ? (
+                            <div
+                              className="flex items-center gap-1 liquid-glass-pill border-amber-400/60 rounded-xl p-1 shadow-md shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                onClick={() => handleUpdateQuantity(item.id, -1)}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-300 hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
+                                aria-label="Decrease quantity"
+                              >
+                                <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                              </button>
+                              <span className="font-mono text-xs font-extrabold text-white min-w-[18px] text-center">
+                                {inBasket.quantity}
+                              </span>
+                              <button
+                                onClick={() => handleUpdateQuantity(item.id, 1)}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-300 hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
+                                aria-label="Increase quantity"
+                              >
+                                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleAddToBasket(item)}
+                              className="px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-md shadow-amber-950/40 cursor-pointer active:scale-95 transition-all"
+                            >
+                              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                              <span>Add</span>
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1171,76 +1166,107 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         )}
       </main>
 
-      {/* Floating Bottom Cart Bar */}
+      {/* Floating Bottom Cart Bar (Restaurant OS Liquid-Glass Pill) */}
       {basketCount > 0 && (
-        <div className="fixed bottom-4 left-0 right-0 z-40 px-4 pointer-events-none">
-          <div className="max-w-md mx-auto pointer-events-auto">
+        <div className="fixed bottom-4 left-0 right-0 z-40 px-3.5 pointer-events-none">
+          <div className="max-w-md mx-auto w-full pointer-events-auto">
             <button
               onClick={() => setIsCheckoutOpen(true)}
-              className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 text-slate-950 font-extrabold flex items-center justify-between shadow-[0_8px_30px_rgba(16,185,129,0.5)] hover:brightness-105 active:scale-[0.99] transition-all"
+              className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-black flex items-center justify-between shadow-2xl shadow-amber-950/60 hover:brightness-105 active:scale-[0.98] transition-all border border-amber-300/40 cursor-pointer"
             >
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-xl bg-slate-950 text-emerald-400 flex items-center justify-center text-xs font-mono font-black shadow-inner">
+                <span className="w-7 h-7 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center text-xs font-mono font-black shadow-inner">
                   {basketCount}
                 </span>
                 <span className="text-sm tracking-tight font-black">View Order Summary</span>
               </div>
               <div className="flex items-center gap-1 text-sm font-mono font-black">
                 <span>₹{basketTotal.toFixed(0)}</span>
-                <ChevronRight className="w-4 h-4 ml-1" />
+                <ChevronRight className="w-4 h-4 ml-1 stroke-[3]" />
               </div>
             </button>
           </div>
         </div>
       )}
 
-      {/* Checkout Drawer / Modal */}
+      {/* Checkout Drawer / Modal (Liquid-Glass Sheet) */}
       {isCheckoutOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full max-w-md bg-[#090d14] border border-white/15 rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0F141C]/95 liquid-glass-card border-x-0 border-b-0 sm:border rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
+            {/* Top Amber Radiant Highlight */}
+            <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-64 h-24 bg-amber-500/20 blur-2xl pointer-events-none rounded-full" />
+
             {/* Drawer Header */}
-            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/[0.03]">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-emerald-400" />
-                <h2 className="text-sm font-black text-white uppercase tracking-tight">Your Pickup Order</h2>
+            <div className="p-4 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02] relative z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-white tracking-tight">Your Pickup Order</h2>
+                  <p className="text-[10px] text-white/50 font-mono">Counter Collection • {cartName}</p>
+                </div>
               </div>
               <button
                 onClick={() => setIsCheckoutOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white flex items-center justify-center transition-all"
+                className="w-8 h-8 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white/70 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-white/10 active:scale-90"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Form & Items Container */}
-            <form onSubmit={handleSubmitOrder} className="flex-1 overflow-y-auto p-4 space-y-4">
+            <form onSubmit={handleSubmitOrder} className="flex-1 overflow-y-auto p-4 space-y-4 relative z-10">
               {/* Items List */}
-              <div className="space-y-2.5">
-                <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                  Review Selected Items
-                </span>
-                <div className="space-y-2 divide-y divide-white/5">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-mono font-bold text-white/50 uppercase tracking-wider">
+                  <span>Selected Dishes ({basketCount})</span>
+                  <button
+                    type="button"
+                    onClick={() => { setBasket([]); setIsCheckoutOpen(false); }}
+                    className="text-white/40 hover:text-rose-400 transition-colors text-[10px]"
+                  >
+                    Clear All
+                  </button>
+                </div>
+
+                <div className="space-y-2 divide-y divide-white/[0.06]">
                   {basket.map(({ item, quantity }) => (
                     <div key={item.id} className="pt-2 flex items-center justify-between gap-3">
-                      <div className="flex-1 truncate">
-                        <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                        <span className="text-[11px] text-emerald-400 font-mono">₹{item.price.toFixed(0)} each</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2.5 h-2.5 rounded-sm border flex items-center justify-center shrink-0 ${
+                              item.isVegetarian !== false
+                                ? 'border-emerald-500 bg-emerald-950/40'
+                                : 'border-rose-500 bg-rose-950/40'
+                            }`}
+                          >
+                            <span
+                              className={`w-1 h-1 rounded-full ${
+                                item.isVegetarian !== false ? 'bg-emerald-400' : 'bg-rose-400'
+                              }`}
+                            />
+                          </span>
+                          <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
+                        </div>
+                        <span className="text-[11px] text-amber-400 font-mono font-bold pl-4">₹{item.price.toFixed(0)}</span>
                       </div>
-                      <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl p-1">
+                      <div className="flex items-center gap-1.5 liquid-glass-pill rounded-xl p-1 shrink-0 border-white/10">
                         <button
                           type="button"
                           onClick={() => handleUpdateQuantity(item.id, -1)}
-                          className="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200"
+                          className="w-6 h-6 rounded-lg bg-white/5 hover:bg-white/15 flex items-center justify-center text-white/80 active:scale-90 transition-all cursor-pointer"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-3 h-3 stroke-[3]" />
                         </button>
-                        <span className="text-xs font-mono font-bold text-white w-4 text-center">{quantity}</span>
+                        <span className="text-xs font-mono font-black text-white w-5 text-center">{quantity}</span>
                         <button
                           type="button"
                           onClick={() => handleUpdateQuantity(item.id, 1)}
-                          className="w-6 h-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center text-slate-950 font-bold"
+                          className="w-6 h-6 rounded-lg bg-amber-500 hover:bg-amber-400 flex items-center justify-center text-slate-950 font-black active:scale-90 transition-all cursor-pointer"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-3 h-3 stroke-[3]" />
                         </button>
                       </div>
                     </div>
@@ -1248,76 +1274,109 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 </div>
               </div>
 
-              {/* Payment Notice */}
-              <div className="p-3.5 bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/25 rounded-2xl flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
-                  <Banknote className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-white">Pay at Counter</p>
-                  <p className="text-[11px] text-emerald-300/80 leading-tight mt-0.5">
-                    Pay with Cash or UPI upon pickup. No online payment required now.
-                  </p>
+              {/* Payment Method Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono font-bold text-white/60 tracking-wider block">
+                  Select Payment Option at Counter
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('CASH')}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 ${
+                      paymentMethod === 'CASH'
+                        ? 'bg-amber-500/15 border-amber-400/60 shadow-lg shadow-amber-950/30'
+                        : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06] text-white/70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <Banknote className={`w-4 h-4 ${paymentMethod === 'CASH' ? 'text-amber-400' : 'text-white/40'}`} />
+                      <span className={`w-2 h-2 rounded-full ${paymentMethod === 'CASH' ? 'bg-amber-400 ring-4 ring-amber-400/20' : 'bg-white/20'}`} />
+                    </div>
+                    <div>
+                      <p className={`text-xs font-bold ${paymentMethod === 'CASH' ? 'text-white' : 'text-white/80'}`}>Cash at Counter</p>
+                      <p className="text-[10px] text-white/40 leading-tight">Pay notes/coins when food is ready</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('UPI')}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 ${
+                      paymentMethod === 'UPI'
+                        ? 'bg-amber-500/15 border-amber-400/60 shadow-lg shadow-amber-950/30'
+                        : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06] text-white/70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <QrCode className={`w-4 h-4 ${paymentMethod === 'UPI' ? 'text-amber-400' : 'text-white/40'}`} />
+                      <span className={`w-2 h-2 rounded-full ${paymentMethod === 'UPI' ? 'bg-amber-400 ring-4 ring-amber-400/20' : 'bg-white/20'}`} />
+                    </div>
+                    <div>
+                      <p className={`text-xs font-bold ${paymentMethod === 'UPI' ? 'text-white' : 'text-white/80'}`}>UPI / QR Code</p>
+                      <p className="text-[10px] text-white/40 leading-tight">Scan GPay, PhonePe or Paytm</p>
+                    </div>
+                  </button>
                 </div>
               </div>
 
               {/* Customer Required Name Field */}
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-300 block font-mono">
-                  Your Name <span className="text-emerald-400">*</span>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-white/70 block font-mono tracking-wider">
+                  Your Calling Name <span className="text-amber-400">*</span>
                 </label>
                 <div className="relative">
-                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <User className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="Enter your name (e.g. Rahul S)"
-                    className="w-full pl-8 pr-3 py-2 bg-white/[0.05] border border-white/15 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-white/[0.04] border border-white/15 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-amber-400 focus:bg-white/[0.07] transition-all"
                   />
                 </div>
               </div>
 
-              {/* Optional Requests Accordion */}
+              {/* Optional Phone & Cooking Notes Accordion */}
               <div>
                 <button
                   type="button"
                   onClick={() => setShowCustomization((prev) => !prev)}
-                  className="w-full py-2 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[11px] font-medium text-slate-400 hover:text-slate-200 flex items-center justify-between transition-all"
+                  className="w-full py-2 px-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 text-[11px] font-medium text-white/60 hover:text-white flex items-center justify-between transition-all cursor-pointer"
                 >
-                  <span>{showCustomization ? 'Hide optional requests' : '+ Add phone or cooking notes'}</span>
+                  <span>{showCustomization ? 'Hide special requests' : '+ Add phone or cooking notes'}</span>
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showCustomization ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showCustomization && (
                   <div className="mt-2.5 p-3 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5 animate-in fade-in duration-200">
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1 font-mono">
+                      <label className="text-[10px] uppercase font-bold text-white/50 block mb-1 font-mono">
                         Mobile Number (Optional SMS alert)
                       </label>
                       <div className="relative">
-                        <Phone className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Phone className="w-3.5 h-3.5 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="tel"
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
                           placeholder="e.g. 9876543210"
-                          className="w-full pl-8 pr-3 py-1.5 bg-white/[0.05] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                          className="w-full pl-8 pr-3 py-1.5 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-amber-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1 font-mono">
-                        Cooking Notes / Special Requests
+                      <label className="text-[10px] uppercase font-bold text-white/50 block mb-1 font-mono">
+                        Special Instructions / Cooking Notes
                       </label>
                       <input
                         type="text"
                         value={orderNotes}
                         onChange={(e) => setOrderNotes(e.target.value)}
                         placeholder="e.g. Extra crispy, less spicy, pack separately"
-                        className="w-full px-3 py-1.5 bg-white/[0.05] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                        className="w-full px-3 py-1.5 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-amber-400"
                       />
                     </div>
                   </div>
@@ -1326,17 +1385,17 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
 
               {/* Price Breakdown */}
               <div className="p-3.5 bg-white/[0.03] rounded-2xl border border-white/10 space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-400">
+                <div className="flex justify-between text-white/60">
                   <span>Subtotal ({basketCount} items)</span>
-                  <span className="font-mono text-slate-200">₹{basketTotal.toFixed(0)}</span>
+                  <span className="font-mono text-white font-medium">₹{basketTotal.toFixed(0)}</span>
                 </div>
-                <div className="flex justify-between text-slate-400">
+                <div className="flex justify-between text-white/60">
                   <span>Cart Packaging & Pickup</span>
-                  <span className="text-emerald-400 font-bold uppercase text-[10px] font-mono">Free</span>
+                  <span className="text-amber-400 font-bold uppercase text-[10px] font-mono">Free</span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-sm text-white">
                   <span>Total Payable at Counter</span>
-                  <span className="text-emerald-400 font-mono text-base">₹{basketTotal.toFixed(0)}</span>
+                  <span className="text-amber-400 font-mono text-base font-black">₹{basketTotal.toFixed(0)}</span>
                 </div>
               </div>
 
@@ -1348,21 +1407,21 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               )}
 
               {/* Checkout Submit CTA */}
-              <div className="pt-1">
+              <div className="pt-1 pb-2">
                 <button
                   type="submit"
                   disabled={isSubmitting || basket.length === 0}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(16,185,129,0.4)] disabled:opacity-50 hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer font-mono"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-2xl shadow-amber-950/60 disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer font-sans tracking-tight"
                 >
                   {isSubmitting ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Placing Order with {cartName}...</span>
+                      <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>Transmitting Order to {cartName}...</span>
                     </>
                   ) : (
                     <>
-                      <Ticket className="w-4 h-4" />
-                      <span>Place Order • ₹{basketTotal.toFixed(0)}</span>
+                      <Ticket className="w-4 h-4 text-slate-950 stroke-[2.5]" />
+                      <span>Confirm Order • ₹{basketTotal.toFixed(0)}</span>
                     </>
                   )}
                 </button>
