@@ -30,6 +30,7 @@ import {
   Share2,
   BellRing,
   Star,
+  QrCode,
 } from 'lucide-react';
 import { api } from '../../packages/api/client';
 import { Restaurant, Order, MenuItem } from '../../packages/types';
@@ -39,13 +40,27 @@ import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
 import { resolveCartTheme } from './cartThemes';
 
 export const getStreetFoodDishImage = (item: MenuItem): string => {
-  if (item.imageUrl && item.imageUrl.trim().length > 5) return item.imageUrl;
-  if (item.image && item.image.trim().length > 5) return item.image;
+  if (
+    item.imageUrl &&
+    item.imageUrl.startsWith('http') &&
+    !item.imageUrl.includes('placeholder') &&
+    !item.imageUrl.startsWith('data:')
+  ) {
+    return item.imageUrl;
+  }
+  if (
+    item.image &&
+    item.image.startsWith('http') &&
+    !item.image.includes('placeholder') &&
+    !item.image.startsWith('data:')
+  ) {
+    return item.image;
+  }
 
   const text = `${item.name} ${item.category || ''} ${(item as any).categoryName || ''} ${item.description || ''}`.toLowerCase();
 
   if (text.includes('fries') || text.includes('peri') || text.includes('chips') || text.includes('finger')) {
-    return 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80';
+    return 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=600&auto=format&fit=crop&q=80';
   }
   if (text.includes('roll') || text.includes('wrap') || text.includes('kathi') || text.includes('frankie')) {
     return 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=600&auto=format&fit=crop&q=80';
@@ -59,8 +74,11 @@ export const getStreetFoodDishImage = (item: MenuItem): string => {
   if (text.includes('noodle') || text.includes('hakka') || text.includes('chow') || text.includes('wok') || text.includes('fried rice') || text.includes('momo') || text.includes('dimsum')) {
     return 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=600&auto=format&fit=crop&q=80';
   }
-  if (text.includes('coffee') || text.includes('frappe') || text.includes('latte') || text.includes('cappuccino') || text.includes('shake') || text.includes('drink') || text.includes('beverage') || text.includes('lemonade') || text.includes('mojito') || text.includes('tea') || text.includes('chai')) {
+  if (text.includes('coffee') || text.includes('frappe') || text.includes('latte') || text.includes('cappuccino') || text.includes('shake')) {
     return 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80';
+  }
+  if (text.includes('shikanji') || text.includes('cooler') || text.includes('lemonade') || text.includes('mojito') || text.includes('drink') || text.includes('beverage') || text.includes('tea') || text.includes('chai')) {
+    return 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=600&auto=format&fit=crop&q=80';
   }
   if (text.includes('brownie') || text.includes('dessert') || text.includes('cake') || text.includes('sweet') || text.includes('chocolate') || text.includes('ice cream')) {
     return 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=600&auto=format&fit=crop&q=80';
@@ -1077,6 +1095,9 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                       src={dishImage}
                       alt={item.name}
                       loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80';
+                      }}
                       className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-white/25 shadow-lg bg-[#11151B] shrink-0 ring-1 ring-white/10"
                     />
                   </div>
