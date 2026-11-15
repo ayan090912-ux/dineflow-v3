@@ -12,7 +12,6 @@ import {
   ChefHat,
   GlassWater,
   X,
-  Printer,
   ChevronRight,
   ShieldCheck,
 } from 'lucide-react';
@@ -213,10 +212,6 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
       setNotificationToast('Receipt downloaded successfully.');
       setTimeout(() => setNotificationToast(null), 4000);
     }
-  };
-
-  const handlePrintReceipt = () => {
-    window.print();
   };
 
   if (!isOpen) return null;
@@ -486,20 +481,11 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <Button
-                  onClick={handlePrintReceipt}
-                  variant="outline"
-                  className="w-full text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.12] bg-white/[0.04] text-white hover:bg-white/[0.08]"
-                >
-                  <Printer className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Print Bill (with UPI QR)</span>
-                </Button>
-
+              <div>
                 <Button
                   onClick={handleDownloadReceipt}
                   variant="outline"
-                  className="w-full text-xs font-medium py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/70 hover:text-white"
+                  className="w-full text-xs font-medium py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/80 hover:text-white"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download Digital Receipt (.png)</span>
