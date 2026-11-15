@@ -57,7 +57,7 @@ export const getStreetFoodDishImage = (item: MenuItem): string => {
     return item.image;
   }
 
-  const text = `${item.name} ${item.category || ''} ${(item as any).categoryName || ''} ${item.description || ''}`.toLowerCase();
+  const text = `${item.name} ${(item as any).category || ''} ${(item as any).categoryName || ''} ${item.description || ''}`.toLowerCase();
 
   if (text.includes('fries') || text.includes('peri') || text.includes('chips') || text.includes('finger')) {
     return 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=600&auto=format&fit=crop&q=80';

@@ -99,8 +99,12 @@ class DeliverOrderSchema(BaseModel):
 
 class UpdateOrderETASchema(BaseModel):
     deltaMinutes: Optional[int] = None
+    delta_minutes: Optional[int] = None
     targetTimestamp: Optional[str] = None
+    etaTargetTimestamp: Optional[str] = None
+    eta_target_timestamp: Optional[str] = None
     estimatedPrepTimeMinutes: Optional[int] = None
+    estimated_prep_time_minutes: Optional[int] = None
     reason: Optional[str] = None
 
 def resolve_item_station(it: Any) -> str:
@@ -561,9 +565,10 @@ async def create_order(
                         actual_session_id = matched_sess.id
                     else:
                         try:
+                            fresh_sess_id = f"sess-{restaurant.id}-{tbl_id or 'tbl'}-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}" if (matched_sess or not session_id) else session_id
                             async with db.begin_nested():
                                 new_sess = TableSession(
-                                    id=session_id,
+                                    id=fresh_sess_id,
                                     restaurant_id=restaurant.id,
                                     table_id=tbl_id,
                                     table_number=tbl_num,
@@ -1718,7 +1723,7 @@ async def update_order_status(
     if payload.estimatedPrepTimeMinutes is not None and not is_evt_order:
         order.estimated_prep_time_minutes = max(1, payload.estimatedPrepTimeMinutes)
         order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=order.estimated_prep_time_minutes)
-    elif payload.etaTargetTimestamp is not None:
+    if payload.etaTargetTimestamp is not None and not is_evt_order:
         try:
             dt_val = datetime.fromisoformat(payload.etaTargetTimestamp.replace("Z", "+00:00"))
             order.eta_target_timestamp = dt_val
@@ -2020,6 +2025,13 @@ async def request_waiter_for_order(
             payload=order_dict,
             target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
         )
+        if (req_station == "KITCHEN" and order.kitchen_status == "READY") or order.status == "READY":
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="order_ready",
+                payload=order_dict,
+                target_audience=["WAITER", "OWNER", "STAFF"]
+            )
     except Exception as e:
         print("[WS BROADCAST] request_waiter notice:", e)
 
@@ -2342,18 +2354,22 @@ async def update_order_eta(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized to update order ETA")
 
     current_mins = order.estimated_prep_time_minutes or 15
-    if payload.deltaMinutes is not None:
-        new_mins = max(1, current_mins + payload.deltaMinutes)
+    delta_mins = payload.deltaMinutes if payload.deltaMinutes is not None else payload.delta_minutes
+    prep_mins = payload.estimatedPrepTimeMinutes if payload.estimatedPrepTimeMinutes is not None else payload.estimated_prep_time_minutes
+    target_ts = payload.targetTimestamp or payload.etaTargetTimestamp or payload.eta_target_timestamp
+
+    if delta_mins is not None:
+        new_mins = max(1, current_mins + delta_mins)
         order.estimated_prep_time_minutes = new_mins
         base_time = order.eta_target_timestamp or datetime.now(timezone.utc)
-        order.eta_target_timestamp = base_time + timedelta(minutes=payload.deltaMinutes)
-    elif payload.estimatedPrepTimeMinutes is not None:
-        order.estimated_prep_time_minutes = max(1, payload.estimatedPrepTimeMinutes)
+        order.eta_target_timestamp = base_time + timedelta(minutes=delta_mins)
+    elif prep_mins is not None:
+        order.estimated_prep_time_minutes = max(1, prep_mins)
         order.eta_target_timestamp = datetime.now(timezone.utc) + timedelta(minutes=order.estimated_prep_time_minutes)
 
-    if payload.targetTimestamp:
+    if target_ts:
         try:
-            dt_val = datetime.fromisoformat(payload.targetTimestamp.replace("Z", "+00:00"))
+            dt_val = datetime.fromisoformat(target_ts.replace("Z", "+00:00"))
             order.eta_target_timestamp = dt_val
         except Exception:
             pass
@@ -2363,25 +2379,34 @@ async def update_order_eta(
 
     try:
         from app.modules.websocket.manager import ws_manager
+        eta_payload = {
+            "orderId": order.id,
+            "order_id": order.id,
+            "restaurantId": order.restaurant_id,
+            "restaurant_id": order.restaurant_id,
+            "tableNumber": order.table_number,
+            "table_number": order.table_number,
+            "estimatedPrepTimeMinutes": order.estimated_prep_time_minutes,
+            "etaTargetTimestamp": resp_data.get("eta_target_timestamp") or resp_data.get("etaTargetTimestamp"),
+            "reason": payload.reason or "ETA Updated",
+            "data": resp_data,
+        }
         await ws_manager.broadcast_event(
             restaurant_id=order.restaurant_id,
             event_type="ETAUpdated",
-            payload={
-                "orderId": order.id,
-                "order_id": order.id,
-                "restaurantId": order.restaurant_id,
-                "restaurant_id": order.restaurant_id,
-                "tableNumber": order.table_number,
-                "table_number": order.table_number,
-                "estimatedPrepTimeMinutes": order.estimated_prep_time_minutes,
-                "etaTargetTimestamp": resp_data.get("eta_target_timestamp") or resp_data.get("etaTargetTimestamp"),
-                "reason": payload.reason or "ETA Updated",
-                "data": resp_data,
-            },
+            payload=eta_payload,
             target_audience=["KITCHEN", "WAITER", "CUSTOMER", "OWNER"]
+        )
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_status_updated",
+            payload=resp_data,
+            target_audience=["KITCHEN", "WAITER", "CUSTOMER", "OWNER", "STAFF"]
         )
     except Exception as ws_err:
         print("[WS_BROADCAST_NOTICE]:", ws_err)
+
+    return resp_data
 
 @router.get("/restaurants/{restaurant_id}/orders/lookup-code/{code}")
 @router.get("/lookup-code/{code}")

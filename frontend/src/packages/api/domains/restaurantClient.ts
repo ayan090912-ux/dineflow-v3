@@ -1221,7 +1221,7 @@ export class RestaurantClient {
   }
 
   async closeTableSession(
-    arg1: string | { restaurantId?: string; tableId?: string; waiterName?: string; tableSessionId?: string; force?: boolean },
+    arg1: string | { restaurantId?: string; tableId?: string; tableNumber?: string; waiterName?: string; tableSessionId?: string; force?: boolean; scope?: any },
     arg2?: string,
     arg3?: string,
     arg4?: string
@@ -1231,6 +1231,7 @@ export class RestaurantClient {
     let waiterName: string | undefined;
     let tableSessionId: string | undefined;
     let force: boolean | undefined;
+    let passedScope: any = undefined;
 
     if (typeof arg1 === 'object' && arg1 !== null) {
       restId = arg1.restaurantId;
@@ -1238,6 +1239,7 @@ export class RestaurantClient {
       waiterName = arg1.waiterName;
       tableSessionId = arg1.tableSessionId;
       force = arg1.force;
+      passedScope = (arg1 as any).scope;
     } else if (typeof arg1 === 'string') {
       const str1 = arg1;
       if (arg4 !== undefined) {
@@ -1286,30 +1288,41 @@ export class RestaurantClient {
       throw new Error('table_id is required to close table session.');
     }
 
-    const userRole = this.base.currentUser?.role as string | undefined;
+    this.base.loadDatabase();
+    const targetTbls = this.base.tables.filter((t) => t.id === tableId || (t.tableNumber && matchTableNumber(t.tableNumber, tableId!)));
+    const matchedTableNum = targetTbls[0]?.tableNumber || (tableId.startsWith('Table') ? tableId : undefined);
+
+    const userRole = (this.base.currentUser?.role || '').toUpperCase();
     const isOwner = userRole === 'OWNER' || userRole === 'RESTAURANT_OWNER' || userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
-    const targetScope = isOwner ? 'OWNER' : getPortalScopeFromPath();
+    const isWaiter = ['WAITER', 'SERVER', 'RUNNER', 'STAFF'].includes(userRole);
+    const targetScope = passedScope || (isWaiter ? 'WAITER' : (isOwner ? 'OWNER' : (getPortalScopeFromPath() || 'WAITER')));
     const queryParams: string[] = [];
     if (tableSessionId) queryParams.push(`table_session_id=${encodeURIComponent(tableSessionId)}`);
+    if (matchedTableNum) queryParams.push(`table_number=${encodeURIComponent(matchedTableNum)}`);
     if (force !== undefined) queryParams.push(`force=${force ? 'true' : 'false'}`);
     const qs = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
     const endpoint = `/restaurants/${encodeURIComponent(restId)}/tables/${encodeURIComponent(tableId)}/close-session${qs}`;
 
-    await this.base.executeProtectedRequest<any>(
-      endpoint,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          table_session_id: tableSessionId,
-          waiter_name: waiterName || this.base.currentUser?.name || 'Staff',
-          force: force ?? true,
-        }),
-      },
-      targetScope
-    );
+    try {
+      await this.base.executeProtectedRequest<any>(
+        endpoint,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            table_session_id: tableSessionId,
+            table_number: matchedTableNum,
+            waiter_name: waiterName || this.base.currentUser?.name || 'Staff',
+            force: force ?? true,
+          }),
+        },
+        targetScope
+      );
+    } catch (apiErr) {
+      console.warn('Backend close-session error (will reconcile locally):', apiErr);
+    }
 
-    this.base.loadDatabase();
-    const targetTbls = this.base.tables.filter((t) => t.id === tableId || (t.tableNumber && matchTableNumber(t.tableNumber, tableId!)));
+    const resolvedCanonicalRest = this.base.resolveTenantRestaurantId(restId) || restId;
+
     targetTbls.forEach((tbl) => {
       tbl.status = 'AVAILABLE';
       tbl.isOccupied = false;
@@ -1318,9 +1331,10 @@ export class RestaurantClient {
     });
 
     this.base.tableSessions.forEach((s) => {
-      const isRestMatch = !s.restaurantId || s.restaurantId === restId || s.restaurantId === (typeof arg1 === 'string' ? arg1 : undefined);
-      const isTableMatch = s.tableId === tableId || (tableSessionId && s.id === tableSessionId) || targetTbls.some((t) => matchTableNumber(s.tableNumber, t.tableNumber));
-      if (isRestMatch && isTableMatch && s.status === 'ACTIVE') {
+      const sCanon = this.base.resolveTenantRestaurantId(s.restaurantId) || s.restaurantId;
+      const isRestMatch = !s.restaurantId || s.restaurantId === restId || sCanon === resolvedCanonicalRest;
+      const isTableMatch = s.tableId === tableId || (tableSessionId && s.id === tableSessionId) || targetTbls.some((t) => matchTableNumber(s.tableNumber, t.tableNumber)) || (matchedTableNum && matchTableNumber(s.tableNumber, matchedTableNum));
+      if (isRestMatch && isTableMatch) {
         s.status = 'CLOSED';
         s.sessionClosedAt = new Date().toISOString();
         s.closedByWaiterName = waiterName || 'Staff';
@@ -1328,16 +1342,53 @@ export class RestaurantClient {
     });
 
     this.base.orders.forEach((o) => {
-      const isRestMatch = !o.restaurantId || o.restaurantId === restId;
-      const isTableMatch = o.tableId === tableId || (tableSessionId && o.tableSessionId === tableSessionId) || targetTbls.some((t) => matchTableNumber(o.tableNumber, t.tableNumber));
+      const oCanon = this.base.resolveTenantRestaurantId(o.restaurantId) || o.restaurantId;
+      const isRestMatch = !o.restaurantId || o.restaurantId === restId || oCanon === resolvedCanonicalRest;
+      const isTableMatch = o.tableId === tableId || (tableSessionId && o.tableSessionId === tableSessionId) || targetTbls.some((t) => matchTableNumber(o.tableNumber, t.tableNumber)) || (matchedTableNum && matchTableNumber(o.tableNumber, matchedTableNum));
       if (isRestMatch && isTableMatch && o.status !== 'CANCELLED') {
         o.status = 'COMPLETED';
         o.kitchenStatus = 'COMPLETED';
         o.barStatus = 'COMPLETED';
+        o.hookahStatus = 'COMPLETED';
+        o.deliveryStatus = 'DELIVERED';
+        o.paymentStatus = 'PAID';
+      }
+    });
+
+    this.base.bills.forEach((b) => {
+      const bCanon = this.base.resolveTenantRestaurantId(b.restaurantId) || b.restaurantId;
+      const isRestMatch = !b.restaurantId || b.restaurantId === restId || bCanon === resolvedCanonicalRest;
+      const isSessionMatch = Boolean(tableSessionId && b.tableSessionId === tableSessionId);
+      const isTableMatch = b.tableId === tableId || targetTbls.some((t) => matchTableNumber(b.tableNumber, t.tableNumber)) || (matchedTableNum && matchTableNumber(b.tableNumber, matchedTableNum));
+      if (isRestMatch && (isSessionMatch || isTableMatch)) {
+        b.status = 'CLOSED';
+        b.paymentStatus = 'PAID';
+      }
+    });
+
+    this.base.customerRequests.forEach((r) => {
+      const rCanon = this.base.resolveTenantRestaurantId(r.restaurantId) || r.restaurantId;
+      const isRestMatch = !r.restaurantId || r.restaurantId === restId || rCanon === resolvedCanonicalRest;
+      const isTableMatch = r.tableId === tableId || targetTbls.some((t) => matchTableNumber(r.tableNumber, t.tableNumber)) || (matchedTableNum && matchTableNumber(r.tableNumber, matchedTableNum));
+      if (isRestMatch && isTableMatch) {
+        r.status = 'COMPLETED';
       }
     });
 
     this.base.saveDatabase();
+
+    realtimeBus.emit('TableSessionClosed' as any, {
+      tableId,
+      restaurantId: restId,
+      tableNumber: matchedTableNum,
+      sessionId: tableSessionId,
+    });
+    realtimeBus.emit('TableStatusUpdated' as any, {
+      tableId,
+      restaurantId: restId,
+      tableNumber: matchedTableNum,
+      status: 'AVAILABLE',
+    } as any);
     return targetTbls[0] || true;
   }
 

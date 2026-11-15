@@ -1094,7 +1094,16 @@ export function getFulfillmentStation(item: {
   }
   const cat = (item.category || item.barCategory || (item as any).categoryName || '').toLowerCase();
   const name = (item.name || '').toLowerCase();
-  if (cat.includes('hookah') || cat.includes('shisha') || name.includes('hookah') || name.includes('shisha')) {
+  if (
+    cat.includes('hookah') ||
+    cat.includes('shisha') ||
+    name.includes('hookah') ||
+    name.includes('shisha') ||
+    name === 'rose' ||
+    name === 'mint' ||
+    name.includes('rose hookah') ||
+    name.includes('mint hookah')
+  ) {
     return 'HOOKAH';
   }
   if (

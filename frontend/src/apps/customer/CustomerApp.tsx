@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   Trash2,
   Loader2,
+  Check,
 } from 'lucide-react';
 import {
   Button,
@@ -53,6 +54,47 @@ import { CustomerBillModal } from './CustomerBillModal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { matchTableNumber, formatStandardTableNumber } from '../../packages/utils/tableUtils';
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
+
+export interface HookahOption {
+  id: string;
+  name: string;
+  price: number;
+  description?: string;
+}
+
+export const HOOKAH_BASE_OPTIONS: HookahOption[] = [
+  { id: 'regular-water', name: 'Regular Water Base', price: 0, description: 'Chilled mineral water' },
+  { id: 'ice-base', name: 'Ice Base', price: 100, description: 'Double crushed ice for ultra smooth cool smoke' },
+  { id: 'redbull-base', name: 'Red Bull Energy Base', price: 250, description: 'Energizing sweet fruity carbonation' },
+  { id: 'milk-base', name: 'Milk & Crushed Ice', price: 150, description: 'Creamy thick velvet clouds' },
+];
+
+export const HOOKAH_CHILLIM_OPTIONS: HookahOption[] = [
+  { id: 'clay-head', name: 'Classic Clay Head', price: 0, description: 'Traditional clay for pure authentic heat' },
+  { id: 'silicone-head', name: 'Ceramic Silicone Head', price: 100, description: 'Even heat distribution & longer session' },
+];
+
+export const HOOKAH_EXTRA_ADDONS: HookahOption[] = [
+  { id: 'disposable-pipe', name: 'Disposable Hygienic Pipe', price: 50, description: 'Individually sealed sterile pipe' },
+  { id: 'extra-coal', name: 'Extra Coconut Coal', price: 50, description: 'Organic slow-burn coconut cubes' },
+  { id: 'ice-tip-hose', name: 'Ice Tip Freezing Hose', price: 100, description: 'Sub-zero frozen mouthpiece tip' },
+];
+
+export const isHookahProduct = (item: any): boolean => {
+  if (!item) return false;
+  const dest = (item.targetDestination || item.target_destination || item.station || '').toUpperCase();
+  if (dest === 'HOOKAH' || dest === 'SHISHA') return true;
+  const name = (item.name || '').toLowerCase().trim();
+  const cat = (item.categoryId || item.category || item.categoryName || '').toLowerCase().trim();
+  return (
+    name.includes('hookah') ||
+    name.includes('shisha') ||
+    cat.includes('hookah') ||
+    cat.includes('shisha') ||
+    name === 'rose' ||
+    name === 'mint'
+  );
+};
 
 export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   tableNumber = 'Table 01',
@@ -82,6 +124,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [selectedServingOption, setSelectedServingOption] = useState<string>('');
+  const [selectedHookahBase, setSelectedHookahBase] = useState<HookahOption>(HOOKAH_BASE_OPTIONS[0]);
+  const [selectedHookahChillim, setSelectedHookahChillim] = useState<HookahOption>(HOOKAH_CHILLIM_OPTIONS[0]);
+  const [selectedHookahAddOns, setSelectedHookahAddOns] = useState<HookahOption[]>([]);
 
   const [selectedTableNum, setSelectedTableNum] = useState<string>(tableNumber);
   const [currentTable, setCurrentTable] = useState<Table | null>(null);
@@ -91,7 +136,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [isCallWaiterModalOpen, setIsCallWaiterModalOpen] = useState(false);
 
   // Cart state
-  const [cart, setCart] = useState<{ item: MenuItem; quantity: number; notes?: string; servingOption?: string }[]>([]);
+  const [cart, setCart] = useState<{ item: MenuItem; quantity: number; notes?: string; servingOption?: string; selectedOptions?: any }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
@@ -530,6 +575,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const handleSwitchMenuTab = (tab: 'FOOD' | 'BAR' | 'HOOKAH') => {
     setCurrentMenuTab(tab);
     setActiveCategory('all');
+    if (tab !== 'FOOD') {
+      setDietaryFilter('ALL');
+    }
   };
 
   const getTableStorageKey = (restId?: string, tableNum?: string) => {
@@ -616,6 +664,17 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     if (now - lastAddTapTimeRef.current < 150) return; // Prevent duplicate rapid taps
     lastAddTapTimeRef.current = now;
 
+    if (isHookahProduct(item)) {
+      setSelectedItem(item);
+      setQuantity(1);
+      setSelectedServingOption('');
+      setSelectedHookahBase(HOOKAH_BASE_OPTIONS[0]);
+      setSelectedHookahChillim(HOOKAH_CHILLIM_OPTIONS[0]);
+      setSelectedHookahAddOns([]);
+      setSpecialInstructions('');
+      return;
+    }
+
     if (item.servingOptions && item.servingOptions.length > 0) {
       setSelectedItem(item);
       setQuantity(1);
@@ -645,22 +704,67 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const handleAddToCart = () => {
     if (!selectedItem) return;
-    const station = getFulfillmentStation(selectedItem);
+    const isHookah = isHookahProduct(selectedItem);
+    const station = isHookah ? 'HOOKAH' : getFulfillmentStation(selectedItem);
+
+    let addOnPrice = 0;
+    let hookahNotes = '';
+    let selectedOptions: any = undefined;
+
+    if (isHookah) {
+      addOnPrice =
+        selectedHookahBase.price +
+        selectedHookahChillim.price +
+        selectedHookahAddOns.reduce((sum, a) => sum + a.price, 0);
+
+      const parts = [
+        selectedHookahBase.name !== 'Regular Water Base' ? `Base: ${selectedHookahBase.name}` : null,
+        selectedHookahChillim.name !== 'Classic Clay Head' ? `Head: ${selectedHookahChillim.name}` : null,
+        selectedHookahAddOns.length > 0 ? `Add-ons: ${selectedHookahAddOns.map((a) => a.name).join(', ')}` : null,
+      ].filter(Boolean);
+      hookahNotes = parts.join(' • ');
+
+      selectedOptions = {
+        base: selectedHookahBase.name,
+        chillim: selectedHookahChillim.name,
+        addOns: selectedHookahAddOns.map((a) => a.name),
+        hookahConfig: parts.join(' | ') || 'Regular Water Base',
+      };
+    }
+
     const itemToAdd = {
       ...selectedItem,
+      price: selectedItem.price + addOnPrice,
       targetDestination: station,
     };
 
-    const combinedNotes = [selectedServingOption ? `Serving: ${selectedServingOption}` : '', specialInstructions].filter(Boolean).join(' • ');
+    const combinedNotes = [
+      hookahNotes,
+      selectedServingOption ? `Serving: ${selectedServingOption}` : '',
+      specialInstructions.trim(),
+    ].filter(Boolean).join(' • ');
 
     setCart((prev) => {
-      const existing = prev.find((c) => c.item.id === selectedItem.id);
+      const existing = prev.find(
+        (c) => c.item.id === selectedItem.id && (c.notes || '') === combinedNotes
+      );
       if (existing) {
         return prev.map((c) =>
-          c.item.id === selectedItem.id ? { ...c, quantity: c.quantity + quantity, notes: combinedNotes } : c
+          c.item.id === selectedItem.id && (c.notes || '') === combinedNotes
+            ? { ...c, quantity: c.quantity + quantity }
+            : c
         );
       }
-      return [...prev, { item: itemToAdd, quantity, notes: combinedNotes, servingOption: selectedServingOption }];
+      return [
+        ...prev,
+        {
+          item: itemToAdd,
+          quantity,
+          notes: combinedNotes,
+          servingOption: selectedServingOption,
+          selectedOptions,
+        },
+      ];
     });
 
     setRecentlyAddedId(selectedItem.id);
@@ -672,6 +776,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     setQuantity(1);
     setSpecialInstructions('');
     setSelectedServingOption('');
+    setSelectedHookahBase(HOOKAH_BASE_OPTIONS[0]);
+    setSelectedHookahChillim(HOOKAH_CHILLIM_OPTIONS[0]);
+    setSelectedHookahAddOns([]);
   };
 
   const handleCheckout = async () => {
@@ -684,7 +791,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const total = subtotal + tax;
 
     const orderItems: OrderItem[] = cart.map((c, idx) => {
-      const station = getFulfillmentStation(c.item);
+      const isHookah = isHookahProduct(c.item);
+      const station = isHookah ? 'HOOKAH' : getFulfillmentStation(c.item);
       return {
         id: `oi-${Date.now()}-${idx}`,
         menuItemId: c.item.id,
@@ -692,6 +800,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         quantity: c.quantity,
         price: c.item.price,
         notes: c.notes,
+        selectedOptions: c.selectedOptions,
         targetDestination: station,
         isAlcoholic: c.item.isAlcoholic || station === 'BAR',
         alcoholPercentage: c.item.alcoholPercentage,
@@ -796,23 +905,112 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     let matchesCat = activeCategory === 'all';
     if (!matchesCat) {
       const activeClean = activeCategory.toLowerCase().trim();
-      const itemCatId = (item.categoryId || '').toLowerCase().trim();
-      const itemBarCat = (item.barCategory || '').toLowerCase().trim();
-      const matchingCategoryObj = foodCategories.find(
-        (c) => c.id.toLowerCase() === activeClean || c.name.toLowerCase() === activeClean
-      );
-      const catName = matchingCategoryObj ? matchingCategoryObj.name.toLowerCase() : '';
-      const catId = matchingCategoryObj ? matchingCategoryObj.id.toLowerCase() : '';
 
-      matchesCat =
-        itemCatId === activeClean ||
-        itemBarCat === activeClean ||
-        (catId !== '' && itemCatId === catId) ||
-        (catName !== '' && (itemCatId === catName || itemBarCat === catName));
+      if (currentMenuTab === 'HOOKAH') {
+        const itemCatId = (item.categoryId || '').toLowerCase().trim();
+        const itemCat = ((item as any).category || '').toLowerCase().trim();
+        const itemDesc = (item.description || '').toLowerCase();
+        const itemName = (item.name || '').toLowerCase();
+
+        if (activeClean === 'flavours' || activeClean === 'flavors') {
+          matchesCat =
+            itemCatId.includes('flavor') ||
+            itemCatId.includes('flavour') ||
+            itemCatId.includes('classic') ||
+            itemCatId.includes('hookah') ||
+            itemCatId.includes('shisha') ||
+            itemCat.includes('flavor') ||
+            itemCat.includes('flavour') ||
+            itemCat.includes('classic') ||
+            itemCat.includes('shisha') ||
+            itemName.includes('flavor') ||
+            itemName.includes('flavour') ||
+            itemName.includes('apple') ||
+            itemName.includes('mint') ||
+            itemName.includes('grape') ||
+            itemName.includes('berry') ||
+            itemName.includes('watermelon') ||
+            itemCatId === 'flavours' ||
+            itemCatId === 'flavors';
+        } else if (activeClean === 'exotic-blends' || activeClean === 'exotic blends') {
+          matchesCat =
+            itemCatId.includes('exotic') ||
+            itemCatId.includes('blend') ||
+            itemCat.includes('exotic') ||
+            itemCat.includes('blend') ||
+            itemName.includes('blend') ||
+            itemName.includes('exotic') ||
+            itemName.includes('special') ||
+            itemDesc.includes('blend') ||
+            itemDesc.includes('exotic');
+        } else if (activeClean === 'herbal' || activeClean === 'herbal & tobacco-free') {
+          matchesCat =
+            itemCatId.includes('herbal') ||
+            itemCatId.includes('tobacco-free') ||
+            itemCatId.includes('nicotine-free') ||
+            itemCat.includes('herbal') ||
+            itemCat.includes('tobacco-free') ||
+            itemName.includes('herbal') ||
+            itemName.includes('tobacco-free') ||
+            itemDesc.includes('herbal') ||
+            itemDesc.includes('tobacco-free') ||
+            itemDesc.includes('nicotine');
+        } else if (activeClean === 'ice-base' || activeClean === 'ice base' || activeClean === 'ice base & addons') {
+          matchesCat =
+            itemCatId.includes('ice') ||
+            itemCatId.includes('addon') ||
+            itemCatId.includes('add-on') ||
+            itemCat.includes('ice') ||
+            itemCat.includes('addon') ||
+            itemName.includes('ice base') ||
+            itemName.includes('ice') ||
+            itemName.includes('addon') ||
+            itemDesc.includes('ice base') ||
+            itemDesc.includes('ice tip') ||
+            itemDesc.includes('crushed ice');
+        } else if (activeClean === 'accessories') {
+          matchesCat =
+            itemCatId.includes('accessor') ||
+            itemCatId.includes('coal') ||
+            itemCatId.includes('pipe') ||
+            itemCatId.includes('head') ||
+            itemCatId.includes('foil') ||
+            itemCat.includes('accessor') ||
+            itemCat.includes('coal') ||
+            itemCat.includes('pipe') ||
+            itemName.includes('coal') ||
+            itemName.includes('pipe') ||
+            itemName.includes('head') ||
+            itemName.includes('accessory') ||
+            itemName.includes('accessories');
+        } else {
+          matchesCat =
+            itemCatId === activeClean ||
+            itemCat === activeClean ||
+            itemCatId.includes(activeClean) ||
+            itemCat.includes(activeClean);
+        }
+      } else {
+        const itemCatId = (item.categoryId || '').toLowerCase().trim();
+        const itemBarCat = (item.barCategory || '').toLowerCase().trim();
+        const matchingCategoryObj = foodCategories.find(
+          (c) => c.id.toLowerCase() === activeClean || c.name.toLowerCase() === activeClean
+        );
+        const catName = matchingCategoryObj ? matchingCategoryObj.name.toLowerCase() : '';
+        const catId = matchingCategoryObj ? matchingCategoryObj.id.toLowerCase() : '';
+
+        matchesCat =
+          itemCatId === activeClean ||
+          itemBarCat === activeClean ||
+          (catId !== '' && itemCatId === catId) ||
+          (catName !== '' && (itemCatId === catName || itemBarCat === catName));
+      }
     }
 
+    // Dietary filter strictly applies only to Food dishes (Hookah & Bar are non-food)
     const isVegItem = item.isVegetarian !== false && item.dietaryType !== 'NON_VEG';
     const matchesDietary =
+      currentMenuTab !== 'FOOD' ||
       dietaryFilter === 'ALL' ||
       (dietaryFilter === 'VEG' && isVegItem) ||
       (dietaryFilter === 'NON_VEG' && !isVegItem);
@@ -1238,8 +1436,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           )}
         </div>
 
-        {/* Dietary Veg/Non-Veg Quick Filter */}
-        {!isBarTheme && (
+        {/* Dietary Veg/Non-Veg Quick Filter: Strictly for Food dishes */}
+        {currentMenuTab === 'FOOD' && (
           <div className="flex items-center gap-1.5 p-1 liquid-glass-strong rounded-2xl text-xs w-full min-w-0 box-border overflow-hidden border border-white/18 shadow-md">
             <button
               onClick={() => setDietaryFilter('ALL')}
@@ -1292,16 +1490,15 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 : 'liquid-glass-pill text-white/70 hover:text-white border border-white/18'
             }`}
           >
-            All {isHookahTheme ? 'Flavours' : isBarTheme ? 'Beverages' : 'Categories'}
+            {isHookahTheme ? 'All Hookah Products' : isBarTheme ? 'All Beverages' : 'All Categories'}
           </button>
           {(isHookahTheme
             ? [
-                { id: 'Hookah & Shisha', name: 'All Shisha' },
-                { id: 'Classic Flavors', name: 'Classic' },
-                { id: 'Exotic Blends', name: 'Exotic Blends' },
-                { id: 'Herbal & Tobacco-Free', name: 'Herbal' },
-                { id: 'Ice Base & Addons', name: 'Ice Base' },
-                { id: 'Accessories', name: 'Accessories' },
+                { id: 'flavours', name: 'Flavours' },
+                { id: 'exotic-blends', name: 'Exotic Blends' },
+                { id: 'herbal', name: 'Herbal' },
+                { id: 'ice-base', name: 'Ice Base' },
+                { id: 'accessories', name: 'Accessories' },
               ]
             : isBarTheme
             ? [
@@ -1355,7 +1552,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             return (
               <div
                 key={item.id}
-                className={`p-3 sm:p-4 flex gap-2.5 sm:gap-3.5 transition-all duration-300 rounded-3xl liquid-glass-card shadow-xl w-full max-w-full min-w-0 box-border overflow-hidden border border-white/20 hover:border-white/35 hover:shadow-[0_20px_50px_rgba(0,0,0,0.7)] ${
+                onClick={() => {
+                  if (isAvailable) {
+                    handleDirectAddItem(item);
+                  }
+                }}
+                className={`p-3 sm:p-4 flex gap-2.5 sm:gap-3.5 transition-all duration-300 rounded-3xl liquid-glass-card shadow-xl w-full max-w-full min-w-0 box-border overflow-hidden border border-white/20 hover:border-white/35 hover:shadow-[0_20px_50px_rgba(0,0,0,0.7)] cursor-pointer ${
                   isAvailable
                     ? 'active:scale-[0.99]'
                     : 'opacity-50 border-white/[0.08]'
@@ -1379,7 +1581,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                        {!isBarTheme && !item.isAlcoholic && (
+                        {!isBarTheme && !isHookahTheme && !item.isAlcoholic && !isHookahProduct(item) && (
                           <span
                             className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold font-mono shrink-0 shadow-sm ${
                               isVeg
@@ -1390,6 +1592,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${isVeg ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                             <span className="hidden sm:inline">{isVeg ? 'VEG' : 'NON-VEG'}</span>
+                          </span>
+                        )}
+                        {(isHookahTheme || isHookahProduct(item)) && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 text-amber-300 text-[9px] font-bold font-mono shrink-0 shadow-sm">
+                            <Flame className="w-2.5 h-2.5 text-amber-400" />
+                            <span className="hidden sm:inline">HOOKAH</span>
                           </span>
                         )}
                         <h3 className="text-[15px] sm:text-base font-bold text-white tracking-tight truncate font-display">{item.name}</h3>
@@ -1465,7 +1673,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                             ) : (
                               <>
                                 <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                                <span>{hasOptions ? 'Options' : 'Add'}</span>
+                                <span>{hasOptions ? 'Options' : isHookahProduct(item) ? 'Customize' : 'Add'}</span>
                               </>
                             )}
                           </button>
@@ -1550,15 +1758,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           >
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className={`text-[9px] font-mono px-2 py-0.5 rounded font-medium shrink-0 ${
-                    selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG'
-                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-rose-950/80 text-rose-400 border border-rose-500/30'
-                  }`}
-                >
-                  {selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG' ? 'VEG' : 'NON-VEG'}
-                </span>
+                {isHookahProduct(selectedItem) ? (
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded font-medium shrink-0 bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
+                    <Flame className="w-2.5 h-2.5 text-amber-400" /> HOOKAH
+                  </span>
+                ) : selectedItem.targetDestination === 'BAR' || selectedItem.isAlcoholic ? (
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded font-medium shrink-0 bg-purple-500/20 text-purple-300 border border-purple-400/30 flex items-center gap-1">
+                    <Wine className="w-2.5 h-2.5 text-purple-400" /> BAR
+                  </span>
+                ) : (
+                  <span
+                    className={`text-[9px] font-mono px-2 py-0.5 rounded font-medium shrink-0 ${
+                      selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG'
+                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-rose-950/80 text-rose-400 border border-rose-500/30'
+                    }`}
+                  >
+                    {selectedItem.isVegetarian !== false && selectedItem.dietaryType !== 'NON_VEG' ? 'VEG' : 'NON-VEG'}
+                  </span>
+                )}
                 <h3 className="font-bold text-white text-sm tracking-tight truncate">{selectedItem.name}</h3>
               </div>
               <button
@@ -1579,6 +1797,144 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             )}
 
             <p className="text-white/60 leading-relaxed text-xs">{selectedItem.description}</p>
+
+            {/* Hookah Customization & Add-ons Configuration */}
+            {isHookahProduct(selectedItem) && (
+              <div className="space-y-4 pt-1 border-t border-white/[0.08]">
+                {/* 1. Base Upgrade */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white/90 text-xs flex items-center gap-1.5">
+                      <span>🧊</span> Hookah Base
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-mono">Select Base</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {HOOKAH_BASE_OPTIONS.map((base) => {
+                      const isSelected = selectedHookahBase.id === base.id;
+                      return (
+                        <button
+                          key={base.id}
+                          type="button"
+                          onClick={() => setSelectedHookahBase(base)}
+                          className={`p-2.5 rounded-xl border text-left transition-all flex items-start justify-between gap-2 ${
+                            isSelected
+                              ? 'bg-amber-500/20 border-amber-400 text-white shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                              : 'bg-white/[0.04] border-white/10 text-white/70 hover:bg-white/[0.08] hover:border-white/20'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                                isSelected ? 'border-amber-400 bg-amber-400' : 'border-white/30'
+                              }`}>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-black" />}
+                              </span>
+                              <span className="text-xs font-bold text-white truncate">{base.name}</span>
+                            </div>
+                            {base.description && (
+                              <p className="text-[10px] text-white/50 mt-1 pl-5 line-clamp-1">{base.description}</p>
+                            )}
+                          </div>
+                          <span className="text-[11px] font-mono font-bold text-amber-300 shrink-0">
+                            {base.price > 0 ? `+${formatPrice(base.price)}` : 'FREE'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Chillim / Head Selection */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white/90 text-xs flex items-center gap-1.5">
+                      <span>🏺</span> Head / Chillim Type
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-mono">Select Head</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {HOOKAH_CHILLIM_OPTIONS.map((chillim) => {
+                      const isSelected = selectedHookahChillim.id === chillim.id;
+                      return (
+                        <button
+                          key={chillim.id}
+                          type="button"
+                          onClick={() => setSelectedHookahChillim(chillim)}
+                          className={`p-2.5 rounded-xl border text-left transition-all flex items-start justify-between gap-1.5 ${
+                            isSelected
+                              ? 'bg-amber-500/20 border-amber-400 text-white shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                              : 'bg-white/[0.04] border-white/10 text-white/70 hover:bg-white/[0.08]'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                                isSelected ? 'border-amber-400 bg-amber-400' : 'border-white/30'
+                              }`}>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-black" />}
+                              </span>
+                              <span className="text-xs font-bold text-white truncate">{chillim.name}</span>
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-mono font-bold text-amber-300 shrink-0">
+                            {chillim.price > 0 ? `+${formatPrice(chillim.price)}` : 'FREE'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Extra Add-ons & Accessories (Multi-Select) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white/90 text-xs flex items-center gap-1.5">
+                      <span>✨</span> Accessories &amp; Extras
+                    </span>
+                    <span className="text-[10px] text-white/40 font-mono">Optional</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {HOOKAH_EXTRA_ADDONS.map((addon) => {
+                      const isChecked = selectedHookahAddOns.some((a) => a.id === addon.id);
+                      return (
+                        <button
+                          key={addon.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedHookahAddOns((prev) =>
+                              isChecked ? prev.filter((a) => a.id !== addon.id) : [...prev, addon]
+                            );
+                          }}
+                          className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2 ${
+                            isChecked
+                              ? 'bg-amber-500/15 border-amber-400/80 text-white shadow-sm'
+                              : 'bg-white/[0.03] border-white/10 text-white/70 hover:bg-white/[0.06]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                              isChecked ? 'bg-amber-500 border-amber-400 text-black' : 'border-white/30'
+                            }`}>
+                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-medium text-white block truncate">{addon.name}</span>
+                              {addon.description && (
+                                <span className="text-[10px] text-white/40 block truncate">{addon.description}</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xs font-mono font-bold text-amber-300 shrink-0">
+                            +{formatPrice(addon.price)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {selectedItem.servingOptions && selectedItem.servingOptions.length > 0 && (
               <div className="space-y-1.5">
@@ -1632,9 +1988,21 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
             <button
               onClick={handleAddToCart}
-              className="w-full py-3.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-lg transition-all active:scale-[0.99]"
+              className="w-full py-3.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
             >
-              Add to Order · {formatPrice(selectedItem.price * quantity)}
+              <span>Add to Order</span>
+              <span>·</span>
+              <span className="font-mono font-bold">
+                {formatPrice(
+                  (selectedItem.price +
+                    (isHookahProduct(selectedItem)
+                      ? selectedHookahBase.price +
+                        selectedHookahChillim.price +
+                        selectedHookahAddOns.reduce((s, a) => s + a.price, 0)
+                      : 0)) *
+                    quantity
+                )}
+              </span>
             </button>
           </div>
         </div>

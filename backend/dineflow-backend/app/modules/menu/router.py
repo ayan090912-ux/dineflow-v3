@@ -60,6 +60,14 @@ class UpdateMenuItemSchema(BaseModel):
 def format_menu_item_response(item: MenuItem) -> dict:
     stock_val = getattr(item, "stock_quantity", None)
     track_val = bool(getattr(item, "track_inventory", False))
+    dest = (getattr(item, "target_destination", None) or "").upper()
+    name_lower = (item.name or "").lower()
+    is_hookah = dest == "HOOKAH" or "shisha" in name_lower or "hookah" in name_lower
+
+    # Hookah products are strictly non-food items: omit veg / non-veg dietary classifications
+    is_veg_val = None if is_hookah else item.is_vegetarian
+    dietary_val = None if is_hookah else item.dietary_type
+
     return {
         "id": item.id,
         "restaurant_id": item.restaurant_id,
@@ -73,12 +81,12 @@ def format_menu_item_response(item: MenuItem) -> dict:
         "imageUrl": item.image_url,
         "is_available": item.is_available,
         "isAvailable": item.is_available,
-        "is_vegetarian": item.is_vegetarian,
-        "isVegetarian": item.is_vegetarian,
-        "dietary_type": item.dietary_type,
-        "dietaryType": item.dietary_type,
-        "target_destination": item.target_destination,
-        "targetDestination": item.target_destination,
+        "is_vegetarian": is_veg_val,
+        "isVegetarian": is_veg_val,
+        "dietary_type": dietary_val,
+        "dietaryType": dietary_val,
+        "target_destination": "HOOKAH" if is_hookah else item.target_destination,
+        "targetDestination": "HOOKAH" if is_hookah else item.target_destination,
         "is_alcoholic": item.is_alcoholic,
         "isAlcoholic": item.is_alcoholic,
         "preparation_time_minutes": item.preparation_time_minutes,

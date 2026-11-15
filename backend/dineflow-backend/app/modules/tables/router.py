@@ -298,14 +298,12 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{restaurant_id}/active-sessions")
 async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depends(get_db)):
-    try:
-        from app.core.tenant.resolver import resolve_canonical_restaurant_id
-        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
-    except Exception:
-        canonical_id = restaurant_id
+    valid_rest_ids = await _get_valid_restaurant_ids(restaurant_id, db)
+    if not valid_rest_ids:
+        valid_rest_ids = [restaurant_id]
 
     query = select(TableSession).where(
-        (TableSession.restaurant_id == canonical_id) &
+        (TableSession.restaurant_id.in_(valid_rest_ids)) &
         (TableSession.status != "CLOSED")
     ).order_by(TableSession.session_started_at.desc())
     result = await db.execute(query)
@@ -625,7 +623,7 @@ async def create_table_session(
 
     now_utc = datetime.now(timezone.utc)
     new_sess = TableSession(
-        id=f"sess-{int(now_utc.timestamp() * 1000)}",
+        id=f"sess-{int(now_utc.timestamp() * 1000)}-{uuid.uuid4().hex[:6]}",
         restaurant_id=tbl.restaurant_id or canonical_rest_id,
         table_id=resolved_tbl_id,
         table_number=resolved_tbl_num,
@@ -706,6 +704,7 @@ async def get_table(
 
 class CloseTableSessionSchema(BaseModel):
     table_session_id: Optional[str] = None
+    table_number: Optional[str] = None
     waiter_name: Optional[str] = None
     force: Optional[bool] = False
 
@@ -715,6 +714,7 @@ async def close_table_session(
     restaurant_id: str,
     table_id: str,
     table_session_id: Optional[str] = Query(None),
+    table_number: Optional[str] = Query(None),
     force: Optional[bool] = Query(False),
     payload: Optional[CloseTableSessionSchema] = None,
     caller: CallerContext = Depends(require_tenant_staff_or_owner),
@@ -742,10 +742,11 @@ async def close_table_session(
         )
 
     target_session_id = table_session_id or (payload.table_session_id if payload else None)
+    target_table_number = table_number or (payload.table_number if payload else None)
     valid_rest_ids = await _get_valid_restaurant_ids(restaurant_id, db)
 
     query_tbl = select(Table).where(
-        _get_table_match_filter(table_id)
+        _get_table_match_filter(table_id, target_table_number)
     )
     if valid_rest_ids:
         query_tbl = query_tbl.where(Table.restaurant_id.in_(valid_rest_ids))
@@ -763,18 +764,29 @@ async def close_table_session(
 
     # 3. Tenant Membership Check: Staff/Owner must belong to this restaurant
     if not caller.is_admin:
+        caller_rest_match = bool(
+            caller.restaurant_id and (
+                caller.restaurant_id in valid_rest_ids or 
+                caller.restaurant_id == tbl.restaurant_id or
+                caller.restaurant_id == restaurant_id
+            )
+        )
         if caller.role in ["OWNER", "RESTAURANT_OWNER"]:
-            res_rest = await db.execute(select(Restaurant).where(Restaurant.id == tbl.restaurant_id))
-            rest_obj = res_rest.scalar_one_or_none()
-            if rest_obj:
-                is_owner = (caller.uid and rest_obj.owner_uid == caller.uid) or (caller.email and rest_obj.owner_email and caller.email.lower() == rest_obj.owner_email.lower())
-                if not is_owner:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"Access denied: You do not have ownership of restaurant '{tbl.restaurant_id}'."
+            if not caller_rest_match:
+                res_rest = await db.execute(select(Restaurant).where(Restaurant.id == tbl.restaurant_id))
+                rest_obj = res_rest.scalar_one_or_none()
+                if rest_obj:
+                    is_owner = (
+                        (caller.uid and rest_obj.owner_uid and rest_obj.owner_uid == caller.uid) or
+                        (caller.email and rest_obj.owner_email and caller.email.lower() == rest_obj.owner_email.lower())
                     )
+                    if not is_owner:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Access denied: You do not have ownership of restaurant '{tbl.restaurant_id}'."
+                        )
         elif (caller.role or "").upper() in authorized_roles:
-            if caller.restaurant_id and caller.restaurant_id not in valid_rest_ids:
+            if not caller_rest_match and caller.restaurant_id and caller.restaurant_id not in valid_rest_ids:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Access denied: Staff member is assigned to restaurant '{caller.restaurant_id}', not '{tbl.restaurant_id}'."
@@ -785,9 +797,26 @@ async def close_table_session(
 
     # Close ALL active sessions for this table in this restaurant
     now_utc = datetime.now(timezone.utc)
+    table_num_variants = [tbl.table_number]
+    clean_num = _extract_clean_table_number(tbl.table_number, tbl.id)
+    if clean_num:
+        raw_num = clean_num.lstrip("0") or "0"
+        padded_2 = clean_num.zfill(2)
+        table_num_variants.extend([
+            f"Table {raw_num}",
+            f"Table {padded_2}",
+            raw_num,
+            padded_2,
+            f"tbl-{padded_2}",
+            f"tbl-{raw_num}",
+            tbl.id
+        ])
+    if target_table_number:
+        table_num_variants.extend([target_table_number, target_table_number.strip()])
+
     query_sess = select(TableSession).where(
         (TableSession.restaurant_id.in_(search_rest_ids)) &
-        ((TableSession.table_id == tbl.id) | (TableSession.table_number == tbl.table_number)) &
+        ((TableSession.table_id == tbl.id) | (TableSession.table_number.in_(table_num_variants)) | (TableSession.id == target_session_id)) &
         (TableSession.status != "CLOSED")
     )
 

@@ -53,7 +53,7 @@ class TestTenantSecurityHardening:
     # 1. Orders Endpoint Multi-Tenant Isolation
     # =========================================================================
 
-    def test_orders_unauthenticated_returns_401(self):
+    async def test_orders_unauthenticated_returns_401(self):
         res = client.get("/api/v1/orders/restaurant/tenant-a-id")
         assert res.status_code == 401
         assert "Authentication credentials are required" in res.json().get("detail", "")
@@ -110,7 +110,7 @@ class TestTenantSecurityHardening:
     # 2. Customer Requests (Waiter Calls) Multi-Tenant Isolation
     # =========================================================================
 
-    def test_customer_requests_unauthenticated_returns_401(self):
+    async def test_customer_requests_unauthenticated_returns_401(self):
         res = client.get("/api/v1/customer-requests?restaurant_id=tenant-a-id")
         assert res.status_code == 401
 
@@ -144,7 +144,7 @@ class TestTenantSecurityHardening:
     # 3. Billing & Financial Data Multi-Tenant Isolation
     # =========================================================================
 
-    def test_billing_bills_unauthenticated_returns_401(self):
+    async def test_billing_bills_unauthenticated_returns_401(self):
         res = client.get("/api/v1/restaurants/tenant-a-id/billing/bills")
         assert res.status_code == 401
 
@@ -174,7 +174,7 @@ class TestTenantSecurityHardening:
         )
         assert res.status_code == 200
 
-    def test_billing_close_table_unauthenticated_returns_401(self):
+    async def test_billing_close_table_unauthenticated_returns_401(self):
         res = client.post("/api/v1/restaurants/tenant-a-id/billing/bill-999/close-table")
         assert res.status_code == 401
 

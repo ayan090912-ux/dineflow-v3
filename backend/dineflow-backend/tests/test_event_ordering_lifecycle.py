@@ -135,7 +135,7 @@ class TestEventOrderingLifecycle:
     # -----------------------------------------------------------------------
     # Scenario 2: Service period calculations (single-day, multi-day, midnight spans)
     # -----------------------------------------------------------------------
-    def test_service_period_engine_calculations(self):
+    async def test_service_period_engine_calculations(self):
         # A: Single-day normal evening
         res_single = calculate_event_service_window(
             start_date_str="2026-11-20",
@@ -176,7 +176,7 @@ class TestEventOrderingLifecycle:
     # -----------------------------------------------------------------------
     # Scenario 3: Activation & event expiry authoritative enforcement
     # -----------------------------------------------------------------------
-    def test_authoritative_event_status_lifecycle(self):
+    async def test_authoritative_event_status_lifecycle(self):
         now = datetime.now(timezone.utc)
         start_future = now + timedelta(days=2)
         end_future = now + timedelta(days=2, hours=6)

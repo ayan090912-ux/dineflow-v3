@@ -140,7 +140,7 @@ class TestStaffTerminalSecurity:
             )
             assert tampered_resp.status_code == 401
 
-    def test_websocket_privileged_role_tenant_authorization(self):
+    async def test_websocket_privileged_role_tenant_authorization(self):
         from fastapi.testclient import TestClient
         from starlette.websockets import WebSocketDisconnect
 

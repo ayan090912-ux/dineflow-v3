@@ -538,18 +538,18 @@ export class OrderClient {
     let order = this.base.orders.find((o) => o.id === orderId);
     const currentMins = order?.estimatedPrepTimeMinutes || 15;
     let newMins = currentMins;
+    const isDelta = deltaOrMins === 5 || deltaOrMins === -5;
 
-    if (deltaOrMins === 5 || deltaOrMins === -5) {
+    if (isDelta) {
       newMins = Math.max(1, currentMins + deltaOrMins);
     } else {
       newMins = Math.max(1, deltaOrMins);
     }
 
     const baseTime = order?.etaTargetTimestamp ? new Date(order.etaTargetTimestamp).getTime() : Date.now();
-    const newTargetTimestamp =
-      deltaOrMins === 5 || deltaOrMins === -5
-        ? new Date(baseTime + deltaOrMins * 60000).toISOString()
-        : new Date(Date.now() + newMins * 60000).toISOString();
+    const newTargetTimestamp = isDelta
+      ? new Date(baseTime + deltaOrMins * 60000).toISOString()
+      : new Date(Date.now() + newMins * 60000).toISOString();
 
     if (order) {
       order.estimatedPrepTimeMinutes = newMins;
@@ -572,12 +572,15 @@ export class OrderClient {
 
     try {
       const resp = await this.base.executeProtectedRequest<any>(
-        `/orders/${encodeURIComponent(orderId)}/status`,
+        `/orders/${encodeURIComponent(orderId)}/eta`,
         {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify({
+            deltaMinutes: isDelta ? deltaOrMins : undefined,
             estimatedPrepTimeMinutes: newMins,
+            targetTimestamp: newTargetTimestamp,
             etaTargetTimestamp: newTargetTimestamp,
+            reason: reason || note || 'Adjusted by Chef',
           }),
         },
         'KITCHEN'
@@ -594,7 +597,22 @@ export class OrderClient {
         this.base.saveDatabase();
       }
     } catch (e) {
-      console.warn('Backend updateOrderETA failed, fallback to local state:', e);
+      console.warn('Backend /orders/eta failed, fallback to /status:', e);
+      try {
+        await this.base.executeProtectedRequest<any>(
+          `/orders/${encodeURIComponent(orderId)}/status`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              estimatedPrepTimeMinutes: newMins,
+              etaTargetTimestamp: newTargetTimestamp,
+            }),
+          },
+          'KITCHEN'
+        );
+      } catch (err2) {
+        console.warn('Backend fallback to /status failed:', err2);
+      }
     }
 
     const updatedOrder = order || {
@@ -611,6 +629,7 @@ export class OrderClient {
       etaTargetTimestamp: newTargetTimestamp,
       data: updatedOrder,
     });
+    realtimeBus.emit('order_status_updated' as any, updatedOrder);
 
     return updatedOrder;
   }
@@ -704,8 +723,9 @@ export class OrderClient {
   }
 
   async collectOrder(orderId: string, station?: string, waiterName?: string) {
+    let apiResp: any = null;
     try {
-      await this.base.executeProtectedRequest<any>(
+      apiResp = await this.base.executeProtectedRequest<any>(
         `/orders/${encodeURIComponent(orderId)}/collect`,
         {
           method: 'POST',
@@ -713,8 +733,12 @@ export class OrderClient {
         },
         'WAITER'
       );
-    } catch (e) {
+    } catch (e: any) {
       console.warn('API POST for collectOrder failed:', e);
+      // Re-throw 409 Conflict (e.g., claimed by another waiter) or other explicit errors
+      if (e?.status === 409 || e?.statusCode === 409 || e?.message?.includes('already been collected')) {
+        throw e;
+      }
     }
 
     const order = this.base.orders.find((o) => o.id === orderId);
@@ -732,6 +756,7 @@ export class OrderClient {
         tableNumber: order.tableNumber,
         data: order,
       });
+      realtimeBus.emit('order_status_updated' as any, order);
     }
     return order;
   }

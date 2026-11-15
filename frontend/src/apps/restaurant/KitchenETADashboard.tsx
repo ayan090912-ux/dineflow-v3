@@ -398,8 +398,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
       // Targeted ETA Update — update specific ticket without refetching the entire board
       if (event.type === 'ETAUpdated' || (event as any).type === 'ETA_UPDATED') {
         const orderId = (event as any).orderId || (event as any).order_id;
-        const mins = (event as any).estimatedPrepTimeMinutes;
-        const target = (event as any).etaTargetTimestamp;
+        const mins = (event as any).estimatedPrepTimeMinutes ?? (event as any).estimated_prep_time_minutes;
+        const target = (event as any).etaTargetTimestamp ?? (event as any).eta_target_timestamp;
         if (orderId) {
           setOrders((prev) =>
             prev.map((o) =>
@@ -418,14 +418,70 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
       // Targeted Order Status Update — no sound, just UI update
       if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
-        const orderId = (event as any).orderId || (event as any).order_id;
-        const status = (event as any).status;
-        const kitchenStatus = (event as any).kitchenStatus;
+        const orderId = (event as any).orderId || (event as any).order_id || (event.data as any)?.id;
+        const status = (event as any).status || (event.data as any)?.status;
+        const kitchenStatus = (event as any).kitchenStatus || (event as any).kitchen_status || (event.data as any)?.kitchenStatus || (event.data as any)?.kitchen_status;
+        const deliveryStatus = (event as any).deliveryStatus || (event as any).delivery_status || (event.data as any)?.deliveryStatus || (event.data as any)?.delivery_status;
+        const claimedBy = (event as any).claimedBy || (event as any).claimed_by || (event.data as any)?.claimedBy || (event.data as any)?.claimed_by;
+        const waiterRequested = (event as any).kitchenWaiterRequested ?? (event as any).kitchen_waiter_requested ?? (event.data as any)?.kitchenWaiterRequested ?? (event.data as any)?.kitchen_waiter_requested;
+        const mins = (event as any).estimatedPrepTimeMinutes ?? (event as any).estimated_prep_time_minutes ?? (event.data as any)?.estimatedPrepTimeMinutes ?? (event.data as any)?.estimated_prep_time_minutes;
+        const target = (event as any).etaTargetTimestamp ?? (event as any).eta_target_timestamp ?? (event.data as any)?.etaTargetTimestamp ?? (event.data as any)?.eta_target_timestamp;
+
         if (orderId) {
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? { ...o, status: status || o.status, kitchenStatus: kitchenStatus || o.kitchenStatus }
+                ? {
+                    ...o,
+                    status: status || o.status,
+                    kitchenStatus: kitchenStatus || o.kitchenStatus,
+                    deliveryStatus: deliveryStatus || o.deliveryStatus,
+                    claimedBy: claimedBy !== undefined ? claimedBy : o.claimedBy,
+                    kitchenWaiterRequested: waiterRequested !== undefined ? waiterRequested : o.kitchenWaiterRequested,
+                    estimatedPrepTimeMinutes: mins !== undefined ? mins : o.estimatedPrepTimeMinutes,
+                    etaTargetTimestamp: target !== undefined ? target : o.etaTargetTimestamp,
+                  }
+                : o
+            )
+          );
+        }
+        return;
+      }
+
+      // Waiter Collected Handover Event
+      if (event.type === 'order_collected' || event.type === 'OrderCollected') {
+        const orderId = (event as any).orderId || (event as any).order_id;
+        const waiterName = (event as any).waiterName || (event as any).waiter_name;
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? {
+                    ...o,
+                    deliveryStatus: 'COLLECTED',
+                    claimedBy: waiterName || o.claimedBy || 'Floor Waiter',
+                  }
+                : o
+            )
+          );
+        }
+        return;
+      }
+
+      // Waiter Delivered to Table Event
+      if (event.type === 'order_delivered' || event.type === 'OrderDelivered') {
+        const orderId = (event as any).orderId || (event as any).order_id;
+        const station = (event as any).station;
+        if (orderId && (!station || station === 'KITCHEN')) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? {
+                    ...o,
+                    kitchenStatus: 'COMPLETED',
+                    deliveryStatus: 'DELIVERED',
+                    status: o.status === 'READY' ? 'DELIVERED' : o.status,
+                  }
                 : o
             )
           );

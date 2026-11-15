@@ -90,6 +90,21 @@ const playNotificationChime = () => {
   } catch (e) {}
 };
 
+// Standalone Live Clock component to avoid re-rendering entire WaiterTerminalOS on each second
+const LiveClock: React.FC = () => {
+  const [time, setTime] = useState<string>('');
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <span className="font-tabular">{time || '08:42 PM'}</span>;
+};
+
 interface WaiterTerminalOSProps {
   restaurant?: Restaurant;
   onLogout?: () => void;
@@ -106,7 +121,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
   // Ref so mute/unmute does NOT re-register the event subscription effect
   const isAudioMutedRef = React.useRef<boolean>(false);
-  const [currentTime, setCurrentTime] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isErrorState, setIsErrorState] = useState<boolean>(false);
   const [wsStatus, setWsStatus] = useState<ConnectionStatusType>('CONNECTING');
@@ -138,6 +152,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
 
   // Debounce protection and history view mode
+  const [ticketFilter, setTicketFilter] = useState<'ready' | 'prep' | 'all'>('ready');
   const [deliveringOrderIds, setDeliveringOrderIds] = useState<Set<string>>(new Set());
   const [collectingOrderIds, setCollectingOrderIds] = useState<Set<string>>(new Set());
   const [completingRequestIds, setCompletingRequestIds] = useState<Set<string>>(new Set());
@@ -174,19 +189,6 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   useEffect(() => {
     isAudioMutedRef.current = isAudioMuted;
   }, [isAudioMuted]);
-
-  // Live Clock Tick
-  useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      );
-    };
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Fetch data strictly for authenticated employee's restaurant
   const loadData = async (silent: boolean = false) => {
@@ -294,7 +296,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         event.type === 'service_request_created' ||
         event.type === 'order_ready' ||
         event.type === 'CustomerRequestCreated' ||
-        event.type === 'OrderReady';
+        event.type === 'OrderReady' ||
+        event.type === 'waiter_requested' ||
+        event.type === 'WaiterRequested';
 
       if (isChimeEvent && !isAudioMutedRef.current) {
         playNotificationChime();
@@ -304,7 +308,70 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       const reqTitle = (event as any).customTitle || (event as any).requestType || (event as any).payload?.customTitle || (event as any).payload?.requestType || 'Assistance';
 
       // 4. Granular instant state dispatch
-      if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
+      if (
+        event.type === 'ETAUpdated' ||
+        (event as any).type === 'ETA_UPDATED' ||
+        (event as any).type === 'eta_updated'
+      ) {
+        const payloadData = (event as any).payload || (event as any).data || event;
+        const orderId = (event as any).orderId || (event as any).order_id || payloadData.orderId || payloadData.order_id || payloadData.id;
+        const mins = payloadData.estimatedPrepTimeMinutes ?? (event as any).estimatedPrepTimeMinutes ?? (event as any).estimated_prep_time_minutes;
+        const target = payloadData.etaTargetTimestamp ?? (event as any).etaTargetTimestamp ?? (event as any).eta_target_timestamp;
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? {
+                    ...o,
+                    estimatedPrepTimeMinutes: mins !== undefined ? mins : o.estimatedPrepTimeMinutes,
+                    etaTargetTimestamp: target !== undefined ? target : o.etaTargetTimestamp,
+                  }
+                : o
+            )
+          );
+        }
+        return;
+      } else if (event.type === 'waiter_requested' || event.type === 'WaiterRequested') {
+        const payloadData = (event as any).payload || (event as any).data || event;
+        const orderId = payloadData.orderId || payloadData.order_id || (event as any).orderId || (event as any).order_id;
+        const station = (payloadData.station || (event as any).station || 'KITCHEN').toUpperCase();
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) => {
+              if (o.id !== orderId) return o;
+              const patch: any = { deliveryStatus: 'WAITING_FOR_WAITER' };
+              if (station === 'KITCHEN') {
+                patch.kitchenWaiterRequested = true;
+                if (!o.kitchenStatus || o.kitchenStatus === 'PREPARING') patch.kitchenStatus = 'READY';
+              } else if (station === 'BAR') {
+                patch.barWaiterRequested = true;
+                if (!o.barStatus || o.barStatus === 'PREPARING') patch.barStatus = 'READY';
+              } else if (station === 'HOOKAH') {
+                patch.hookahWaiterRequested = true;
+                if (!o.hookahStatus || o.hookahStatus === 'PREPARING') patch.hookahStatus = 'READY';
+              }
+              return { ...o, ...patch };
+            })
+          );
+        }
+      } else if (event.type === 'order_collected' || event.type === 'OrderCollected') {
+        const payloadData = (event as any).payload || (event as any).data || event;
+        const orderId = payloadData.orderId || payloadData.order_id || (event as any).orderId || (event as any).order_id;
+        const waiterName = payloadData.waiterName || payloadData.waiter_name || (event as any).waiterName;
+        if (orderId) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? {
+                    ...o,
+                    deliveryStatus: 'COLLECTED',
+                    claimedBy: waiterName || o.claimedBy || 'Floor Waiter',
+                  }
+                : o
+            )
+          );
+        }
+      } else if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
         const payloadData = (event as any).payload || (event as any).data || event;
         const newReq: CustomerRequest = {
           id: payloadData.id || (event as any).id || `req-${Date.now()}`,
@@ -434,17 +501,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       } else if (
         event.type === 'order_status_updated' ||
         event.type === 'OrderStatusUpdated' ||
+        event.type === 'KitchenStatusUpdated' ||
+        event.type === 'kitchen_status_updated' ||
         event.type === 'HookahStatusUpdated' ||
         event.type === 'BarStatusUpdated'
       ) {
-        const payloadData = (event as any).payload || event;
+        const payloadData = (event as any).payload || (event as any).data || event;
         const orderId = (event as any).orderId || (event as any).order_id || payloadData.orderId || payloadData.order_id || payloadData.id;
         const newStatus = (event as any).status || payloadData.status;
-        const newKitchenStatus = (event as any).kitchenStatus || payloadData.kitchenStatus;
+        const newKitchenStatus = (event as any).kitchenStatus || (event as any).kitchen_status || payloadData.kitchenStatus || payloadData.kitchen_status;
         const newBarStatus = (event as any).barStatus || payloadData.barStatus;
         const newHookahStatus = (event as any).hookahStatus || payloadData.hookahStatus;
-        const newDeliveryStatus = (event as any).deliveryStatus || payloadData.deliveryStatus || (event as any).delivery_status;
-        const newClaimedBy = (event as any).claimedBy || payloadData.claimedBy || (event as any).claimed_by;
+        const newDeliveryStatus = (event as any).deliveryStatus || payloadData.deliveryStatus || (event as any).delivery_status || payloadData.delivery_status;
+        const newClaimedBy = (event as any).claimedBy || payloadData.claimedBy || (event as any).claimed_by || payloadData.claimed_by;
+        const waiterRequested = (event as any).kitchenWaiterRequested ?? (event as any).kitchen_waiter_requested ?? payloadData.kitchenWaiterRequested ?? payloadData.kitchen_waiter_requested;
+        const mins = (event as any).estimatedPrepTimeMinutes ?? (event as any).estimated_prep_time_minutes ?? payloadData.estimatedPrepTimeMinutes ?? payloadData.estimated_prep_time_minutes;
+        const target = (event as any).etaTargetTimestamp ?? (event as any).eta_target_timestamp ?? payloadData.etaTargetTimestamp ?? payloadData.eta_target_timestamp;
 
         if (orderId) {
           setOrders((prev) =>
@@ -458,6 +530,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 hookahStatus: newHookahStatus !== undefined ? newHookahStatus : o.hookahStatus,
                 deliveryStatus: newDeliveryStatus || o.deliveryStatus,
                 claimedBy: newClaimedBy || o.claimedBy,
+                kitchenWaiterRequested: waiterRequested !== undefined ? waiterRequested : o.kitchenWaiterRequested,
+                estimatedPrepTimeMinutes: mins !== undefined ? mins : o.estimatedPrepTimeMinutes,
+                etaTargetTimestamp: target !== undefined ? target : o.etaTargetTimestamp,
               };
             })
           );
@@ -468,32 +543,72 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
         setTables((prev) =>
           prev.map((t) =>
-            t.id === tblId || (t as any).number === tblNum || t.tableNumber === tblNum
-              ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined }
+            t.id === tblId || (tblNum && tblNum !== 'Table' && matchTableNumber(t.tableNumber, tblNum))
+              ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined, sessionStartedAt: undefined }
               : t
           )
         );
+        setActiveSessions((prev) =>
+          prev.filter((s) =>
+            (sessId ? s.id !== sessId : true) &&
+            (tblId ? s.tableId !== tblId : true) &&
+            (tblNum && tblNum !== 'Table' ? !matchTableNumber(s.tableNumber, tblNum) : true)
+          )
+        );
         if (sessId) {
-          setActiveSessions((prev) => prev.filter((s) => s.id !== sessId));
           setRequests((prev) => prev.filter((r) => r.tableSessionId !== sessId));
         }
-      } else if (event.type === 'table_session_created' || event.type === 'TableSessionCreated' || event.type === 'table_status_updated' || event.type === 'TableStatusUpdated') {
+      } else if (event.type === 'table_status_updated' || event.type === 'TableStatusUpdated') {
+        const payloadData = (event as any).payload || event;
+        const newStatus = payloadData.status || payloadData.table_status || payloadData.tableStatus;
+        const isOccupied = payloadData.is_occupied ?? payloadData.isOccupied ?? (newStatus === 'OCCUPIED');
+        const tblId = payloadData.tableId || payloadData.table_id;
+        const sessId = payloadData.sessionId || payloadData.session_id || payloadData.table_session_id;
+
+        if (newStatus === 'AVAILABLE' || isOccupied === false) {
+          setTables((prev) =>
+            prev.map((t) =>
+              t.id === tblId || (tblNum && tblNum !== 'Table' && matchTableNumber(t.tableNumber, tblNum))
+                ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined, sessionStartedAt: undefined }
+                : t
+            )
+          );
+          setActiveSessions((prev) =>
+            prev.filter((s) =>
+              (sessId ? s.id !== sessId : true) &&
+              (tblId ? s.tableId !== tblId : true) &&
+              (tblNum && tblNum !== 'Table' ? !matchTableNumber(s.tableNumber, tblNum) : true)
+            )
+          );
+        } else {
+          const sess = payloadData.session || (sessId ? { id: sessId, tableId: tblId, tableNumber: tblNum, status: 'ACTIVE' } : null);
+          if (sess && sess.id) {
+            setActiveSessions((prev) => [sess, ...prev.filter((s) => s.id !== sess.id)]);
+          }
+          if (tblId || (tblNum && tblNum !== 'Table')) {
+            setTables((prev) =>
+              prev.map((t) =>
+                t.id === tblId || (tblNum && tblNum !== 'Table' && matchTableNumber(t.tableNumber, tblNum))
+                  ? { ...t, status: 'OCCUPIED', isOccupied: true, activeSessionId: sess?.id || t.activeSessionId }
+                  : t
+              )
+            );
+          }
+        }
+      } else if (event.type === 'table_session_created' || event.type === 'TableSessionCreated') {
         const sess = (event as any).session || (event as any).payload?.session;
         const tblId = (event as any).tableId || sess?.tableId;
         if (sess && sess.id) {
           setActiveSessions((prev) => [sess, ...prev.filter((s) => s.id !== sess.id)]);
-          if (tblId) {
+          if (tblId || sess.tableNumber) {
             setTables((prev) =>
               prev.map((t) =>
-                t.id === tblId || (t as any).number === sess.tableNumber || t.tableNumber === sess.tableNumber
+                t.id === tblId || matchTableNumber(t.tableNumber, sess.tableNumber)
                   ? { ...t, status: 'OCCUPIED', isOccupied: true, activeSessionId: sess.id }
                   : t
               )
             );
           }
-        } else {
-          api.getActiveTableSessions(currentRestaurantId).then(setActiveSessions).catch(() => {});
-          api.getTables(currentRestaurantId).then(setTables).catch(() => {});
         }
       } else if (event.type === 'payment_status_updated' || event.type === 'BillPaid') {
         const payloadData = (event as any).payload || event;
@@ -806,12 +921,18 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     );
 
     return tables.filter((t) => {
+      // If table is explicitly marked AVAILABLE and not occupied, it is clean and vacant
+      const isExplicitlyAvailable = t.status === 'AVAILABLE' && !t.isOccupied && !t.activeSessionId;
+      if (isExplicitlyAvailable) return false;
+
       const isSessionActive =
         t.status === 'OCCUPIED' ||
         t.status === 'BILL_REQUESTED' ||
+        t.isOccupied ||
+        Boolean(t.activeSessionId) ||
         activeSessionTableIds.has(t.id) ||
         (t.tableNumber && activeSessionTableIds.has(t.tableNumber.toLowerCase())) ||
-        activeSessions.some((s) => s.status !== 'CLOSED' && matchTableNumber(s.tableNumber, t.tableNumber));
+        activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || matchTableNumber(s.tableNumber, t.tableNumber)));
 
       if (!isSessionActive) return false;
 
@@ -931,6 +1052,64 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       return true;
     });
   }, [orders, searchQuery]);
+
+  const cookingPlatesList = useMemo(() => {
+    return orders.filter((o) => {
+      const isDone = o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED';
+      if (isDone) return false;
+      const isReady =
+        o.status === 'READY' ||
+        o.kitchenStatus === 'READY' ||
+        o.barStatus === 'READY' ||
+        o.hookahStatus === 'READY';
+      if (isReady) return false;
+      const isCooking =
+        o.status === 'PREPARING' ||
+        o.status === 'ACCEPTED' ||
+        o.status === 'PENDING' ||
+        o.kitchenStatus === 'PREPARING' ||
+        o.kitchenStatus === 'ACCEPTED' ||
+        o.kitchenStatus === 'PENDING' ||
+        o.barStatus === 'PREPARING' ||
+        o.hookahStatus === 'PREPARING' ||
+        Boolean(o.estimatedPrepTimeMinutes || o.etaTargetTimestamp);
+      if (!isCooking) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          o.id.toLowerCase().includes(q) ||
+          (o.tableNumber && o.tableNumber.toLowerCase().includes(q)) ||
+          (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+          (o.items || []).some((i) => i.name.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [orders, searchQuery]);
+
+  const displayedPlatesList = useMemo(() => {
+    if (ticketFilter === 'prep') return cookingPlatesList;
+    if (ticketFilter === 'all') {
+      const combined = [...readyPlatesList, ...cookingPlatesList];
+      const seen = new Set<string>();
+      const deduped: Order[] = [];
+      for (const ord of combined) {
+        if (!seen.has(ord.id)) {
+          seen.add(ord.id);
+          deduped.push(ord);
+        }
+      }
+      return deduped.sort((a, b) => {
+        const aReady = a.status === 'READY' || a.kitchenStatus === 'READY' || a.barStatus === 'READY' || a.hookahStatus === 'READY';
+        const bReady = b.status === 'READY' || b.kitchenStatus === 'READY' || b.barStatus === 'READY' || b.hookahStatus === 'READY';
+        if (aReady && !bReady) return -1;
+        if (!aReady && bReady) return 1;
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      });
+    }
+    return readyPlatesList;
+  }, [ticketFilter, readyPlatesList, cookingPlatesList]);
 
   // Helper for Occupied Duration
   const getOccupiedDuration = (sessionStart?: string, orderCreated?: string) => {
@@ -1061,7 +1240,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             {/* Clock */}
             <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-tabular">{currentTime || '08:42 PM'}</span>
+              <LiveClock />
             </div>
 
             {/* Audio Chime Toggle */}
@@ -1105,13 +1284,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
       )}
 
       {/* ONE-SCREEN WAITER OPERATIONAL INTERFACE */}
-      <main className={`flex-1 overflow-y-auto space-y-4 relative z-10 ${isEmbedded ? 'p-0' : 'p-3 sm:p-4 lg:p-6'}`}>
+      <div className={`flex-1 ${isEmbedded ? '' : 'overflow-y-auto'} space-y-4 relative z-10 ${isEmbedded ? 'p-0' : 'p-3 sm:p-4 lg:p-6'}`}>
         {/* TOP OPERATIONAL BAR: Stage Selector, Live Counts, Search & Refresh */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
+          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-none">
             <button
               onClick={() => setWaiterView('floor')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
+              className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 touch-manipulation min-h-[40px] ${
                 waiterView === 'floor'
                   ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
                   : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
@@ -1126,7 +1305,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
             <button
               onClick={() => setWaiterView('tables')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
+              className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 touch-manipulation min-h-[40px] ${
                 waiterView === 'tables'
                   ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.25)]'
                   : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
@@ -1140,8 +1319,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             </button>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 max-w-xl justify-end">
-            <div className="flex-1">
+          <div className="flex items-center gap-2 w-full md:w-auto md:flex-1 md:max-w-xl justify-end">
+            <div className="flex-1 min-w-0">
               <SearchInput
                 value={searchQuery}
                 onChange={(val) => setSearchQuery(typeof val === 'string' ? val : (val as any).target.value)}
@@ -1153,10 +1332,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             {isEmbedded && (
               <button
                 onClick={() => setIsAudioMuted(!isAudioMuted)}
-                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-8.5 w-8.5 flex items-center justify-center shrink-0 active:scale-95"
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white transition-colors border border-white/15 h-9 w-9 flex items-center justify-center shrink-0 active:scale-95 touch-manipulation"
                 title={isAudioMuted ? 'Enable Audio Chime' : 'Mute Audio Chime'}
               >
-                {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+                {isAudioMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
               </button>
             )}
 
@@ -1165,7 +1344,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               size="sm"
               onClick={() => loadData()}
               disabled={isLoading}
-              className="text-xs border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white flex items-center gap-1.5 h-8.5 shrink-0 rounded-xl backdrop-blur-md shadow-sm active:scale-95"
+              className="text-xs border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white flex items-center gap-1.5 h-9 px-3 shrink-0 rounded-xl backdrop-blur-md shadow-sm active:scale-95 touch-manipulation"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -1268,38 +1447,72 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               ) : (
                 /* LIVE DUAL-SECTION OPERATIONAL FLOOR: Section A (Ready) & Section B (Requests) */
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-                  {/* SECTION A: READY FOR SERVICE */}
-                  <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  {/* SECTION A: READY FOR SERVICE & KITCHEN ETA PASS */}
+                  <div className="liquid-glass-card border border-white/10 p-4 sm:p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-white/10 pb-3">
                       <div className="flex items-center gap-2">
                         <Flame className="w-4 h-4 text-emerald-400" />
                         <h2 className="text-sm font-bold text-white uppercase tracking-tight">
-                          Section A: Ready for Service
+                          Section A: Kitchen Pass & Orders
                         </h2>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
-                          {readyPlatesList.length} Ready
-                        </span>
                       </div>
-                      <span className="text-[11px] font-mono text-white/50">
-                        Kitchen, Bar & Hookah Passes
-                      </span>
+                      <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10 text-[11px] font-mono self-start sm:self-auto overflow-x-auto max-w-full">
+                        <button
+                          type="button"
+                          onClick={() => setTicketFilter('ready')}
+                          className={`px-2.5 py-1 rounded-lg transition-all touch-manipulation cursor-pointer active:scale-95 ${
+                            ticketFilter === 'ready'
+                              ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 font-bold shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Ready ({readyPlatesList.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTicketFilter('prep')}
+                          className={`px-2.5 py-1 rounded-lg transition-all touch-manipulation cursor-pointer active:scale-95 ${
+                            ticketFilter === 'prep'
+                              ? 'bg-amber-500/25 text-amber-300 border border-amber-400/40 font-bold shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Cooking & ETA ({cookingPlatesList.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTicketFilter('all')}
+                          className={`px-2.5 py-1 rounded-lg transition-all touch-manipulation cursor-pointer active:scale-95 ${
+                            ticketFilter === 'all'
+                              ? 'bg-sky-500/25 text-sky-300 border border-sky-400/40 font-bold shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          All ({readyPlatesList.length + cookingPlatesList.length})
+                        </button>
+                      </div>
                     </div>
 
-                    {readyPlatesList.length === 0 ? (
+                    {displayedPlatesList.length === 0 ? (
                       <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-white/10 space-y-3 backdrop-blur-xl shadow-inner">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(16,185,129,0.18)]">
                           <Coffee className="w-6 h-6 text-emerald-400" />
                         </div>
-                        <p className="text-sm font-bold text-white">No ready tickets at the pass</p>
+                        <p className="text-sm font-bold text-white">
+                          {ticketFilter === 'prep' ? 'No orders currently cooking' : 'No tickets in this view'}
+                        </p>
                         <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                          Dishes and beverages will appear here instantly as soon as kitchen, bar, or hookah staff mark them ready.
+                          {ticketFilter === 'prep'
+                            ? 'New incoming tickets and active cooking times set by chefs will display here.'
+                            : 'Dishes and beverages will appear here instantly as soon as kitchen, bar, or hookah staff update them.'}
                         </p>
                       </div>
                     ) : (
                       <div className="space-y-3.5">
-                        {readyPlatesList.map((order) => {
+                        {displayedPlatesList.map((order) => {
                           const readiness = getOrderReadiness(order);
                           const isDelivering = deliveringOrderIds.has(order.id);
+                          const isCookingOnly = !readiness.readyItems.length && !readiness.isCompleteOrderReady;
                           const formattedTable = order.tableNumber && order.tableNumber !== 'COUNTER'
                             ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`)
                             : 'Counter';
@@ -1310,7 +1523,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                               className={`p-4 rounded-2xl border transition-all duration-300 space-y-3 shadow-xl liquid-glass-card ${
                                 readiness.isCompleteOrderReady
                                   ? 'border-emerald-400/40 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
-                                  : 'border-amber-400/40 hover:border-amber-400/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+                                  : readiness.readyItems.length > 0
+                                  ? 'border-amber-400/40 hover:border-amber-400/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+                                  : 'border-slate-700/60 hover:border-slate-600 shadow-md'
                               }`}
                             >
                               {/* Ticket Header */}
@@ -1323,6 +1538,26 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                     <span className="text-[11px] font-mono text-white/50">
                                       #{order.id.slice(-4)}
                                     </span>
+
+                                    {/* Custom ETA Chip — Only rendered when ETA is set, never fabricated */}
+                                    {(order.estimatedPrepTimeMinutes || order.etaTargetTimestamp) && (
+                                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-400/30 text-[10px] font-mono font-bold flex items-center gap-1 shadow-sm">
+                                        <Clock className="w-3 h-3 text-amber-400" />
+                                        <span>ETA: ~{order.estimatedPrepTimeMinutes}m</span>
+                                        {order.etaTargetTimestamp && (
+                                          <span className="text-amber-400/80 text-[9px]">
+                                            ({(() => {
+                                              const diffMs = new Date(order.etaTargetTimestamp).getTime() - Date.now();
+                                              const remMins = Math.round(diffMs / 60000);
+                                              if (remMins > 0) return `${remMins}m left`;
+                                              if (remMins === 0) return 'due now';
+                                              return `${Math.abs(remMins)}m overdue`;
+                                            })()})
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
+
                                     {readiness.readyItems.some(r => r.station === 'BAR') && (
                                       <span className="px-2 py-0.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[10px] font-mono font-bold">
                                         BAR
@@ -1338,6 +1573,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                         KITCHEN
                                       </span>
                                     )}
+
                                     {order.deliveryStatus === 'COLLECTED' ? (
                                       <span className="px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-300 border border-sky-400/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                         <Package className="w-3 h-3 text-sky-400" />
@@ -1352,6 +1588,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                       <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                         <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                                         All Items Ready
+                                      </span>
+                                    ) : isCookingOnly ? (
+                                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-400/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                                        <Clock className="w-3 h-3 text-amber-400 animate-pulse" />
+                                        In Kitchen Prep ({order.kitchenStatus || 'COOKING'})
                                       </span>
                                     ) : (
                                       <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-400/30 text-[10px] font-mono font-bold flex items-center gap-1">
@@ -1369,7 +1610,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
                                 <div className="text-right text-[11px] font-mono text-slate-400 shrink-0">
                                   <span className="block text-slate-300 font-medium">
-                                    Ready: {getTimeElapsed(order.readyAt || order.updatedAt)}
+                                    {order.readyAt ? `Ready: ${getTimeElapsed(order.readyAt)}` : `Prep: ${order.kitchenStatus || 'IN PROGRESS'}`}
                                   </span>
                                   <span className="text-[10px] text-slate-500">
                                     Ordered {order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -1385,16 +1626,25 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                 </div>
                                 <div className="space-y-1.5">
                                   {readiness.readyItems.map((r, idx) => (
-                                    <div key={idx} className="flex items-center justify-between text-xs">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-mono font-bold text-emerald-400 text-xs">
-                                          {r.item.quantity}x
+                                    <div key={idx} className="flex flex-col gap-1 py-1 border-b border-white/[0.05] last:border-0">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-mono font-bold text-emerald-400 text-xs">
+                                            {r.item.quantity}x
+                                          </span>
+                                          <span className="text-white font-medium">{r.item.name}</span>
+                                        </div>
+                                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#181d27] text-slate-300 border border-[#2d3545]">
+                                          {r.station === 'BAR' ? '🍸 Bar' : r.station === 'HOOKAH' ? '💨 Hookah' : '🍳 Kitchen'}
                                         </span>
-                                        <span className="text-white font-medium">{r.item.name}</span>
                                       </div>
-                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#181d27] text-slate-300 border border-[#2d3545]">
-                                        {r.station === 'BAR' ? '🍸 Bar' : r.station === 'HOOKAH' ? '💨 Hookah' : '🍳 Kitchen'}
-                                      </span>
+                                      {r.item.notes && (
+                                        <div className="flex flex-wrap items-center gap-1.5 pl-6 text-[10px]">
+                                          <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/30 font-mono font-medium">
+                                            {r.item.notes}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -1409,14 +1659,21 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                   </div>
                                   <div className="space-y-1">
                                     {readiness.outstandingItems.map((oItem, idx) => (
-                                      <div key={idx} className="flex items-center justify-between text-xs text-slate-400">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-mono text-slate-400">{oItem.item.quantity}x</span>
-                                          <span>{oItem.item.name}</span>
+                                      <div key={idx} className="flex flex-col gap-0.5 py-0.5">
+                                        <div className="flex items-center justify-between text-xs text-slate-400">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-mono text-slate-400">{oItem.item.quantity}x</span>
+                                            <span>{oItem.item.name}</span>
+                                          </div>
+                                          <span className="text-[10px] font-mono text-amber-300/80">
+                                            {oItem.station}: {oItem.stationStatus}
+                                          </span>
                                         </div>
-                                        <span className="text-[10px] font-mono text-amber-300/80">
-                                          {oItem.station}: {oItem.stationStatus}
-                                        </span>
+                                        {oItem.item.notes && (
+                                          <span className="text-[9px] font-mono text-amber-300/70 pl-6">
+                                            ↳ {oItem.item.notes}
+                                          </span>
+                                        )}
                                       </div>
                                     ))}
                                   </div>
@@ -1433,51 +1690,67 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
                               {/* 1-Click Action Workflow: Collect -> Served */}
                               <div className="flex items-center gap-2 pt-1">
-                                {order.deliveryStatus !== 'COLLECTED' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCollectOrder(order.id, order.tableNumber)}
-                                    disabled={collectingOrderIds.has(order.id) || isDelivering}
-                                    className="flex-1 min-h-[44px] py-2.5 px-3 rounded-lg text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 bg-sky-600 text-white hover:bg-sky-500 touch-manipulation"
-                                  >
-                                    {collectingOrderIds.has(order.id) ? (
-                                      <RefreshCw className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                      <>
-                                        <Package className="w-4 h-4" />
-                                        <span>Accept & Collect</span>
-                                      </>
-                                    )}
-                                  </button>
-                                )}
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const readyStations = Array.from(new Set(readiness.readyItems.map((r) => r.station).filter(Boolean)));
-                                    const stationToDeliver = readyStations.length === 1 ? readyStations[0] : undefined;
-                                    handleDeliverOrder(order.id, order.tableNumber, stationToDeliver);
-                                  }}
-                                  disabled={isDelivering || collectingOrderIds.has(order.id)}
-                                  className={`min-h-[44px] py-2.5 px-4 rounded-lg text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 touch-manipulation ${
-                                    order.deliveryStatus === 'COLLECTED'
-                                      ? 'w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400'
-                                      : 'border border-emerald-500/40 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20'
-                                  }`}
-                                >
-                                  {isDelivering ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                      <span>
-                                        {order.deliveryStatus === 'COLLECTED'
-                                          ? `Mark Delivered (${formattedTable})`
-                                          : `Mark Delivered`}
+                                {readiness.readyItems.length === 0 && !readiness.isCompleteOrderReady ? (
+                                  <div className="w-full min-h-[40px] py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-400/20 text-amber-300 text-xs font-mono flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                      <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                                      In Kitchen Prep ({order.kitchenStatus || 'COOKING'})
+                                    </span>
+                                    {order.estimatedPrepTimeMinutes && (
+                                      <span className="text-[11px] font-bold text-amber-200 bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-400/30">
+                                        ETA: ~{order.estimatedPrepTimeMinutes} min
                                       </span>
-                                    </>
-                                  )}
-                                </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <>
+                                    {order.deliveryStatus !== 'COLLECTED' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCollectOrder(order.id, order.tableNumber)}
+                                        disabled={collectingOrderIds.has(order.id) || isDelivering}
+                                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 bg-sky-600 text-white hover:bg-sky-500 touch-manipulation cursor-pointer active:scale-95"
+                                      >
+                                        {collectingOrderIds.has(order.id) ? (
+                                          <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          <>
+                                            <Package className="w-4 h-4" />
+                                            <span>Accept & Collect</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const readyStations = Array.from(new Set(readiness.readyItems.map((r) => r.station).filter(Boolean)));
+                                        const stationToDeliver = readyStations.length === 1 ? readyStations[0] : undefined;
+                                        handleDeliverOrder(order.id, order.tableNumber, stationToDeliver);
+                                      }}
+                                      disabled={isDelivering || collectingOrderIds.has(order.id)}
+                                      className={`min-h-[44px] py-2.5 px-4 rounded-xl text-xs font-bold font-mono transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 touch-manipulation cursor-pointer active:scale-95 ${
+                                        order.deliveryStatus === 'COLLECTED'
+                                          ? 'w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400'
+                                          : 'border border-emerald-500/40 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                      }`}
+                                    >
+                                      {isDelivering ? (
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <>
+                                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                          <span>
+                                            {order.deliveryStatus === 'COLLECTED'
+                                              ? `Mark Delivered (${formattedTable})`
+                                              : `Mark Delivered`}
+                                          </span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
@@ -1677,10 +1950,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
                 {activeTablesList.map((table) => {
                   const activeSession = activeSessions.find(
-                    (s) => s.status === 'ACTIVE' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
+                    (s) => s.status !== 'CLOSED' && (s.tableId === table.id || matchTableNumber(s.tableNumber, table.tableNumber))
                   );
                   const matchingBill = activeSession
                     ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID')
@@ -1740,13 +2013,23 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                               {latestOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN') && (
                                 <div className="flex justify-between items-center">
                                   <span className="text-white/50">Kitchen:</span>
-                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
-                                    latestOrder.kitchenStatus === 'READY' || (!latestOrder.kitchenStatus && latestOrder.status === 'READY')
-                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
-                                      : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
-                                  }`}>
-                                    {latestOrder.kitchenStatus === 'READY' ? 'READY' : latestOrder.kitchenStatus || 'COOKING'}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {(latestOrder.estimatedPrepTimeMinutes || latestOrder.etaTargetTimestamp) && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/30 flex items-center gap-1 font-bold">
+                                        <Clock className="w-2.5 h-2.5" />
+                                        ~{latestOrder.estimatedPrepTimeMinutes}m
+                                      </span>
+                                    )}
+                                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
+                                      latestOrder.kitchenStatus === 'READY' || (!latestOrder.kitchenStatus && latestOrder.status === 'READY')
+                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                                        : latestOrder.kitchenStatus === 'COMPLETED'
+                                        ? 'bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20'
+                                        : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                                    }`}>
+                                      {latestOrder.kitchenStatus === 'READY' ? 'READY' : latestOrder.kitchenStatus || 'COOKING'}
+                                    </span>
+                                  </div>
                                 </div>
                               )}
                               {latestOrder.items.some((i) => getFulfillmentStation(i) === 'BAR') && (
@@ -1755,9 +2038,25 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
                                     latestOrder.barStatus === 'READY' || (!latestOrder.barStatus && latestOrder.status === 'READY')
                                       ? 'bg-purple-500/20 text-purple-300 border border-purple-400/30'
+                                      : latestOrder.barStatus === 'COMPLETED'
+                                      ? 'bg-purple-500/10 text-purple-400/80 border border-purple-500/20'
                                       : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
                                   }`}>
                                     {latestOrder.barStatus === 'READY' ? 'READY' : latestOrder.barStatus || 'PREPARING'}
+                                  </span>
+                                </div>
+                              )}
+                              {latestOrder.items.some((i) => getFulfillmentStation(i) === 'HOOKAH') && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-white/50">Hookah:</span>
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
+                                    latestOrder.hookahStatus === 'READY' || (!latestOrder.hookahStatus && latestOrder.status === 'READY')
+                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                                      : latestOrder.hookahStatus === 'COMPLETED'
+                                      ? 'bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20'
+                                      : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                                  }`}>
+                                    {latestOrder.hookahStatus === 'READY' ? 'READY' : latestOrder.hookahStatus || 'PREPARING'}
                                   </span>
                                 </div>
                               )}
@@ -1775,7 +2074,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-full text-xs py-1.5 bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 h-9 font-bold touch-manipulation rounded-xl"
+                          className="w-full text-xs py-2 bg-white/[0.06] border-white/15 hover:bg-white/[0.12] text-slate-200 h-10 font-bold touch-manipulation rounded-xl"
                           onClick={() => setSelectedTableForView(table)}
                         >
                           View Details
@@ -1783,7 +2082,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                         <Button
                           variant="danger"
                           size="sm"
-                          className="w-full text-xs py-1.5 bg-rose-600/90 hover:bg-rose-500 text-white h-9 font-bold touch-manipulation rounded-xl shadow-[0_2px_8px_rgba(225,29,72,0.3)]"
+                          className="w-full text-xs py-2 bg-rose-600/90 hover:bg-rose-500 text-white h-10 font-bold touch-manipulation rounded-xl shadow-[0_2px_8px_rgba(225,29,72,0.3)] active:scale-95"
                           onClick={() => setSelectedTableForClose(table)}
                         >
                           Close Table
@@ -1796,7 +2095,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             )}
           </div>
         )}
-      </main>
+      </div>
 
       {/* BILL & PAYMENT ACTION MODAL */}
       {selectedBillForAction && (
@@ -2099,7 +2398,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         >
           {(() => {
             const activeSession = activeSessions.find(
-              (s) => s.tableId === selectedTableForView.id && s.status === 'ACTIVE'
+              (s) => s.status !== 'CLOSED' && (s.tableId === selectedTableForView.id || matchTableNumber(s.tableNumber, selectedTableForView.tableNumber))
             );
             const sessionOrders = activeSession
               ? orders.filter((o) => (o.tableSessionId === activeSession.id || (!o.tableSessionId && matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
@@ -2121,7 +2420,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[10px]">Status:</span>
-                    <strong className="text-emerald-400">ACTIVE</strong>
+                    <strong className="text-emerald-400">{activeSession ? 'ACTIVE' : 'OCCUPIED'}</strong>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[10px]">Orders Count:</span>
@@ -2160,9 +2459,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
                           <div className="space-y-1 py-1 border-y border-slate-900">
                             {ord.items.map((it, idx) => (
-                              <div key={idx} className="flex justify-between text-slate-300">
-                                <span>{it.quantity}x {it.name}</span>
-                                <span className="font-mono font-bold text-slate-200">₹{(it.price * it.quantity).toFixed(2)}</span>
+                              <div key={idx} className="flex flex-col gap-0.5">
+                                <div className="flex justify-between text-slate-300">
+                                  <span>{it.quantity}x {it.name}</span>
+                                  <span className="font-mono font-bold text-slate-200">₹{(it.price * it.quantity).toFixed(2)}</span>
+                                </div>
+                                {it.notes && (
+                                  <span className="text-[10px] text-amber-300/80 font-mono pl-3">
+                                    ↳ {it.notes}
+                                  </span>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -2191,7 +2497,19 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                   </div>
                 )}
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-between items-center pt-2">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      const tbl = selectedTableForView;
+                      setSelectedTableForView(null);
+                      setSelectedTableForClose(tbl);
+                    }}
+                    className="bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl touch-manipulation min-h-[36px]"
+                  >
+                    Close Table
+                  </Button>
                   <Button variant="outline" onClick={() => setSelectedTableForView(null)} className="border-slate-800 text-slate-300">
                     Close Window
                   </Button>
@@ -2215,8 +2533,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
               (s) => (s.tableId === selectedTableForClose.id || matchTableNumber(s.tableNumber, selectedTableForClose.tableNumber)) && s.status !== 'CLOSED'
             );
             const sessionOrders = activeSession
-              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (!o.tableSessionId && matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
-              : orders.filter((o) => matchTableNumber(o.tableNumber, selectedTableForView.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
+              ? orders.filter((o) => (o.tableSessionId === activeSession.id || (!o.tableSessionId && matchTableNumber(o.tableNumber, selectedTableForClose.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+              : orders.filter((o) => matchTableNumber(o.tableNumber, selectedTableForClose.tableNumber) && o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED');
             const matchingBill = activeSession ? bills.find((b) => b.tableSessionId === activeSession.id && b.status !== 'CLOSED' && b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID') : undefined;
             const authCalc = calculateAuthoritativeSessionBill(sessionOrders, restaurant, matchingBill);
             const sessionTotal = authCalc.grandTotal;
@@ -2259,7 +2577,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     variant="outline"
                     onClick={() => setSelectedTableForClose(null)}
                     disabled={isClosingTableLoading}
-                    className="border-slate-800 text-slate-300"
+                    className="border-slate-800 text-slate-300 min-h-[40px] px-4 touch-manipulation"
                   >
                     Cancel
                   </Button>
@@ -2268,46 +2586,75 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
                     disabled={isClosingTableLoading}
                     onClick={async () => {
                       setIsClosingTableLoading(true);
+                      const targetTbl = selectedTableForClose;
+                      const activeSess = activeSessions.find(
+                        (s) => s.status !== 'CLOSED' && (s.tableId === targetTbl.id || matchTableNumber(s.tableNumber, targetTbl.tableNumber))
+                      );
+
+                      // Instant optimistic state update for ultra-snappy responsiveness
+                      setActiveSessions((prev) =>
+                        prev.filter(
+                          (s) =>
+                            s.id !== activeSess?.id &&
+                            s.tableId !== targetTbl.id &&
+                            !matchTableNumber(s.tableNumber, targetTbl.tableNumber)
+                        )
+                      );
+                      setTables((prev) =>
+                        prev.map((t) =>
+                          t.id === targetTbl.id || matchTableNumber(t.tableNumber, targetTbl.tableNumber)
+                            ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined, sessionStartedAt: undefined }
+                            : t
+                        )
+                      );
+                      setOrders((prev) =>
+                        prev.map((o) =>
+                          (activeSess && o.tableSessionId === activeSess.id) ||
+                          o.tableId === targetTbl.id ||
+                          (o.tableNumber && matchTableNumber(o.tableNumber, targetTbl.tableNumber))
+                            ? { ...o, status: 'COMPLETED', paymentStatus: 'PAID' }
+                            : o
+                        )
+                      );
+                      setBills((prev) =>
+                        prev.map((b) =>
+                          (activeSess && b.tableSessionId === activeSess.id) ||
+                          (b.tableNumber && matchTableNumber(b.tableNumber, targetTbl.tableNumber))
+                            ? { ...b, status: 'CLOSED', paymentStatus: 'PAID' }
+                            : b
+                        )
+                      );
+                      setRequests((prev) =>
+                        prev.filter(
+                          (r) =>
+                            r.tableId !== targetTbl.id &&
+                            (!r.tableNumber || !matchTableNumber(r.tableNumber, targetTbl.tableNumber)) &&
+                            (!activeSess || r.tableSessionId !== activeSess.id)
+                        )
+                      );
+
+                      setSelectedTableForClose(null);
+                      showToast('Table Session Closed 🧹', `${targetTbl.tableNumber} is now available for new guests`, 'success');
+
                       try {
-                        const targetTbl = selectedTableForClose;
-                        const activeSess = activeSessions.find(
-                          (s) => s.status !== 'CLOSED' && (s.tableId === targetTbl.id || matchTableNumber(s.tableNumber, targetTbl.tableNumber))
-                        );
                         await api.closeTableSession({
                           restaurantId: currentRestaurantId,
                           tableId: targetTbl.id,
+                          tableNumber: targetTbl.tableNumber,
                           waiterName: waiterName,
                           tableSessionId: activeSess?.id,
                           force: true,
+                          scope: 'WAITER',
                         });
-                        showToast('Table Session Closed 🧹', `${targetTbl.tableNumber} is now available for new guests`, 'success');
-                        setSelectedTableForClose(null);
-
-                        // Optimistically clear closed session from React state
-                        setActiveSessions((prev) =>
-                          prev.filter(
-                            (s) =>
-                              s.id !== activeSess?.id &&
-                              s.tableId !== targetTbl.id &&
-                              !matchTableNumber(s.tableNumber, targetTbl.tableNumber)
-                          )
-                        );
-                        setTables((prev) =>
-                          prev.map((t) =>
-                            t.id === targetTbl.id || matchTableNumber(t.tableNumber, targetTbl.tableNumber)
-                              ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined }
-                              : t
-                          )
-                        );
-
-                        await loadData();
+                        setTimeout(() => loadData(true), 1200);
                       } catch (err: any) {
-                        showToast('Error', err.message || 'Failed to close table session', 'warning');
+                        console.warn('Background closeTableSession sync warning:', err);
+                        setTimeout(() => loadData(true), 1200);
                       } finally {
                         setIsClosingTableLoading(false);
                       }
                     }}
-                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold min-h-[40px] px-4 touch-manipulation active:scale-95 shadow-[0_2px_8px_rgba(225,29,72,0.3)]"
                   >
                     {isClosingTableLoading ? 'Closing Session...' : 'Close & Reset Table 🧹'}
                   </Button>

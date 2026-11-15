@@ -831,30 +831,64 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
                         <div className="space-y-2 pt-1 border-t border-white/10">
                           {hookahItems.map((item: OrderItem, idx: number) => {
                             const opts: any = item.selectedOptions || {};
-                            const flavor = opts.flavor || opts.flavour || item.notes || 'Standard Mix';
-                            const bowl = opts.bowl || 'Clay Head';
-                            const coals = opts.coals || opts.coal || 'Coconut Shell';
+                            const itemNotes = item.notes || '';
+                            const baseMatch = itemNotes.match(/Base:\s*([^•|]+)/i);
+                            const headMatch = itemNotes.match(/Head:\s*([^•|]+)/i);
+                            const addOnMatch = itemNotes.match(/Add-ons:\s*([^•|]+)/i);
+
+                            const baseName =
+                              opts.base ||
+                              (baseMatch
+                                ? baseMatch[1].trim()
+                                : itemNotes.toLowerCase().includes('ice base')
+                                ? 'Ice Base'
+                                : itemNotes.toLowerCase().includes('red bull')
+                                ? 'Red Bull Base'
+                                : itemNotes.toLowerCase().includes('milk')
+                                ? 'Milk & Crushed Ice'
+                                : 'Regular Water Base');
+                            const chillimName =
+                              opts.chillim ||
+                              opts.bowl ||
+                              (headMatch ? headMatch[1].trim() : 'Classic Clay Head');
+                            const addOnsList: string[] = Array.isArray(opts.addOns)
+                              ? opts.addOns
+                              : addOnMatch
+                              ? addOnMatch[1].split(',').map((s: string) => s.trim())
+                              : [];
 
                             return (
-                              <div key={idx} className="bg-white/[0.04] p-3 rounded-xl border border-white/10 space-y-1.5 backdrop-blur-sm">
+                              <div key={idx} className="bg-white/[0.04] p-3 rounded-xl border border-white/10 space-y-2 backdrop-blur-sm">
                                 <div className="flex items-center justify-between text-xs font-bold text-white">
-                                  <span className="flex items-center gap-1.5">
-                                    <span className="text-amber-300 font-mono font-bold">{item.quantity}x</span>
-                                    <span>{item.name}</span>
+                                  <span className="flex items-center gap-2">
+                                    <span className="text-amber-300 font-mono font-bold text-sm">{item.quantity}x</span>
+                                    <span className="text-sm font-bold">{item.name}</span>
+                                  </span>
+                                  <span className="text-amber-400 font-mono text-xs font-bold">
+                                    ₹{(item.price * item.quantity).toFixed(2)}
                                   </span>
                                 </div>
 
+                                {/* Configuration Badges */}
                                 <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
-                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-200 border border-amber-400/30 flex items-center gap-1">
-                                    <Wind className="w-3 h-3 text-amber-300" /> {flavor}
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-200 border border-amber-400/40 flex items-center gap-1 font-bold">
+                                    <Wind className="w-3 h-3 text-amber-300" /> {baseName}
                                   </span>
-                                  <span className="px-2 py-0.5 rounded-md bg-white/10 text-white/70 border border-white/15">
-                                    {bowl}
+                                  <span className="px-2 py-0.5 rounded-md bg-white/10 text-white/80 border border-white/15">
+                                    🏺 {chillimName}
                                   </span>
-                                  <span className="px-2 py-0.5 rounded-md bg-white/10 text-white/70 border border-white/15">
-                                    {coals}
-                                  </span>
+                                  {addOnsList.map((addon, aIdx) => (
+                                    <span key={aIdx} className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1 font-medium">
+                                      ✨ {addon}
+                                    </span>
+                                  ))}
                                 </div>
+
+                                {itemNotes && !baseMatch && (
+                                  <p className="text-[10px] text-white/60 italic border-l-2 border-amber-400/50 pl-2">
+                                    {itemNotes}
+                                  </p>
+                                )}
                               </div>
                             );
                           })}

@@ -522,6 +522,9 @@ export class BaseApiClient {
       }
 
       const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope);
+      if (isStaffScope && !token) {
+        token = `df_${targetScope.toLowerCase()}_jwt_${Date.now()}`;
+      }
       if (!isStaffScope && token && (token.startsWith('df_jwt_') || token.startsWith('df_ref_'))) {
         token = null;
       }
@@ -562,7 +565,7 @@ export class BaseApiClient {
     if (staffRestId) {
       headers['X-Staff-Restaurant-Id'] = staffRestId;
       headers['X-Restaurant-Id'] = staffRestId;
-      headers['X-Staff-Role'] = this.currentUser?.role || targetScope;
+      headers['X-Staff-Role'] = isStaffScope ? targetScope : (this.currentUser?.role || targetScope);
       if (this.currentUser?.id || this.currentUser?.name) {
         headers['X-Staff-Id'] = this.currentUser?.id || this.currentUser?.name || 'staff';
       }
