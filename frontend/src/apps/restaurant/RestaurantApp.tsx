@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -107,6 +107,18 @@ import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
 import { sendAppNotification, registerServiceWorker } from '../../packages/utils/notifications';
 
+const formatElapsed = (timestamp?: string | Date) => {
+  if (!timestamp) return '';
+  const diffSec = Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHrs = Math.floor(diffMin / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  return `${diffDays}d ago`;
+};
+
 interface RestaurantAppProps {
   activeRestaurant?: any;
   onEditSetup?: () => void;
@@ -210,6 +222,116 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const recentToastKeys = useRef<Map<string, number>>(new Map());
   const handledOrderEventsRef = useRef<Set<string>>(new Set());
+
+  // POS Orders Stream States & Live Watch
+  const [posDayFilter, setPosDayFilter] = useState<'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK'>('TODAY');
+  const [posStatusFilter, setPosStatusFilter] = useState<'ALL' | 'PENDING' | 'IN_KITCHEN' | 'READY' | 'DELIVERED'>('ALL');
+  const [posSearchQuery, setPosSearchQuery] = useState<string>('');
+  const [posAutoWatch, setPosAutoWatch] = useState<boolean>(true);
+  const [posLastUpdated, setPosLastUpdated] = useState<Date>(new Date());
+
+  // Helper for grouping orders by calendar date (YYYY-MM-DD)
+  const getDayKey = useCallback((timestamp?: string | Date) => {
+    if (!timestamp) return 'UNKNOWN';
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) return 'UNKNOWN';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const getDayLabel = useCallback((dayKey: string) => {
+    if (dayKey === 'UNKNOWN') return 'Unscheduled / Other';
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const yest = new Date(now.getTime() - 86400000);
+    const yestKey = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`;
+
+    if (dayKey === todayKey) return 'Today';
+    if (dayKey === yestKey) return 'Yesterday';
+
+    const parts = dayKey.split('-');
+    if (parts.length === 3) {
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    return dayKey;
+  }, []);
+
+  // Filtered orders and Day-wise grouping for POS stream
+  const todayKeyStr = useMemo(() => getDayKey(new Date()), [getDayKey]);
+  const yesterdayKeyStr = useMemo(() => getDayKey(new Date(Date.now() - 86400000)), [getDayKey]);
+  const sevenDaysAgoTime = useMemo(() => Date.now() - 7 * 86400000, []);
+
+  // Today's summary stats
+  const todayOrders = useMemo(() => orders.filter((o) => getDayKey(o.createdAt) === todayKeyStr), [orders, todayKeyStr, getDayKey]);
+  const todayGrossSales = useMemo(() => todayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0), [todayOrders]);
+  const activeOrdersCount = useMemo(() => orders.filter((o) => o.status === 'PENDING' || o.status === 'IN_KITCHEN').length, [orders]);
+  const deliveredOrdersCount = useMemo(() => orders.filter((o) => o.status === 'DELIVERED').length, [orders]);
+
+  // Filtered orders according to posDayFilter, posStatusFilter, posSearchQuery
+  const filteredPosOrders = useMemo(() => {
+    return orders.filter((o) => {
+      // 1. Day filter
+      if (posDayFilter === 'TODAY') {
+        if (getDayKey(o.createdAt) !== todayKeyStr) return false;
+      } else if (posDayFilter === 'YESTERDAY') {
+        if (getDayKey(o.createdAt) !== yesterdayKeyStr) return false;
+      } else if (posDayFilter === 'WEEK') {
+        const orderTime = new Date(o.createdAt).getTime();
+        if (isNaN(orderTime) || orderTime < sevenDaysAgoTime) return false;
+      }
+
+      // 2. Status filter
+      if (posStatusFilter !== 'ALL' && o.status !== posStatusFilter) {
+        return false;
+      }
+
+      // 3. Search query
+      if (posSearchQuery.trim()) {
+        const q = posSearchQuery.toLowerCase().trim();
+        const matchId = (o.id || '').toLowerCase().includes(q);
+        const matchTable = (o.tableNumber || '').toLowerCase().includes(q);
+        const matchCustomer = (o.customerName || '').toLowerCase().includes(q);
+        const matchItem = (o.items || []).some((item) => (item.name || '').toLowerCase().includes(q));
+        if (!matchId && !matchTable && !matchCustomer && !matchItem) return false;
+      }
+
+      return true;
+    });
+  }, [orders, posDayFilter, posStatusFilter, posSearchQuery, todayKeyStr, yesterdayKeyStr, sevenDaysAgoTime, getDayKey]);
+
+  // Group filtered orders by dayKey in descending date order
+  const dayWiseOrderGroups = useMemo(() => {
+    const map = new Map<string, Order[]>();
+    for (const order of filteredPosOrders) {
+      const dayKey = getDayKey(order.createdAt);
+      if (!map.has(dayKey)) {
+        map.set(dayKey, []);
+      }
+      map.get(dayKey)!.push(order);
+    }
+
+    // Sort days descending
+    const sortedDayKeys = Array.from(map.keys()).sort((a, b) => {
+      if (a === 'UNKNOWN') return 1;
+      if (b === 'UNKNOWN') return -1;
+      return b.localeCompare(a);
+    });
+
+    return sortedDayKeys.map((dayKey) => {
+      const dayOrders = map.get(dayKey) || [];
+      // Sort orders within day: newest first
+      dayOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const dayTotalAmount = dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const dayActiveCount = dayOrders.filter((o) => o.status === 'PENDING' || o.status === 'IN_KITCHEN').length;
+      return {
+        dayKey,
+        dayLabel: getDayLabel(dayKey),
+        orders: dayOrders,
+        totalAmount: dayTotalAmount,
+        activeCount: dayActiveCount,
+      };
+    });
+  }, [filteredPosOrders, getDayKey, getDayLabel]);
 
   const addToast = (type: 'info' | 'success' | 'warning' | 'error' | 'danger', title: string, message?: string) => {
     const key = `${type}:${title}:${message || ''}`;
@@ -853,6 +975,27 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       clearInterval(interval);
     };
   }, [activeRestaurant?.id, currentRestaurant?.id]);
+
+  // POS Orders Stream Auto-Watch: live polling fallback every 6 seconds when viewing POS stream
+  useEffect(() => {
+    if (activeTab !== 'orders' || !posAutoWatch) return;
+
+    const restId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+    if (!restId) return;
+
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        api.getOrders(restId).then((ords) => {
+          if (Array.isArray(ords)) {
+            setOrders(ords);
+            setPosLastUpdated(new Date());
+          }
+        }).catch(() => {});
+      }
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, [activeTab, posAutoWatch, activeRestaurant?.id, currentRestaurant?.id]);
 
 
   const loadData = useCallback(async (forceLoading = false) => {
@@ -2457,7 +2600,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {/* Tab 2: Orders Board */}
         {activeTab === 'orders' && (
           <div className="space-y-6">
-            {/* Header Banner */}
+            {/* Header Banner & Live Watch Bar */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1e232e] pb-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl border bg-amber-500/10 text-amber-400 border-amber-500/20">
@@ -2469,9 +2612,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <Badge variant="brand" className="font-mono text-[10px] px-2.5 py-0.5 bg-amber-950/60 text-amber-300 border-amber-800/60">
                       LIVE ORDERS FEED
                     </Badge>
+                    {posAutoWatch ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        LIVE WATCH: AUTO-STREAMING
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-500/15 text-slate-400 border border-slate-500/30">
+                        <span className="h-2 w-2 rounded-full bg-slate-500"></span>
+                        LIVE WATCH: PAUSED
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Live chronological order stream from table QR codes, POS, and counter pickups.
+                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                    <span>Live chronological order stream from table QR codes, POS, and counter pickups.</span>
+                    <span className="text-[11px] font-mono text-slate-400 border-l border-slate-700 pl-2">
+                      Synced {formatElapsed(posLastUpdated) || 'just now'} ({posLastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+                    </span>
                   </p>
                 </div>
               </div>
@@ -2479,9 +2639,21 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
+                  variant={posAutoWatch ? 'secondary' : 'outline'}
+                  onClick={() => setPosAutoWatch(!posAutoWatch)}
+                  className="border-white/15 text-xs px-3 py-1.5 font-mono rounded-xl transition-all"
+                  icon={<Eye className="w-3.5 h-3.5" />}
+                >
+                  {posAutoWatch ? 'Auto-Sync: ON' : 'Auto-Sync: OFF'}
+                </Button>
+                <Button
+                  size="sm"
                   variant="outline"
-                  onClick={() => loadData()}
-                  className="border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white text-xs px-3.5 py-2 font-mono rounded-xl backdrop-blur-md transition-all active:scale-95 shadow-sm"
+                  onClick={() => {
+                    loadData();
+                    setPosLastUpdated(new Date());
+                  }}
+                  className="border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white text-xs px-3.5 py-1.5 font-mono rounded-xl backdrop-blur-md transition-all active:scale-95 shadow-sm"
                   icon={<RefreshCw className="w-3.5 h-3.5" />}
                 >
                   Refresh Stream
@@ -2489,113 +2661,334 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               </div>
             </div>
 
-            {/* Orders Stream Table */}
-            <Card className="liquid-glass-card border border-white/[0.08] rounded-2xl overflow-hidden shadow-sm">
-              <DataTable<Order>
-                data={orders}
-                keyExtractor={(o) => o.id}
-                columns={[
-                  {
-                    key: 'id',
-                    header: 'Order Ticket',
-                    render: (o) => (
-                      <div className="font-mono">
-                        <span className="font-bold text-white text-xs">#{o.id.length > 8 ? o.id.slice(-6) : o.id}</span>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {/* KPI Metric Summary Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <Card className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Today's Gross Sales</span>
+                  <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400">
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
+                  {formatCurrency(todayGrossSales, theme.currency)}
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono mt-1">
+                  {todayOrders.length} {todayOrders.length === 1 ? 'order' : 'orders'} today
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Today's Orders</span>
+                  <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400">
+                    <ShoppingBag className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-xl font-bold font-mono text-white mt-1">
+                  {todayOrders.length}
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono mt-1">
+                  {todayKeyStr}
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Active in Prep</span>
+                  <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-xl font-bold font-mono text-amber-400 mt-1">
+                  {activeOrdersCount}
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono mt-1">
+                  Pending or In-Kitchen
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Served & Delivered</span>
+                  <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
+                  {deliveredOrdersCount}
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono mt-1">
+                  Completed & Handed Over
+                </div>
+              </Card>
+            </div>
+
+            {/* Filter and Search Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-xl bg-[#12151b] border border-[#1e232e]">
+              {/* Day-Wise Filter Tabs */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-slate-400 font-mono mr-1">Days:</span>
+                {[
+                  { key: 'TODAY', label: 'Today', count: orders.filter((o) => getDayKey(o.createdAt) === todayKeyStr).length },
+                  { key: 'YESTERDAY', label: 'Yesterday', count: orders.filter((o) => getDayKey(o.createdAt) === yesterdayKeyStr).length },
+                  { key: 'WEEK', label: 'Last 7 Days', count: orders.filter((o) => new Date(o.createdAt).getTime() >= sevenDaysAgoTime).length },
+                  { key: 'ALL', label: 'All Days', count: orders.length }
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setPosDayFilter(tab.key as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all flex items-center gap-1.5 ${
+                      posDayFilter === tab.key
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                        : 'bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      posDayFilter === tab.key ? 'bg-slate-950/20 text-slate-900 font-bold' : 'bg-white/10 text-slate-400'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Status & Search Filters */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Status Dropdown / Pills */}
+                <div className="flex items-center gap-1">
+                  {(['ALL', 'PENDING', 'IN_KITCHEN', 'READY', 'DELIVERED'] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setPosStatusFilter(status)}
+                      className={`px-2 py-1 rounded-md text-[11px] font-mono transition-all ${
+                        posStatusFilter === status
+                          ? 'bg-white/20 text-white font-bold border border-white/30'
+                          : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 border border-white/5'
+                      }`}
+                    >
+                      {status === 'ALL' ? 'All Status' : status.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search Box */}
+                <div className="relative min-w-[200px]">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={posSearchQuery}
+                    onChange={(e) => setPosSearchQuery(e.target.value)}
+                    placeholder="Search ticket, table, guest..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono transition-all"
+                  />
+                  {posSearchQuery && (
+                    <button
+                      onClick={() => setPosSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Day-Wise Grouped Orders Stream */}
+            {dayWiseOrderGroups.length === 0 ? (
+              <Card className="p-12 text-center border border-white/[0.08] rounded-2xl bg-[#12151b]">
+                <ShoppingBag className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <h4 className="text-base font-bold text-white">No Orders Found</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  {posSearchQuery || posStatusFilter !== 'ALL' || posDayFilter !== 'ALL'
+                    ? 'No orders match your selected filters. Try clearing the search query or changing day/status filters.'
+                    : 'No orders have been recorded in the system yet.'}
+                </p>
+                {(posSearchQuery || posStatusFilter !== 'ALL' || posDayFilter !== 'ALL') && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setPosDayFilter('ALL');
+                      setPosStatusFilter('ALL');
+                      setPosSearchQuery('');
+                    }}
+                    className="mt-4 border-white/20 text-xs font-mono"
+                  >
+                    Reset Filters
+                  </Button>
+                )}
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {dayWiseOrderGroups.map((group) => (
+                  <div key={group.dayKey} className="space-y-3">
+                    {/* Day Group Sticky Header */}
+                    <div className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-xl bg-[#141822]/95 border border-white/[0.1] backdrop-blur-md shadow-md">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <Calendar className="w-4 h-4" />
                         </div>
-                      </div>
-                    )
-                  },
-                  {
-                    key: 'tableNumber',
-                    header: 'Table / Guest',
-                    render: (o) => (
-                      <div>
-                        <span className="px-2 py-0.5 rounded-lg bg-white/10 text-white border border-white/20 text-xs font-mono font-bold">
-                          {o.tableNumber && o.tableNumber !== 'COUNTER' ? (o.tableNumber.startsWith('Table') ? o.tableNumber : `Table ${o.tableNumber}`) : 'Counter Pickup'}
-                        </span>
-                        <div className="text-[11px] text-slate-400 mt-1">
-                          {o.customerName || 'Walk-in Guest'}
-                        </div>
-                      </div>
-                    )
-                  },
-                  {
-                    key: 'items',
-                    header: 'Ordered Items & Station Routing',
-                    render: (o) => (
-                      <div className="space-y-1">
-                        {o.items.map((i) => {
-                          const station = getFulfillmentStation(i);
-                          return (
-                            <div key={i.id} className="text-xs text-slate-200 flex items-center gap-1.5 flex-wrap">
-                              <span className="font-mono font-bold text-amber-400">{i.quantity}x</span>
-                              <span>{i.name}</span>
-                              <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded ${
-                                station === 'BAR'
-                                  ? 'bg-sky-500/20 text-sky-300 border border-sky-400/30'
-                                  : station === 'HOOKAH'
-                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
-                                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
-                              }`}>
-                                {station}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-bold text-white tracking-wide">
+                              {group.dayLabel}
+                            </h4>
+                            <span className="text-[11px] font-mono text-slate-400">
+                              ({group.dayKey})
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/10 text-slate-300 border border-white/15">
+                              {group.orders.length} {group.orders.length === 1 ? 'order' : 'orders'}
+                            </span>
+                            {group.activeCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse">
+                                {group.activeCount} in prep
                               </span>
-                            </div>
-                          );
-                        })}
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )
-                  },
-                  {
-                    key: 'totalAmount',
-                    header: 'Total Value',
-                    render: (o) => (
-                      <span className="font-mono font-bold text-emerald-400 text-sm">
-                        {formatCurrency(o.totalAmount, theme.currency)}
-                      </span>
-                    )
-                  },
-                  {
-                    key: 'status',
-                    header: 'Status',
-                    render: (o) => (
-                      <Badge variant={o.status === 'DELIVERED' ? 'success' : o.status === 'READY' ? 'success' : o.status === 'IN_KITCHEN' ? 'warning' : 'default'} className="font-mono text-[10px]">
-                        {o.status}
-                      </Badge>
-                    )
-                  },
-                  {
-                    key: 'actions',
-                    header: '1-Click Action',
-                    render: (o) => (
-                      <div className="flex gap-1.5">
-                        {o.status === 'PENDING' && (
-                          <Button size="sm" variant="brand" onClick={() => handleUpdateOrderStatus(o.id, 'IN_KITCHEN')} className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1">
-                            Send KDS 🍳
-                          </Button>
-                        )}
-                        {o.status === 'IN_KITCHEN' && (
-                          <Button size="sm" variant="secondary" onClick={() => handleUpdateOrderStatus(o.id, 'READY')} className="text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold px-2.5 py-1">
-                            Mark Ready 🛎️
-                          </Button>
-                        )}
-                        {o.status === 'READY' && (
-                          <Button size="sm" variant="primary" onClick={() => handleUpdateOrderStatus(o.id, 'DELIVERED')} className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1">
-                            Deliver Table ✨
-                          </Button>
-                        )}
-                        {o.status === 'DELIVERED' && (
-                          <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Served
-                          </span>
-                        )}
+                      <div className="flex items-center gap-3 self-end sm:self-center">
+                        <span className="text-xs text-slate-400">Day Total:</span>
+                        <span className="font-mono font-bold text-emerald-400 text-sm">
+                          {formatCurrency(group.totalAmount, theme.currency)}
+                        </span>
                       </div>
-                    )
-                  }
-                ]}
-              />
-            </Card>
+                    </div>
+
+                    {/* Day Orders Table */}
+                    <Card className="liquid-glass-card border border-white/[0.08] rounded-2xl overflow-hidden shadow-sm">
+                      <DataTable<Order>
+                        data={group.orders}
+                        keyExtractor={(o) => o.id}
+                        columns={[
+                          {
+                            key: 'id',
+                            header: 'Order Ticket',
+                            render: (o) => (
+                              <div className="font-mono">
+                                <span className="font-bold text-white text-xs">#{o.id.length > 8 ? o.id.slice(-6) : o.id}</span>
+                                <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                                  <span>{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                  <span className="text-[9px] text-amber-400/90 font-mono">({formatElapsed(o.createdAt)})</span>
+                                </div>
+                              </div>
+                            )
+                          },
+                          {
+                            key: 'tableNumber',
+                            header: 'Table / Guest',
+                            render: (o) => (
+                              <div>
+                                <span className="px-2 py-0.5 rounded-lg bg-white/10 text-white border border-white/20 text-xs font-mono font-bold">
+                                  {o.tableNumber && o.tableNumber !== 'COUNTER' ? (o.tableNumber.startsWith('Table') ? o.tableNumber : `Table ${o.tableNumber}`) : 'Counter Pickup'}
+                                </span>
+                                <div className="text-[11px] text-slate-400 mt-1">
+                                  {o.customerName || 'Walk-in Guest'}
+                                </div>
+                              </div>
+                            )
+                          },
+                          {
+                            key: 'items',
+                            header: 'Ordered Items & Station Routing',
+                            render: (o) => (
+                              <div className="space-y-1">
+                                {o.items.map((i) => {
+                                  const station = getFulfillmentStation(i);
+                                  return (
+                                    <div key={i.id} className="text-xs text-slate-200">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-mono font-bold text-amber-400">{i.quantity}x</span>
+                                        <span>{i.name}</span>
+                                        <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded ${
+                                          station === 'BAR'
+                                            ? 'bg-sky-500/20 text-sky-300 border border-sky-400/30'
+                                            : station === 'HOOKAH'
+                                            ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                                        }`}>
+                                          {station}
+                                        </span>
+                                      </div>
+                                      {(i as any).notes && (
+                                        <div className="text-[10px] text-amber-300/80 italic pl-4">
+                                          ↳ {(i as any).notes}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )
+                          },
+                          {
+                            key: 'totalAmount',
+                            header: 'Total Value',
+                            render: (o) => (
+                              <div className="flex flex-col gap-1">
+                                <span className="font-mono font-bold text-emerald-400 text-sm">
+                                  {formatCurrency(o.totalAmount, theme.currency)}
+                                </span>
+                                <div>
+                                  {o.paymentStatus === 'PAID' ? (
+                                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                      PAID
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                      UNPAID
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          },
+                          {
+                            key: 'status',
+                            header: 'Status',
+                            render: (o) => (
+                              <Badge variant={o.status === 'DELIVERED' ? 'success' : o.status === 'READY' ? 'success' : o.status === 'IN_KITCHEN' ? 'warning' : 'default'} className="font-mono text-[10px]">
+                                {o.status}
+                              </Badge>
+                            )
+                          },
+                          {
+                            key: 'actions',
+                            header: '1-Click Action',
+                            render: (o) => (
+                              <div className="flex gap-1.5">
+                                {o.status === 'PENDING' && (
+                                  <Button size="sm" variant="brand" onClick={() => handleUpdateOrderStatus(o.id, 'IN_KITCHEN')} className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1">
+                                    Send KDS 🍳
+                                  </Button>
+                                )}
+                                {o.status === 'IN_KITCHEN' && (
+                                  <Button size="sm" variant="secondary" onClick={() => handleUpdateOrderStatus(o.id, 'READY')} className="text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold px-2.5 py-1">
+                                    Mark Ready 🛎️
+                                  </Button>
+                                )}
+                                {o.status === 'READY' && (
+                                  <Button size="sm" variant="primary" onClick={() => handleUpdateOrderStatus(o.id, 'DELIVERED')} className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1">
+                                    Deliver Table ✨
+                                  </Button>
+                                )}
+                                {o.status === 'DELIVERED' && (
+                                  <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5" /> Served
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          }
+                        ]}
+                      />
+                    </Card>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
