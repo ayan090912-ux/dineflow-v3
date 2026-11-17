@@ -3111,15 +3111,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
 
             <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-xl mx-auto text-center space-y-6 shadow-xl">
-              <div className="p-6 bg-[#0e1117] rounded-2xl border border-[#1e232e] inline-block shadow-inner">
-                <QRCodeDisplay
-                  url={getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}
-                  tableNumber="COUNTER"
-                  restaurantName={currentRestaurant?.name || theme?.restaurantName || 'Food Truck'}
-                  restaurantLogo={theme?.logo}
-                  restaurantId={currentRestaurant?.id}
-                  isPickup={true}
-                  size={240}
+              <div className="p-5 bg-white rounded-2xl inline-block shadow-2xl mx-auto">
+                <QRCodeSVG
+                  value={getRestaurantCustomerUrl(currentRestaurant, 'COUNTER')}
+                  size={200}
+                  level="H"
+                  className="w-full h-auto object-contain mx-auto"
                 />
               </div>
 

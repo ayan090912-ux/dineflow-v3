@@ -35,6 +35,7 @@ export interface QRCodeDisplayProps {
   capacity?: number;
   size?: number;
   isPickup?: boolean;
+  compact?: boolean;
 }
 
 export type QRDesignPreset = 'ACRYLIC_DARK' | 'GOLD_LUXE' | 'WOOD_BISTRO' | 'NEON_CYBER' | 'SIMPLE';
@@ -155,6 +156,7 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   capacity = 4,
   size = 200,
   isPickup = false,
+  compact = false,
 }) => {
   const [preset, setPreset] = useState<QRDesignPreset>('ACRYLIC_DARK');
   const [ctaText, setCtaText] = useState(
@@ -223,6 +225,20 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   // Exact encoded customer destination URL (single source of truth for display, QR code, copy link, and live view)
   const candidateUrl = sanitizeQrUrl(url || value);
   const qrUrl = candidateUrl || defaultUrl;
+
+  // Compact / Raw QR Code fallback mode
+  if (compact || (!tableNumber && !url && Boolean(value))) {
+    return (
+      <div className="flex flex-col items-center justify-center p-2 bg-white rounded-xl shadow-md w-full h-full">
+        <QRCodeSVG
+          value={qrUrl}
+          size={size || 144}
+          level="M"
+          className="w-auto h-auto max-w-full max-h-full object-contain"
+        />
+      </div>
+    );
+  }
 
   // Copy link to clipboard
   const handleCopyLink = () => {

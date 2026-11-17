@@ -19,7 +19,8 @@ import {
   Smartphone,
   Check,
 } from 'lucide-react';
-import { Button, Card, Badge, Input, QRCodeDisplay } from '../../packages/ui';
+import { Button, Card, Badge, Input } from '../../packages/ui';
+import { QRCodeSVG } from 'qrcode.react';
 import { BillingConfig, Restaurant } from '../../packages/types';
 import { api } from '../../packages/api/client';
 
@@ -561,9 +562,11 @@ export const OwnerBillingSettings: React.FC<OwnerBillingSettingsProps> = ({
                 </div>
               ) : upiId ? (
                 <div className="w-40 h-40 bg-white p-2.5 rounded-xl shadow-lg flex items-center justify-center">
-                  <QRCodeDisplay
+                  <QRCodeSVG
                     value={dynamicUpiPayload}
                     size={144}
+                    level="M"
+                    className="w-full h-full object-contain"
                   />
                 </div>
               ) : (
