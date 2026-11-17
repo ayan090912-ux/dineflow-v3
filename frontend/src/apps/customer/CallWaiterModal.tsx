@@ -7,6 +7,8 @@ import {
   FileText,
   Receipt,
   PhoneCall,
+  Flame,
+  Wine,
   X,
   ArrowRight,
 } from 'lucide-react';
@@ -37,19 +39,22 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
   if (!isOpen) return null;
 
   const handleSelectOption = async (
-    requestType: 'WATER' | 'CUTLERY' | 'NAPKINS' | 'BILL' | 'CALL_WAITER',
+    requestType: 'WATER' | 'CUTLERY' | 'NAPKINS' | 'BILL' | 'CALL_WAITER' | 'HOOKAH' | 'BAR',
     customTitle: string
   ) => {
     setSubmittingType(requestType);
     try {
+      const station = requestType === 'HOOKAH' ? 'HOOKAH' : requestType === 'BAR' ? 'BAR' : undefined;
+      const apiReqType = requestType === 'HOOKAH' ? 'CALL_WAITER' : requestType === 'BAR' ? 'CALL_WAITER' : requestType;
       await api.createCustomerRequest({
         tableNumber,
         tableId,
         tableSessionId,
         restaurantId,
-        requestType,
+        requestType: apiReqType,
         customTitle,
-        priority: requestType === 'BILL' || requestType === 'CALL_WAITER' ? 'HIGH' : 'MEDIUM',
+        station,
+        priority: requestType === 'BILL' || requestType === 'CALL_WAITER' || requestType === 'HOOKAH' || requestType === 'BAR' ? 'HIGH' : 'MEDIUM',
         customerNotes: note.trim() || undefined,
       });
 
@@ -84,6 +89,18 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
       title: 'Napkins & Tissues',
       description: 'Fresh paper or cloth napkins',
       icon: FileText,
+    },
+    {
+      id: 'HOOKAH' as const,
+      title: 'Hookah Coal & Heat',
+      description: 'Fresh charcoal cubes or shisha adjustment',
+      icon: Flame,
+    },
+    {
+      id: 'BAR' as const,
+      title: 'Bar & Drink Service',
+      description: 'Cocktail recommendations, extra ice or refills',
+      icon: Wine,
     },
     {
       id: 'BILL' as const,

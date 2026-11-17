@@ -208,11 +208,11 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     };
   }, [restaurant?.id]);
 
-  // Initial load and adaptive background fallback polling (30s when CONNECTED, 8s when disconnected)
+  // Initial load and adaptive background fallback polling (5s when CONNECTED, 3s when disconnected)
   useEffect(() => {
     loadData(true);
     loadAuxiliaryData();
-    const pollIntervalMs = wsStatus === 'CONNECTED' ? 30000 : 8000;
+    const pollIntervalMs = wsStatus === 'CONNECTED' ? 5000 : 3000;
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadData(false);

@@ -373,6 +373,19 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
         }
       } else if (event.type === 'service_request_created' || event.type === 'CustomerRequestCreated' || event.type === 'WaiterCalled') {
         const payloadData = (event as any).payload || (event as any).data || event;
+        const reqType = (payloadData.requestType || payloadData.request_type || '').toUpperCase();
+        // Station order ready passes belong strictly to Section A (Kitchen Pass & Orders), NOT Section B
+        if (
+          reqType === 'ORDER_READY' ||
+          reqType === 'DISH_READY' ||
+          reqType === 'BAR_READY' ||
+          reqType === 'HOOKAH_READY' ||
+          Boolean(payloadData.orderId) ||
+          Boolean(payloadData.order_id)
+        ) {
+          return;
+        }
+
         const newReq: CustomerRequest = {
           id: payloadData.id || (event as any).id || `req-${Date.now()}`,
           restaurantId: payloadData.restaurantId || payloadData.restaurant_id || currentRestaurantId,
@@ -951,6 +964,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
     return requests.filter((r) => {
       const isPendingOrActive = r.status === 'PENDING' || r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS';
       if (!isPendingOrActive) return false;
+
+      // Exclude order ready passes — orders belong exclusively in Section A (Kitchen Pass & Orders)
+      const isOrderPass =
+        r.requestType === 'ORDER_READY' ||
+        r.requestType === 'DISH_READY' ||
+        r.requestType === 'BAR_READY' ||
+        r.requestType === 'HOOKAH_READY' ||
+        Boolean(r.orderId) ||
+        Boolean((r as any).order_id);
+      if (isOrderPass) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();

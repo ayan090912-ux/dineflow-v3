@@ -1081,15 +1081,7 @@ async def create_order(
 
         try:
             from app.modules.websocket.manager import ws_manager
-            order_target_aud = ["CUSTOMER", "OWNER", "CART", "STAFF"]
-            if has_kitchen and restaurant.has_kitchen is not False and (not restaurant.enabled_modules or "kitchen" in restaurant.enabled_modules):
-                order_target_aud.append("KITCHEN")
-            if has_bar and restaurant.has_bar is not False and (not restaurant.enabled_modules or "bar" in restaurant.enabled_modules):
-                order_target_aud.append("BAR")
-            if has_hookah and (not restaurant.enabled_modules or "hookah" in restaurant.enabled_modules):
-                order_target_aud.append("HOOKAH")
-            if restaurant.has_waiter is not False and (not restaurant.enabled_modules or "waiter" in restaurant.enabled_modules):
-                order_target_aud.append("WAITER")
+            order_target_aud = ["CUSTOMER", "OWNER", "CART", "STAFF", "KITCHEN", "BAR", "HOOKAH", "WAITER"]
 
             await ws_manager.broadcast_event(
                 restaurant_id=restaurant.id,
@@ -2012,12 +2004,6 @@ async def request_waiter_for_order(
                 "request": req_dict,
             },
             target_audience=["WAITER", "OWNER", "KITCHEN", "BAR", "HOOKAH"]
-        )
-        await ws_manager.broadcast_event(
-            restaurant_id=order.restaurant_id,
-            event_type="service_request_created",
-            payload=req_dict,
-            target_audience=["WAITER", "OWNER"]
         )
         await ws_manager.broadcast_event(
             restaurant_id=order.restaurant_id,

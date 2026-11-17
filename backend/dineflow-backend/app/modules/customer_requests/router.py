@@ -130,6 +130,11 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
         try:
             # Routine BILL requests belong strictly to WAITER terminal (Part 3)
             aud = ["WAITER"] if req_type == "BILL" else ["WAITER", "OWNER"]
+            req_st = (payload.station or "").upper()
+            if req_st == "HOOKAH" or req_type in ["HOOKAH", "HOOKAH_SERVICE"]:
+                aud.append("HOOKAH")
+            if req_st == "BAR" or req_type in ["BAR", "BAR_SERVICE"]:
+                aud.append("BAR")
             await ws_manager.broadcast_event(
                 restaurant_id=canonical_rest_id,
                 event_type="service_request_created",
@@ -200,7 +205,11 @@ async def get_customer_requests(
             else:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Role not authorized for customer requests")
 
-    query = select(CustomerRequestModel).where(CustomerRequestModel.restaurant_id == canonical_rest_id)
+    query = select(CustomerRequestModel).where(
+        (CustomerRequestModel.restaurant_id == canonical_rest_id) &
+        (CustomerRequestModel.request_type != "ORDER_READY") &
+        (CustomerRequestModel.order_id.is_(None))
+    )
     if status_filter:
         query = query.where(CustomerRequestModel.status == status_filter.upper())
     elif active_only:
