@@ -101,12 +101,14 @@ export class CustomerClient {
     return createdReq;
   }
 
-  async getCustomerRequests(restaurantId?: string, statusFilter?: string): Promise<CustomerRequest[]> {
+  async getCustomerRequests(restaurantId?: string, statusFilter?: string, activeOnly?: boolean): Promise<CustomerRequest[]> {
     const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
     const apiBase = getApiBaseUrl();
     let url = `${apiBase}/customer-requests?restaurant_id=${encodeURIComponent(restId)}`;
     if (statusFilter) {
       url += `&status_filter=${encodeURIComponent(statusFilter)}`;
+    } else if (activeOnly) {
+      url += `&active_only=true`;
     }
     try {
       const res = await fetch(url, {

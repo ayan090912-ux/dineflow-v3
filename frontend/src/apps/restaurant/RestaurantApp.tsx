@@ -203,6 +203,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     }
   }, [activeTab]);
 
+  // Keep-alive tracking for high-frequency operational terminals (prevents screen blanking on tab switch)
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([activeTab]));
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
@@ -2993,107 +3004,121 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         )}
 
         {/* Tab: Waiter Terminal Operating System */}
-        {activeTab === 'waiter' && (
-          isModuleEnabled(currentRestaurant, 'waiter') ? (
-            <WaiterTerminalOS restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
-          ) : (
-            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
-                <PhoneCall className="w-8 h-8" />
-              </div>
-              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
-              <h3 className="text-xl font-bold text-white">Waiter Terminal is currently disabled for this restaurant.</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                The Waiter Terminal has been deactivated in Workspace Settings.
-              </p>
-              <div className="pt-2 flex justify-center gap-3">
-                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
-                  Open Terminals & Setup
-                </Button>
-                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
-                  Return to Dashboard
-                </Button>
-              </div>
-            </Card>
-          )
+        {visitedTabs.has('waiter') && (
+          <div style={{ display: activeTab === 'waiter' ? 'block' : 'none' }}>
+            {isModuleEnabled(currentRestaurant, 'waiter') ? (
+              <WaiterTerminalOS
+                restaurant={currentRestaurant || activeRestaurant}
+                isEmbedded={true}
+                initialOrders={orders}
+                initialTables={tables}
+                initialBills={bills}
+              />
+            ) : (
+              <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                  <PhoneCall className="w-8 h-8" />
+                </div>
+                <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+                <h3 className="text-xl font-bold text-white">Waiter Terminal is currently disabled for this restaurant.</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  The Waiter Terminal has been deactivated in Workspace Settings.
+                </p>
+                <div className="pt-2 flex justify-center gap-3">
+                  <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                    Open Terminals & Setup
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                    Return to Dashboard
+                  </Button>
+                </div>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* Tab 3: Kitchen Display System (KDS) & ETA Controls */}
-        {activeTab === 'kitchen' && (
-          isModuleEnabled(currentRestaurant, 'kitchen') ? (
-            <KitchenETADashboard restaurant={currentRestaurant || activeRestaurant} orders={orders} onRefreshOrders={handleRefreshOrders} isEmbedded={true} />
-          ) : (
-            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
-                <ChefHat className="w-8 h-8" />
-              </div>
-              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
-              <h3 className="text-xl font-bold text-white">Kitchen Terminal is currently disabled for this restaurant.</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                The Kitchen Display System has been deactivated in Workspace Settings.
-              </p>
-              <div className="pt-2 flex justify-center gap-3">
-                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
-                  Open Terminals & Setup
-                </Button>
-                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
-                  Return to Dashboard
-                </Button>
-              </div>
-            </Card>
-          )
+        {visitedTabs.has('kitchen') && (
+          <div style={{ display: activeTab === 'kitchen' ? 'block' : 'none' }}>
+            {isModuleEnabled(currentRestaurant, 'kitchen') ? (
+              <KitchenETADashboard restaurant={currentRestaurant || activeRestaurant} orders={orders} onRefreshOrders={handleRefreshOrders} isEmbedded={true} />
+            ) : (
+              <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                  <ChefHat className="w-8 h-8" />
+                </div>
+                <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+                <h3 className="text-xl font-bold text-white">Kitchen Terminal is currently disabled for this restaurant.</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  The Kitchen Display System has been deactivated in Workspace Settings.
+                </p>
+                <div className="pt-2 flex justify-center gap-3">
+                  <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                    Open Terminals & Setup
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                    Return to Dashboard
+                  </Button>
+                </div>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* Tab 3.5: Bar Terminal */}
-        {activeTab === 'bar' && (
-          isModuleEnabled(currentRestaurant, 'bar') ? (
-            <BarTerminal restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
-          ) : (
-            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
-              <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-400 mx-auto flex items-center justify-center">
-                <Wine className="w-8 h-8" />
-              </div>
-              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
-              <h3 className="text-xl font-bold text-white">Bar Terminal is currently disabled for this restaurant.</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                The Bar Terminal KDS has been deactivated in Workspace Settings.
-              </p>
-              <div className="pt-2 flex justify-center gap-3">
-                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
-                  Open Terminals & Setup
-                </Button>
-                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
-                  Return to Dashboard
-                </Button>
-              </div>
-            </Card>
-          )
+        {visitedTabs.has('bar') && (
+          <div style={{ display: activeTab === 'bar' ? 'block' : 'none' }}>
+            {isModuleEnabled(currentRestaurant, 'bar') ? (
+              <BarTerminal restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
+            ) : (
+              <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+                <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-400 mx-auto flex items-center justify-center">
+                  <Wine className="w-8 h-8" />
+                </div>
+                <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+                <h3 className="text-xl font-bold text-white">Bar Terminal is currently disabled for this restaurant.</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  The Bar Terminal KDS has been deactivated in Workspace Settings.
+                </p>
+                <div className="pt-2 flex justify-center gap-3">
+                  <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                    Open Terminals & Setup
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                    Return to Dashboard
+                  </Button>
+                </div>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* Tab 3.55: Hookah & Shisha Terminal */}
-        {activeTab === 'hookah' && (
-          isModuleEnabled(currentRestaurant, 'hookah') ? (
-            <HookahTerminal restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
-          ) : (
-            <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
-                <Flame className="w-8 h-8" />
-              </div>
-              <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
-              <h3 className="text-xl font-bold text-white">Hookah & Shisha Terminal is currently disabled for this venue.</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                The Hookah & Shisha station has been deactivated in Terminals & Setup.
-              </p>
-              <div className="pt-2 flex justify-center gap-3">
-                <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
-                  Open Terminals & Setup
-                </Button>
-                <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
-                  Return to Dashboard
-                </Button>
-              </div>
-            </Card>
-          )
+        {visitedTabs.has('hookah') && (
+          <div style={{ display: activeTab === 'hookah' ? 'block' : 'none' }}>
+            {isModuleEnabled(currentRestaurant, 'hookah') ? (
+              <HookahTerminal restaurant={currentRestaurant || activeRestaurant} isEmbedded={true} />
+            ) : (
+              <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                  <Flame className="w-8 h-8" />
+                </div>
+                <Badge variant="warning" className="text-[10px] uppercase font-mono">Module Disabled</Badge>
+                <h3 className="text-xl font-bold text-white">Hookah & Shisha Terminal is currently disabled for this venue.</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  The Hookah & Shisha station has been deactivated in Terminals & Setup.
+                </p>
+                <div className="pt-2 flex justify-center gap-3">
+                  <Button variant="brand" onClick={() => setActiveTab('workspace_settings')} className="text-xs">
+                    Open Terminals & Setup
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveTab('dashboard')} className="text-xs">
+                    Return to Dashboard
+                  </Button>
+                </div>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* Tab 3.6: Counter / Pickup QR Entry Point */}

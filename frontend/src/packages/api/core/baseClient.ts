@@ -306,7 +306,9 @@ export class BaseApiClient {
     }
   }
 
-  public saveDatabase() {
+  private _saveDbTimeout: any = null;
+
+  private _doSaveDatabase() {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const payload = {
@@ -335,6 +337,22 @@ export class BaseApiClient {
     } catch (e) {
       console.error('Failed to persist database to localStorage:', e);
     }
+  }
+
+  public saveDatabase(immediate: boolean = false) {
+    if (immediate) {
+      if (this._saveDbTimeout) {
+        clearTimeout(this._saveDbTimeout);
+        this._saveDbTimeout = null;
+      }
+      this._doSaveDatabase();
+      return;
+    }
+    if (this._saveDbTimeout) return;
+    this._saveDbTimeout = setTimeout(() => {
+      this._saveDbTimeout = null;
+      this._doSaveDatabase();
+    }, 1000);
   }
 
   public restoreSession(targetScope?: PortalScope) {
@@ -508,6 +526,8 @@ export class BaseApiClient {
           localStorage.getItem('dinely_staff_token') ||
           sessionStorage.getItem('dinely_staff_token') ||
           localStorage.getItem('dinely_staff_token_staff') ||
+          localStorage.getItem('dinely_owner_token') ||
+          sessionStorage.getItem('dinely_owner_token') ||
           localStorage.getItem('dinely_auth_token') ||
           sessionStorage.getItem('dinely_auth_token') ||
           this.currentTokensByScope[targetScope]?.accessToken ||

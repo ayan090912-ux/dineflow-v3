@@ -109,9 +109,19 @@ interface WaiterTerminalOSProps {
   restaurant?: Restaurant;
   onLogout?: () => void;
   isEmbedded?: boolean;
+  initialOrders?: Order[];
+  initialTables?: Table[];
+  initialBills?: Bill[];
 }
 
-export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, onLogout, isEmbedded = false }) => {
+export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
+  restaurant,
+  onLogout,
+  isEmbedded = false,
+  initialOrders,
+  initialTables,
+  initialBills,
+}) => {
   const { formatPrice } = useTheme();
 
   // Navigation view state: 'floor' (Default: 1-Screen Live Service Floor) or 'tables' (Floor Management)
@@ -121,17 +131,54 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
   // Ref so mute/unmute does NOT re-register the event subscription effect
   const isAudioMutedRef = React.useRef<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (initialOrders && initialOrders.length > 0) return false;
+    if (typeof window !== 'undefined' && Array.isArray((api as any)?.orders) && (api as any).orders.length > 0) return false;
+    return true;
+  });
   const [isErrorState, setIsErrorState] = useState<boolean>(false);
   const [wsStatus, setWsStatus] = useState<ConnectionStatusType>('CONNECTING');
 
-  // Core Data State
-  const [requests, setRequests] = useState<CustomerRequest[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [tables, setTables] = useState<Table[]>([]);
-  const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
+  // Core Data State - pre-populated from initial props or in-memory API cache for instant render without blank screen
+  const [requests, setRequests] = useState<CustomerRequest[]>(() => {
+    if (typeof window !== 'undefined' && Array.isArray((api as any)?.customerRequests)) {
+      const restId = restaurant?.id || api.getCurrentRestaurantId();
+      return (api as any).customerRequests.filter((r: any) => !restId || r.restaurantId === restId);
+    }
+    return [];
+  });
+  const [orders, setOrders] = useState<Order[]>(() => {
+    if (initialOrders && initialOrders.length > 0) return initialOrders;
+    if (typeof window !== 'undefined' && Array.isArray((api as any)?.orders)) {
+      const restId = restaurant?.id || api.getCurrentRestaurantId();
+      return (api as any).orders.filter((o: any) => !restId || o.restaurantId === restId);
+    }
+    return [];
+  });
+  const [tables, setTables] = useState<Table[]>(() => {
+    if (initialTables && initialTables.length > 0) return initialTables;
+    if (typeof window !== 'undefined' && Array.isArray((api as any)?.tables)) {
+      const restId = restaurant?.id || api.getCurrentRestaurantId();
+      return (api as any).tables.filter((t: any) => !restId || t.restaurantId === restId);
+    }
+    return [];
+  });
+  const [activeSessions, setActiveSessions] = useState<TableSession[]>(() => {
+    if (typeof window !== 'undefined' && Array.isArray((api as any)?.tableSessions)) {
+      const restId = restaurant?.id || api.getCurrentRestaurantId();
+      return (api as any).tableSessions.filter((s: any) => !restId || s.restaurantId === restId);
+    }
+    return [];
+  });
   const [notifications, setNotifications] = useState<WaiterNotification[]>([]);
-  const [bills, setBills] = useState<Bill[]>([]);
+  const [bills, setBills] = useState<Bill[]>(() => {
+    if (initialBills && initialBills.length > 0) return initialBills;
+    if (typeof window !== 'undefined' && Array.isArray((api as any)?.bills)) {
+      const restId = restaurant?.id || api.getCurrentRestaurantId();
+      return (api as any).bills.filter((b: any) => !restId || b.restaurantId === restId);
+    }
+    return [];
+  });
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -198,12 +245,12 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
 
       const isNotWedding = (restaurant as any)?.businessType !== 'WEDDING_ORDERING';
       const [reqData, ordData, tblData, notifData, sessionData, billData] = await Promise.all([
-        api.getCustomerRequests(targetRestId),
-        api.getOrders(targetRestId, { excludeEvents: isNotWedding }),
+        api.getCustomerRequests(targetRestId, undefined, true),
+        api.getOrders(targetRestId, { excludeEvents: isNotWedding, activeOnly: true }),
         api.getTables(targetRestId),
         api.getWaiterNotifications(targetRestId),
         api.getActiveTableSessions(targetRestId),
-        api.getBills(targetRestId),
+        api.getBills(targetRestId, 'OPEN'),
       ]);
 
       setRequests(reqData);
@@ -436,7 +483,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             return [payloadOrder, ...prev];
           });
         } else {
-          api.getOrders(currentRestaurantId).then(setOrders).catch(() => {});
+          api.getOrders(currentRestaurantId, { activeOnly: true }).then(setOrders).catch(() => {});
         }
       } else if (event.type === 'order_ready' || event.type === 'OrderReady') {
         const payloadData = (event as any).payload || event;
@@ -475,11 +522,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({ restaurant, 
             }
             return prev;
           });
-          api.getOrders(currentRestaurantId).then((fresh) => {
+          api.getOrders(currentRestaurantId, { activeOnly: true }).then((fresh) => {
             if (fresh && Array.isArray(fresh)) setOrders(fresh);
           }).catch(() => {});
         } else {
-          api.getOrders(currentRestaurantId).then((fresh) => {
+          api.getOrders(currentRestaurantId, { activeOnly: true }).then((fresh) => {
             if (fresh && Array.isArray(fresh)) setOrders(fresh);
           }).catch(() => {});
         }

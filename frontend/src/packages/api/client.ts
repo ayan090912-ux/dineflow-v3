@@ -1131,8 +1131,8 @@ export class DinelyApiClient extends BaseApiClient {
     return this.customer.createCustomerRequest(data);
   }
 
-  async getCustomerRequests(restaurantId?: string, statusFilter?: string): Promise<CustomerRequest[]> {
-    return this.customer.getCustomerRequests(restaurantId, statusFilter);
+  async getCustomerRequests(restaurantId?: string, statusFilter?: string, activeOnly?: boolean): Promise<CustomerRequest[]> {
+    return this.customer.getCustomerRequests(restaurantId, statusFilter, activeOnly);
   }
 
   async updateCustomerRequest(requestId: string, statusVal: string, waiterName?: string): Promise<CustomerRequest> {
