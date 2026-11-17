@@ -32,7 +32,6 @@ import {
   Package,
   Download,
   Share2,
-  Palette,
   Eye,
   Menu as MenuIcon,
   X as CloseIcon,
@@ -69,7 +68,6 @@ import { DinelyLogo, Button, SearchInput, Avatar, Badge } from '../../packages/u
 import { realtimeBus } from '../../packages/api/realtime';
 import { normalizeOrder } from '../../packages/api/core/helpers';
 import { getRestaurantCustomerUrl, getRestaurantPublicDomain, getTenantUrl, getTenantFromHostname } from '../../packages/utils/tenantResolver';
-import { CART_THEMES, resolveCartTheme, CartTheme, CartThemeId } from './cartThemes';
 
 // Web Audio API Synthesizer for Kitchen & Terminal Chimes
 const playKitchenChime = (type: 'NEW_ORDER' | 'BUMP') => {
@@ -281,12 +279,7 @@ export const CartApp: React.FC<CartAppProps> = ({
   // Responsive Mobile Navigation Drawer
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
-  // Active Theme & Customization State for Counter QR & Storefront
-  const [selectedThemeId, setSelectedThemeId] = useState<CartThemeId>('amber_street');
-  const [customAccent, setCustomAccent] = useState<string>('#f59e0b');
-  const [customTagline, setCustomTagline] = useState<string>('Instant QR Pickup • No App Needed');
-  const [isSavingTheme, setIsSavingTheme] = useState(false);
-  const [themeSaveSuccess, setThemeSaveSuccess] = useState<string | null>(null);
+  // Active Customization State for Counter QR
   const [qrCopied, setQrCopied] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const qrCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -1285,27 +1278,6 @@ export const CartApp: React.FC<CartAppProps> = ({
     return `https://dinely.food/cart/menu?cartId=${encodeURIComponent(currentCart.id)}`;
   }, [currentCart]);
 
-  // Sync Theme from Business Profile
-  useEffect(() => {
-    if (currentCart?.theme) {
-      const resolved = resolveCartTheme(currentCart.theme);
-      setSelectedThemeId(resolved.id);
-      setCustomAccent(currentCart.theme.primaryColor || resolved.primaryColor);
-      if ((currentCart.theme as any).tagline) {
-        setCustomTagline((currentCart.theme as any).tagline);
-      }
-    }
-  }, [currentCart]);
-
-  const activeCartTheme = useMemo(() => {
-    const base = resolveCartTheme(selectedThemeId);
-    return {
-      ...base,
-      primaryColor: customAccent || base.primaryColor,
-      accentColor: customAccent || base.accentColor,
-    };
-  }, [selectedThemeId, customAccent]);
-
   const handleCopyQrLink = () => {
     navigator.clipboard?.writeText(cartOrderingUrl);
     setQrCopied(true);
@@ -1347,42 +1319,6 @@ export const CartApp: React.FC<CartAppProps> = ({
     link.download = `${(currentCart?.name || 'max-kart').toLowerCase().replace(/\s+/g, '-')}-counter-qr.png`;
     link.href = exportCanvas.toDataURL('image/png');
     link.click();
-  };
-
-  const handleSaveTheme = async () => {
-    if (!cartId) return;
-    try {
-      setIsSavingTheme(true);
-      setThemeSaveSuccess(null);
-      const themeConfig = {
-        restaurantName: currentCart?.name || 'MAX KART',
-        primaryColor: activeCartTheme.primaryColor,
-        secondaryColor: activeCartTheme.accentColor,
-        accentColor: activeCartTheme.accentColor,
-        backgroundColor: activeCartTheme.backgroundColor,
-        textColor: activeCartTheme.textColor,
-        fontFamily: 'sans' as const,
-        borderRadius: 'lg' as const,
-        themeId: selectedThemeId,
-        id: selectedThemeId,
-        tagline: customTagline,
-      };
-
-      await api.updateRestaurantTheme(cartId, themeConfig as any);
-      if (currentCart) {
-        setCurrentCart({
-          ...currentCart,
-          theme: themeConfig as any,
-        });
-      }
-      setThemeSaveSuccess(`Theme "${activeCartTheme.name}" saved! Live customer menu updated.`);
-      setTimeout(() => setThemeSaveSuccess(null), 5000);
-    } catch (err: any) {
-      console.warn('Failed to save cart theme:', err);
-      alert('Failed to save theme: ' + (err?.message || 'Unknown error'));
-    } finally {
-      setIsSavingTheme(false);
-    }
   };
 
   const newOrdersCount = liveOrders.filter((o) => (o.status === 'PENDING' || o.status === 'NEW') && o.pickupStatus !== 'REDEEMED').length;
@@ -2875,389 +2811,99 @@ export const CartApp: React.FC<CartAppProps> = ({
               </div>
             )}
 
-            {/* Main Balanced Grid: Left (QR & Themes) | Right (Phone Mockup Preview) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start w-full">
-              {/* LEFT COLUMN: QR Code Card & Themes (lg:col-span-7 xl:col-span-8) */}
-              <div className="lg:col-span-7 xl:col-span-8 space-y-6 w-full min-w-0">
-                {/* 1. Dedicated Standalone Counter QR Card */}
-                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-b from-[#10141e] to-[#090c12] border border-[#1f2638] shadow-2xl space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1b2234]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
-                        <Truck className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <h2 className="text-base font-bold text-white truncate">{currentCart?.name || 'MAX KART'}</h2>
-                        <p className="text-xs text-slate-400">Permanent Counter Standee QR Code</p>
-                      </div>
+            {/* Dedicated Standalone Counter QR Card */}
+            <div className="max-w-3xl mx-auto w-full">
+              <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#10141e] to-[#090c12] border border-[#1f2638] shadow-2xl space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1b2234]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
+                      <Truck className="w-5 h-5" />
                     </div>
-                    <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold self-start sm:self-center shrink-0">
-                      ● Active Customer Link
-                    </span>
+                    <div className="min-w-0">
+                      <h2 className="text-base sm:text-lg font-bold text-white truncate">{currentCart?.name || 'MAX KART'}</h2>
+                      <p className="text-xs text-slate-400">Permanent Counter Standee QR Code</p>
+                    </div>
                   </div>
+                  <span className="text-[11px] font-mono px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold self-start sm:self-center shrink-0">
+                    ● Active Customer Link
+                  </span>
+                </div>
 
-                  {/* QR Code and Actions in 2 inner columns */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
-                    {/* QR Code Container Badge */}
-                    <div className="flex flex-col items-center justify-center p-5 bg-white rounded-2xl shadow-xl border border-slate-200 text-center mx-auto sm:mx-0 w-full max-w-[240px]">
-                      <QRCodeSVG
+                {/* QR Code and Actions in 2 inner columns */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 items-center">
+                  {/* QR Code Container Badge */}
+                  <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl shadow-xl border border-slate-200 text-center mx-auto sm:mx-0 w-full max-w-[260px]">
+                    <QRCodeSVG
+                      value={cartOrderingUrl}
+                      size={210}
+                      level="H"
+                      marginSize={2}
+                      className="w-full h-auto object-contain"
+                    />
+                    {/* Hidden canvas for high-res PNG export */}
+                    <div className="hidden">
+                      <QRCodeCanvas
+                        ref={qrCanvasRef}
                         value={cartOrderingUrl}
-                        size={190}
+                        size={500}
                         level="H"
                         marginSize={2}
-                        className="w-full h-auto object-contain"
-                      />
-                      {/* Hidden canvas for high-res PNG export */}
-                      <div className="hidden">
-                        <QRCodeCanvas
-                          ref={qrCanvasRef}
-                          value={cartOrderingUrl}
-                          size={500}
-                          level="H"
-                          marginSize={2}
-                        />
-                      </div>
-                      <p className="text-[10px] font-bold text-slate-900 mt-2 tracking-wide uppercase font-mono">
-                        Scan to Order Takeaway
-                      </p>
-                    </div>
-
-                    {/* QR Details and Buttons */}
-                    <div className="space-y-4 min-w-0">
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                          Canonical Ordering URL
-                        </label>
-                        <div className="p-2.5 bg-[#07090e] rounded-xl border border-[#1b2234] flex items-center justify-between gap-2">
-                          <span className="text-xs font-mono text-sky-400 truncate">{cartOrderingUrl}</span>
-                          <button
-                            type="button"
-                            onClick={handleCopyQrLink}
-                            className="p-1.5 rounded-lg bg-[#151a26] hover:bg-[#1f2638] text-slate-300 hover:text-white transition-all shrink-0 cursor-pointer"
-                            title="Copy URL"
-                          >
-                            {qrCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                        {qrCopied && (
-                          <span className="text-[11px] text-emerald-400 font-medium">Copied to clipboard!</span>
-                        )}
-                      </div>
-
-                      <div className="space-y-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={handleDownloadQrPng}
-                          className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all border border-slate-700/60 cursor-pointer"
-                        >
-                          <Download className="w-4 h-4 text-emerald-400" />
-                          <span>Download High-Res QR (PNG)</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setIsPrintModalOpen(true)}
-                          className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all border border-slate-700/60 cursor-pointer"
-                        >
-                          <Printer className="w-4 h-4 text-sky-400" />
-                          <span>Print Counter Standee Sign</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-[#0a0d14] rounded-xl border border-[#171d2b] flex items-center gap-2 text-xs text-slate-400">
-                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>
-                      Pointed permanently to your public customer storefront. Never redirects to POS or requires an app install.
-                    </span>
-                  </div>
-                </div>
-
-                {/* 2. Choose Visual Theme (All 5 Themes) & Customization */}
-                <div className="p-5 sm:p-6 rounded-3xl bg-[#0c0f16] border border-[#1a1f2b] shadow-2xl space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#181d2a]">
-                    <div>
-                      <h2 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wide">
-                        <Palette className="w-4 h-4 text-rose-400" />
-                        <span>Choose Visual Theme</span>
-                      </h2>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Choose the visual palette for your customer storefront. Updates in real-time.
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 self-start sm:self-center shrink-0">
-                      5 Curated Themes
-                    </span>
-                  </div>
-
-                  {/* 5 Themes Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {CART_THEMES.map((theme) => {
-                      const isSelected = selectedThemeId === theme.id;
-                      return (
-                        <button
-                          key={theme.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedThemeId(theme.id);
-                            setCustomAccent(theme.primaryColor);
-                          }}
-                          className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative overflow-hidden ${
-                            isSelected
-                              ? 'bg-slate-800/90 border-sky-400 ring-2 ring-sky-500/40 shadow-lg'
-                              : 'bg-[#080b10] border-[#181d2a] hover:border-slate-700 text-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between w-full mb-2">
-                            {/* Color Dot Swatches */}
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className="w-4 h-4 rounded-full border border-white/20 shadow-sm"
-                                style={{ backgroundColor: theme.primaryColor }}
-                              />
-                              <span
-                                className="w-4 h-4 rounded-full border border-white/20 shadow-sm"
-                                style={{ backgroundColor: theme.backgroundColor }}
-                              />
-                            </div>
-                            {isSelected && (
-                              <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                              </span>
-                            )}
-                          </div>
-
-                          <div>
-                            <div className="text-xs font-bold text-white leading-snug">{theme.name}</div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">{theme.subtitle}</div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Additional Styling Controls */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                    <div>
-                      <label className="text-[11px] font-medium text-slate-400 mb-1 block">
-                        Primary Accent Color
-                      </label>
-                      <div className="flex items-center gap-2.5 p-2 bg-[#080b10] border border-[#1a1f2b] rounded-xl">
-                        <input
-                          type="color"
-                          value={customAccent}
-                          onChange={(e) => setCustomAccent(e.target.value)}
-                          className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
-                        />
-                        <span className="text-xs font-mono text-slate-200">{customAccent}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-medium text-slate-400 mb-1 block">
-                        Storefront Tagline
-                      </label>
-                      <input
-                        type="text"
-                        value={customTagline}
-                        onChange={(e) => setCustomTagline(e.target.value)}
-                        placeholder="e.g. Instant QR Pickup • No App Needed"
-                        className="w-full px-3 py-2 bg-[#080b10] border border-[#1a1f2b] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
                       />
                     </div>
+                    <p className="text-[11px] font-bold text-slate-900 mt-2.5 tracking-wide uppercase font-mono">
+                      Scan to Order Takeaway
+                    </p>
                   </div>
 
-                  {/* Save Theme Button */}
-                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    {themeSaveSuccess && (
-                      <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        <span>{themeSaveSuccess}</span>
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleSaveTheme}
-                      disabled={isSavingTheme}
-                      className="w-full sm:w-auto ml-auto px-6 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
-                    >
-                      {isSavingTheme ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Saving to Cloud...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Save Theme Settings</span>
-                        </>
+                  {/* QR Details and Buttons */}
+                  <div className="space-y-4 min-w-0">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        Canonical Ordering URL
+                      </label>
+                      <div className="p-3 bg-[#07090e] rounded-xl border border-[#1b2234] flex items-center justify-between gap-2">
+                        <span className="text-xs font-mono text-sky-400 truncate">{cartOrderingUrl}</span>
+                        <button
+                          type="button"
+                          onClick={handleCopyQrLink}
+                          className="p-1.5 rounded-lg bg-[#151a26] hover:bg-[#1f2638] text-slate-300 hover:text-white transition-all shrink-0 cursor-pointer"
+                          title="Copy URL"
+                        >
+                          {qrCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      {qrCopied && (
+                        <span className="text-[11px] text-emerald-400 font-medium">Copied to clipboard!</span>
                       )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT COLUMN: Live Mobile Storefront Preview (lg:col-span-5 xl:col-span-4) */}
-              <div className="lg:col-span-5 xl:col-span-4 w-full flex flex-col items-center space-y-3 lg:sticky lg:top-6">
-                <div className="flex items-center justify-between w-full max-w-[340px] px-2 text-xs font-bold text-slate-400">
-                  <span className="flex items-center gap-1.5 text-sky-400">
-                    <Eye className="w-4 h-4" /> Live Mobile Preview
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500">Real-time theme rendering</span>
-                </div>
-
-                {/* Smartphone Mockup Frame */}
-                <div className="w-full max-w-[340px] rounded-[44px] bg-[#000000] border-[8px] border-slate-800 shadow-2xl p-2.5 flex flex-col relative overflow-hidden transition-all">
-                  {/* Dynamic Island / Speaker Notch */}
-                  <div className="w-24 h-4 bg-slate-900 rounded-full mx-auto mb-2 flex items-center justify-center">
-                    <div className="w-2 h-2 rounded-full bg-slate-800" />
-                  </div>
-
-                  {/* Screen Content */}
-                  <div
-                    className="w-full rounded-[32px] overflow-hidden flex flex-col min-h-[560px] max-h-[620px] transition-colors duration-300 font-sans"
-                    style={{
-                      backgroundColor: activeCartTheme.backgroundColor,
-                      color: activeCartTheme.textColor,
-                    }}
-                  >
-                    {/* Simulated Mobile Header */}
-                    <div className="p-3.5 border-b border-white/10 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shadow-inner"
-                          style={{
-                            backgroundColor: activeCartTheme.badgeBg,
-                            color: activeCartTheme.accentColor,
-                            borderColor: activeCartTheme.badgeBorder,
-                            borderWidth: 1,
-                          }}
-                        >
-                          <Truck className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-extrabold leading-tight text-white">
-                            {currentCart?.name || 'MAX KART'}
-                          </div>
-                          <span
-                            className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded-full inline-block mt-0.5"
-                            style={{
-                              backgroundColor: activeCartTheme.badgeBg,
-                              color: activeCartTheme.badgeText,
-                              borderColor: activeCartTheme.badgeBorder,
-                              borderWidth: 1,
-                            }}
-                          >
-                            Open
-                          </span>
-                        </div>
-                      </div>
-
-                      <span className="text-[9px] px-2 py-0.5 rounded bg-white/10 text-slate-300">
-                        Counter QR
-                      </span>
                     </div>
 
-                    {/* Tagline */}
-                    <div className="px-3.5 pt-2">
-                      <p className="text-[10px] opacity-80 flex items-center gap-1 font-medium">
-                        <Sparkles className="w-3 h-3" style={{ color: activeCartTheme.accentColor }} />
-                        <span className="truncate">{customTagline}</span>
-                      </p>
-                    </div>
-
-                    {/* Category Filter Pills */}
-                    <div className="px-3.5 py-2.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-                      {['All Items', 'Pure Veg', 'Non-Veg'].map((cat, idx) => (
-                        <span
-                          key={cat}
-                          className="text-[10px] px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all"
-                          style={
-                            idx === 0
-                              ? {
-                                  backgroundColor: activeCartTheme.pillActiveBg,
-                                  color: activeCartTheme.pillActiveText,
-                                }
-                              : {
-                                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                                  color: '#cbd5e1',
-                                }
-                          }
-                        >
-                          {cat}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Real Menu Items List */}
-                    <div className="flex-1 px-3.5 py-1 space-y-2 overflow-y-auto max-h-[340px]">
-                      {menuItems.slice(0, 4).map((it) => (
-                        <div
-                          key={it.id}
-                          className="p-2 rounded-2xl border transition-all flex items-center gap-2.5"
-                          style={{
-                            backgroundColor: activeCartTheme.surfaceColor,
-                            borderColor: activeCartTheme.cardBorder,
-                          }}
-                        >
-                          {/* Dish Thumbnail or Neutral Icon */}
-                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10 shrink-0 flex items-center justify-center">
-                            {it.imageUrl ? (
-                              <img
-                                src={it.imageUrl}
-                                alt={it.name}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <UtensilsCrossed className="w-4 h-4 opacity-40 text-slate-400" />
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-bold text-white truncate">{it.name}</div>
-                            <div className="text-[10px] opacity-70 mt-0.5 font-mono">
-                              ₹{it.price}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                              style={{
-                                backgroundColor: it.isAvailable === false ? 'rgba(239, 68, 68, 0.2)' : activeCartTheme.badgeBg,
-                                color: it.isAvailable === false ? '#f87171' : activeCartTheme.badgeText,
-                              }}
-                            >
-                              {it.isAvailable === false ? 'Sold Out' : 'Available'}
-                            </span>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-1 rounded-lg shadow-sm ${
-                                it.isAvailable === false ? 'opacity-40 cursor-not-allowed' : ''
-                              }`}
-                              style={{
-                                backgroundColor: it.isAvailable === false ? '#334155' : activeCartTheme.primaryColor,
-                                color: it.isAvailable === false ? '#94a3b8' : activeCartTheme.pillActiveText,
-                              }}
-                            >
-                              {it.isAvailable === false ? 'Sold Out' : '+ Add'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Floating Bottom Bar Mockup */}
-                    <div className="p-3 border-t border-white/10 mt-auto">
-                      <div
-                        className={`w-full py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-between shadow-lg ${activeCartTheme.buttonGradient}`}
+                    <div className="space-y-2.5 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadQrPng}
+                        className="w-full py-3 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all border border-slate-700/60 cursor-pointer"
                       >
-                        <span>1 Item Selected</span>
-                        <span>View Order • ₹150 →</span>
-                      </div>
+                        <Download className="w-4 h-4 text-emerald-400" />
+                        <span>Download High-Res QR (PNG)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPrintModalOpen(true)}
+                        className="w-full py-3 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all border border-slate-700/60 cursor-pointer"
+                      >
+                        <Printer className="w-4 h-4 text-sky-400" />
+                        <span>Print Counter Standee Sign</span>
+                      </button>
                     </div>
                   </div>
+                </div>
+
+                <div className="p-3.5 bg-[#0a0d14] rounded-xl border border-[#171d2b] flex items-center gap-2.5 text-xs text-slate-400">
+                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    Pointed permanently to your public customer storefront. Never redirects to POS or requires an app install.
+                  </span>
                 </div>
               </div>
             </div>

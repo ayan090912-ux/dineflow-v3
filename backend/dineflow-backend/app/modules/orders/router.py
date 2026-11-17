@@ -1526,7 +1526,11 @@ async def update_order_status(
         or (payload.deliveryStatus in ["DELIVERED", "OUT_FOR_DELIVERY", "CLAIMED"])
     )
     if is_delivery_attempt and not target_bar and not target_hookah:
-        allowed_delivery_roles = ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF"]
+        allowed_delivery_roles = [
+            "RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER",
+            "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF",
+            "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"
+        ]
         if not caller.is_admin and caller_role not in allowed_delivery_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1683,14 +1687,25 @@ async def update_order_status(
             order.delivery_status = "DELIVERED"
             if not order.delivered_at:
                 order.delivered_at = datetime.now(timezone.utc)
-        elif k_ready and b_ready and h_ready:
+        elif target_status == "READY" or (k_ready and b_ready and h_ready):
             order.status = "READY"
+            if target_status == "READY":
+                if has_k_items and order.kitchen_status in ["PENDING", "ACCEPTED", "PREPARING", None]:
+                    order.kitchen_status = "READY"
+                if has_b_items and order.bar_status in ["PENDING", "ACCEPTED", "PREPARING", None]:
+                    order.bar_status = "READY"
+                if has_h_items and order.hookah_status in ["PENDING", "ACCEPTED", "PREPARING", None]:
+                    order.hookah_status = "READY"
+                if not has_k_items and not has_b_items and not has_h_items:
+                    order.kitchen_status = "READY"
             if any([
                 order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"],
                 order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"],
                 order.hookah_status in ["COMPLETED", "DELIVERED", "SERVED"],
             ]):
                 order.delivery_status = "PARTIALLY_DELIVERED"
+            elif order.delivery_status not in ["COLLECTED", "DELIVERED"]:
+                order.delivery_status = "WAITING_FOR_WAITER"
         elif any([
             order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"],
             order.bar_status in ["COMPLETED", "DELIVERED", "SERVED"],

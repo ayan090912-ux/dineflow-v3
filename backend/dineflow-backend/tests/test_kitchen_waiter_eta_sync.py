@@ -154,3 +154,57 @@ async def test_kitchen_waiter_eta_sync_complete_lifecycle():
 
             refreshed_sess = await db.get(TableSession, session_id)
             assert refreshed_sess.status == "CLOSED"
+
+
+@pytest.mark.asyncio
+async def test_order_mark_as_ready_transitions():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        rest_id = f"rest-ready-{uuid.uuid4().hex[:8]}"
+        cart_headers = {
+            "X-Staff-Role": "CART",
+            "X-Staff-Restaurant-Id": rest_id,
+            "X-Staff-Id": "cart-op-1",
+            "X-Staff-Name": "Cart Operator",
+        }
+
+        async with AsyncSessionLocal() as db:
+            r = Restaurant(
+                id=rest_id,
+                name="Cart Test",
+                slug=f"cart-{uuid.uuid4().hex[:6]}",
+                owner_uid="cart-op-1",
+                owner_email="cart@dinely.test",
+                lifecycle_status="ACTIVE"
+            )
+            db.add(r)
+            order = Order(
+                id=f"ord-cart-{uuid.uuid4().hex[:8]}",
+                restaurant_id=rest_id,
+                table_number="COUNTER",
+                status="PREPARING",
+                kitchen_status="PREPARING",
+                total_amount=250.0,
+                order_type="CART",
+                pickup_code="9988",
+                items_json=[
+                    {"name": "Cart Burger", "quantity": 1, "price": 250.0, "category": "Burgers", "targetDestination": "KITCHEN"}
+                ]
+            )
+            db.add(order)
+            await db.commit()
+            order_id = order.id
+
+        # Update order status to READY directly
+        res_ready = await client.put(f"/api/v1/orders/{order_id}/status", json={"status": "READY"}, headers=cart_headers)
+        assert res_ready.status_code == 200, res_ready.text
+        data = res_ready.json()
+        assert data.get("status") == "READY"
+        assert data.get("kitchen_status") == "READY" or data.get("kitchenStatus") == "READY"
+
+        # Verify in database
+        async with AsyncSessionLocal() as db:
+            ref_order = await db.get(Order, order_id)
+            assert ref_order.status == "READY"
+            assert ref_order.kitchen_status == "READY"
+
