@@ -4873,6 +4873,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         {activeTab === 'theme' && (
           <BrandThemeTerminalOS
             restaurant={currentRestaurant || activeRestaurant}
+            menuItems={menuItems}
             onRefreshData={loadData}
             addToast={addToast}
           />
