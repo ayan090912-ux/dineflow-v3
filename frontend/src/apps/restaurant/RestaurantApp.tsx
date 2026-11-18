@@ -4910,8 +4910,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       <Modal
         isOpen={!!selectedTableQR}
         onClose={() => setSelectedTableQR(null)}
-        title={`Custom QR Standee & Studio for ${selectedTableQR?.tableNumber}`}
-        maxWidth="2xl"
+        title={`Table QR Code · ${selectedTableQR?.tableNumber}`}
+        maxWidth="md"
       >
         {selectedTableQR && (
           <QRCodeDisplay
