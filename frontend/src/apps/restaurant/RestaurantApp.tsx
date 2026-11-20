@@ -6336,144 +6336,178 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       <Modal
         isOpen={!!selectedBillDetails}
         onClose={() => setSelectedBillDetails(null)}
-        title={`Official Tax Invoice — ${selectedBillDetails?.invoiceNumber || selectedBillDetails?.id} 🧾`}
+        title={selectedBillDetails ? `Tax Invoice · ${selectedBillDetails.tableNumber || 'Bill'}` : 'Tax Invoice'}
+        description={
+          selectedBillDetails
+            ? `${selectedBillDetails.invoiceNumber || selectedBillDetails.id} · ${new Date(selectedBillDetails.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at ${new Date(selectedBillDetails.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : ''
+        }
+        maxWidth="lg"
       >
         {selectedBillDetails && (
-          <div className="space-y-4 text-xs printable-receipt">
-            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2 font-mono">
-                <span className="text-slate-400">Invoice #: <strong className="text-emerald-400">{selectedBillDetails.invoiceNumber || selectedBillDetails.id}</strong></span>
-                <span className="text-slate-400">{new Date(selectedBillDetails.createdAt).toLocaleString()}</span>
+          <div className="space-y-4 text-xs font-sans printable-receipt">
+            {/* 1. Status & Table Info Strip */}
+            <div className="flex items-center justify-between gap-3 p-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-xs">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-white/[0.06] border border-white/[0.08] text-white font-mono font-bold">
+                  {selectedBillDetails.tableNumber}
+                </span>
+                <span className="text-[11px] font-mono text-slate-400">
+                  Session #{String(selectedBillDetails.tableSessionId).slice(-6)}
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                <div>Table: <strong className="text-white">{selectedBillDetails.tableNumber}</strong></div>
-                <div>Session: <strong className="text-emerald-400">#{String(selectedBillDetails.tableSessionId).slice(-6)}</strong></div>
-                <div>Payment Method: <strong className="text-amber-400">{(selectedBillDetails.paymentMethod || 'CASH').toUpperCase()}</strong></div>
-                <div>
-                  Status:{' '}
-                  <strong className={selectedBillDetails.paymentStatus === 'PAID' ? 'text-emerald-400' : 'text-amber-400'}>
-                    {selectedBillDetails.paymentStatus === 'PAID' ? 'PAID & VERIFIED ✅' : selectedBillDetails.paymentStatus}
-                  </strong>
-                </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/[0.04] text-slate-400 border border-white/[0.06]">
+                  {(selectedBillDetails.paymentMethod || 'CASH').toUpperCase()}
+                </span>
+                {selectedBillDetails.paymentStatus === 'PAID' ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-mono font-semibold">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> PAID
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] font-mono font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> UNPAID
+                  </span>
+                )}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <h5 className="font-bold text-slate-300 uppercase text-[11px]">Itemized Tax Invoice Breakdown</h5>
-              <div className="divide-y divide-slate-800 bg-slate-950 p-3 rounded-2xl border border-slate-800 max-h-52 overflow-y-auto">
+            {/* 2. Itemized Breakdown & Summary Card */}
+            <div className="bg-[#0c0e14] border border-white/[0.08] rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between text-[10px] font-mono uppercase text-slate-400 pb-2 border-b border-white/[0.06]">
+                <span>Ordered Items</span>
+                <span>Amount</span>
+              </div>
+
+              <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
                 {selectedBillDetails.items.map((i, idx) => (
-                  <div key={idx} className="py-1.5 flex justify-between items-center">
-                    <div>
-                      <span className="font-bold text-white">{i.name}</span> × {i.quantity}
-                      {i.station === 'BAR' && <span className="ml-1.5 text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono">BAR</span>}
+                  <div key={idx} className="flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 h-5 rounded-md bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-[10px] font-mono font-bold text-slate-300 shrink-0">
+                        {i.quantity}×
+                      </span>
+                      <span className="font-medium text-white truncate">{i.name}</span>
+                      {i.station === 'BAR' && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/15 border border-purple-500/30 text-purple-300 font-mono shrink-0">
+                          BAR
+                        </span>
+                      )}
+                      {i.station === 'HOOKAH' && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono shrink-0">
+                          HOOKAH
+                        </span>
+                      )}
                     </div>
-                    <span className="font-mono font-bold text-white">{formatCurrency(i.totalPrice, theme.currency || 'INR (₹)')}</span>
+                    <span className="font-mono font-bold text-slate-200 shrink-0">
+                      {formatCurrency(i.totalPrice, theme.currency || 'INR (₹)')}
+                    </span>
                   </div>
                 ))}
               </div>
-            </div>
 
-            <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-1.5 font-mono text-xs">
-              <div className="flex justify-between text-slate-400">
-                <span>Subtotal:</span>
-                <span>{formatCurrency(selectedBillDetails.subtotal, theme.currency || 'INR (₹)')}</span>
-              </div>
-
-              {(selectedBillDetails.discountAmount || 0) > 0 && (
-                <div className="flex justify-between text-emerald-400">
-                  <span>Discount ({selectedBillDetails.discountPercentage || 0}%):</span>
-                  <span>-{formatCurrency(selectedBillDetails.discountAmount, theme.currency || 'INR (₹)')}</span>
+              {/* Calculations Breakdown */}
+              <div className="pt-3 border-t border-white/[0.06] space-y-1.5 text-xs font-mono">
+                <div className="flex justify-between text-slate-400">
+                  <span>Subtotal</span>
+                  <span className="text-slate-200">{formatCurrency(selectedBillDetails.subtotal, theme.currency || 'INR (₹)')}</span>
                 </div>
-              )}
 
-              {(selectedBillDetails.serviceChargeAmount || 0) > 0 && (
-                <div className="flex justify-between text-amber-400">
-                  <span>Service Charge ({selectedBillDetails.serviceChargePercentage || 0}%):</span>
-                  <span>{formatCurrency(selectedBillDetails.serviceChargeAmount, theme.currency || 'INR (₹)')}</span>
-                </div>
-              )}
-
-              {selectedBillDetails.taxBreakdown && selectedBillDetails.taxBreakdown.length > 0 ? (
-                selectedBillDetails.taxBreakdown.map((t, idx) => (
-                  <div key={idx} className="flex justify-between text-slate-400">
-                    <span>{t.name || t.taxName || 'GST'} ({t.rate || t.taxRate || 0}%{t.isInclusive ? ' Incl.' : ''}):</span>
-                    <span>{formatCurrency(t.amount || t.taxAmount || 0, theme.currency || 'INR (₹)')}</span>
+                {(selectedBillDetails.discountAmount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-400">
+                    <span>Discount ({selectedBillDetails.discountPercentage || 0}%)</span>
+                    <span>-{formatCurrency(selectedBillDetails.discountAmount, theme.currency || 'INR (₹)')}</span>
                   </div>
-                ))
-              ) : (
-                <div className="flex justify-between text-slate-400">
-                  <span>GST / Taxes:</span>
-                  <span>{formatCurrency(selectedBillDetails.taxAmount, theme.currency || 'INR (₹)')}</span>
-                </div>
-              )}
+                )}
 
-              {selectedBillDetails.roundOffAmount && selectedBillDetails.roundOffAmount !== 0 ? (
-                <div className="flex justify-between text-slate-400">
-                  <span>Round Off:</span>
-                  <span>{formatCurrency(selectedBillDetails.roundOffAmount, theme.currency || 'INR (₹)')}</span>
-                </div>
-              ) : null}
+                {(selectedBillDetails.serviceChargeAmount || 0) > 0 && (
+                  <div className="flex justify-between text-amber-400">
+                    <span>Service Charge ({selectedBillDetails.serviceChargePercentage || 0}%)</span>
+                    <span>{formatCurrency(selectedBillDetails.serviceChargeAmount, theme.currency || 'INR (₹)')}</span>
+                  </div>
+                )}
 
-              <div className="flex justify-between text-emerald-400 font-black pt-2 border-t border-slate-800 text-sm">
-                <span>GRAND TOTAL:</span>
-                <span className="text-base">{formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}</span>
+                {selectedBillDetails.taxBreakdown && selectedBillDetails.taxBreakdown.length > 0 ? (
+                  selectedBillDetails.taxBreakdown.map((t, idx) => {
+                    const cleanName = (t.name || t.taxName || 'GST').replace(/\s*\(\d+%\)/g, '').trim();
+                    const rate = t.rate || t.taxRate || 0;
+                    return (
+                      <div key={idx} className="flex justify-between text-slate-400">
+                        <span>{cleanName} ({rate}%{t.isInclusive ? ' Incl.' : ''})</span>
+                        <span className="text-slate-200">{formatCurrency(t.amount || t.taxAmount || 0, theme.currency || 'INR (₹)')}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="flex justify-between text-slate-400">
+                    <span>GST / Taxes</span>
+                    <span className="text-slate-200">{formatCurrency(selectedBillDetails.taxAmount, theme.currency || 'INR (₹)')}</span>
+                  </div>
+                )}
+
+                {selectedBillDetails.roundOffAmount && selectedBillDetails.roundOffAmount !== 0 ? (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Round Off</span>
+                    <span className="text-slate-200">{formatCurrency(selectedBillDetails.roundOffAmount, theme.currency || 'INR (₹)')}</span>
+                  </div>
+                ) : null}
+
+                {/* Grand Total Row */}
+                <div className="pt-2.5 border-t border-white/[0.08] flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                    {selectedBillDetails.paymentStatus === 'PAID' ? 'Total Paid' : 'Total Payable'}
+                  </span>
+                  <span className="text-lg font-black font-mono text-emerald-400">
+                    {formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Dynamic UPI QR Section */}
-            {(selectedBillDetails.paymentQrPayload || selectedBillDetails.qrDataUrl || currentRestaurant?.upiId) && (
-              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+            {/* 3. Dynamic UPI Payment Card (For Unpaid Bills) */}
+            {selectedBillDetails.paymentStatus !== 'PAID' && (selectedBillDetails.paymentQrPayload || selectedBillDetails.qrDataUrl || currentRestaurant?.upiId) && (
+              <div className="bg-[#0c0e14] border border-white/[0.08] rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-200 block">Dynamic UPI Payment QR</span>
-                    <span className="text-[10px] text-slate-400">
-                      Exact bill amount encoded ({formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')})
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                      Dynamic UPI Payment QR
                     </span>
                   </div>
-                  {selectedBillDetails.paymentStatus === 'PAID' ? (
-                    <Badge variant="success" className="text-[10px]">PAID & VERIFIED</Badge>
-                  ) : (
-                    <Badge variant="warning" className="text-[10px]">AWAITING PAYMENT</Badge>
-                  )}
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    Exact: {formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}
+                  </span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
-                  <div className="w-32 h-32 bg-white p-2 rounded-xl flex items-center justify-center shrink-0 shadow-md">
+                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/[0.02] border border-white/[0.06] p-3.5 rounded-xl">
+                  {/* QR Box */}
+                  <div className="w-28 h-28 bg-white p-2 rounded-2xl flex items-center justify-center shrink-0 shadow-lg">
                     {selectedBillDetails.qrDataUrl ? (
                       <img src={selectedBillDetails.qrDataUrl} alt="Bill UPI QR" className="w-full h-full object-contain" />
                     ) : selectedBillDetails.paymentQrPayload ? (
-                      <QRCodeSVG value={selectedBillDetails.paymentQrPayload} size={112} level="M" />
+                      <QRCodeSVG value={selectedBillDetails.paymentQrPayload} size={96} level="M" />
                     ) : (
                       <QRCodeSVG
                         value={`upi://pay?pa=${encodeURIComponent((currentRestaurant?.upiId || '').trim() || `${(currentRestaurant?.slug || currentRestaurant?.name || 'thestart').toLowerCase().replace(/[^a-z0-9]/g, '') || 'dinely.pos'}@icici`)}&pn=${encodeURIComponent(currentRestaurant?.upiMerchantName || currentRestaurant?.name || 'Restaurant')}&am=${selectedBillDetails.grandTotal.toFixed(2)}&cu=INR`}
-                        size={112}
+                        size={96}
                         level="M"
                       />
                     )}
                   </div>
 
-                  <div className="space-y-1.5 text-xs text-slate-300 w-full">
-                    <div className="flex justify-between text-[11px] font-mono">
-                      <span className="text-slate-500">Gateway / Mode:</span>
-                      <span className="text-emerald-400 font-bold">{selectedBillDetails.paymentGateway || 'DIRECT_UPI'}</span>
+                  {/* Payment Details & Actions */}
+                  <div className="flex-1 min-w-0 space-y-2 text-xs w-full">
+                    <div className="text-[11px] text-slate-300">
+                      Scan with <strong className="text-white">GPay</strong>, <strong className="text-white">PhonePe</strong>, <strong className="text-white">Paytm</strong>, or any UPI app.
                     </div>
-                    {selectedBillDetails.gatewayOrderId && (
-                      <div className="flex justify-between text-[10px] font-mono">
-                        <span className="text-slate-500">Order Ref:</span>
-                        <span className="text-slate-400 truncate max-w-[150px]">{selectedBillDetails.gatewayOrderId}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-[11px] font-mono">
-                      <span className="text-slate-500">Total Payable:</span>
-                      <span className="text-white font-bold">{formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}</span>
-                    </div>
-                    <div className="flex justify-between text-[10px] font-mono">
-                      <span className="text-slate-500">Scan via:</span>
-                      <span className="text-slate-400">GPay, PhonePe, Paytm, BHIM</span>
+                    <div className="text-[10px] font-mono text-slate-400 flex items-center gap-2">
+                      <span>Gateway: {selectedBillDetails.paymentGateway || 'DIRECT_UPI'}</span>
+                      <span>•</span>
+                      <span className="text-emerald-400 font-bold">{formatCurrency(selectedBillDetails.grandTotal, theme.currency || 'INR (₹)')}</span>
                     </div>
 
-                    <div className="pt-1 flex gap-2 no-print print:hidden">
-                      <Button
+                    <div className="pt-1 flex items-center gap-2 no-print print:hidden">
+                      <button
                         type="button"
                         onClick={async () => {
                           try {
@@ -6490,13 +6524,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             addToast('warning', 'Reconciliation', e.message || 'Payment still pending.');
                           }
                         }}
-                        variant="outline"
-                        className="text-[10px] py-1 px-2 border-slate-700 text-cyan-400 hover:bg-cyan-500/10 flex-1"
+                        className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-slate-200 border border-white/[0.08] flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                       >
-                        Check Live Status 🔄
-                      </Button>
+                        <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Check Status</span>
+                      </button>
 
-                      <Button
+                      <button
                         type="button"
                         onClick={async () => {
                           try {
@@ -6510,77 +6544,111 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             addToast('danger', 'QR Error', e.message);
                           }
                         }}
-                        variant="outline"
-                        className="text-[10px] py-1 px-2 border-slate-700 text-slate-300 hover:text-white"
+                        className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-slate-400 hover:text-white border border-white/[0.06] flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                       >
-                        Regenerate QR ⚡
-                      </Button>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Refresh QR</span>
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="pt-2 flex flex-wrap justify-end gap-2 no-print print:hidden">
-              <Button
-                type="button"
-                onClick={() => window.print()}
-                variant="outline"
-                className="border-slate-700 bg-slate-900 text-slate-100 hover:text-white font-bold text-xs flex items-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5 text-amber-400" />
-                <span>Print Bill (with UPI QR)</span>
-              </Button>
+            {/* Paid Verification Banner */}
+            {selectedBillDetails.paymentStatus === 'PAID' && (
+              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-emerald-300">Payment Settled & Verified</div>
+                  <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                    Settled via {(selectedBillDetails.paymentMethod || 'CASH').toUpperCase()} • Full payment confirmed.
+                  </div>
+                </div>
+              </div>
+            )}
 
-              <Button
-                onClick={async () => {
-                  try {
-                    const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
-                    const res = await api.printBillInvoice(restId, selectedBillDetails.id);
-                    if (res.success) {
-                      addToast('success', 'Thermal Print Dispatched', res.message || 'Receipt sent to thermal printer.');
-                      if (res.connectionType === 'BROWSER') {
-                        window.print();
-                      }
-                    } else {
-                      addToast('danger', 'Print Failed', res.message || 'Thermal printer error.');
-                    }
-                  } catch (e: any) {
-                    addToast('danger', 'Print Error', e.message || 'Could not print thermal receipt.');
-                  }
-                }}
-                variant="brand"
-                className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Thermal Receipt</span>
-              </Button>
-
-              {selectedBillDetails.paymentStatus !== 'PAID' && (
+            {/* 4. Action Buttons Footer */}
+            <div className="pt-2 flex flex-wrap items-center justify-between gap-2.5 no-print print:hidden">
+              <div className="flex items-center gap-2">
                 <Button
-                  onClick={() => {
-                    setPaymentBillModal(selectedBillDetails);
-                    setPaymentMethodInput('CASH');
-                    setSelectedBillDetails(null);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                  type="button"
+                  onClick={() => window.print()}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs font-medium border-white/10 bg-white/[0.03] hover:bg-white/[0.08] text-slate-300 flex items-center gap-1.5"
+                  title="Print standard A4/A6 receipt"
                 >
-                  Record Manual Payment 💳
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Print Bill</span>
                 </Button>
-              )}
 
-              <Button
-                onClick={() => downloadDigitalReceiptPNG(selectedBillDetails, currentRestaurant?.legalName || currentRestaurant?.name || theme.restaurantName || 'Restaurant')}
-                variant="brand"
-                className="flex items-center gap-1.5 cursor-pointer shadow-md text-xs"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download Tax Invoice (.png)</span>
-              </Button>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
+                      const res = await api.printBillInvoice(restId, selectedBillDetails.id);
+                      if (res.success) {
+                        addToast('success', 'Thermal Print Dispatched', res.message || 'Receipt sent to thermal printer.');
+                        if (res.connectionType === 'BROWSER') {
+                          window.print();
+                        }
+                      } else {
+                        addToast('danger', 'Print Failed', res.message || 'Thermal printer error.');
+                      }
+                    } catch (e: any) {
+                      addToast('danger', 'Print Error', e.message || 'Could not print thermal receipt.');
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs font-medium border-white/10 bg-white/[0.03] hover:bg-white/[0.08] text-slate-300 flex items-center gap-1.5"
+                  title="Send to thermal receipt printer"
+                >
+                  <Receipt className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Thermal Print</span>
+                </Button>
 
-              <Button onClick={() => setSelectedBillDetails(null)} variant="outline" className="border-slate-800 text-slate-300 text-xs">
-                Close
-              </Button>
+                <button
+                  type="button"
+                  onClick={() => downloadDigitalReceiptPNG(selectedBillDetails, currentRestaurant?.legalName || currentRestaurant?.name || theme.restaurantName || 'Restaurant')}
+                  className="p-2 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] text-slate-300 hover:text-white transition-all cursor-pointer"
+                  title="Download Tax Invoice PNG"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {selectedBillDetails.paymentStatus !== 'PAID' && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPaymentBillModal(selectedBillDetails);
+                      setPaymentMethodInput('CASH');
+                      setSelectedBillDetails(null);
+                    }}
+                    size="sm"
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 active:scale-95 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Record Payment</span>
+                  </Button>
+                )}
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedBillDetails(null)}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  Close
+                </Button>
+              </div>
             </div>
           </div>
         )}
