@@ -934,6 +934,7 @@ export interface CustomerRequest {
   assignedWaiterName?: string;
   message?: string;
   customerNotes?: string;
+  paymentMethod?: PaymentMethod;
   rejectionReason?: string;
 }
 

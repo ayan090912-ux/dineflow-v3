@@ -30,6 +30,8 @@ class CreateCustomerRequestSchema(BaseModel):
     orderId: Optional[str] = None
     station: Optional[str] = None
     itemsSummary: Optional[str] = None
+    paymentMethod: Optional[str] = None
+    payment_method: Optional[str] = None
 
 class UpdateCustomerRequestSchema(BaseModel):
     status: str
@@ -38,6 +40,16 @@ class UpdateCustomerRequestSchema(BaseModel):
 def format_request_dict(req: CustomerRequestModel) -> dict:
     now_iso = datetime.now(timezone.utc).isoformat()
     iso_time = req.created_at.isoformat() if getattr(req, "created_at", None) else now_iso
+
+    # Resolve paymentMethod from request message or notes if present
+    pm = getattr(req, "payment_method", None)
+    if not pm and req.message:
+        for m in ["UPI", "CASH", "CARD"]:
+            msg_up = req.message.upper()
+            if f"[{m}]" in msg_up or f"VIA {m}" in msg_up or f"• {m}" in msg_up or f"({m})" in msg_up:
+                pm = m
+                break
+
     return {
         "id": req.id,
         "restaurantId": req.restaurant_id,
@@ -51,6 +63,8 @@ def format_request_dict(req: CustomerRequestModel) -> dict:
         "customTitle": req.message if req.message else req.request_type.replace("_", " ").title(),
         "message": req.message,
         "customerNotes": req.message,
+        "paymentMethod": pm,
+        "payment_method": pm,
         "status": req.status,
         "priority": "HIGH" if req.request_type in ["BILL", "CALL_WAITER", "ORDER_READY", "DISH_DELIVERY"] else "MEDIUM",
         "waiterName": req.waiter_name,
@@ -91,6 +105,11 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
     clean_tbl = (payload.tableNumber or "").strip()
     clean_tbl_display = clean_tbl if clean_tbl.lower().startswith("table") else f"Table {clean_tbl}"
     msg = payload.message or payload.customerNotes or f"{clean_tbl_display} requested: {title}"
+
+    pm_arg = (payload.paymentMethod or payload.payment_method or "").upper().strip()
+    if pm_arg and pm_arg in ["UPI", "CASH", "CARD", "QR_CODE"]:
+        if f"via {pm_arg}" not in msg and f"[{pm_arg}]" not in msg:
+            msg = f"{msg} (via {pm_arg})"
 
     session_id = payload.tableSessionId
     if not session_id and (payload.tableId or payload.tableNumber):

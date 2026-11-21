@@ -14,6 +14,9 @@ import {
   X,
   ChevronRight,
   ShieldCheck,
+  Banknote,
+  QrCode,
+  Wallet,
 } from 'lucide-react';
 import { Modal, Button, Badge, Card, QRCodeDisplay } from '../../packages/ui';
 import { QRCodeSVG } from 'qrcode.react';
@@ -110,18 +113,23 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
     ? Boolean(billingConfig.upiEnabled) 
     : (currentRestaurant?.upiEnabled !== undefined ? Boolean(currentRestaurant.upiEnabled) : true);
 
-  // Request Bill Handler (Notifies Waiter Terminal & WebSocket)
-  const handleRequestBill = async () => {
+  // Request Bill Handler with selected payment method (Notifies Waiter Terminal & WebSocket)
+  const handleRequestBill = async (method: PaymentMethod = selectedPaymentMethod) => {
     setIsLoading(true);
-    setNotificationToast('Notifying floor staff...');
+    const methodLabel = method === 'UPI' ? 'UPI QR' : method === 'CASH' ? 'Cash' : 'Card Machine';
+    setNotificationToast(`Notifying floor staff for ${methodLabel} payment...`);
     try {
-      const b = await api.requestTableBill(restId, tableNumber, tableSession?.id);
-      setBill(b);
-      setNotificationToast('Bill request transmitted to floor terminal.');
+      const b = await api.requestTableBill(restId, tableNumber, tableSession?.id, method);
+      if (b) {
+        setBill(b);
+      } else {
+        setBill((prev) => prev ? { ...prev, status: 'BILL_REQUESTED', paymentMethod: method } : prev);
+      }
+      setNotificationToast(`Floor staff alerted: Bringing ${methodLabel} service to ${standardTable}.`);
       setTimeout(() => setNotificationToast(null), 4000);
     } catch (err: any) {
       console.warn('Request bill error:', err);
-      setNotificationToast('Bill request sent.');
+      setNotificationToast(`Bill request transmitted to floor staff.`);
       setTimeout(() => setNotificationToast(null), 3000);
     } finally {
       setIsLoading(false);
@@ -299,11 +307,13 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               ) : bill.status === 'BILL_REQUESTED' ? (
                 <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 shrink-0 text-amber-400" />
+                    <Clock className="w-4 h-4 shrink-0 text-amber-400 animate-pulse" />
                     <div>
-                      <p className="font-medium text-xs">Bill Requested</p>
+                      <p className="font-semibold text-xs">
+                        Bill Requested · Paying via {(bill.paymentMethod || selectedPaymentMethod || 'UPI').toUpperCase()}
+                      </p>
                       <p className="text-[10px] text-white/60">
-                        Floor staff has been notified and is bringing your receipt to {formatStandardTableNumber(bill.tableNumber)}.
+                        Floor staff has been notified. Waiter is bringing your receipt and {(bill.paymentMethod || selectedPaymentMethod) === 'CASH' ? 'cash collection' : (bill.paymentMethod || selectedPaymentMethod) === 'CARD' ? 'wireless card terminal' : 'UPI QR verification'} to {formatStandardTableNumber(bill.tableNumber)}.
                       </p>
                     </div>
                   </div>
@@ -402,51 +412,162 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
               </div>
             </div>
 
-            {/* ATTACHED UPI QR PAYMENT SECTION (SHOWN ON BILL & ON PHYSICAL PRINT) */}
-            {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (bill.qrDataUrl || bill.paymentQrPayload || activeQrUrl || activeUpiId) && (
-              <div className="liquid-glass-card rounded-2xl border border-white/[0.08] p-4 text-center space-y-3 qr-code-box shadow-md">
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-[11px] font-mono">
-                  <span className="text-amber-400 font-semibold uppercase tracking-wider">UPI Payment QR • Scan to Pay</span>
-                  <span className="text-white font-bold">{formatCurrency(bill.grandTotal)}</span>
+            {/* PAYMENT METHOD SELECTION & UPI QR BOX */}
+            {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (
+              <div className="liquid-glass-card rounded-2xl border border-white/[0.08] p-4 space-y-3.5 shadow-md no-print print:hidden">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                    How would you like to pay?
+                  </h4>
+                  <span className="text-[10px] font-mono text-amber-400">
+                    Total: {formatCurrency(bill.grandTotal)}
+                  </span>
                 </div>
 
-                <div className="w-40 h-40 bg-white p-2.5 rounded-xl shadow-md mx-auto flex items-center justify-center">
-                  {bill.qrDataUrl ? (
-                    <img
-                      src={bill.qrDataUrl}
-                      alt="Bill UPI QR Code"
-                      className="w-full h-full object-contain"
-                    />
-                  ) : bill.paymentQrPayload ? (
-                    <QRCodeSVG
-                      value={bill.paymentQrPayload}
-                      size={144}
-                      level="M"
-                    />
-                  ) : activeQrUrl ? (
-                    <img
-                      src={activeQrUrl}
-                      alt="Merchant UPI QR Code"
-                      className="w-full h-full object-contain"
-                    />
-                  ) : activeUpiId ? (
-                    <QRCodeSVG
-                      value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${bill.grandTotal.toFixed(2)}&cu=INR`}
-                      size={144}
-                      level="M"
-                    />
-                  ) : null}
+                {/* 3 Interactive Payment Methods */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPaymentMethod('UPI');
+                      if (bill.status === 'BILL_REQUESTED') handleRequestBill('UPI');
+                    }}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                      selectedPaymentMethod === 'UPI'
+                        ? 'bg-amber-500/15 border-amber-400 text-white shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                        : 'bg-white/[0.02] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedPaymentMethod === 'UPI' ? 'bg-amber-500/20 text-amber-300' : 'bg-white/[0.04] text-white/50'}`}>
+                      <QrCode className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-bold font-sans">UPI / QR</span>
+                    <span className="text-[9px] font-mono text-white/40">Instant Scan</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPaymentMethod('CASH');
+                      if (bill.status === 'BILL_REQUESTED') handleRequestBill('CASH');
+                    }}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                      selectedPaymentMethod === 'CASH'
+                        ? 'bg-emerald-500/15 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        : 'bg-white/[0.02] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedPaymentMethod === 'CASH' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/[0.04] text-white/50'}`}>
+                      <Banknote className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-bold font-sans">Cash</span>
+                    <span className="text-[9px] font-mono text-white/40">Pay at Table</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPaymentMethod('CARD');
+                      if (bill.status === 'BILL_REQUESTED') handleRequestBill('CARD');
+                    }}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                      selectedPaymentMethod === 'CARD'
+                        ? 'bg-purple-500/15 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                        : 'bg-white/[0.02] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedPaymentMethod === 'CARD' ? 'bg-purple-500/20 text-purple-300' : 'bg-white/[0.04] text-white/50'}`}>
+                      <CreditCard className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-bold font-sans">Card</span>
+                    <span className="text-[9px] font-mono text-white/40">Card POS</span>
+                  </button>
                 </div>
 
-                {activeUpiId && (
-                  <div className="bg-white/[0.02] p-2 rounded-lg border border-white/[0.06] font-mono text-[10px] flex items-center justify-between">
-                    <span className="text-white/40">UPI ID:</span>
-                    <span className="font-semibold text-white select-all">{activeUpiId}</span>
+                {/* Sub-view: UPI Dynamic QR Code */}
+                {selectedPaymentMethod === 'UPI' && (
+                  <div className="bg-[#0c0e14] border border-white/10 rounded-xl p-3.5 text-center space-y-2.5">
+                    <div className="w-36 h-36 bg-white p-2 rounded-xl shadow-md mx-auto flex items-center justify-center">
+                      {bill.qrDataUrl ? (
+                        <img src={bill.qrDataUrl} alt="Bill UPI QR Code" className="w-full h-full object-contain" />
+                      ) : bill.paymentQrPayload ? (
+                        <QRCodeSVG value={bill.paymentQrPayload} size={128} level="M" />
+                      ) : activeQrUrl ? (
+                        <img src={activeQrUrl} alt="Merchant UPI QR Code" className="w-full h-full object-contain" />
+                      ) : activeUpiId ? (
+                        <QRCodeSVG
+                          value={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(activeMerchantName || 'Merchant')}&am=${bill.grandTotal.toFixed(2)}&cu=INR`}
+                          size={128}
+                          level="M"
+                        />
+                      ) : null}
+                    </div>
+
+                    {activeUpiId && (
+                      <div className="bg-white/[0.02] p-1.5 rounded-lg border border-white/[0.06] font-mono text-[10px] flex items-center justify-between">
+                        <span className="text-white/40">UPI ID:</span>
+                        <span className="font-semibold text-white select-all">{activeUpiId}</span>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-white/50">
+                      Scan with Google Pay, PhonePe, Paytm, BHIM, or any banking app
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={handleCustomerClaimedPaid}
+                      disabled={isLoading}
+                      className="w-full py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>I Have Completed UPI Payment</span>
+                    </button>
                   </div>
                 )}
-                <p className="text-[10px] text-white/40">
-                  Scan with GPay, PhonePe, Paytm, BHIM, or any banking app
-                </p>
+
+                {/* Sub-view: Cash Payment Info */}
+                {selectedPaymentMethod === 'CASH' && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3.5 text-center space-y-1.5">
+                    <p className="text-xs font-bold text-emerald-300 flex items-center justify-center gap-1.5">
+                      <Banknote className="w-4 h-4" /> Cash Payment Selected
+                    </p>
+                    <p className="text-[11px] text-white/70">
+                      Floor staff will bring your itemized tax invoice and collect cash of <strong className="text-white font-mono">{formatCurrency(bill.grandTotal)}</strong> at Table {formatStandardTableNumber(bill.tableNumber)}.
+                    </p>
+                  </div>
+                )}
+
+                {/* Sub-view: Card Machine Info */}
+                {selectedPaymentMethod === 'CARD' && (
+                  <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3.5 text-center space-y-1.5">
+                    <p className="text-xs font-bold text-purple-300 flex items-center justify-center gap-1.5">
+                      <CreditCard className="w-4 h-4" /> Card Machine Selected
+                    </p>
+                    <p className="text-[11px] text-white/70">
+                      Floor staff will bring the wireless card POS swipe/tap terminal to Table {formatStandardTableNumber(bill.tableNumber)}.
+                    </p>
+                  </div>
+                )}
+
+                {/* Main Action Trigger */}
+                <Button
+                  onClick={() => handleRequestBill(selectedPaymentMethod)}
+                  disabled={isLoading}
+                  className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer ${
+                    selectedPaymentMethod === 'CASH'
+                      ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950/40'
+                      : selectedPaymentMethod === 'CARD'
+                      ? 'bg-purple-500 hover:bg-purple-400 text-white shadow-purple-950/40'
+                      : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950/40'
+                  }`}
+                >
+                  <PhoneCall className="w-4 h-4 stroke-[2.5]" />
+                  <span>
+                    {bill.status === 'BILL_REQUESTED'
+                      ? `Notify Waiter Again (${selectedPaymentMethod})`
+                      : `Call Waiter for Bill (${selectedPaymentMethod})`}
+                  </span>
+                </Button>
               </div>
             )}
 
@@ -459,28 +580,6 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
             {/* ACTION BUTTONS */}
             <div className="space-y-2.5 pt-1 no-print print:hidden">
-              {bill.paymentStatus !== 'PAID' && bill.status !== 'CLOSED' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Button
-                    onClick={handleRequestBill}
-                    disabled={isLoading}
-                    variant="outline"
-                    className="w-full text-xs font-medium py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/80 hover:text-white"
-                  >
-                    <PhoneCall className="w-3.5 h-3.5" />
-                    <span>{bill.status === 'BILL_REQUESTED' ? 'Notify Waiter Again' : 'Call Waiter for Bill'}</span>
-                  </Button>
-
-                  <Button
-                    onClick={() => setIsPayOnlineModalOpen(true)}
-                    className="w-full text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 bg-amber-500 text-black hover:bg-amber-400"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>Pay via UPI QR</span>
-                  </Button>
-                </div>
-              )}
-
               <div>
                 <Button
                   onClick={handleDownloadReceipt}

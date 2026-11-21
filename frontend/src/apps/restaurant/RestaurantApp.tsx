@@ -233,6 +233,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [billingSearchQuery, setBillingSearchQuery] = useState('');
   const [billingStatusFilter, setBillingStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'CANCELLED'>('ALL');
   const [billingPaymentFilter, setBillingPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'UPI'>('ALL');
+  const [billingDateFilter, setBillingDateFilter] = useState<'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK'>('ALL');
   const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'taxes' | 'settings' | 'printers'>('terminal');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const recentToastKeys = useRef<Map<string, number>>(new Map());
@@ -4669,181 +4670,423 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   </div>
                 )}
 
-                {/* SUBTAB 2: INVOICES & RECEIPTS HISTORY */}
-                {billingSubTab === 'invoices' && (
-                  <div className="space-y-4">
-                    {/* Filters Bar */}
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#12151b] p-3 rounded-xl border border-[#1e232e]">
-                      <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
-                        <select
-                          value={billingStatusFilter}
-                          onChange={(e: any) => setBillingStatusFilter(e.target.value)}
-                          className="px-3 py-1.5 bg-[#0e1117] border border-[#1e232e] rounded-lg text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500"
-                        >
-                          <option value="ALL">All Statuses</option>
-                          <option value="PAID">Paid Only</option>
-                          <option value="PENDING">Pending / Unpaid</option>
-                        </select>
+                {/* SUBTAB 2: INVOICES & RECEIPTS HISTORY (DATE-WISE REALTIME ARCHIVE) */}
+                {billingSubTab === 'invoices' && (() => {
+                  // Compute date-filtered list
+                  const now = new Date();
+                  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                  const startOfYesterday = startOfToday - 86400000;
+                  const startOfWeek = startOfToday - 7 * 86400000;
 
-                        <select
-                          value={billingPaymentFilter}
-                          onChange={(e: any) => setBillingPaymentFilter(e.target.value)}
-                          className="px-3 py-1.5 bg-[#0e1117] border border-[#1e232e] rounded-lg text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500"
-                        >
-                          <option value="ALL">All Payment Methods</option>
-                          <option value="UPI">UPI / Digital</option>
-                          <option value="CASH">Cash</option>
-                          <option value="CARD">Credit/Debit Card</option>
-                        </select>
+                  const filteredBills = bills.filter((b) => {
+                    if (billingStatusFilter === 'PAID' && !(b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
+                    if (billingStatusFilter === 'PENDING' && (b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
+                    if (billingPaymentFilter !== 'ALL' && (b.paymentMethod || 'CASH').toUpperCase() !== billingPaymentFilter) return false;
+
+                    const billTime = new Date(b.createdAt).getTime();
+                    if (billingDateFilter === 'TODAY' && billTime < startOfToday) return false;
+                    if (billingDateFilter === 'YESTERDAY' && (billTime < startOfYesterday || billTime >= startOfToday)) return false;
+                    if (billingDateFilter === 'WEEK' && billTime < startOfWeek) return false;
+
+                    if (billingSearchQuery) {
+                      const q = billingSearchQuery.toLowerCase();
+                      const match =
+                        (b.invoiceNumber && b.invoiceNumber.toLowerCase().includes(q)) ||
+                        b.id.toLowerCase().includes(q) ||
+                        b.tableNumber.toLowerCase().includes(q) ||
+                        String(b.tableSessionId || '').toLowerCase().includes(q) ||
+                        (b.paymentMethod && b.paymentMethod.toLowerCase().includes(q));
+                      if (!match) return false;
+                    }
+                    return true;
+                  });
+
+                  // Group bills by date (YYYY-MM-DD)
+                  const dateGroupsMap = new Map<string, {
+                    dateKey: string;
+                    label: string;
+                    subLabel: string;
+                    bills: Bill[];
+                    totalRevenue: number;
+                    paidCount: number;
+                    pendingCount: number;
+                    upiTotal: number;
+                    cashTotal: number;
+                    cardTotal: number;
+                  }>();
+
+                  filteredBills.forEach((b) => {
+                    const d = new Date(b.createdAt);
+                    const isValidDate = !isNaN(d.getTime());
+                    const dateKey = isValidDate
+                      ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                      : 'UNKNOWN';
+
+                    const billTime = isValidDate ? d.getTime() : 0;
+                    const isToday = isValidDate && billTime >= startOfToday;
+                    const isYesterday = isValidDate && billTime >= startOfYesterday && billTime < startOfToday;
+
+                    const label = isToday
+                      ? 'Today'
+                      : isYesterday
+                      ? 'Yesterday'
+                      : isValidDate
+                      ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'Historical Archives';
+
+                    const subLabel = isValidDate
+                      ? d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+                      : 'Previous dates';
+
+                    if (!dateGroupsMap.has(dateKey)) {
+                      dateGroupsMap.set(dateKey, {
+                        dateKey,
+                        label,
+                        subLabel,
+                        bills: [],
+                        totalRevenue: 0,
+                        paidCount: 0,
+                        pendingCount: 0,
+                        upiTotal: 0,
+                        cashTotal: 0,
+                        cardTotal: 0,
+                      });
+                    }
+
+                    const grp = dateGroupsMap.get(dateKey)!;
+                    grp.bills.push(b);
+
+                    const isPaid = b.paymentStatus === 'PAID' || b.status === 'CLOSED';
+                    if (isPaid) {
+                      const amt = Number(b.grandTotal || 0);
+                      grp.totalRevenue += amt;
+                      grp.paidCount += 1;
+                      const pm = (b.paymentMethod || 'CASH').toUpperCase();
+                      if (pm.includes('UPI')) grp.upiTotal += amt;
+                      else if (pm.includes('CASH')) grp.cashTotal += amt;
+                      else if (pm.includes('CARD')) grp.cardTotal += amt;
+                    } else {
+                      grp.pendingCount += 1;
+                    }
+                  });
+
+                  // Sort date groups descending
+                  const sortedGroups = Array.from(dateGroupsMap.values()).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+
+                  // Overall metrics for current filter view
+                  const overallRevenue = filteredBills
+                    .filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED')
+                    .reduce((sum, b) => sum + Number(b.grandTotal || 0), 0);
+                  const overallPending = filteredBills.filter((b) => !(b.paymentStatus === 'PAID' || b.status === 'CLOSED')).length;
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Top Metric Strip */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="p-3 bg-[#12151b] border border-[#1e232e] rounded-xl space-y-1">
+                          <span className="text-[10px] font-mono uppercase text-slate-400 block">Total Invoices</span>
+                          <span className="text-xl font-bold font-mono text-white">{filteredBills.length}</span>
+                        </div>
+                        <div className="p-3 bg-[#12151b] border border-[#1e232e] rounded-xl space-y-1">
+                          <span className="text-[10px] font-mono uppercase text-slate-400 block">Settled Revenue</span>
+                          <span className="text-xl font-bold font-mono text-emerald-400">
+                            {formatCurrency(overallRevenue, theme.currency || 'INR (₹)')}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-[#12151b] border border-[#1e232e] rounded-xl space-y-1">
+                          <span className="text-[10px] font-mono uppercase text-slate-400 block">Pending Settlement</span>
+                          <span className="text-xl font-bold font-mono text-amber-400">{overallPending}</span>
+                        </div>
+                        <div className="p-3 bg-[#12151b] border border-[#1e232e] rounded-xl space-y-1">
+                          <span className="text-[10px] font-mono uppercase text-slate-400 block">Active Date View</span>
+                          <span className="text-xs font-mono font-bold text-slate-200">
+                            {billingDateFilter === 'TODAY'
+                              ? 'Today Only'
+                              : billingDateFilter === 'YESTERDAY'
+                              ? 'Yesterday'
+                              : billingDateFilter === 'WEEK'
+                              ? 'Last 7 Days'
+                              : 'All Dates Archive'}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="relative w-full sm:w-64">
-                        <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
-                        <input
-                          type="text"
-                          value={billingSearchQuery}
-                          onChange={(e) => setBillingSearchQuery(e.target.value)}
-                          placeholder="Search invoice #, table #, session..."
-                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#0e1117] border border-[#1e232e] rounded-lg text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                    </div>
+                      {/* Filters Bar: Date Presets, Status, Payment Mode, Search */}
+                      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#12151b] p-3 rounded-xl border border-[#1e232e]">
+                        {/* Quick Date Presets */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+                          {(['ALL', 'TODAY', 'YESTERDAY', 'WEEK'] as const).map((df) => (
+                            <button
+                              key={df}
+                              type="button"
+                              onClick={() => setBillingDateFilter(df)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                                billingDateFilter === df
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                                  : 'bg-[#0e1117] text-slate-400 border border-[#1e232e] hover:text-white'
+                              }`}
+                            >
+                              {df === 'ALL'
+                                ? 'All Dates'
+                                : df === 'TODAY'
+                                ? 'Today'
+                                : df === 'YESTERDAY'
+                                ? 'Yesterday'
+                                : 'Last 7 Days'}
+                            </button>
+                          ))}
+                        </div>
 
-                    {/* Bills DataTable */}
-                    <div className="bg-[#12151b] border border-[#1e232e] rounded-xl overflow-hidden shadow-sm">
-                      <DataTable<Bill>
-                        data={bills.filter((b) => {
-                          if (billingStatusFilter === 'PAID' && !(b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
-                          if (billingStatusFilter === 'PENDING' && (b.paymentStatus === 'PAID' || b.status === 'CLOSED')) return false;
-                          if (billingPaymentFilter !== 'ALL' && b.paymentMethod !== billingPaymentFilter) return false;
-                          if (billingSearchQuery) {
-                            const q = billingSearchQuery.toLowerCase();
-                            return (
-                              (b.invoiceNumber && b.invoiceNumber.toLowerCase().includes(q)) ||
-                              b.id.toLowerCase().includes(q) ||
-                              b.tableNumber.toLowerCase().includes(q) ||
-                              b.tableSessionId.toLowerCase().includes(q)
-                            );
-                          }
-                          return true;
-                        })}
-                        keyExtractor={(b) => b.id}
-                        columns={[
-                          {
-                            key: 'id',
-                            header: 'Invoice #',
-                            render: (b) => (
-                              <div>
-                                <p className="font-mono font-bold text-emerald-400 text-xs">{b.invoiceNumber || b.id}</p>
-                                <p className="text-[10px] text-slate-400 font-mono">
-                                  {new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
+                        {/* Secondary Dropdown Filters & Search */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <select
+                            value={billingStatusFilter}
+                            onChange={(e: any) => setBillingStatusFilter(e.target.value)}
+                            className="px-2.5 py-1.5 bg-[#0e1117] border border-[#1e232e] rounded-lg text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            <option value="ALL">All Statuses</option>
+                            <option value="PAID">Paid Only</option>
+                            <option value="PENDING">Pending / Unpaid</option>
+                          </select>
+
+                          <select
+                            value={billingPaymentFilter}
+                            onChange={(e: any) => setBillingPaymentFilter(e.target.value)}
+                            className="px-2.5 py-1.5 bg-[#0e1117] border border-[#1e232e] rounded-lg text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            <option value="ALL">All Payment Methods</option>
+                            <option value="UPI">UPI / QR</option>
+                            <option value="CASH">Cash</option>
+                            <option value="CARD">Card</option>
+                          </select>
+
+                          <div className="relative flex-1 sm:w-60">
+                            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                            <input
+                              type="text"
+                              value={billingSearchQuery}
+                              onChange={(e) => setBillingSearchQuery(e.target.value)}
+                              placeholder="Search invoice #, table #..."
+                              className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#0e1117] border border-[#1e232e] rounded-lg text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* DATE-WISE GROUPED INVOICES SECTIONS */}
+                      {sortedGroups.length === 0 ? (
+                        <div className="p-12 text-center bg-[#12151b]/40 border border-dashed border-[#1e232e] rounded-xl space-y-2">
+                          <Receipt className="w-8 h-8 text-slate-500 mx-auto" />
+                          <h4 className="font-bold text-white text-sm">No Invoices Found</h4>
+                          <p className="text-xs text-slate-400">
+                            {billingDateFilter === 'TODAY'
+                              ? 'No invoices generated today yet. Once tables request or settle bills, they will appear here live.'
+                              : 'No billing records match the current filters.'}
+                          </p>
+                          {billingDateFilter !== 'ALL' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBillingDateFilter('ALL');
+                                setBillingStatusFilter('ALL');
+                                setBillingPaymentFilter('ALL');
+                                setBillingSearchQuery('');
+                              }}
+                              className="text-xs text-emerald-400 hover:underline font-mono pt-2 block mx-auto cursor-pointer"
+                            >
+                              View All Historical Records →
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          {sortedGroups.map((group) => (
+                            <div key={group.dateKey} className="space-y-2.5">
+                              {/* Date Group Banner Header */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-gradient-to-r from-[#141822] via-[#10131a] to-[#0c0e14] border border-[#1e232e] shadow-xs">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                                    <Clock className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <h3 className="text-sm font-bold text-white tracking-tight">
+                                        {group.label}
+                                      </h3>
+                                      <span className="text-[10px] font-mono text-slate-400">
+                                        ({group.subLabel})
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] font-mono text-slate-400">
+                                      {group.bills.length} Bill{group.bills.length === 1 ? '' : 's'} · {group.paidCount} Paid · {group.pendingCount} Pending
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
+                                  {group.upiTotal > 0 && (
+                                    <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px]">
+                                      UPI: {formatCurrency(group.upiTotal, theme.currency || 'INR (₹)')}
+                                    </span>
+                                  )}
+                                  {group.cashTotal > 0 && (
+                                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[10px]">
+                                      Cash: {formatCurrency(group.cashTotal, theme.currency || 'INR (₹)')}
+                                    </span>
+                                  )}
+                                  {group.cardTotal > 0 && (
+                                    <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 text-[10px]">
+                                      Card: {formatCurrency(group.cardTotal, theme.currency || 'INR (₹)')}
+                                    </span>
+                                  )}
+                                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">
+                                    Day Total: {formatCurrency(group.totalRevenue, theme.currency || 'INR (₹)')}
+                                  </span>
+                                </div>
                               </div>
-                            ),
-                          },
-                          {
-                            key: 'tableNumber',
-                            header: 'Table & Session',
-                            render: (b) => (
-                              <div>
-                                <p className="font-bold text-white text-xs">{b.tableNumber}</p>
-                                <p className="text-[10px] text-emerald-400 font-mono">Session #{b.tableSessionId}</p>
+
+                              {/* Day Invoices Table */}
+                              <div className="bg-[#12151b] border border-[#1e232e] rounded-xl overflow-hidden shadow-sm">
+                                <DataTable<Bill>
+                                  data={group.bills}
+                                  keyExtractor={(b) => b.id}
+                                  columns={[
+                                    {
+                                      key: 'id',
+                                      header: 'Invoice #',
+                                      render: (b) => (
+                                        <div>
+                                          <p className="font-mono font-bold text-emerald-400 text-xs">
+                                            {b.invoiceNumber || b.id}
+                                          </p>
+                                          <p className="text-[10px] text-slate-400 font-mono">
+                                            {new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </p>
+                                        </div>
+                                      ),
+                                    },
+                                    {
+                                      key: 'tableNumber',
+                                      header: 'Table & Session',
+                                      render: (b) => (
+                                        <div>
+                                          <p className="font-bold text-white text-xs">{b.tableNumber}</p>
+                                          <p className="text-[10px] text-emerald-400 font-mono">
+                                            Session #{String(b.tableSessionId || '').slice(-6)}
+                                          </p>
+                                        </div>
+                                      ),
+                                    },
+                                    {
+                                      key: 'items',
+                                      header: 'Items Breakdown',
+                                      render: (b) => (
+                                        <span className="text-xs font-mono text-slate-300">
+                                          {(b.items || []).reduce((sum, i) => sum + i.quantity, 0)} Items ({(b.orders || []).length} Orders)
+                                        </span>
+                                      ),
+                                    },
+                                    {
+                                      key: 'grandTotal',
+                                      header: 'Grand Total',
+                                      render: (b) => (
+                                        <div>
+                                          <p className="font-mono font-bold text-white text-sm">
+                                            {formatCurrency(b.grandTotal, theme.currency || 'INR (₹)')}
+                                          </p>
+                                          <p className="text-[10px] text-slate-500 font-mono">
+                                            Tax: {formatCurrency(b.taxAmount, theme.currency || 'INR (₹)')}
+                                            {b.serviceChargeAmount ? ` • SC: ${formatCurrency(b.serviceChargeAmount, theme.currency || 'INR (₹)')}` : ''}
+                                          </p>
+                                        </div>
+                                      ),
+                                    },
+                                    {
+                                      key: 'paymentMethod',
+                                      header: 'Payment Method',
+                                      render: (b) => {
+                                        const pm = (b.paymentMethod || 'CASH').toUpperCase();
+                                        return (
+                                          <Badge
+                                            variant="outline"
+                                            className={`font-mono text-[10px] ${
+                                              pm.includes('UPI')
+                                                ? 'text-amber-400 border-amber-500/30'
+                                                : pm.includes('CARD')
+                                                ? 'text-purple-400 border-purple-500/30'
+                                                : 'text-emerald-400 border-emerald-500/30'
+                                            }`}
+                                          >
+                                            {pm}
+                                          </Badge>
+                                        );
+                                      },
+                                    },
+                                    {
+                                      key: 'status',
+                                      header: 'Status',
+                                      render: (b) => (
+                                        <Badge
+                                          variant={
+                                            b.paymentStatus === 'PAID' || b.status === 'CLOSED'
+                                              ? 'success'
+                                              : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED' || b.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION'
+                                              ? 'warning'
+                                              : b.status === 'BILL_REQUESTED'
+                                              ? 'warning'
+                                              : 'info'
+                                          }
+                                        >
+                                          {b.paymentStatus === 'PAID' || b.status === 'CLOSED'
+                                            ? 'PAID'
+                                            : b.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION'
+                                            ? 'AWAITING CONFIRMATION'
+                                            : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED'
+                                            ? 'VERIFY PAYMENT ⚠️'
+                                            : b.status === 'BILL_REQUESTED'
+                                            ? 'BILL REQUESTED'
+                                            : 'UNPAID'}
+                                        </Badge>
+                                      ),
+                                    },
+                                    {
+                                      key: 'actions',
+                                      header: 'Actions',
+                                      render: (b) => (
+                                        <div className="flex items-center gap-1.5">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setSelectedBillDetails(b)}
+                                            className="border-slate-800 text-xs font-bold text-slate-300 hover:text-white"
+                                          >
+                                            View 🧾
+                                          </Button>
+                                          {b.paymentStatus !== 'PAID' && (
+                                            <Button
+                                              size="sm"
+                                              onClick={() => {
+                                                setPaymentBillModal(b);
+                                                setPaymentMethodInput(b.paymentMethod || 'CASH');
+                                              }}
+                                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 whitespace-nowrap cursor-pointer"
+                                            >
+                                              Record Payment 💳
+                                            </Button>
+                                          )}
+                                        </div>
+                                      ),
+                                    },
+                                  ]}
+                                />
                               </div>
-                            ),
-                          },
-                          {
-                            key: 'items',
-                            header: 'Items Breakdown',
-                            render: (b) => (
-                              <span className="text-xs font-mono text-slate-300">
-                                {b.items.reduce((sum, i) => sum + i.quantity, 0)} Items ({b.orders.length} Orders)
-                              </span>
-                            ),
-                          },
-                          {
-                            key: 'grandTotal',
-                            header: 'Grand Total',
-                            render: (b) => (
-                              <div>
-                                <p className="font-mono font-bold text-white text-sm">
-                                  {formatCurrency(b.grandTotal, theme.currency || 'INR (₹)')}
-                                </p>
-                                <p className="text-[10px] text-slate-500 font-mono">
-                                  Tax: {formatCurrency(b.taxAmount, theme.currency || 'INR (₹)')}
-                                  {b.serviceChargeAmount ? ` • SC: ${formatCurrency(b.serviceChargeAmount, theme.currency || 'INR (₹)')}` : ''}
-                                </p>
-                              </div>
-                            ),
-                          },
-                          {
-                            key: 'paymentMethod',
-                            header: 'Payment Method',
-                            render: (b) => (
-                              <Badge variant="outline" className="font-mono">
-                                {b.paymentMethod || 'CASH'}
-                              </Badge>
-                            ),
-                          },
-                          {
-                            key: 'status',
-                            header: 'Status',
-                            render: (b) => (
-                              <Badge
-                                variant={
-                                  b.paymentStatus === 'PAID' || b.status === 'CLOSED'
-                                    ? 'success'
-                                    : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED' || b.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION'
-                                    ? 'warning'
-                                    : b.status === 'BILL_REQUESTED'
-                                    ? 'warning'
-                                    : 'info'
-                                }
-                              >
-                                {b.paymentStatus === 'PAID' || b.status === 'CLOSED'
-                                  ? 'PAID'
-                                  : b.paymentStatus === 'PAYMENT_AWAITING_CONFIRMATION'
-                                  ? 'AWAITING CONFIRMATION'
-                                  : b.paymentStatus === 'PAYMENT_VERIFICATION_REQUIRED'
-                                  ? 'VERIFY PAYMENT ⚠️'
-                                  : b.status === 'BILL_REQUESTED'
-                                  ? 'BILL REQUESTED'
-                                  : 'UNPAID'}
-                              </Badge>
-                            ),
-                          },
-                          {
-                            key: 'actions',
-                            header: 'Actions',
-                            render: (b) => (
-                              <div className="flex items-center gap-1.5">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setSelectedBillDetails(b)}
-                                  className="border-slate-800 text-xs font-bold text-slate-300 hover:text-white"
-                                >
-                                  View 🧾
-                                </Button>
-                                {b.paymentStatus !== 'PAID' && (
-                                  <Button
-                                    size="sm"
-                                    onClick={() => {
-                                      setPaymentBillModal(b);
-                                      setPaymentMethodInput('CASH');
-                                    }}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 whitespace-nowrap"
-                                  >
-                                    Record Manual Payment 💳
-                                  </Button>
-                                )}
-                              </div>
-                            ),
-                          },
-                        ]}
-                      />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </>
             )}
           </div>

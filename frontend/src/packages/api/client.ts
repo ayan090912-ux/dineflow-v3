@@ -960,8 +960,8 @@ export class DinelyApiClient extends BaseApiClient {
     return this.billing.getRunningTableBill(restaurantId, tableNumber, targetSessionId);
   }
 
-  async requestTableBill(restaurantId?: string, tableNumber?: string, targetSessionId?: string): Promise<Bill | null> {
-    return this.billing.requestTableBill(restaurantId, tableNumber, targetSessionId);
+  async requestTableBill(restaurantId?: string, tableNumber?: string, targetSessionId?: string, paymentMethod: PaymentMethod = 'UPI'): Promise<Bill | null> {
+    return this.billing.requestTableBill(restaurantId, tableNumber, targetSessionId, paymentMethod);
   }
 
   async recordBillPayment(billId: string, paymentMethod: PaymentMethod = 'CASH'): Promise<Bill | null> {

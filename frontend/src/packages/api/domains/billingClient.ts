@@ -276,7 +276,7 @@ export class BillingClient {
     return newBill;
   }
 
-  async requestTableBill(restaurantId?: string, tableNumber?: string, targetSessionId?: string): Promise<Bill | null> {
+  async requestTableBill(restaurantId?: string, tableNumber?: string, targetSessionId?: string, paymentMethod: PaymentMethod = 'UPI'): Promise<Bill | null> {
     const bill = await this.getRunningTableBill(restaurantId, tableNumber, targetSessionId);
     if (!bill) return null;
 
@@ -285,6 +285,7 @@ export class BillingClient {
     const tbl = this.base.tables.find((t) => t.restaurantId === restId && matchTableNumber(t.tableNumber, bill.tableNumber));
 
     bill.status = 'BILL_REQUESTED';
+    bill.paymentMethod = paymentMethod;
     bill.requestedAt = new Date().toISOString();
     bill.updatedAt = new Date().toISOString();
 
@@ -301,8 +302,8 @@ export class BillingClient {
       id: `notif-bill-${Date.now()}`,
       restaurantId: restId,
       type: 'BILL_REQUEST',
-      title: `🔔 BILL REQUEST: ${bill.tableNumber}`,
-      message: `Customer at ${bill.tableNumber} (Session #${bill.tableSessionId}) requested running bill of ₹${bill.grandTotal.toFixed(2)}.`,
+      title: `🔔 BILL REQUEST: ${bill.tableNumber} (${paymentMethod})`,
+      message: `Customer at ${bill.tableNumber} (Session #${bill.tableSessionId}) requested running bill of ₹${bill.grandTotal.toFixed(2)} via ${paymentMethod}.`,
       tableNumber: bill.tableNumber,
       timestamp: new Date().toISOString(),
       isRead: false,
@@ -319,9 +320,10 @@ export class BillingClient {
           restaurantId: restId,
           tableNumber: bill.tableNumber,
           requestType: 'BILL',
-          customTitle: 'Bill Requested 🧾',
-          message: `Customer at ${bill.tableNumber} requested final bill (₹${bill.grandTotal.toFixed(2)})`,
-          customerNotes: `Total Amount: ₹${bill.grandTotal.toFixed(2)}`,
+          customTitle: `Bill Request · ${paymentMethod}`,
+          message: `Customer at ${bill.tableNumber} requested final bill (₹${bill.grandTotal.toFixed(2)}) via ${paymentMethod}`,
+          customerNotes: `Payment Method: ${paymentMethod} | Total Amount: ₹${bill.grandTotal.toFixed(2)}`,
+          paymentMethod: paymentMethod,
           priority: 'HIGH',
           tableSessionId: bill.tableSessionId,
         }),
@@ -338,6 +340,7 @@ export class BillingClient {
       tableNumber: bill.tableNumber,
       tableSessionId: bill.tableSessionId,
       grandTotal: bill.grandTotal,
+      paymentMethod: paymentMethod,
       data: bill,
     });
 
@@ -345,7 +348,8 @@ export class BillingClient {
       restaurantId: restId,
       tableNumber: bill.tableNumber,
       requestType: 'BILL',
-      customTitle: 'Bill Requested 🧾',
+      paymentMethod: paymentMethod,
+      customTitle: `Bill Request · ${paymentMethod}`,
       tableSessionId: bill.tableSessionId,
     });
 
@@ -353,7 +357,8 @@ export class BillingClient {
       restaurantId: restId,
       tableNumber: bill.tableNumber,
       requestType: 'BILL',
-      customTitle: 'Bill Requested 🧾',
+      paymentMethod: paymentMethod,
+      customTitle: `Bill Request · ${paymentMethod}`,
       tableSessionId: bill.tableSessionId,
     });
 

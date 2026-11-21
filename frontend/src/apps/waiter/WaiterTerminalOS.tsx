@@ -897,19 +897,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     return 0;
   };
 
-  // Record Bill Payment (CASH / UPI / CARD) & Auto-complete Service Request
+  // Record Bill Payment (CASH / UPI / CARD) & Auto-complete Service Request & Close Table
   const handleRecordPayment = async (
     billId: string | undefined,
     tableNum: string,
     sessionId?: string,
     method: PaymentMethod = 'CASH',
-    requestId?: string
+    requestId?: string,
+    autoCloseTable: boolean = true
   ) => {
     setIsProcessingPayment(true);
     try {
       let activeBillId = billId;
       if (!activeBillId) {
-        const b = await api.requestTableBill(currentRestaurantId, tableNum, sessionId);
+        const b = await api.requestTableBill(currentRestaurantId, tableNum, sessionId, method);
         if (b) activeBillId = b.id;
       }
 
@@ -927,7 +928,47 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
         );
       }
 
-      showToast('Payment Recorded 💳', `Bill for ${tableNum} marked as PAID via ${method}`, 'success');
+      // Close Table Settlement & Session automatically
+      if (autoCloseTable) {
+        try {
+          await api.closeTableSettlement(currentRestaurantId, activeBillId, waiterName);
+        } catch (e) {
+          console.warn('closeTableSettlement error:', e);
+        }
+
+        try {
+          const targetTbl = tables.find((t) => matchTableNumber(t.tableNumber, tableNum));
+          await api.closeTableSession({
+            restaurantId: currentRestaurantId,
+            tableId: targetTbl?.id || tableNum,
+            tableNumber: tableNum,
+            waiterName: waiterName,
+            tableSessionId: sessionId,
+            force: true,
+            scope: 'WAITER',
+          });
+        } catch (e) {
+          console.warn('closeTableSession error:', e);
+        }
+
+        // Optimistically free table & sessions
+        setTables((prev) =>
+          prev.map((t) =>
+            matchTableNumber(t.tableNumber, tableNum)
+              ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined }
+              : t
+          )
+        );
+        if (sessionId) {
+          setActiveSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        }
+      }
+
+      showToast(
+        autoCloseTable ? 'Payment Recorded & Table Closed! 🧹' : 'Payment Recorded 💳',
+        `Table ${tableNum} bill settled via ${method}${autoCloseTable ? ' and reset to AVAILABLE' : ''}`,
+        'success'
+      );
 
       if (requestId) {
         await handleCompleteRequest(requestId);
@@ -949,6 +990,15 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     req?: CustomerRequest,
     existingBill?: Bill | null
   ) => {
+    // Resolve preferred payment method chosen by the customer
+    const requestedMethod: PaymentMethod =
+      (req?.paymentMethod as PaymentMethod) ||
+      (req?.message?.includes('via UPI') ? 'UPI' :
+       req?.message?.includes('via CARD') ? 'CARD' :
+       req?.message?.includes('via CASH') ? 'CASH' :
+       existingBill?.paymentMethod || 'CASH');
+    setSelectedPaymentMethod(requestedMethod);
+
     setSelectedBillForAction({
       bill: existingBill || null,
       request: req,
@@ -1914,6 +1964,25 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                     <span className="text-white/50 block text-[10px]">TOTAL PAYABLE</span>
                                     <span className="text-emerald-400 font-bold text-sm font-tabular">₹{billAmt.toFixed(2)}</span>
                                   </div>
+                                  <div className="text-center">
+                                    <span className="text-white/50 block text-[10px]">CHOSEN METHOD</span>
+                                    {(() => {
+                                      const pm = req.paymentMethod ||
+                                        (req.message?.includes('via UPI') ? 'UPI' :
+                                         req.message?.includes('via CARD') ? 'CARD' :
+                                         req.message?.includes('via CASH') ? 'CASH' :
+                                         matchingBill?.paymentMethod || 'UPI');
+                                      return (
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                          pm === 'CASH' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                                          pm === 'CARD' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                                          'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                        }`}>
+                                          {pm === 'CASH' ? '💵 CASH' : pm === 'CARD' ? '💳 CARD' : '📱 UPI'}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
                                   <div className="text-right">
                                     <span className="text-white/50 block text-[10px]">STATUS</span>
                                     {payStatus === 'PAID' ? (
@@ -1938,7 +2007,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="w-1/2 text-xs border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-8"
+                                      className="w-1/3 text-xs border-[#1e232e] bg-[#141822] hover:bg-[#1a202c] text-slate-200 h-9"
                                       onClick={() => openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)}
                                     >
                                       View Bill
@@ -1947,10 +2016,11 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                       variant="brand"
                                       size="sm"
                                       disabled={isProcessing}
-                                      className="w-1/2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white h-8 font-semibold"
+                                      className="w-2/3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white h-9 font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/40"
                                       onClick={() => openBillActionModal(req.tableNumber, req.tableSessionId, req, matchingBill)}
                                     >
-                                      {payStatus === 'PAID' ? 'Confirm & Close' : 'Collect Payment'}
+                                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                                      <span>Record Payment & Close Table</span>
                                     </Button>
                                   </>
                                 ) : (
@@ -2149,14 +2219,26 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                         >
                           View Details
                         </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          className="w-full text-xs py-2 bg-rose-600/90 hover:bg-rose-500 text-white h-10 font-bold touch-manipulation rounded-xl shadow-[0_2px_8px_rgba(225,29,72,0.3)] active:scale-95"
-                          onClick={() => setSelectedTableForClose(table)}
-                        >
-                          Close Table
-                        </Button>
+                        {sessionTotal > 0 ? (
+                          <Button
+                            variant="brand"
+                            size="sm"
+                            className="w-full text-xs py-2 bg-emerald-600 hover:bg-emerald-500 text-white h-10 font-bold touch-manipulation rounded-xl shadow-[0_2px_8px_rgba(16,185,129,0.3)] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                            onClick={() => openBillActionModal(table.tableNumber, activeSession?.id, undefined, matchingBill)}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Settle & Close</span>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            className="w-full text-xs py-2 bg-rose-600/90 hover:bg-rose-500 text-white h-10 font-bold touch-manipulation rounded-xl shadow-[0_2px_8px_rgba(225,29,72,0.3)] active:scale-95"
+                            onClick={() => setSelectedTableForClose(table)}
+                          >
+                            Close Table
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -2399,16 +2481,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                               tableNum,
                               sessId,
                               selectedPaymentMethod,
-                              req?.id
+                              req?.id,
+                              true
                             )
                           }
-                          className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+                          className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 cursor-pointer"
                         >
-                          {isProcessingPayment
-                            ? 'Recording...'
-                            : currentPayStatus === 'PAYMENT_AWAITING_CONFIRMATION'
-                            ? `Verify & Confirm Payment (₹${calculatedTotal.toFixed(2)})`
-                            : `Record ${selectedPaymentMethod} Payment (₹${calculatedTotal.toFixed(2)})`}
+                          <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>
+                            {isProcessingPayment
+                              ? 'Recording & Closing Table...'
+                              : currentPayStatus === 'PAYMENT_AWAITING_CONFIRMATION'
+                              ? `Verify & Close Table (₹${calculatedTotal.toFixed(2)}) 🏁`
+                              : `Record ${selectedPaymentMethod} & Close Table (₹${calculatedTotal.toFixed(2)}) 🏁`}
+                          </span>
                         </Button>
                       </div>
                     </div>
@@ -2428,15 +2514,49 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                         <Printer className="w-3.5 h-3.5 text-amber-400" />
                         <span>Print Bill</span>
                       </Button>
+                      <Button
+                        variant="brand"
+                        size="sm"
+                        disabled={isProcessingPayment}
+                        onClick={async () => {
+                          setIsProcessingPayment(true);
+                          try {
+                            if (bill?.id) {
+                              await api.closeTableSettlement(currentRestaurantId, bill.id, waiterName);
+                            }
+                            await api.closeTableSession({
+                              restaurantId: currentRestaurantId,
+                              tableId: tableNum,
+                              tableNumber: tableNum,
+                              waiterName: waiterName,
+                              tableSessionId: sessId,
+                              force: true,
+                              scope: 'WAITER',
+                            });
+                            if (req?.id) await handleCompleteRequest(req.id);
+                            setSelectedBillForAction(null);
+                            showToast('Table Closed 🧹', `${tableNum} session settled & reset to AVAILABLE`, 'success');
+                            await loadData(true);
+                          } catch (e: any) {
+                            showToast('Error', e.message || 'Could not close table', 'warning');
+                          } finally {
+                            setIsProcessingPayment(false);
+                          }
+                        }}
+                        className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Close Table & Reset 🏁</span>
+                      </Button>
                       {req && req.status !== 'COMPLETED' && (
                         <Button
-                          variant="success"
+                          variant="outline"
                           size="sm"
                           onClick={() => {
                             handleCompleteRequest(req.id);
                             setSelectedBillForAction(null);
                           }}
-                          className="text-xs"
+                          className="text-xs border-[#1e232e] text-slate-300"
                         >
                           Complete Request ✓
                         </Button>
