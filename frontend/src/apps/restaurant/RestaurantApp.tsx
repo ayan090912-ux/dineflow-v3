@@ -1022,79 +1022,86 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       return;
     }
 
-    if (forceLoading || (!activeRestaurant && !currentRestaurant)) {
+    // Only show full-screen blocking loader on initial cold mount if no tables/restaurant are present
+    if (forceLoading || (!activeRestaurant && !currentRestaurant && tables.length === 0)) {
       setViewState('LOADING');
     }
     setViewError('');
     try {
       const user = api.getCurrentUser();
-      const rest = (await api.getRestaurantDetails(targetRestId).catch(() => null)) || activeRestaurant || currentRestaurant;
-      if (!rest) {
+      const existingRest = (activeRestaurant?.id === targetRestId ? activeRestaurant : (currentRestaurant?.id === targetRestId ? currentRestaurant : null));
+
+      // Phase 1: High-Priority Core Floorplan & Operational Data (Loads instantly)
+      const [rest, ownerRests, o, t, activeSess, bDay, bList] = await Promise.all([
+        existingRest ? Promise.resolve(existingRest) : api.getRestaurantDetails(targetRestId).catch(() => null),
+        api.getOwnerRestaurants().catch(() => []),
+        api.getOrders(targetRestId).catch((err) => { console.error('[Orders] Load error:', err); return []; }),
+        api.getTables(targetRestId).catch((err) => { console.error('[Tables] Load error:', err); return []; }),
+        api.getActiveTableSessions(targetRestId).catch((err) => { console.error('[ActiveSessions] Load error:', err); return []; }),
+        api.getCurrentBusinessDay(targetRestId).catch(() => null),
+        api.getBills(targetRestId).catch(() => []),
+      ]);
+
+      const effectiveRest = rest || existingRest || activeRestaurant || currentRestaurant;
+      if (!effectiveRest) {
         setViewState('ERROR');
         setViewError(`Restaurant "${targetRestId}" could not be loaded or was not found.`);
         return;
       }
 
-      const ownerRests = await api.getOwnerRestaurants().catch(() => []);
       setCurrentUser(user);
-      setCurrentRestaurant(rest);
-      setAllMyRestaurants(ownerRests);
+      setCurrentRestaurant(effectiveRest);
+      setAllMyRestaurants(ownerRests || []);
 
-      if (rest?.theme) {
+      if (effectiveRest?.theme) {
         setTheme({
-          restaurantId: rest.id,
-          restaurantName: rest.name,
-          logo: rest.theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
-          bannerUrl: rest.theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-          primaryColor: rest.theme.primaryColor || '#e11d48',
-          secondaryColor: rest.theme.secondaryColor || '#475569',
+          restaurantId: effectiveRest.id,
+          restaurantName: effectiveRest.name,
+          logo: effectiveRest.theme.logo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80',
+          bannerUrl: effectiveRest.theme.bannerUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+          primaryColor: effectiveRest.theme.primaryColor || '#e11d48',
+          secondaryColor: effectiveRest.theme.secondaryColor || '#475569',
           accentColor: '#f59e0b',
           backgroundColor: '#f8fafc',
           textColor: '#0f172a',
           fontFamily: 'sans',
           borderRadius: 'lg',
-          currency: rest.theme.currency || rest.currency || 'INR (₹)',
+          currency: effectiveRest.theme.currency || effectiveRest.currency || 'INR (₹)',
         });
       }
 
-      let menuLoadErr: string | null = null;
-      const [o, m, t, e, i, sup, fc, bc, bDay, bHistory, activeSess, bList] = await Promise.all([
-        api.getOrders(rest.id).catch((err) => { console.error('[Orders] Load error:', err); return []; }),
-        api.getMenuItems(rest.id).catch((err) => {
-          console.error('[Menu] Load error:', err);
-          menuLoadErr = err?.message || 'Failed to load menu items';
-          return [];
-        }),
-        api.getTables(rest.id).catch((err) => { console.error('[Tables] Load error:', err); return []; }),
-        api.getEmployees(rest.id).catch((err) => { console.error('[Employees] Load error:', err); return []; }),
-        api.getInventory(rest.id).catch((err) => { console.error('[Inventory] Load error:', err); return []; }),
-        api.getSuppliers(rest.id).catch((err) => { console.error('[Suppliers] Load error:', err); return []; }),
-        api.getCategories(rest.id).catch((err) => { console.error('[Categories] Load error:', err); return []; }),
-        api.getBarCategories(rest.id).catch((err) => { console.error('[BarCats] Load error:', err); return []; }),
-        api.getCurrentBusinessDay(rest.id).catch(() => null),
-        api.getBusinessDayHistory(rest.id).catch(() => []),
-        api.getActiveTableSessions(rest.id).catch(() => []),
-        api.getBills(rest.id).catch(() => []),
-      ]);
-
-      if (menuLoadErr) {
-        addToast('error', 'Menu Sync Notice', menuLoadErr);
-      }
-
       setOrders(o || []);
-      setMenuItems(m || []);
       setTables(t || []);
-      setEmployees(e || []);
-      setInventory(i || []);
-      setSuppliers(sup || []);
-      setFoodCategories(fc || []);
-      setBarCategories(bc || []);
-      setCurrentBusinessDay(bDay);
-      setBusinessDayHistory(bHistory || []);
       setActiveSessions(activeSess || []);
+      setCurrentBusinessDay(bDay);
       setBills(bList || []);
 
+      // IMMEDIATELY UNBLOCK SCREEN: Tables, floorplan, active sessions & billing ready
       setViewState('READY');
+
+      // Phase 2: Secondary Background Modules (Non-blocking: Menu, Inventory, Staff, Categories)
+      Promise.all([
+        api.getMenuItems(effectiveRest.id).catch((err) => {
+          console.error('[Menu] Load error:', err);
+          return [];
+        }),
+        api.getEmployees(effectiveRest.id).catch((err) => { console.error('[Employees] Load error:', err); return []; }),
+        api.getInventory(effectiveRest.id).catch((err) => { console.error('[Inventory] Load error:', err); return []; }),
+        api.getSuppliers(effectiveRest.id).catch((err) => { console.error('[Suppliers] Load error:', err); return []; }),
+        api.getCategories(effectiveRest.id).catch((err) => { console.error('[Categories] Load error:', err); return []; }),
+        api.getBarCategories(effectiveRest.id).catch((err) => { console.error('[BarCats] Load error:', err); return []; }),
+        api.getBusinessDayHistory(effectiveRest.id).catch(() => []),
+      ]).then(([m, e, i, sup, fc, bc, bHistory]) => {
+        setMenuItems(m || []);
+        setEmployees(e || []);
+        setInventory(i || []);
+        setSuppliers(sup || []);
+        setFoodCategories(fc || []);
+        setBarCategories(bc || []);
+        setBusinessDayHistory(bHistory || []);
+      }).catch((bgErr) => {
+        console.warn('[RestaurantApp] Background data sync error:', bgErr);
+      });
     } catch (err: any) {
       console.error('[RestaurantApp] Failed to load data:', err);
       if (!activeRestaurant && !currentRestaurant) {
@@ -1102,7 +1109,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         setViewError(err?.message || 'Failed to initialize restaurant operating system.');
       }
     }
-  }, [activeRestaurant, currentRestaurant?.id]);
+  }, [activeRestaurant, currentRestaurant?.id, tables.length]);
 
   const handleRefreshOrders = useCallback(async () => {
     const targetRestId = activeRestaurant?.id || currentRestaurant?.id || api.getCurrentRestaurantId();
@@ -1595,6 +1602,48 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     addToast('info', 'Inventory Item Removed', `${name} removed from inventory.`);
     loadData();
   };
+
+  const enrichedFloorplanTables = useMemo(() => {
+    return tables.map((tbl) => {
+      const isReserved = tbl.status === 'RESERVED' || Boolean(tbl.reservationDetails);
+      const isMerged = tbl.isMerged || tbl.status === 'MERGED';
+
+      const activeSession = activeSessions.find(
+        (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || matchTableNumber(s.tableNumber, tbl.tableNumber))
+      );
+      const activeSessionId = activeSession?.id || tbl.activeSessionId || (tbl as any).active_session_id;
+      const activeSess = activeSession || (activeSessionId ? {
+        id: activeSessionId,
+        tableId: tbl.id,
+        tableNumber: tbl.tableNumber,
+        status: 'ACTIVE' as const,
+        sessionStartedAt: new Date().toISOString(),
+        restaurantId: currentRestaurant?.id || ''
+      } : undefined);
+      const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
+      const tableOrders = activeSessionId
+        ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+        : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
+      const matchingBill = activeSessionId
+        ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
+        : undefined;
+      const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, matchingBill);
+      const sessionTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : (tbl.sessionTotal !== undefined ? tbl.sessionTotal : (tbl as any).session_total || 0);
+
+      return {
+        tbl,
+        isReserved,
+        isMerged,
+        activeSession,
+        activeSessionId,
+        activeSess,
+        isTableOccupied,
+        tableOrders,
+        matchingBill,
+        sessionTotal,
+      };
+    });
+  }, [tables, activeSessions, orders, bills, currentRestaurant]);
 
   if (viewState === 'INITIALIZING' || viewState === 'LOADING') {
     const restName = activeRestaurant?.name || currentRestaurant?.name;
@@ -3220,32 +3269,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
             {/* Interactive Floorplan Table Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tables.map((tbl) => {
-                const isReserved = tbl.status === 'RESERVED' || Boolean(tbl.reservationDetails);
-                const isMerged = tbl.isMerged || tbl.status === 'MERGED';
-
-                const activeSession = activeSessions.find(
-                  (s) => s.status === 'ACTIVE' && (s.tableId === tbl.id || matchTableNumber(s.tableNumber, tbl.tableNumber))
-                );
-                const activeSessionId = activeSession?.id || tbl.activeSessionId || (tbl as any).active_session_id;
-                const activeSess = activeSession || (activeSessionId ? {
-                  id: activeSessionId,
-                  tableId: tbl.id,
-                  tableNumber: tbl.tableNumber,
-                  status: 'ACTIVE' as const,
-                  sessionStartedAt: new Date().toISOString(),
-                  restaurantId: currentRestaurant?.id || ''
-                } : undefined);
-                const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
-                const tableOrders = activeSessionId
-                  ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
-                  : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
-                const matchingBill = activeSessionId
-                  ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
-                  : undefined;
-                const authCalc = calculateAuthoritativeSessionBill(tableOrders, currentRestaurant, matchingBill);
-                const sessionTotal = authCalc.grandTotal > 0 ? authCalc.grandTotal : (tbl.sessionTotal !== undefined ? tbl.sessionTotal : (tbl as any).session_total || 0);
-
+              {enrichedFloorplanTables.map(({ tbl, isReserved, isMerged, activeSess, isTableOccupied, tableOrders, sessionTotal }) => {
                 return (
                   <Card
                     key={tbl.id}

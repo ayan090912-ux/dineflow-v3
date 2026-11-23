@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 import logging
 from typing import Optional
 from datetime import datetime, timezone
@@ -149,14 +150,18 @@ class UpdateTableSchema(BaseModel):
 import time
 
 _TABLES_CACHE: dict = {}
-_TABLES_CACHE_TTL: float = 5.0  # 5s cache: fast floorplan retrieval while ensuring freshness
+_TABLES_CACHE_TTL: float = 60.0  # 60s cache: fast floorplan retrieval while ensuring freshness
+_ACTIVE_SESSIONS_CACHE: dict = {}
+_ACTIVE_SESSIONS_CACHE_TTL: float = 30.0
 
 def invalidate_tables_cache(restaurant_id: Optional[str] = None):
-    global _TABLES_CACHE
+    global _TABLES_CACHE, _ACTIVE_SESSIONS_CACHE
     if restaurant_id:
         _TABLES_CACHE.pop(restaurant_id, None)
+        _ACTIVE_SESSIONS_CACHE.pop(restaurant_id, None)
     else:
         _TABLES_CACHE.clear()
+        _ACTIVE_SESSIONS_CACHE.clear()
 
 @router.get("/{restaurant_id}/tables")
 async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
@@ -177,16 +182,18 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
         if now_t - cached_ts < _TABLES_CACHE_TTL:
             return cached_tables
 
-    query = select(Table).where(Table.restaurant_id == canonical_id).order_by(Table.table_number)
-    result = await db.execute(query)
-    tables = result.scalars().all()
-
-    # Query active table sessions for this restaurant to enforce single source of truth
+    query_tables = select(Table).where(Table.restaurant_id == canonical_id).order_by(Table.table_number)
     query_active_sessions = select(TableSession).where(
         (TableSession.restaurant_id == canonical_id) &
         (TableSession.status != "CLOSED")
     )
-    res_sesses = await db.execute(query_active_sessions)
+
+    # Fetch tables and active sessions in parallel to minimize DB round-trips
+    res_tables, res_sesses = await asyncio.gather(
+        db.execute(query_tables),
+        db.execute(query_active_sessions)
+    )
+    tables = res_tables.scalars().all()
     active_sessions = res_sesses.scalars().all()
     active_session_map = {sess.table_id: sess.id for sess in active_sessions}
     active_session_num_map = {sess.table_number: sess.id for sess in active_sessions}
@@ -298,6 +305,12 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{restaurant_id}/active-sessions")
 async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depends(get_db)):
+    now_t = time.time()
+    if restaurant_id in _ACTIVE_SESSIONS_CACHE:
+        cached_ts, cached_sessions = _ACTIVE_SESSIONS_CACHE[restaurant_id]
+        if now_t - cached_ts < _ACTIVE_SESSIONS_CACHE_TTL:
+            return cached_sessions
+
     valid_rest_ids = await _get_valid_restaurant_ids(restaurant_id, db)
     if not valid_rest_ids:
         valid_rest_ids = [restaurant_id]
@@ -307,7 +320,12 @@ async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depen
         (TableSession.status != "CLOSED")
     ).order_by(TableSession.session_started_at.desc())
     result = await db.execute(query)
-    return result.scalars().all()
+    sessions = result.scalars().all()
+
+    _ACTIVE_SESSIONS_CACHE[restaurant_id] = (now_t, sessions)
+    for rid in valid_rest_ids:
+        _ACTIVE_SESSIONS_CACHE[rid] = (now_t, sessions)
+    return sessions
 
 from app.core.security.tenant_auth import (
     get_caller_context,

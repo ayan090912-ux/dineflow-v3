@@ -897,6 +897,7 @@ export class RestaurantClient {
     if (existingIdx >= 0) this.base.tables[existingIdx] = mapped;
     else this.base.tables.push(mapped);
     this.base.saveDatabase();
+    this.base.invalidateQueryCache('tables');
     return mapped;
   }
 
@@ -948,6 +949,7 @@ export class RestaurantClient {
     if (idx >= 0) this.base.tables[idx] = updatedTable;
     else this.base.tables.push(updatedTable);
     this.base.saveDatabase();
+    this.base.invalidateQueryCache('tables');
     return updatedTable;
   }
 
@@ -962,6 +964,7 @@ export class RestaurantClient {
     }
     this.base.tables = this.base.tables.filter((t) => t.id !== tableId && t.tableNumber !== tableId);
     this.base.saveDatabase();
+    this.base.invalidateQueryCache('tables');
     return true;
   }
 
@@ -1064,28 +1067,30 @@ export class RestaurantClient {
     const targetId = this.base.resolveTenantRestaurantId(restaurantId);
     if (!targetId) return [];
 
-    try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/active-sessions`);
-      if (res.ok) {
-        const sessions = await res.json();
-        if (Array.isArray(sessions)) {
-          return sessions.map((s: any) => ({
-            id: s.id,
-            restaurantId: s.restaurant_id || targetId,
-            tableId: s.table_id,
-            tableNumber: s.table_number,
-            status: s.status || 'ACTIVE',
-            sessionStartedAt: s.session_started_at || new Date().toISOString(),
-          }));
+    return this.base.getCachedOrFetch(`activeSessions:${targetId}`, 10000, async () => {
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/active-sessions`);
+        if (res.ok) {
+          const sessions = await res.json();
+          if (Array.isArray(sessions)) {
+            return sessions.map((s: any) => ({
+              id: s.id,
+              restaurantId: s.restaurant_id || targetId,
+              tableId: s.table_id,
+              tableNumber: s.table_number,
+              status: s.status || 'ACTIVE',
+              sessionStartedAt: s.session_started_at || new Date().toISOString(),
+            }));
+          }
         }
+      } catch (e) {
+        console.warn('API fetch for active table sessions failed:', e);
       }
-    } catch (e) {
-      console.warn('API fetch for active table sessions failed:', e);
-    }
 
-    this.base.loadDatabase();
-    return this.base.tableSessions.filter((s) => s.restaurantId === targetId && s.status === 'ACTIVE');
+      this.base.loadDatabase();
+      return this.base.tableSessions.filter((s) => s.restaurantId === targetId && s.status === 'ACTIVE');
+    });
   }
 
   async getOrCreateTableSession(restaurantId?: string, tableId?: string, tableNumber?: string): Promise<TableSession | null> {
@@ -1376,6 +1381,8 @@ export class RestaurantClient {
     });
 
     this.base.saveDatabase();
+    this.base.invalidateQueryCache('tables');
+    this.base.invalidateQueryCache('activeSessions');
 
     realtimeBus.emit('TableSessionClosed' as any, {
       tableId,

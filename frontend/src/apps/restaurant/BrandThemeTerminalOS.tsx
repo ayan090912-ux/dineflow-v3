@@ -345,9 +345,9 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
       </div>
 
       {/* 3. MAIN WORKSPACE GRID */}
-      <div className={`grid grid-cols-1 ${showLivePreview ? 'xl:grid-cols-12' : ''} gap-6 items-start`}>
+      <div className={`grid grid-cols-1 ${showLivePreview ? 'lg:grid-cols-12' : ''} gap-6 items-start`}>
         {/* Left Column: Essential Branding & Storefront Controls */}
-        <div className={`${showLivePreview ? 'xl:col-span-6 2xl:col-span-7' : 'max-w-4xl mx-auto w-full'} space-y-6`}>
+        <div className={`${showLivePreview ? 'lg:col-span-7' : 'max-w-4xl mx-auto w-full'} space-y-6`}>
           {/* SECTION 1: Core Brand Identity */}
           <div className="bg-[#12151b] border border-white/[0.08] rounded-2xl p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
@@ -731,7 +731,7 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
 
         {/* Right Column: Authentic Dinely Liquid-Glass Customer Storefront Simulator */}
         {showLivePreview && (
-          <div className="xl:col-span-6 2xl:col-span-5 sticky top-6 space-y-3">
+          <div className="lg:col-span-5 sticky top-6 space-y-3">
             {/* Simulator Mode Switcher Bar */}
             <div className="flex items-center justify-between p-1 bg-[#12151b] border border-white/[0.08] rounded-xl">
               <div className="flex items-center gap-1">

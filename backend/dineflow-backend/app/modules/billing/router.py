@@ -1216,6 +1216,12 @@ async def close_table_settlement(
     await db.commit()
     await db.refresh(bill)
 
+    try:
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(target_rest_id)
+    except Exception:
+        pass
+
     formatted = format_bill_response(bill)
 
     # Broadcast Realtime Closure Event
