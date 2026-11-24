@@ -3268,8 +3268,29 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
 
             {/* Interactive Floorplan Table Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {enrichedFloorplanTables.map(({ tbl, isReserved, isMerged, activeSess, isTableOccupied, tableOrders, sessionTotal }) => {
+            {enrichedFloorplanTables.length === 0 ? (
+              <Card className="bg-[#12151b] border-[#1e232e] p-10 text-center space-y-4 rounded-2xl shadow-xl">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+                  <Grid className="w-7 h-7" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-white">No Tables Loaded</h4>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                    Create tables with specific seating capacities, generate QR codes, and manage live dining floorplans.
+                  </p>
+                </div>
+                <div className="pt-2 flex justify-center gap-3">
+                  <Button variant="brand" size="sm" onClick={() => setIsCreateTableModalOpen(true)} className="text-xs" icon={<Plus className="w-3.5 h-3.5" />}>
+                    Create Your First Table
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => loadData(true)} className="text-xs border-[#1e232e] text-slate-300" icon={<RefreshCw className="w-3.5 h-3.5" />}>
+                    Reload Tables
+                  </Button>
+                </div>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {enrichedFloorplanTables.map(({ tbl, isReserved, isMerged, activeSess, isTableOccupied, tableOrders, sessionTotal }) => {
                 return (
                   <Card
                     key={tbl.id}
@@ -3479,7 +3500,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   </Card>
                 );
               })}
-            </div>
+              </div>
+            )}
           </div>
         ) : (
           <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">

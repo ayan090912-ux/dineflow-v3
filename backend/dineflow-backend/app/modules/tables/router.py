@@ -188,12 +188,10 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
         (TableSession.status != "CLOSED")
     )
 
-    # Fetch tables and active sessions in parallel to minimize DB round-trips
-    res_tables, res_sesses = await asyncio.gather(
-        db.execute(query_tables),
-        db.execute(query_active_sessions)
-    )
+    res_tables = await db.execute(query_tables)
     tables = res_tables.scalars().all()
+
+    res_sesses = await db.execute(query_active_sessions)
     active_sessions = res_sesses.scalars().all()
     active_session_map = {sess.table_id: sess.id for sess in active_sessions}
     active_session_num_map = {sess.table_number: sess.id for sess in active_sessions}
@@ -322,10 +320,23 @@ async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depen
     result = await db.execute(query)
     sessions = result.scalars().all()
 
-    _ACTIVE_SESSIONS_CACHE[restaurant_id] = (now_t, sessions)
+    serialized_sessions = []
+    for s in sessions:
+        serialized_sessions.append({
+            "id": s.id,
+            "restaurant_id": s.restaurant_id,
+            "table_id": s.table_id,
+            "table_number": s.table_number,
+            "status": s.status,
+            "session_started_at": s.session_started_at.isoformat() if s.session_started_at else None,
+            "session_closed_at": s.session_closed_at.isoformat() if s.session_closed_at else None,
+            "closed_by_waiter_name": getattr(s, "closed_by_waiter_name", None),
+        })
+
+    _ACTIVE_SESSIONS_CACHE[restaurant_id] = (now_t, serialized_sessions)
     for rid in valid_rest_ids:
-        _ACTIVE_SESSIONS_CACHE[rid] = (now_t, sessions)
-    return sessions
+        _ACTIVE_SESSIONS_CACHE[rid] = (now_t, serialized_sessions)
+    return serialized_sessions
 
 from app.core.security.tenant_auth import (
     get_caller_context,
