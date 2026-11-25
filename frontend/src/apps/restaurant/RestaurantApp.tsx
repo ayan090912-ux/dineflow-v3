@@ -2681,29 +2681,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-xl font-bold text-white tracking-tight">POS & QR Orders Stream</h3>
-                    <Badge variant="brand" className="font-mono text-[10px] px-2.5 py-0.5 bg-amber-950/60 text-amber-300 border-amber-800/60">
-                      LIVE ORDERS FEED
-                    </Badge>
-                    {posAutoWatch ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                        <span className="relative flex h-2 w-2">
-                          <span className=" absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        LIVE WATCH: AUTO-STREAMING
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-500/15 text-slate-400 border border-slate-500/30">
-                        <span className="h-2 w-2 rounded-full bg-slate-500"></span>
-                        LIVE WATCH: PAUSED
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
-                    <span>Live chronological order stream from table QR codes, POS, and counter pickups.</span>
-                    <span className="text-[11px] font-mono text-slate-400 border-l border-slate-700 pl-2">
+                  <h3 className="text-lg font-semibold text-white tracking-tight">POS & QR Orders</h3>
+                  <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                    <span>Chronological order stream from table QR codes, POS, and counter pickups.</span>
+                    <span className="text-[11px] font-mono text-slate-500 border-l border-[#1e232e] pl-2">
                       Synced {formatElapsed(posLastUpdated) || 'just now'} ({posLastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
                     </span>
                   </p>
@@ -2715,7 +2696,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   size="sm"
                   variant={posAutoWatch ? 'secondary' : 'outline'}
                   onClick={() => setPosAutoWatch(!posAutoWatch)}
-                  className="border-white/15 text-xs px-3 py-1.5 font-mono rounded-xl transition-all"
+                  className="text-xs px-3 py-1.5 font-mono"
                   icon={<Eye className="w-3.5 h-3.5" />}
                 >
                   {posAutoWatch ? 'Auto-Sync: ON' : 'Auto-Sync: OFF'}
@@ -2727,7 +2708,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     loadData();
                     setPosLastUpdated(new Date());
                   }}
-                  className="border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white text-xs px-3.5 py-1.5 font-mono rounded-xl backdrop-blur-md transition-all active:scale-95 shadow-sm"
+                  className="text-xs px-3.5 py-1.5 font-mono"
                   icon={<RefreshCw className="w-3.5 h-3.5" />}
                 >
                   Refresh Stream

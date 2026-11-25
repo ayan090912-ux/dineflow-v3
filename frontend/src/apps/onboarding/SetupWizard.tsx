@@ -701,907 +701,869 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   }
 
   // STEP 1 - 4: AUTHENTICATED RESTAURANT SETUP WIZARD
+  const stepItems = [
+    { num: 1, title: 'Business model', subtitle: 'Venue format & workflow' },
+    { num: 2, title: businessType === 'WEDDING_ORDERING' ? 'Event & kitchen' : 'Venue details', subtitle: 'Name, address & capacity' },
+    { num: 3, title: businessType === 'WEDDING_ORDERING' ? 'Architecture' : 'Terminals', subtitle: 'Operational stations' },
+    { num: 4, title: 'Review & launch', subtitle: 'Confirm configuration' },
+  ];
+
+  const inputClass =
+    'w-full px-3.5 py-2.5 bg-[#0b0d12] border border-[#232836] rounded-lg text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-slate-400 transition-colors';
+
   return (
-    <div className="min-h-screen bg-[#0b0d11] text-[#f3f4f6] flex flex-col justify-between font-sans">
-      {/* Top Header Navbar */}
-      <header className="border-b border-[#1e232e] bg-[#0b0d11]/80 backdrop-blur-md sticky top-0 z-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 text-white">
+    <div className="min-h-screen bg-[#0a0c10] text-slate-100 flex flex-col justify-between font-sans">
+      {/* Top Header */}
+      <header className="border-b border-[#1b1f29] bg-[#0a0c10] sticky top-0 z-20">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3 text-white">
             <DinelyLogo size="sm" />
-            <span className="text-slate-600 text-sm hidden sm:inline">•</span>
-            <span className="text-xs font-mono text-slate-400 hidden sm:inline">Venue Onboarding</span>
+            <span className="text-slate-700 text-sm hidden sm:inline">/</span>
+            <span className="text-xs font-medium text-slate-400 hidden sm:inline">New Workspace</span>
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            <span className="text-slate-400 hidden sm:inline font-mono">{currentUser.email}</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded bg-[#1a1e27] text-[#f97316] border border-[#2d3545]">
+            <span className="text-slate-400 hidden sm:inline">{currentUser.email}</span>
+            <span className="text-xs font-medium text-slate-300 sm:hidden">
               Step {currentStep} of 4
             </span>
           </div>
         </div>
       </header>
 
-      {/* Main Form Content */}
-      <main className="max-w-3xl w-full mx-auto my-10 px-4 sm:px-6 flex-1">
-        <div className="bg-[#12151b] border border-[#1e232e] p-6 sm:p-10 shadow-xl space-y-8 rounded-2xl text-left">
-          {/* Progress Tracker */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-              <span className={currentStep >= 1 ? 'text-white' : 'text-slate-600'}>1. Business Model</span>
-              <span className={currentStep >= 2 ? 'text-white' : 'text-slate-600'}>2. Venue Details</span>
-              <span className={currentStep >= 3 ? 'text-white' : 'text-slate-600'}>3. Stations</span>
-              <span className={currentStep >= 4 ? 'text-white' : 'text-slate-600'}>4. Launch</span>
-            </div>
-            <div className="h-1.5 w-full bg-[#1a1e27] rounded-full overflow-hidden flex">
-              <div
-                className="h-full bg-[#f97316] transition-all duration-300 ease-out"
-                style={{ width: `${(currentStep / 4) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Error Callout */}
-          {errorMessage && (
-            <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-              {errorMessage}
-            </div>
-          )}
-
-          {/* STEP 1: BUSINESS TYPE (ONLY 3 CARDS) */}
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
-                  What type of venue do you operate?
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Select your operational model. Dinely configures the ideal terminal suite for your workflow.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                {BUSINESS_TYPES.map((bt) => {
-                  const IconComp = bt.icon;
-                  const isSelected = businessType === bt.id;
-                  return (
-                    <div
-                      key={bt.id}
-                      onClick={() => applyBusinessTypeDefaults(bt.id)}
-                      className={`p-4 sm:p-5 rounded-xl border cursor-pointer transition-all flex items-start gap-4 ${
-                        isSelected
-                          ? 'bg-[#1a1e27] border-[#f97316] text-white shadow-sm'
-                          : 'bg-[#0b0d11] border-[#1e232e] text-slate-400 hover:border-[#2d3545] hover:text-slate-200'
+      {/* Main Split Workspace */}
+      <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8 lg:gap-12 items-start">
+          {/* Left Rail: Stepper & Live Summary */}
+          <aside className="space-y-8 lg:sticky lg:top-24">
+            <nav aria-label="Onboarding steps" className="space-y-1">
+              {stepItems.map((s) => {
+                const isActive = currentStep === s.num;
+                const isDone = currentStep > s.num;
+                return (
+                  <button
+                    key={s.num}
+                    type="button"
+                    disabled={!isDone && !isActive}
+                    onClick={() => {
+                      if (isDone) setCurrentStep(s.num);
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-3 transition-colors ${
+                      isActive
+                        ? 'bg-[#141821] text-white'
+                        : isDone
+                        ? 'text-slate-300 hover:bg-[#101319] cursor-pointer'
+                        : 'text-slate-600 cursor-default'
+                    }`}
+                  >
+                    <span
+                      className={`w-5 h-5 rounded-full text-[11px] font-semibold flex items-center justify-center shrink-0 mt-0.5 border ${
+                        isActive
+                          ? 'bg-white text-slate-950 border-white'
+                          : isDone
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : 'bg-transparent text-slate-600 border-[#232836]'
                       }`}
                     >
-                      <div className={`p-2.5 rounded-lg border shrink-0 ${isSelected ? 'bg-[#f97316] text-[#0b0d11] border-[#f97316]' : 'bg-[#12151b] border-[#2d3545] text-slate-400'}`}>
-                        <IconComp className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1 flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-bold text-white tracking-tight font-display">{bt.name}</h3>
-                          <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded border ${
-                            isSelected ? 'bg-[#f97316]/10 text-[#f97316] border-[#f97316]/30' : 'bg-[#12151b] text-slate-500 border-[#1e232e]'
-                          }`}>
-                            {bt.tagline}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 leading-relaxed">{bt.desc}</p>
-                      </div>
-                      <div className="pt-1 shrink-0">
-                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? 'border-[#f97316] bg-[#f97316] text-[#0b0d11]' : 'border-slate-700'}`}>
-                          {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                        </div>
-                      </div>
+                      {isDone ? <Check className="w-3 h-3 stroke-[2.5]" /> : s.num}
+                    </span>
+                    <div className="min-w-0">
+                      <p className={`text-xs font-medium ${isActive ? 'text-white' : isDone ? 'text-slate-200' : 'text-slate-500'}`}>
+                        {s.title}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">{s.subtitle}</p>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                  </button>
+                );
+              })}
+            </nav>
 
-          {/* STEP 2: BUSINESS DETAILS & LOCATION (OR WEDDING ORDERING REQUIREMENTS) */}
-          {currentStep === 2 && businessType === 'WEDDING_ORDERING' ? (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
-                  Wedding Ordering Setup & Banquet Details
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Provide wedding guests with table-specific QR codes for ordering food directly to your kitchen.
-                </p>
-              </div>
-
-              {/* Verified Owner Identity */}
-              {currentUser && (
-                <div className="p-3 bg-[#0b0d11] rounded-lg border border-[#1e232e] flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="text-slate-400">Authenticated Dinely Account:</span>
-                    <strong className="text-white font-mono">{currentUser.email}</strong>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold text-emerald-400">VERIFIED</span>
+            {/* Live Configuration Summary */}
+            <div className="hidden lg:block pt-6 border-t border-[#1b1f29] space-y-3 text-xs">
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Configuration</p>
+              <dl className="space-y-2">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Format</dt>
+                  <dd className="text-slate-200 font-medium text-right">
+                    {BUSINESS_TYPES.find((b) => b.id === businessType)?.name}
+                  </dd>
                 </div>
-              )}
-
-              {/* Fulfilling Restaurant / Kitchen Selection */}
-              <div className="p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e] space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-white flex items-center gap-1.5">
-                    <Store className="w-4 h-4 text-[#f97316]" /> Fulfilling Restaurant or Catering Kitchen *
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-mono">Kitchen Terminal</span>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Select your existing restaurant or catering kitchen partner that will prepare and fulfill banquet orders placed by wedding guests.
-                </p>
-
-                {ownerRestaurants.length > 0 ? (
-                  <div className="space-y-2 pt-1">
-                    {ownerRestaurants.map((r) => {
-                      const isChosen = selectedCateringRestaurantId === r.id;
-                      return (
-                        <div
-                          key={r.id}
-                          onClick={() => {
-                            setSelectedCateringRestaurantId(r.id);
-                            if (r.address) {
-                              const parts = r.address.split(',');
-                              if (!weddingVenueCity && parts.length > 1) {
-                                setWeddingVenueCity(parts[parts.length - 2].trim());
-                              }
-                            }
-                          }}
-                          className={`p-3.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                            isChosen
-                              ? 'bg-[#1a1e27] border-[#f97316] text-white shadow-sm'
-                              : 'bg-[#12151b] border-[#2d3545] text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${isChosen ? 'bg-[#f97316]/20 text-[#f97316]' : 'bg-[#1e232e] text-slate-400'}`}>
-                              <UtensilsCrossed className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h4 className="text-xs font-bold text-white">{r.name}</h4>
-                              <p className="text-[11px] text-slate-400 truncate max-w-sm">{r.address || 'Active Dinely Restaurant'}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                              r.isApproved || r.lifecycleStatus === 'LIVE' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                            }`}>
-                              {r.isApproved || r.lifecycleStatus === 'LIVE' ? 'ACTIVE VENUE' : 'PENDING'}
-                            </span>
-                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                              isChosen ? 'border-[#f97316] bg-[#f97316] text-[#0b0d11]' : 'border-slate-700'
-                            }`}>
-                              {isChosen && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    <div
-                      onClick={() => setSelectedCateringRestaurantId('NEW')}
-                      className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                        selectedCateringRestaurantId === 'NEW'
-                          ? 'bg-[#1a1e27] border-[#f97316] text-white'
-                          : 'bg-[#0b0d11] border-dashed border-[#2d3545] text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span className="text-xs font-medium">+ Register a new catering restaurant or kitchen partner</span>
-                      {selectedCateringRestaurantId === 'NEW' && <Check className="w-3.5 h-3.5 text-[#f97316]" />}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-200 space-y-1">
-                    <p className="font-semibold flex items-center gap-1.5 text-amber-300">
-                      <AlertCircle className="w-4 h-4 shrink-0" /> Catering Kitchen Required
-                    </p>
-                    <p className="text-[11px] text-amber-300/80">
-                      Wedding ordering requires an authenticated kitchen to receive and prepare food orders. Complete your catering venue details below to establish your kitchen terminal.
-                    </p>
+                {restaurantName && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-slate-500">Venue</dt>
+                    <dd className="text-slate-200 font-medium truncate max-w-[140px] text-right">{restaurantName}</dd>
                   </div>
                 )}
-              </div>
+                {city && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-slate-500">City</dt>
+                    <dd className="text-slate-200 text-right">{city}</dd>
+                  </div>
+                )}
+                {businessType !== 'WEDDING_ORDERING' && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-slate-500">Seating</dt>
+                    <dd className="text-slate-200 text-right">
+                      {businessType === 'FOOD_CART' && !hasSeating ? 'Counter pickup' : `${tablesCount} tables`}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+          </aside>
 
-              {/* If registering new catering kitchen profile */}
-              {(selectedCateringRestaurantId === 'NEW' || ownerRestaurants.length === 0) && (
-                <div className="space-y-4 p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e]">
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Catering Kitchen Parameters</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300">Catering Kitchen / Restaurant Name *</label>
+          {/* Right Canvas: Focused Step Form */}
+          <div className="bg-[#101319] border border-[#1d222d] p-6 sm:p-8 space-y-8 rounded-xl text-left">
+            {/* Error Callout */}
+            {errorMessage && (
+              <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* STEP 1: BUSINESS TYPE */}
+            {currentStep === 1 && (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                    Choose your venue format
+                  </h1>
+                  <p className="text-sm text-slate-400">
+                    Select how your operation runs. We will pre-configure the matching POS and service terminals.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {BUSINESS_TYPES.map((bt) => {
+                    const IconComp = bt.icon;
+                    const isSelected = businessType === bt.id;
+                    return (
+                      <button
+                        type="button"
+                        key={bt.id}
+                        onClick={() => applyBusinessTypeDefaults(bt.id)}
+                        className={`p-5 rounded-xl border text-left transition-colors flex flex-col justify-between gap-4 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#161a24] border-white text-white'
+                            : 'bg-[#0b0d12] border-[#1d222d] text-slate-400 hover:border-[#2e3545] hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between w-full">
+                          <div
+                            className={`p-2 rounded-lg border ${
+                              isSelected
+                                ? 'bg-white text-slate-950 border-white'
+                                : 'bg-[#12151d] border-[#232836] text-slate-400'
+                            }`}
+                          >
+                            <IconComp className="w-4 h-4" />
+                          </div>
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                              isSelected ? 'border-white bg-white text-slate-950' : 'border-slate-700'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-white">{bt.name}</h3>
+                          <p className="text-xs text-slate-400 leading-relaxed">{bt.desc}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: BUSINESS DETAILS & LOCATION (OR WEDDING ORDERING REQUIREMENTS) */}
+            {currentStep === 2 && businessType === 'WEDDING_ORDERING' ? (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                    Banquet & catering setup
+                  </h1>
+                  <p className="text-sm text-slate-400">
+                    Connect a catering kitchen and enter event details for guest table QR ordering.
+                  </p>
+                </div>
+
+                {/* Fulfilling Restaurant / Kitchen Selection */}
+                <div className="p-4 bg-[#0b0d12] rounded-xl border border-[#1d222d] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-white">Fulfilling Catering Kitchen *</label>
+                    <span className="text-[11px] text-slate-500">Required</span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Select an existing restaurant or register a catering kitchen to receive banquet orders.
+                  </p>
+
+                  {ownerRestaurants.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      {ownerRestaurants.map((r) => {
+                        const isChosen = selectedCateringRestaurantId === r.id;
+                        return (
+                          <div
+                            key={r.id}
+                            onClick={() => {
+                              setSelectedCateringRestaurantId(r.id);
+                              if (r.address) {
+                                const parts = r.address.split(',');
+                                if (!weddingVenueCity && parts.length > 1) {
+                                  setWeddingVenueCity(parts[parts.length - 2].trim());
+                                }
+                              }
+                            }}
+                            className={`p-3.5 rounded-lg border cursor-pointer transition-colors flex items-center justify-between ${
+                              isChosen
+                                ? 'bg-[#161a24] border-white text-white'
+                                : 'bg-[#101319] border-[#232836] text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg border ${isChosen ? 'bg-white text-slate-950 border-white' : 'bg-[#151922] border-[#232836] text-slate-400'}`}>
+                                <UtensilsCrossed className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-semibold text-white">{r.name}</h4>
+                                <p className="text-[11px] text-slate-400 truncate max-w-sm">{r.address || 'Active Restaurant'}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-[11px] text-slate-400">
+                                {r.isApproved || r.lifecycleStatus === 'LIVE' ? 'Active' : 'Pending'}
+                              </span>
+                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                isChosen ? 'border-white bg-white text-slate-950' : 'border-slate-700'
+                              }`}>
+                                {isChosen && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <div
+                        onClick={() => setSelectedCateringRestaurantId('NEW')}
+                        className={`p-3 rounded-lg border cursor-pointer transition-colors flex items-center justify-between ${
+                          selectedCateringRestaurantId === 'NEW'
+                            ? 'bg-[#161a24] border-white text-white'
+                            : 'bg-[#0b0d12] border-dashed border-[#232836] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span className="text-xs font-medium">+ Register a new catering kitchen</span>
+                        {selectedCateringRestaurantId === 'NEW' && <Check className="w-3.5 h-3.5 text-white" />}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 bg-[#121620] border border-[#232836] rounded-lg text-xs text-slate-300 space-y-1">
+                      <p className="font-medium flex items-center gap-1.5 text-white">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" /> Catering kitchen required
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Enter your catering venue details below to configure the kitchen terminal for this event.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* If registering new catering kitchen profile */}
+                {(selectedCateringRestaurantId === 'NEW' || ownerRestaurants.length === 0) && (
+                  <div className="space-y-4 p-4 bg-[#0b0d12] rounded-xl border border-[#1d222d]">
+                    <h4 className="text-xs font-semibold text-white">Catering Kitchen Details</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-300">Kitchen / Restaurant Name *</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Royal Banquet Caterers"
+                          value={restaurantName}
+                          onChange={(e) => setRestaurantName(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-300">Kitchen Phone *</label>
+                        <input
+                          type="tel"
+                          placeholder="+91 98765 43210"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-300">Street Address *</label>
+                        <input
+                          type="text"
+                          placeholder="123 Culinary Boulevard"
+                          value={address}
+                          onChange={(e) => setAddress(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-300">City *</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Bengaluru"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Wedding Event Parameters */}
+                <div className="space-y-4 p-4 bg-[#0b0d12] rounded-xl border border-[#1d222d]">
+                  <h4 className="text-xs font-semibold text-white">Event Details</h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Event Name *</label>
                       <input
                         type="text"
-                        placeholder="e.g. Royal Banquet Caterers"
-                        value={restaurantName}
-                        onChange={(e) => setRestaurantName(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                        placeholder="e.g. Julian & Clara's Reception"
+                        value={weddingName}
+                        onChange={(e) => setWeddingName(e.target.value)}
+                        className={inputClass}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300">Kitchen Phone *</label>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Event Date *</label>
+                      <input
+                        type="date"
+                        value={weddingDate}
+                        onChange={(e) => setWeddingDate(e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Banquet Venue / Hall *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. The Grand Glasshouse Atrium"
+                        value={weddingVenueName}
+                        onChange={(e) => setWeddingVenueName(e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Venue City / Area *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Bengaluru, Karnataka"
+                        value={weddingVenueCity}
+                        onChange={(e) => setWeddingVenueCity(e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Estimated Guest Count</label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={2000}
+                        value={weddingGuestCount}
+                        onChange={(e) => setWeddingGuestCount(Math.max(1, parseInt(e.target.value) || 100))}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Banquet Tables Count *</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={weddingTableCount}
+                        onChange={(e) => setWeddingTableCount(Math.max(1, parseInt(e.target.value) || 10))}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">Catering & Dietary Notes</label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. 3-course plated service, craft mocktail bar, allergen-aware kitchen."
+                      value={weddingCateringNotes}
+                      onChange={(e) => setWeddingCateringNotes(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  {ownerRestaurants.length > 0 && selectedCateringRestaurantId !== 'NEW' && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Owner Contact Phone *</label>
                       <input
                         type="tel"
                         placeholder="+91 98765 43210"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                        className={inputClass}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : currentStep === 2 ? (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                    Venue details & capacity
+                  </h1>
+                  <p className="text-sm text-slate-400">
+                    Enter your venue name, address, and table count to generate your floorplan and QR codes.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Venue Name *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Lumiere Bistro"
+                        value={restaurantName}
+                        onChange={(e) => setRestaurantName(e.target.value)}
+                        className={inputClass}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Contact Phone *</label>
+                      <input
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className={inputClass}
+                        required
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300">Street Address *</label>
-                      <input
-                        type="text"
-                        placeholder="123 Culinary Boulevard"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300">City *</label>
+
+                  <AddressAutocomplete
+                    value={address}
+                    onSelectAddress={handleSelectAddress}
+                    onChangeText={(txt) => setAddress(txt)}
+                    selectedLocation={
+                      selectedLocationObj ||
+                      (city ? {
+                        fullAddress: address,
+                        locality,
+                        city,
+                        state,
+                        country,
+                        postalCode,
+                        latitude,
+                        longitude,
+                        placeId,
+                      } : null)
+                    }
+                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">City *</label>
                       <input
                         type="text"
                         placeholder="e.g. Bengaluru"
                         value={city}
                         onChange={(e) => setCity(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
+                        className={inputClass}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Country *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. India"
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        className={inputClass}
+                        required
                       />
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* Wedding Event Parameters */}
-              <div className="space-y-4 p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e]">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Wedding Event Parameters</h4>
+                  {/* Seating / Table Configuration */}
+                  {businessType === 'FOOD_CART' ? (
+                    <div className="p-4 bg-[#0b0d12] rounded-xl border border-[#1d222d] space-y-3">
+                      <label className="text-xs font-medium text-slate-300 block">Seating & Ordering Mode *</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => { setHasSeating(true); setEnableWaiter(true); if (tablesCount === 0) setTablesCount(5); }}
+                          className={`p-3.5 rounded-lg border text-xs font-medium transition-colors text-left space-y-1 cursor-pointer ${
+                            hasSeating ? 'bg-[#161a24] border-white text-white' : 'bg-[#101319] border-[#232836] text-slate-400'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>Tables Available</span>
+                            {hasSeating && <Check className="w-3.5 h-3.5 text-white" />}
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-normal">Individual QR ordering per table</p>
+                        </button>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Wedding / Celebration Event Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Julian & Clara's Wedding Reception"
-                      value={weddingName}
-                      onChange={(e) => setWeddingName(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Event Date *</label>
-                    <input
-                      type="date"
-                      value={weddingDate}
-                      onChange={(e) => setWeddingDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                </div>
+                        <button
+                          type="button"
+                          onClick={() => { setHasSeating(false); setEnableWaiter(false); setTablesCount(0); }}
+                          className={`p-3.5 rounded-lg border text-xs font-medium transition-colors text-left space-y-1 cursor-pointer ${
+                            !hasSeating ? 'bg-[#161a24] border-white text-white' : 'bg-[#101319] border-[#232836] text-slate-400'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>Counter Pickup Only</span>
+                            {!hasSeating && <Check className="w-3.5 h-3.5 text-white" />}
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-normal">Single standee QR with token numbers</p>
+                        </button>
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Banquet Venue / Hall Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. The Grand Glasshouse Atrium"
-                      value={weddingVenueName}
-                      onChange={(e) => setWeddingVenueName(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Venue City / Area *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Bengaluru, Karnataka"
-                      value={weddingVenueCity}
-                      onChange={(e) => setWeddingVenueCity(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Estimated Guest Count</label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={2000}
-                      value={weddingGuestCount}
-                      onChange={(e) => setWeddingGuestCount(Math.max(1, parseInt(e.target.value) || 100))}
-                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Banquet Tables Count *</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={200}
-                      value={weddingTableCount}
-                      onChange={(e) => setWeddingTableCount(Math.max(1, parseInt(e.target.value) || 10))}
-                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white font-bold text-[#f97316] focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Catering & Dietary Requirements</label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. 3-course plated service, craft mocktail bar, allergen-aware kitchen."
-                    value={weddingCateringNotes}
-                    onChange={(e) => setWeddingCateringNotes(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-xs text-white focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-
-                {ownerRestaurants.length > 0 && selectedCateringRestaurantId !== 'NEW' && (
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Owner Contact Phone *</label>
-                    <input
-                      type="tel"
-                      placeholder="+91 98765 43210"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#12151b] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : currentStep === 2 ? (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
-                  Venue details & floorplan
-                </h2>
-                <p className="text-xs text-slate-400">Provide official venue name, location, and guest dining capacity.</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Venue Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Lumiere Bistro"
-                      value={restaurantName}
-                      onChange={(e) => setRestaurantName(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Contact Phone *</label>
-                    <input
-                      type="tel"
-                      placeholder="+91 98765 43210"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Verified Owner Identity */}
-                {currentUser && (
-                  <div className="p-3 bg-[#0b0d11] rounded-lg border border-[#1e232e] flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span className="text-slate-400">Authenticated Owner:</span>
-                      <strong className="text-white font-mono">{currentUser.email}</strong>
-                    </div>
-                    <span className="text-[10px] font-mono font-bold text-emerald-400">VERIFIED</span>
-                  </div>
-                )}
-
-                <AddressAutocomplete
-                  value={address}
-                  onSelectAddress={handleSelectAddress}
-                  onChangeText={(txt) => setAddress(txt)}
-                  selectedLocation={
-                    selectedLocationObj ||
-                    (city ? {
-                      fullAddress: address,
-                      locality,
-                      city,
-                      state,
-                      country,
-                      postalCode,
-                      latitude,
-                      longitude,
-                      placeId,
-                    } : null)
-                  }
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">City *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Bengaluru"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300">Country *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. India"
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#0b0d11] border border-[#2d3545] rounded-lg text-sm text-white focus:outline-none focus:border-[#f97316]"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Seating / Table Configuration */}
-                {businessType === 'FOOD_CART' ? (
-                  <div className="p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e] space-y-3">
-                    <label className="text-xs font-semibold text-slate-300 block">Customer Seating Mode *</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => { setHasSeating(true); setEnableWaiter(true); if (tablesCount === 0) setTablesCount(5); }}
-                        className={`p-3 rounded-lg border text-xs font-semibold transition-all text-left space-y-1 cursor-pointer ${
-                          hasSeating ? 'bg-[#1a1e27] border-[#f97316] text-white' : 'bg-[#12151b] border-[#2d3545] text-slate-400'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>Tables Available</span>
-                          {hasSeating && <CheckCircle2 className="w-3.5 h-3.5 text-[#f97316]" />}
+                      {hasSeating && (
+                        <div className="pt-3 flex items-center justify-between border-t border-[#1d222d]">
+                          <label className="text-xs font-medium text-white">Table Count</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={tablesCount}
+                            onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-24 px-3 py-1.5 bg-[#101319] border border-[#232836] rounded-lg text-center font-semibold text-white text-sm focus:outline-none focus:border-slate-400"
+                          />
                         </div>
-                        <p className="text-[10px] text-slate-500 font-normal">Customer tables with individual QR ordering</p>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => { setHasSeating(false); setEnableWaiter(false); setTablesCount(0); }}
-                        className={`p-3 rounded-lg border text-xs font-semibold transition-all text-left space-y-1 cursor-pointer ${
-                          !hasSeating ? 'bg-[#1a1e27] border-[#f97316] text-white' : 'bg-[#12151b] border-[#2d3545] text-slate-400'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>Counter Pickup Only</span>
-                          {!hasSeating && <CheckCircle2 className="w-3.5 h-3.5 text-[#f97316]" />}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-normal">Single Standee QR with token numbering</p>
-                      </button>
+                      )}
                     </div>
-
-                    {hasSeating && (
-                      <div className="pt-2 flex items-center justify-between border-t border-[#1e232e]">
-                        <label className="text-xs font-medium text-white flex items-center gap-1.5">
-                          <Grid className="w-3.5 h-3.5 text-[#f97316]" /> Table Count
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={tablesCount}
-                          onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-20 px-3 py-1 bg-[#12151b] border border-[#2d3545] rounded-lg text-center font-bold text-[#f97316] text-sm"
-                        />
+                  ) : (
+                    <div className="p-4 bg-[#0b0d12] rounded-xl border border-[#1d222d] flex items-center justify-between gap-4">
+                      <div>
+                        <label className="text-xs font-medium text-white block">Dining Tables Count *</label>
+                        <p className="text-xs text-slate-400 mt-0.5">Number of tables to pre-generate with unique QR codes.</p>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-4 bg-[#0b0d11] rounded-xl border border-[#1e232e] flex items-center justify-between">
-                    <div>
-                      <label className="text-xs font-semibold text-white flex items-center gap-1.5">
-                        <Grid className="w-3.5 h-3.5 text-[#f97316]" /> Dining Tables Count *
-                      </label>
-                      <p className="text-[11px] text-slate-400">Total dining tables for QR menus and floor ordering.</p>
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={tablesCount}
+                        onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-24 px-3 py-2 bg-[#101319] border border-[#232836] rounded-lg text-center font-semibold text-white text-sm focus:outline-none focus:border-slate-400"
+                      />
                     </div>
-                    <input
-                      type="number"
-                      min={1}
-                      max={200}
-                      value={tablesCount}
-                      onChange={(e) => setTablesCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-24 px-3 py-1.5 bg-[#12151b] border border-[#2d3545] rounded-lg text-center font-bold text-[#f97316] text-base focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {/* STEP 3: CHOOSE YOUR DINELY TERMINALS / WEDDING ARCHITECTURE */}
-          {currentStep === 3 && businessType === 'WEDDING_ORDERING' ? (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
-                  Wedding ordering architecture
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Direct kitchen routing, banquet table QR codes, and digital catering workflow.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
-                  <div className="p-2 rounded-lg border bg-[#12151b] text-[#f97316] border-[#2d3545]">
-                    <ChefHat className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white text-xs">Direct Kitchen KDS Routing</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#f97316]/10 text-[#f97316]">Active</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Wedding guest orders from banquet tables route directly to the catering kitchen KDS bump board with table numbers and dietary flags.
-                    </p>
-                  </div>
+            {/* STEP 3: CHOOSE YOUR DINELY TERMINALS / WEDDING ARCHITECTURE */}
+            {currentStep === 3 && businessType === 'WEDDING_ORDERING' ? (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                    Banquet workflow summary
+                  </h1>
+                  <p className="text-sm text-slate-400">
+                    These capabilities will be provisioned for your wedding & event workspace.
+                  </p>
                 </div>
 
-                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
-                  <div className="p-2 rounded-lg border bg-[#12151b] text-[#10b981] border-[#2d3545]">
-                    <QrCode className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white text-xs">Table-Specific Banquet QR Codes</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400">Automated</span>
+                <div className="divide-y divide-[#1d222d] border border-[#1d222d] rounded-xl bg-[#0b0d12]">
+                  <div className="p-4 flex items-start gap-3.5">
+                    <ChefHat className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                    <div className="space-y-0.5">
+                      <span className="font-medium text-white text-sm">Direct Kitchen KDS Routing</span>
+                      <p className="text-xs text-slate-400">
+                        Guest orders from banquet tables route straight to your catering kitchen display with table numbers and dietary notes.
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      Decoupled table QR codes generated for print or standees. Guests scan and order instantly without app installation.
-                    </p>
                   </div>
-                </div>
-
-                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
-                  <div className="p-2 rounded-lg border bg-[#12151b] text-purple-400 border-[#2d3545]">
-                    <UtensilsCrossed className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white text-xs">Authoritative Catering Menu</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-400">Configurable</span>
+                  <div className="p-4 flex items-start gap-3.5">
+                    <QrCode className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                    <div className="space-y-0.5">
+                      <span className="font-medium text-white text-sm">Table-Specific Banquet QR Codes</span>
+                      <p className="text-xs text-slate-400">
+                        Printable QR cards generated per table so guests scan and order without downloading an app.
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      Choose full restaurant catalog or curate a custom banquet menu with dietary preferences, live course pacing, and beverage options.
-                    </p>
                   </div>
-                </div>
-
-                <div className="p-4 rounded-xl border bg-[#1a1e27] border-[#2d3545] text-white flex items-start gap-3">
-                  <div className="p-2 rounded-lg border bg-[#12151b] text-sky-400 border-[#2d3545]">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white text-xs">Platform Admin Approval</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400">Enterprise</span>
+                  <div className="p-4 flex items-start gap-3.5">
+                    <UtensilsCrossed className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                    <div className="space-y-0.5">
+                      <span className="font-medium text-white text-sm">Custom Banquet Menu</span>
+                      <p className="text-xs text-slate-400">
+                        Reuse your full restaurant catalog or curate a dedicated event menu with course pacing.
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      Submitted setup requests are reviewed and provisioned by Dinely Platform Admin (ayan090912@gmail.com) for production live execution.
-                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-          ) : currentStep === 3 ? (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
-                  Operational modules
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Select which terminals should be generated for your {businessType.toLowerCase()} workspace.
-                </p>
-              </div>
-
-              <div className="space-y-2.5">
-                {/* 1. Kitchen KDS */}
-                <div
-                  onClick={() => setEnableKitchen(!enableKitchen)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                    enableKitchen ? 'bg-[#1a1e27] border-[#2d3545] text-white' : 'bg-[#0b0d11] border-[#1e232e] text-slate-500 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg border ${enableKitchen ? 'bg-[#12151b] text-[#f97316] border-[#2d3545]' : 'bg-[#12151b] border-[#1e232e] text-slate-500'}`}>
-                      <ChefHat className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white text-xs">Kitchen Display System (KDS)</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#f97316]/10 text-[#f97316]">Recommended</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Live food tickets, station timers, and cook bump board.</p>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={enableKitchen}
-                    onChange={() => {}}
-                    className="w-4 h-4 rounded text-[#f97316] accent-[#f97316] mt-1 cursor-pointer"
-                  />
+            ) : currentStep === 3 ? (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                    Select operational terminals
+                  </h1>
+                  <p className="text-sm text-slate-400">
+                    Enable the stations your team needs. You can adjust these anytime in settings.
+                  </p>
                 </div>
 
-                {/* 2. Waiter Terminal */}
-                <div
-                  onClick={() => setEnableWaiter(!enableWaiter)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                    enableWaiter ? 'bg-[#1a1e27] border-[#2d3545] text-white' : 'bg-[#0b0d11] border-[#1e232e] text-slate-500 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg border ${enableWaiter ? 'bg-[#12151b] text-[#10b981] border-[#2d3545]' : 'bg-[#12151b] border-[#1e232e] text-slate-500'}`}>
-                      <PhoneCall className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white text-xs">Waiter Terminal OS</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Floor service alerts, water/bill calls, and active dining tables.</p>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={enableWaiter}
-                    onChange={() => {}}
-                    className="w-4 h-4 rounded text-[#10b981] accent-[#10b981] mt-1 cursor-pointer"
-                  />
-                </div>
-
-                {/* 3. Bar Terminal */}
-                {businessType !== 'FOOD_CART' && (
-                  <div
-                    onClick={() => setEnableBar(!enableBar)}
-                    className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                      enableBar ? 'bg-[#1a1e27] border-[#2d3545] text-white' : 'bg-[#0b0d11] border-[#1e232e] text-slate-500 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg border ${enableBar ? 'bg-[#12151b] text-purple-400 border-[#2d3545]' : 'bg-[#12151b] border-[#1e232e] text-slate-500'}`}>
-                        <Wine className="w-4 h-4" />
-                      </div>
+                <div className="divide-y divide-[#1d222d] border border-[#1d222d] rounded-xl bg-[#0b0d12] overflow-hidden">
+                  {/* 1. Kitchen KDS */}
+                  <label className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-[#121620] transition-colors">
+                    <div className="flex items-start gap-3.5">
+                      <ChefHat className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white text-xs">Bar & Mixology Terminal</span>
+                          <span className="font-medium text-white text-sm">Kitchen Display (KDS)</span>
+                          <span className="text-[11px] text-slate-400">• Recommended</span>
                         </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Dedicated beverage queue, cocktail batching, and drink orders.</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Live food tickets, prep timers, and order bump board.</p>
                       </div>
                     </div>
                     <input
                       type="checkbox"
-                      checked={enableBar}
-                      onChange={() => {}}
-                      className="w-4 h-4 rounded text-purple-400 accent-purple-400 mt-1 cursor-pointer"
+                      checked={enableKitchen}
+                      onChange={() => setEnableKitchen(!enableKitchen)}
+                      className="w-4 h-4 rounded accent-white cursor-pointer shrink-0"
                     />
-                  </div>
-                )}
+                  </label>
 
-                {/* 4. Inventory Terminal */}
-                <div
-                  onClick={() => setEnableInventory(!enableInventory)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                    enableInventory ? 'bg-[#1a1e27] border-[#2d3545] text-white' : 'bg-[#0b0d11] border-[#1e232e] text-slate-500 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg border ${enableInventory ? 'bg-[#12151b] text-rose-400 border-[#2d3545]' : 'bg-[#12151b] border-[#1e232e] text-slate-500'}`}>
-                      <Package className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white text-xs">Inventory Management</span>
+                  {/* 2. Waiter Terminal */}
+                  <label className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-[#121620] transition-colors">
+                    <div className="flex items-start gap-3.5">
+                      <PhoneCall className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-medium text-white text-sm block">Waiter Terminal</span>
+                        <p className="text-xs text-slate-400 mt-0.5">Floor service requests, table sessions, and runner dispatch.</p>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Raw materials, recipe depletion, and low stock warnings.</p>
                     </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={enableInventory}
-                    onChange={() => {}}
-                    className="w-4 h-4 rounded text-rose-400 accent-rose-400 mt-1 cursor-pointer"
-                  />
-                </div>
+                    <input
+                      type="checkbox"
+                      checked={enableWaiter}
+                      onChange={() => setEnableWaiter(!enableWaiter)}
+                      className="w-4 h-4 rounded accent-white cursor-pointer shrink-0"
+                    />
+                  </label>
 
-                {/* 5. Billing & POS */}
-                <div
-                  onClick={() => setEnableBilling(!enableBilling)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                    enableBilling ? 'bg-[#1a1e27] border-[#2d3545] text-white' : 'bg-[#0b0d11] border-[#1e232e] text-slate-500 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg border ${enableBilling ? 'bg-[#12151b] text-sky-400 border-[#2d3545]' : 'bg-[#12151b] border-[#1e232e] text-slate-500'}`}>
-                      <Receipt className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white text-xs">Billing, GST & UPI Engine</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400">Essential</span>
+                  {/* 3. Bar Terminal */}
+                  {businessType !== 'FOOD_CART' && (
+                    <label className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-[#121620] transition-colors">
+                      <div className="flex items-start gap-3.5">
+                        <Wine className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                        <div>
+                          <span className="font-medium text-white text-sm block">Bar & Beverage Terminal</span>
+                          <p className="text-xs text-slate-400 mt-0.5">Dedicated drink queue, mixology prep, and bar pass.</p>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Digital receipts, UPI QR standees, and tax invoices.</p>
+                      <input
+                        type="checkbox"
+                        checked={enableBar}
+                        onChange={() => setEnableBar(!enableBar)}
+                        className="w-4 h-4 rounded accent-white cursor-pointer shrink-0"
+                      />
+                    </label>
+                  )}
+
+                  {/* 4. Inventory Terminal */}
+                  <label className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-[#121620] transition-colors">
+                    <div className="flex items-start gap-3.5">
+                      <Package className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-medium text-white text-sm block">Inventory Management</span>
+                        <p className="text-xs text-slate-400 mt-0.5">Raw material stock levels, recipe depletion, and low-stock alerts.</p>
+                      </div>
                     </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={enableBilling}
-                    onChange={() => {}}
-                    className="w-4 h-4 rounded text-sky-400 accent-sky-400 mt-1 cursor-pointer"
-                  />
+                    <input
+                      type="checkbox"
+                      checked={enableInventory}
+                      onChange={() => setEnableInventory(!enableInventory)}
+                      className="w-4 h-4 rounded accent-white cursor-pointer shrink-0"
+                    />
+                  </label>
+
+                  {/* 5. Billing & POS */}
+                  <label className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-[#121620] transition-colors">
+                    <div className="flex items-start gap-3.5">
+                      <Receipt className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-medium text-white text-sm block">Billing, GST & UPI Engine</span>
+                        <p className="text-xs text-slate-400 mt-0.5">Tax invoices, dynamic UPI QR checkout, and daily settlement.</p>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={enableBilling}
+                      onChange={() => setEnableBilling(!enableBilling)}
+                      className="w-4 h-4 rounded accent-white cursor-pointer shrink-0"
+                    />
+                  </label>
                 </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {/* STEP 4: REVIEW & CREATE WORKSPACE */}
-          {currentStep === 4 && businessType === 'WEDDING_ORDERING' ? (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
-                  Review wedding setup request
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Confirm wedding celebration details and catering kitchen partner before submitting.
-                </p>
-              </div>
-
-              <div className="p-5 bg-[#0b0d11] rounded-xl border border-[#1e232e] space-y-4 text-left">
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Event Name</span>
-                    <span className="font-bold text-white text-sm">{weddingName || 'Wedding Reception'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Operational Mode</span>
-                    <span className="font-semibold text-[#f97316] text-sm">Wedding Ordering</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Event Date</span>
-                    <span className="text-slate-300 font-mono">{weddingDate || 'Scheduled date'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Scale & Capacity</span>
-                    <span className="font-semibold text-white">{weddingGuestCount} Guests • {weddingTableCount} Banquet Tables</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Banquet Venue</span>
-                    <span className="text-slate-300">{weddingVenueName || 'Venue hall'}, {weddingVenueCity}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Catering Kitchen</span>
-                    <span className="font-semibold text-emerald-400">
-                      {selectedCateringRestaurantId === 'NEW'
-                        ? `${restaurantName} (New Catering Kitchen)`
-                        : (ownerRestaurants.find((r) => r.id === selectedCateringRestaurantId)?.name || 'Existing Kitchen')}
-                    </span>
-                  </div>
-                </div>
-
-                {weddingCateringNotes && (
-                  <div className="pt-3 border-t border-[#1e232e] text-xs">
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block mb-1">Catering Notes:</span>
-                    <p className="text-slate-300 italic">{weddingCateringNotes}</p>
-                  </div>
-                )}
-
-                <div className="p-3 bg-[#1a1e27] rounded-lg border border-[#2d3545] text-xs text-slate-300 flex items-start gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-[#f97316] shrink-0 mt-0.5" />
-                  <p className="text-[11px] leading-relaxed">
-                    Upon submission, your wedding ordering workspace will be configured under your restaurant. Dinely Platform Admin (<span className="text-white font-mono">ayan090912@gmail.com</span>) will review and provision the live banquet module.
+            {/* STEP 4: REVIEW & CREATE WORKSPACE */}
+            {currentStep === 4 && businessType === 'WEDDING_ORDERING' ? (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                    Review wedding setup
+                  </h1>
+                  <p className="text-sm text-slate-400">
+                    Confirm your event details and catering kitchen before submitting.
                   </p>
                 </div>
 
-                <div className="pt-2 border-t border-[#1e232e] text-xs text-slate-400 flex items-center justify-between">
-                  <span>Owner Account:</span>
-                  <span className="font-mono text-white">{currentUser.email}</span>
+                <div className="border border-[#1d222d] rounded-xl bg-[#0b0d12] divide-y divide-[#1d222d] text-xs">
+                  <div className="p-4 flex justify-between gap-4">
+                    <span className="text-slate-400">Event Name</span>
+                    <span className="font-medium text-white text-right">{weddingName || 'Wedding Reception'}</span>
+                  </div>
+                  <div className="p-4 flex justify-between gap-4">
+                    <span className="text-slate-400">Event Date</span>
+                    <span className="font-medium text-white text-right">{weddingDate || 'Scheduled date'}</span>
+                  </div>
+                  <div className="p-4 flex justify-between gap-4">
+                    <span className="text-slate-400">Scale & Capacity</span>
+                    <span className="font-medium text-white text-right">{weddingGuestCount} Guests • {weddingTableCount} Tables</span>
+                  </div>
+                  <div className="p-4 flex justify-between gap-4">
+                    <span className="text-slate-400">Banquet Venue</span>
+                    <span className="font-medium text-white text-right">{weddingVenueName || 'Venue hall'}, {weddingVenueCity}</span>
+                  </div>
+                  <div className="p-4 flex justify-between gap-4">
+                    <span className="text-slate-400">Catering Kitchen</span>
+                    <span className="font-medium text-white text-right">
+                      {selectedCateringRestaurantId === 'NEW'
+                        ? `${restaurantName} (New)`
+                        : (ownerRestaurants.find((r) => r.id === selectedCateringRestaurantId)?.name || 'Existing Kitchen')}
+                    </span>
+                  </div>
+                  {weddingCateringNotes && (
+                    <div className="p-4 space-y-1">
+                      <span className="text-slate-400 block">Catering Notes</span>
+                      <p className="text-slate-200">{weddingCateringNotes}</p>
+                    </div>
+                  )}
+                  <div className="p-4 flex justify-between gap-4">
+                    <span className="text-slate-400">Owner Account</span>
+                    <span className="text-slate-200">{currentUser.email}</span>
+                  </div>
                 </div>
               </div>
+            ) : currentStep === 4 ? (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                    Review & create workspace
+                  </h1>
+                  <p className="text-sm text-slate-400">
+                    Confirm your venue details before creating your live workspace.
+                  </p>
+                </div>
+
+                <div className="border border-[#1d222d] rounded-xl bg-[#0b0d12] divide-y divide-[#1d222d] text-xs">
+                  <div className="p-4 flex items-center justify-between gap-4">
+                    <span className="text-slate-400">Venue Name</span>
+                    <span className="font-medium text-white text-sm">{restaurantName}</span>
+                  </div>
+                  <div className="p-4 flex items-center justify-between gap-4">
+                    <span className="text-slate-400">Business Model</span>
+                    <span className="font-medium text-white">
+                      {BUSINESS_TYPES.find((b) => b.id === businessType)?.name || businessType}
+                    </span>
+                  </div>
+                  <div className="p-4 flex items-center justify-between gap-4">
+                    <span className="text-slate-400">Location</span>
+                    <span className="text-slate-200">{city}, {country}</span>
+                  </div>
+                  <div className="p-4 flex items-center justify-between gap-4">
+                    <span className="text-slate-400">Capacity</span>
+                    <span className="font-medium text-white">
+                      {businessType === 'FOOD_CART' && !hasSeating ? 'Counter Pickup' : `${tablesCount} Tables`}
+                    </span>
+                  </div>
+                  <div className="p-4 space-y-2">
+                    <span className="text-slate-400 block">Enabled Modules</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Owner Dashboard</span>
+                      {enableKitchen && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Kitchen KDS</span>}
+                      {enableWaiter && (businessType !== 'FOOD_CART' || hasSeating) && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Waiter Terminal</span>}
+                      {enableBar && businessType !== 'FOOD_CART' && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Bar Terminal</span>}
+                      {enableInventory && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Inventory</span>}
+                      {enableBilling && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Billing & UPI</span>}
+                    </div>
+                  </div>
+                  <div className="p-4 flex items-center justify-between gap-4">
+                    <span className="text-slate-400">Owner Account</span>
+                    <span className="text-slate-200">{currentUser.email}</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Navigation Controls */}
+            <div className="flex items-center justify-between pt-5 border-t border-[#1d222d]">
+              {currentStep > 1 ? (
+                <button
+                  type="button"
+                  onClick={handlePrevStep}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-lg border border-[#232836] hover:border-slate-500 bg-[#141821] text-xs font-medium text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Back</span>
+                </button>
+              ) : (
+                <div />
+              )}
+
+              {currentStep < 4 ? (
+                <button
+                  type="button"
+                  onClick={handleNextStep}
+                  className="px-5 py-2 rounded-lg bg-white hover:bg-slate-200 text-slate-950 font-semibold text-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Continue</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSubmitApplication}
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-lg bg-white hover:bg-slate-200 text-slate-950 font-semibold text-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                >
+                  <span>
+                    {businessType === 'WEDDING_ORDERING'
+                      ? (isSubmitting ? 'Submitting...' : 'Submit Wedding Request')
+                      : (isSubmitting ? 'Creating workspace...' : 'Create Workspace')}
+                  </span>
+                  {!isSubmitting && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </div>
-          ) : currentStep === 4 ? (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
-                  Review & launch workspace
-                </h2>
-                <p className="text-xs text-slate-400">Confirm your venue parameters before generating the live tenant.</p>
-              </div>
-
-              {/* Review Summary Card */}
-              <div className="p-5 bg-[#0b0d11] rounded-xl border border-[#1e232e] space-y-4 text-left">
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Venue Name</span>
-                    <span className="font-bold text-white text-sm">{restaurantName}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Business Model</span>
-                    <span className="font-semibold text-[#f97316] text-sm">{businessType}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Location</span>
-                    <span className="text-slate-300">{city}, {country}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Capacity</span>
-                    <span className="font-semibold text-white">{businessType === 'FOOD_CART' && !hasSeating ? 'Counter Pickup' : `${tablesCount} Tables`}</span>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-[#1e232e] space-y-2">
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider font-mono block">Enabled Modules:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-[11px] px-2 py-0.5 rounded bg-[#1a1e27] border border-[#2d3545] text-white">Owner OS</span>
-                    {enableKitchen && <span className="text-[11px] px-2 py-0.5 rounded bg-[#1a1e27] border border-[#2d3545] text-white">Kitchen KDS</span>}
-                    {enableWaiter && (businessType !== 'FOOD_CART' || hasSeating) && <span className="text-[11px] px-2 py-0.5 rounded bg-[#1a1e27] border border-[#2d3545] text-white">Waiter Terminal</span>}
-                    {enableBar && businessType !== 'FOOD_CART' && <span className="text-[11px] px-2 py-0.5 rounded bg-[#1a1e27] border border-[#2d3545] text-white">Bar Terminal</span>}
-                    {enableInventory && <span className="text-[11px] px-2 py-0.5 rounded bg-[#1a1e27] border border-[#2d3545] text-white">Inventory OS</span>}
-                    {enableBilling && <span className="text-[11px] px-2 py-0.5 rounded bg-[#1a1e27] border border-[#2d3545] text-white">Billing & UPI</span>}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-[#1e232e] text-xs text-slate-400 flex items-center justify-between">
-                  <span>Owner Account:</span>
-                  <span className="font-mono text-white">{currentUser.email}</span>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Navigation Controls */}
-          <div className="flex items-center justify-between pt-4 border-t border-[#1e232e]">
-            {currentStep > 1 ? (
-              <button
-                type="button"
-                onClick={handlePrevStep}
-                disabled={isSubmitting}
-                className="px-4 py-2 rounded-lg border border-[#2d3545] hover:border-slate-500 bg-[#1a1e27] text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Back</span>
-              </button>
-            ) : <div />}
-
-            {currentStep < 4 ? (
-              <button
-                type="button"
-                onClick={handleNextStep}
-                className="px-6 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm cursor-pointer flex items-center gap-1"
-              >
-                <span>Continue</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmitApplication}
-                disabled={isSubmitting}
-                className="px-8 py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-[#0b0d11] font-bold text-xs transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-2"
-              >
-                <span>
-                  {businessType === 'WEDDING_ORDERING'
-                    ? (isSubmitting ? 'Submitting Wedding Request...' : 'Submit Wedding Setup Request')
-                    : (isSubmitting ? 'Submitting Application...' : 'Create Workspace & Submit')}
-                </span>
-                {!isSubmitting && <ArrowRight className="w-4 h-4" />}
-              </button>
-            )}
           </div>
         </div>
       </main>
 
       {/* Minimal Footer */}
-      <footer className="border-t border-[#1e232e] py-6 px-4 text-center text-xs text-slate-600">
-        Dinely Restaurant Operating System • Enterprise Multi-Tenant Architecture
+      <footer className="border-t border-[#1b1f29] py-5 px-4 text-center text-xs text-slate-600">
+        Dinely
       </footer>
     </div>
   );
