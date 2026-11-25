@@ -907,7 +907,23 @@ export class RestaurantClient {
           closedByWaiterName: s.closed_by_waiter_name || s.closedByWaiterName,
         }));
 
-        const mappedRequests = Array.isArray(data.customerRequests) ? data.customerRequests : [];
+        const mappedRequests: CustomerRequest[] = (Array.isArray(data.customerRequests) ? data.customerRequests : []).map((raw: any) => ({
+          id: raw.id,
+          restaurantId: raw.restaurantId || raw.restaurant_id || targetId,
+          tableId: raw.tableId || raw.table_id,
+          tableNumber: raw.tableNumber || raw.table_number || 'Table 01',
+          requestType: (raw.requestType || raw.request_type || 'WATER').toUpperCase() as any,
+          customTitle: raw.customTitle || raw.custom_title || raw.message,
+          message: raw.message || raw.customerNotes || raw.customer_notes || '',
+          customerNotes: raw.customerNotes || raw.customer_notes || raw.message || '',
+          priority: (raw.priority || 'MEDIUM') as any,
+          status: (raw.status || 'PENDING').toUpperCase() as any,
+          requestedAt: raw.requestedAt || raw.requested_at || raw.created_at || raw.timestamp || new Date().toISOString(),
+          acceptedAt: raw.acceptedAt || raw.accepted_at,
+          completedAt: raw.completedAt || raw.completed_at,
+          assignedWaiterName: raw.waiterName || raw.waiter_name || raw.assignedWaiterName,
+          tableSessionId: raw.tableSessionId || raw.table_session_id,
+        }));
         const mappedBills = Array.isArray(data.bills) ? data.bills : [];
 
         return {
@@ -922,18 +938,24 @@ export class RestaurantClient {
       console.warn('API fetch for waiter snapshot failed, falling back:', e);
     }
 
-    // Fallback: local store / getTables
-    const tbls = await this.getTables(targetId).catch(() => []);
-    const sesss = await this.getActiveTableSessions(targetId).catch(() => []);
-    const ords = this.base.orders.filter((o) => o.restaurantId === targetId && o.status !== 'CANCELLED');
-    const reqs = this.base.customerRequests.filter((r) => r.restaurantId === targetId && r.status !== 'COMPLETED');
-    const blls = this.base.bills.filter((b) => b.restaurantId === targetId && b.paymentStatus !== 'PAID');
+    // Fallback: fetch independently
+    const [tbls, sesss, ords, reqs, blls] = await Promise.all([
+      this.getTables(targetId).catch(() => []),
+      this.getActiveTableSessions(targetId).catch(() => []),
+      this.base.orders.filter((o) => o.restaurantId === targetId && o.status !== 'CANCELLED'),
+      fetch(`${getApiBaseUrl()}/customer-requests?restaurant_id=${encodeURIComponent(targetId)}&active_only=true`, {
+        headers: { ...this.base.getAuthHeader() },
+      })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
+      this.base.bills.filter((b) => b.restaurantId === targetId && b.paymentStatus !== 'PAID'),
+    ]);
 
     return {
       tables: tbls,
       activeSessions: sesss || [],
       orders: ords || [],
-      customerRequests: reqs || [],
+      customerRequests: Array.isArray(reqs) ? reqs : [],
       bills: blls || [],
     };
   }

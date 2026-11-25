@@ -277,7 +277,15 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
         api.getWaiterNotifications(targetRestId).catch(() => []),
       ]);
 
-      setRequests(snapshot.customerRequests || []);
+      let reqData = snapshot.customerRequests || [];
+      if (reqData.length === 0) {
+        // Direct API fallback to guarantee active customer requests are always loaded
+        const directReqs = await api.getCustomerRequests(targetRestId, undefined, true).catch(() => []);
+        if (directReqs && directReqs.length > 0) {
+          reqData = directReqs;
+        }
+      }
+      setRequests(reqData);
       const cleanOrders = (snapshot.orders || []).filter(
         (o: Order) => !isNotWedding || (o.orderType !== 'WEDDING_EVENT' && !o.eventId)
       );
@@ -332,18 +340,27 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     const handledEventIds = new Set<string>();
 
     const unsubscribe = realtimeBus.subscribe((event) => {
-      // 1. Strict multi-tenant isolation
+      // 1. Strict multi-tenant isolation with slug/UUID resilience
       const evtRestId = (event as any).restaurantId || (event as any).restaurant_id;
       if (evtRestId) {
         const resolvedCurrentRestId = api.getCurrentRestaurantId();
         const normEvt = String(evtRestId).toLowerCase();
         const normCurr = String(currentRestaurantId).toLowerCase();
         const normResolved = String(resolvedCurrentRestId).toLowerCase();
+        const restId = (restaurant?.id || '').toLowerCase();
+        const restSlug = (restaurant?.slug || '').toLowerCase();
+        const restPubSlug = (restaurant?.publicSlug || '').toLowerCase();
+
         const isMatchingTenant =
           normEvt === normCurr ||
           normEvt === normResolved ||
+          (restId && normEvt === restId) ||
+          (restSlug && normEvt === restSlug) ||
+          (restPubSlug && normEvt === restPubSlug) ||
           normEvt.includes(normCurr) ||
-          normCurr.includes(normEvt);
+          normCurr.includes(normEvt) ||
+          (restId && (normEvt.includes(restId) || restId.includes(normEvt))) ||
+          (restSlug && (normEvt.includes(restSlug) || restSlug.includes(normEvt)));
         if (!isMatchingTenant) {
           return;
         }

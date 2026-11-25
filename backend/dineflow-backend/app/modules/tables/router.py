@@ -363,6 +363,11 @@ async def get_waiter_snapshot(
     from app.modules.customer_requests.models import CustomerRequestModel
     from app.modules.orders.router import format_order_response
     from app.modules.billing.router import format_bill_response
+    from app.modules.customer_requests.router import format_request_dict
+
+    valid_rest_ids = await _get_valid_restaurant_ids(canonical_id, db)
+    if not valid_rest_ids:
+        valid_rest_ids = [canonical_id]
 
     # 1. Tables and active sessions
     tables_list = await get_tables(canonical_id, db)
@@ -392,33 +397,14 @@ async def get_waiter_snapshot(
 
     # 3. Active service requests
     req_stmt = select(CustomerRequestModel).where(
-        CustomerRequestModel.restaurant_id == canonical_id,
+        CustomerRequestModel.restaurant_id.in_(valid_rest_ids),
         CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS", "ACCEPTED"]),
         CustomerRequestModel.request_type != "ORDER_READY",
         CustomerRequestModel.order_id.is_(None)
     ).order_by(CustomerRequestModel.created_at.desc()).limit(50)
     req_res = await db.execute(req_stmt)
     raw_reqs = req_res.scalars().all()
-    formatted_requests = [
-        {
-            "id": r.id,
-            "restaurantId": r.restaurant_id,
-            "tableId": r.table_id,
-            "tableNumber": r.table_number or "Table 01",
-            "requestType": r.request_type,
-            "customTitle": r.custom_title,
-            "message": r.message,
-            "customerNotes": r.customer_notes,
-            "priority": r.priority or "MEDIUM",
-            "status": r.status or "PENDING",
-            "requestedAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
-            "acceptedAt": r.accepted_at.isoformat() if getattr(r, "accepted_at", None) else None,
-            "completedAt": r.completed_at.isoformat() if getattr(r, "completed_at", None) else None,
-            "assignedWaiterName": r.waiter_name or r.assigned_staff_name,
-            "tableSessionId": r.table_session_id,
-        }
-        for r in raw_reqs
-    ]
+    formatted_requests = [format_request_dict(r) for r in raw_reqs]
 
     # 4. Open / Unpaid Bills
     bill_stmt = select(Bill).where(

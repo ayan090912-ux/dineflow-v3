@@ -154,12 +154,27 @@ async def create_customer_request(payload: CreateCustomerRequestSchema, db: Asyn
                 aud.append("HOOKAH")
             if req_st == "BAR" or req_type in ["BAR", "BAR_SERVICE"]:
                 aud.append("BAR")
+            # Broadcast to canonical restaurant ID AND slug / alias so every connected floor client receives it
             await ws_manager.broadcast_event(
                 restaurant_id=canonical_rest_id,
                 event_type="service_request_created",
                 payload=req_dict,
                 target_audience=aud
             )
+            if rest.slug and rest.slug.lower() != canonical_rest_id.lower():
+                await ws_manager.broadcast_event(
+                    restaurant_id=rest.slug,
+                    event_type="service_request_created",
+                    payload=req_dict,
+                    target_audience=aud
+                )
+            if payload.restaurantId and payload.restaurantId.lower() not in (canonical_rest_id.lower(), (rest.slug or "").lower()):
+                await ws_manager.broadcast_event(
+                    restaurant_id=payload.restaurantId,
+                    event_type="service_request_created",
+                    payload=req_dict,
+                    target_audience=aud
+                )
         except Exception as e:
             logger.error(
                 f"[create_customer_request] WebSocket broadcast failed for request '{req_id}' "
