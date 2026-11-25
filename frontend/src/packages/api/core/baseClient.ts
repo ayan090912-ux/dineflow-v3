@@ -511,8 +511,30 @@ export class BaseApiClient {
         (unauthErr as any).statusCode = 401;
         throw unauthErr;
       }
+    } else if (!isStaffScope) {
+      // Owner / non-staff scope: always prioritize the active Firebase Owner session
+      // so a staff/cart token in localStorage never hijacks Owner Dashboard requests.
+      await ensureFirebaseAuthReady();
+      token = await getValidFirebaseIdToken(false);
+      if (!token && typeof window !== 'undefined') {
+        token =
+          localStorage.getItem('dinely_owner_token') ||
+          sessionStorage.getItem('dinely_owner_token') ||
+          null;
+      }
+      if (!token) {
+        this.clearAllAuthSessions();
+        authStateMachine.handleSessionExpired();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('dinely_auth_required', { detail: { reason: 'UNAUTHENTICATED' } }));
+        }
+        const unauthErr = new Error('Authentication required: No valid Firebase ID token found. Please log in.');
+        (unauthErr as any).statusCode = 401;
+        throw unauthErr;
+      }
     } else {
-      // Fast path for staff terminals: check local tokens immediately without awaiting Firebase
+      // Staff terminal scope: strictly check only this station's token & aliases first,
+      // then fall back to Firebase (if owner is viewing standalone) or generic staff token.
       if (typeof window !== 'undefined') {
         const scopeLower = targetScope.toLowerCase();
         token =
@@ -521,13 +543,19 @@ export class BaseApiClient {
           (targetScope === 'HOOKAH' ? (localStorage.getItem('dinely_staff_token_hookah') || localStorage.getItem('dinely_staff_token_shisha')) : null) ||
           (targetScope === 'BAR' ? (localStorage.getItem('dinely_staff_token_bar') || localStorage.getItem('dinely_staff_token_bartender')) : null) ||
           (targetScope === 'KITCHEN' ? (localStorage.getItem('dinely_staff_token_kitchen') || localStorage.getItem('dinely_staff_token_chef')) : null) ||
-          (targetScope === 'STAFF' ? (localStorage.getItem('dinely_staff_token_cart') || localStorage.getItem('dinely_staff_token_food_cart')) : null) ||
-          localStorage.getItem('dinely_staff_token_cart') ||
+          (targetScope === 'STAFF' ? (localStorage.getItem('dinely_staff_token_cart') || localStorage.getItem('dinely_staff_token_food_cart') || localStorage.getItem('dinely_staff_token_staff')) : null) ||
+          null;
+      }
+
+      if (!token) {
+        await ensureFirebaseAuthReady();
+        token = await getValidFirebaseIdToken(false);
+      }
+
+      if (!token && typeof window !== 'undefined') {
+        token =
           localStorage.getItem('dinely_staff_token') ||
           sessionStorage.getItem('dinely_staff_token') ||
-          localStorage.getItem('dinely_staff_token_staff') ||
-          localStorage.getItem('dinely_owner_token') ||
-          sessionStorage.getItem('dinely_owner_token') ||
           localStorage.getItem('dinely_auth_token') ||
           sessionStorage.getItem('dinely_auth_token') ||
           this.currentTokensByScope[targetScope]?.accessToken ||
@@ -537,27 +565,7 @@ export class BaseApiClient {
       }
 
       if (!token) {
-        await ensureFirebaseAuthReady();
-        token = await getValidFirebaseIdToken(false);
-      }
-
-      const isStaffScope = ['KITCHEN', 'WAITER', 'BAR', 'HOOKAH', 'INVENTORY', 'STAFF'].includes(targetScope);
-      if (isStaffScope && !token) {
         token = `df_${targetScope.toLowerCase()}_jwt_${Date.now()}`;
-      }
-      if (!isStaffScope && token && (token.startsWith('df_jwt_') || token.startsWith('df_ref_'))) {
-        token = null;
-      }
-
-      if (!token && !isStaffScope) {
-        this.clearAllAuthSessions();
-        authStateMachine.handleSessionExpired();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('dinely_auth_required', { detail: { reason: 'UNAUTHENTICATED' } }));
-        }
-        const unauthErr = new Error('Authentication required: No valid Firebase ID token found. Please log in.');
-        (unauthErr as any).statusCode = 401;
-        throw unauthErr;
       }
     }
 
