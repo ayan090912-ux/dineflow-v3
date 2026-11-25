@@ -59,12 +59,19 @@ import { matchTableNumber } from '../../packages/utils/tableUtils';
 import { calculateAuthoritativeSessionBill } from '../../packages/utils/billingUtils';
 import { useTheme } from '../../packages/theme/ThemeEngine';
 
-// Web Audio API Chime Synthesizer for notifications
+// Shared Web Audio API Chime Synthesizer (singleton AudioContext avoids main-thread stalls)
+let sharedAudioCtx: AudioContext | null = null;
 const playNotificationChime = () => {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new AudioCtx();
+    }
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+    const ctx = sharedAudioCtx;
 
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -199,7 +206,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
 
   // Debounce protection and history view mode
-  const [ticketFilter, setTicketFilter] = useState<'ready' | 'prep' | 'all'>('ready');
+  const [ticketFilter, setTicketFilter] = useState<'ready' | 'prep' | 'all'>('all');
+  const isFetchingRef = React.useRef<boolean>(false);
   const [deliveringOrderIds, setDeliveringOrderIds] = useState<Set<string>>(new Set());
   const [collectingOrderIds, setCollectingOrderIds] = useState<Set<string>>(new Set());
   const [completingRequestIds, setCompletingRequestIds] = useState<Set<string>>(new Set());
@@ -265,6 +273,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
   // Fetch data strictly for authenticated employee's restaurant
   const loadData = async (silent: boolean = false) => {
+    if (isFetchingRef.current && silent) return;
+    isFetchingRef.current = true;
     try {
       if (!silent) setIsErrorState(false);
       const targetRestId = currentRestaurantId;
@@ -277,13 +287,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
         api.getWaiterNotifications(targetRestId).catch(() => []),
       ]);
 
-      let reqData = snapshot.customerRequests || [];
-      if (reqData.length === 0) {
-        // Direct API fallback to guarantee active customer requests are always loaded
-        const directReqs = await api.getCustomerRequests(targetRestId, undefined, true).catch(() => []);
-        if (directReqs && directReqs.length > 0) {
-          reqData = directReqs;
-        }
+      let reqData = snapshot.customerRequests;
+      if (!Array.isArray(reqData)) {
+        reqData = await api.getCustomerRequests(targetRestId, undefined, true).catch(() => []);
       }
       setRequests(reqData);
       const cleanOrders = (snapshot.orders || []).filter(
@@ -299,6 +305,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
       console.error('Failed to load Waiter Terminal data:', err);
       if (!silent) setIsErrorState(true);
     } finally {
+      isFetchingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -306,7 +313,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
   // Realtime WebSocket Connection & Connection Status Sync
   useEffect(() => {
     if (currentRestaurantId) {
-      realtimeBus.connect(currentRestaurantId, 'WAITER');
+      realtimeBus.connect(currentRestaurantId, isEmbedded ? 'OWNER' : 'WAITER');
     }
     const unsubStatus = realtimeBus.subscribeStatus((status) => {
       setWsStatus(status);
@@ -318,7 +325,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     return () => {
       unsubStatus();
     };
-  }, [currentRestaurantId]);
+  }, [currentRestaurantId, isEmbedded]);
 
   // Task 6.4: Realtime Reliability & Dropped WebSocket Fallback Polling
   // Fast adaptive interval (2.5s when WS is DISCONNECTED/RECONNECTING, 6s background safety when healthy)
@@ -1339,7 +1346,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
       {/* HEADER BAR (Standalone Mode) */}
       {!isEmbedded && (
-        <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+        <header className="bg-[#0b0e14] border-b border-[#1e232e] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           {/* Brand Header */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-slate-200 shrink-0">
@@ -1373,7 +1380,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
           {/* Authenticated Staff Info & Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
-            <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-[#141822] px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-[#1e232e]">
               <Avatar src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" name={waiterName} size="sm" />
               <div className="hidden xs:block">
                 <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">{waiterName}</p>
@@ -1382,7 +1389,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
             </div>
 
             {/* Clock */}
-            <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
+            <div className="hidden md:flex bg-[#141822] px-2.5 py-1.5 rounded-xl border border-[#1e232e] items-center gap-1.5 font-mono text-slate-200 text-xs">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
               <LiveClock />
             </div>
@@ -1430,7 +1437,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
       {/* ONE-SCREEN WAITER OPERATIONAL INTERFACE */}
       <div className={`flex-1 ${isEmbedded ? '' : 'overflow-y-auto'} space-y-4 relative z-10 ${isEmbedded ? 'p-0' : 'p-3 sm:p-4 lg:p-6'}`}>
         {/* TOP OPERATIONAL BAR: Stage Selector, Live Counts, Search & Refresh */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 sm:p-3 rounded-xl">
           <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-none">
             <button
               onClick={() => setWaiterView('floor')}
@@ -1500,7 +1507,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
         {waiterView === 'floor' && (
             <div className="space-y-4">
               {/* Operational View Switcher & Live Queue Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl p-3 sm:p-3.5 rounded-2xl border border-white/10 shadow-lg">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-[#12151b] p-3 sm:p-3.5 rounded-xl border border-[#1e232e]">
                 <div className="flex items-center gap-2.5">
                   <span className="relative flex h-2.5 w-2.5">
                     <span className=" absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -1592,7 +1599,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                 /* LIVE DUAL-SECTION OPERATIONAL FLOOR: Section A (Ready) & Section B (Requests) */
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
                   {/* SECTION A: READY FOR SERVICE & KITCHEN ETA PASS */}
-                  <div className="liquid-glass-card border border-white/10 p-4 sm:p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
+                  <div className="bg-[#12151b] border border-[#1e232e] p-4 sm:p-5 lg:p-6 rounded-xl space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-white/10 pb-3">
                       <div className="flex items-center gap-2">
                         <Flame className="w-4 h-4 text-emerald-400" />
@@ -1638,7 +1645,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                     </div>
 
                     {displayedPlatesList.length === 0 ? (
-                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-white/10 space-y-3 backdrop-blur-xl shadow-inner">
+                      <div className="p-10 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center mx-auto">
                           <Coffee className="w-6 h-6 text-emerald-400" />
                         </div>
@@ -1904,7 +1911,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                   </div>
 
                   {/* SECTION B: CUSTOMER REQUESTS */}
-                  <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
+                  <div className="bg-[#12151b] border border-[#1e232e] p-5 lg:p-6 rounded-xl space-y-4">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
                       <div className="flex items-center gap-2">
                         <PhoneCall className="w-4 h-4 text-amber-400" />
@@ -1921,7 +1928,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                     </div>
 
                     {pendingCallsList.length === 0 ? (
-                      <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-white/10 space-y-3 backdrop-blur-xl shadow-inner">
+                      <div className="p-10 text-center bg-[#0e1117] rounded-xl border border-[#1e232e] space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center mx-auto">
                           <CheckCircle2 className="w-6 h-6 text-emerald-400" />
                         </div>
@@ -2104,7 +2111,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
             </div>
 
             {activeTablesList.length === 0 ? (
-              <div className="liquid-glass-card border border-white/10 p-12 text-center space-y-3 rounded-2xl shadow-xl backdrop-blur-2xl">
+              <div className="bg-[#12151b] border border-[#1e232e] p-12 text-center space-y-3 rounded-xl">
                 <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center mx-auto">
                   <Utensils className="w-6 h-6 text-sky-400" />
                 </div>
@@ -2131,7 +2138,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                   return (
                     <div
                       key={table.id}
-                      className="bg-white/[0.04] backdrop-blur-xl border border-white/15 p-4 space-y-3 rounded-2xl hover:border-white/30 transition-all duration-300 flex flex-col justify-between shadow-xl liquid-glass-card"
+                      className="bg-[#12151b] border border-[#1e232e] p-4 space-y-3 rounded-xl hover:border-[#2d3545] transition-colors flex flex-col justify-between"
                     >
                       <div className="space-y-3">
                         <div className="flex items-start justify-between">
