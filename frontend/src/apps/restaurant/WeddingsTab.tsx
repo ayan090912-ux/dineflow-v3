@@ -979,7 +979,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                   Event Operations Terminal
                 </span>
                 <span className="text-[10px] font-sans font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   Live Sync
                 </span>
               </div>
@@ -1360,7 +1360,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
           >
             <p className="text-[11px] font-mono text-emerald-400 uppercase font-bold flex items-center justify-between">
               <span>Ready to Deliver</span>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
             </p>
             <p className="text-2xl font-bold text-emerald-400 mt-1">{liveMetrics.readyToDeliver}</p>
             <p className="text-[10px] text-slate-300 mt-0.5">All required stations ready</p>
@@ -1429,7 +1429,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             <Truck className="w-3.5 h-3.5 text-emerald-400" />
             <span>Delivery Dispatch ({deliveryOrders.length})</span>
             {deliveryOrders.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
             )}
           </button>
 

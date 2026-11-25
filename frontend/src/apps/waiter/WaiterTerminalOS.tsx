@@ -1342,7 +1342,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
         <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
           {/* Brand Header */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-slate-200 shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-slate-200 shrink-0">
               <PhoneCall className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
             </div>
             <div className="min-w-0">
@@ -1436,7 +1436,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
               onClick={() => setWaiterView('floor')}
               className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 touch-manipulation min-h-[40px] ${
                 waiterView === 'floor'
-                  ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
+                  ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40'
                   : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
               }`}
             >
@@ -1451,7 +1451,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
               onClick={() => setWaiterView('tables')}
               className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 touch-manipulation min-h-[40px] ${
                 waiterView === 'tables'
-                  ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.25)]'
+                  ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40'
                   : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
               }`}
             >
@@ -1503,7 +1503,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl p-3 sm:p-3.5 rounded-2xl border border-white/10 shadow-lg">
                 <div className="flex items-center gap-2.5">
                   <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className=" absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                   </span>
                   <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
@@ -1519,7 +1519,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                     onClick={() => setViewMode('active')}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-medium font-mono transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 ${
                       viewMode === 'active'
-                        ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40'
                         : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
                     }`}
                   >
@@ -1531,7 +1531,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                     onClick={() => setViewMode('history')}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-medium font-mono transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 ${
                       viewMode === 'history'
-                        ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        ? 'bg-gradient-to-r from-emerald-500/25 to-teal-500/20 text-emerald-300 border border-emerald-400/40'
                         : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
                     }`}
                   >
@@ -1639,7 +1639,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
                     {displayedPlatesList.length === 0 ? (
                       <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-white/10 space-y-3 backdrop-blur-xl shadow-inner">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(16,185,129,0.18)]">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center mx-auto">
                           <Coffee className="w-6 h-6 text-emerald-400" />
                         </div>
                         <p className="text-sm font-bold text-white">
@@ -1666,9 +1666,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                               key={order.id}
                               className={`p-4 rounded-2xl border transition-all duration-300 space-y-3 shadow-xl liquid-glass-card ${
                                 readiness.isCompleteOrderReady
-                                  ? 'border-emerald-400/40 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+                                  ? 'border-emerald-400/40 hover:border-emerald-400/60'
                                   : readiness.readyItems.length > 0
-                                  ? 'border-amber-400/40 hover:border-amber-400/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+                                  ? 'border-amber-400/40 hover:border-amber-400/60'
                                   : 'border-slate-700/60 hover:border-slate-600 shadow-md'
                               }`}
                             >
@@ -1724,7 +1724,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                         Collected by {order.claimedBy || 'Waiter'}
                                       </span>
                                     ) : ((order as any).kitchenWaiterRequested || (order as any).barWaiterRequested || (order as any).hookahWaiterRequested || order.deliveryStatus === 'WAITING_FOR_WAITER') ? (
-                                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-mono font-bold flex items-center gap-1 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-mono font-bold flex items-center gap-1 animate-pulse">
                                         <Bell className="w-3 h-3 text-amber-400" />
                                         Waiter Requested
                                       </span>
@@ -1922,7 +1922,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
                     {pendingCallsList.length === 0 ? (
                       <div className="p-10 text-center bg-white/[0.02] rounded-2xl border border-white/10 space-y-3 backdrop-blur-xl shadow-inner">
-                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(245,158,11,0.18)]">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center mx-auto">
                           <CheckCircle2 className="w-6 h-6 text-emerald-400" />
                         </div>
                         <p className="text-sm font-bold text-white">All customer requests handled</p>
@@ -1945,7 +1945,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                               key={req.id}
                               className={`p-4 rounded-2xl border transition-all duration-300 space-y-3 shadow-xl liquid-glass-card ${
                                 isBillReq
-                                  ? 'border-amber-400/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                                  ? 'border-amber-400/50'
                                   : isPending
                                   ? 'border-amber-400/35 hover:border-amber-400/55'
                                   : 'border-sky-400/35 hover:border-sky-400/55'
@@ -2105,7 +2105,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
             {activeTablesList.length === 0 ? (
               <div className="liquid-glass-card border border-white/10 p-12 text-center space-y-3 rounded-2xl shadow-xl backdrop-blur-2xl">
-                <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(56,189,248,0.18)]">
+                <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center mx-auto">
                   <Utensils className="w-6 h-6 text-sky-400" />
                 </div>
                 <h3 className="text-sm font-bold text-white">No active tables right now</h3>

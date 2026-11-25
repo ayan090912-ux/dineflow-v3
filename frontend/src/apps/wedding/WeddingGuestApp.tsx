@@ -1439,7 +1439,7 @@ export const WeddingGuestApp: React.FC<WeddingGuestAppProps> = ({
               <div className="flex items-center justify-between pt-0.5">
                 <span className="text-xs font-serif text-[#786956]">Preparation Status</span>
                 <span className="text-xs font-mono font-bold text-emerald-600 uppercase flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
                   {placedOrder.kitchenStatus || placedOrder.status || 'PREPARING'}
                 </span>
               </div>

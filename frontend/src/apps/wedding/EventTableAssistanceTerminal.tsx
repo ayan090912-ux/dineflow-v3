@@ -222,7 +222,7 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
       {fetchError && (
         <div className="bg-rose-950/60 border border-rose-500/40 rounded-2xl p-4 flex items-center justify-between text-xs text-rose-200">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
             <span>{fetchError}</span>
           </div>
           <button
@@ -239,7 +239,7 @@ export const EventTableAssistanceTerminal: React.FC<EventTableAssistanceTerminal
         <Card className="p-4 rounded-2xl bg-[#121520] border border-[#22293c]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-400">New Requests</span>
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold text-white font-mono">{summary.newRequestsCount ?? summary.new ?? 0}</span>

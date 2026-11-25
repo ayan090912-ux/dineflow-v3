@@ -28,13 +28,13 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const variantStyles = {
-    primary: 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold border-t border-white/40 shadow-[0_4px_16px_rgba(16,185,129,0.35)]',
-    brand: 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold border-t border-white/40 shadow-[0_4px_16px_rgba(16,185,129,0.35)]',
-    secondary: 'bg-white/[0.08] backdrop-blur-md text-white hover:bg-white/[0.12] border border-white/15 border-t-white/30 shadow-sm',
-    outline: 'border border-white/15 bg-white/[0.04] backdrop-blur-md text-slate-200 hover:bg-white/[0.08] hover:text-white hover:border-white/25 shadow-sm',
-    ghost: 'text-slate-400 hover:bg-white/[0.08] hover:text-white',
-    danger: 'bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 border border-rose-500/30 border-t-white/30 shadow-xs focus:ring-rose-500/30',
-    success: 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30 border-t-white/30 shadow-xs focus:ring-emerald-500/30',
+    primary: 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold border border-emerald-500',
+    brand: 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold border border-emerald-500',
+    secondary: 'bg-[#181c24] text-white hover:bg-[#1f2430] border border-[#262c3a]',
+    outline: 'border border-[#262c3a] bg-[#12151b] text-slate-200 hover:bg-[#181c24] hover:text-white',
+    ghost: 'text-slate-400 hover:bg-[#181c24] hover:text-white',
+    danger: 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/25 focus:ring-rose-500/30',
+    success: 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/25 focus:ring-emerald-500/30',
   };
 
   return (

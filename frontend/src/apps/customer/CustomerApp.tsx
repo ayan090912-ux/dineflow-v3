@@ -1215,7 +1215,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         {/* Top Header Floating Liquid-Glass Badges */}
         <div className="absolute top-3.5 left-3.5 right-3.5 z-10 flex items-center justify-between">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-white font-mono font-medium shadow-md">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="truncate">{currentRestaurant?.hasTables === false ? 'Counter Pickup' : selectedTableNum}</span>
           </div>
 
@@ -1272,7 +1272,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               onClick={() => setIsOrderStatusModalOpen(true)}
               className={`h-10 px-1 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98 min-w-0 overflow-hidden ${
                 customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0
-                  ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,166,35,0.25)]'
+                  ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300'
                   : 'text-white/85 hover:text-white hover:bg-white/[0.10]'
               }`}
             >
@@ -1365,7 +1365,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {latestPlacedOrder && (
         <div className="mx-3.5 mt-3 p-3 rounded-2xl liquid-glass border border-emerald-500/35 flex items-start justify-between gap-3 shadow-lg relative z-10 w-[calc(100%-1.75rem)] box-border">
           <div className="flex items-start gap-2.5 min-w-0 flex-1">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5 shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-emerald-300 truncate">
                 Order #{latestPlacedOrder.displayOrderNumber || latestPlacedOrder.orderNumber || (latestPlacedOrder.id.length > 8 ? latestPlacedOrder.id.slice(-4) : latestPlacedOrder.id)} Transmitted!
@@ -1410,7 +1410,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       {/* Menu Filter Tabs & Search */}
       <div className="p-3.5 space-y-3.5 relative z-10 w-full max-w-full box-border">
         {/* Search Input with Frosted Liquid-Glass Shell */}
-        <div className="relative liquid-glass rounded-2xl border border-white/20 focus-within:border-amber-400 focus-within:shadow-[0_0_24px_rgba(245,158,11,0.3)] transition-all duration-300 w-full box-border shadow-md">
+        <div className="relative liquid-glass rounded-2xl border border-white/20 focus-within:border-amber-400 focus-within: transition-all duration-300 w-full box-border shadow-md">
           <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-white/50" />
           <input
             type="text"
@@ -1454,11 +1454,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               onClick={() => setDietaryFilter('VEG')}
               className={`flex-1 py-1.5 px-2 rounded-xl font-medium transition-all flex items-center justify-center gap-1.5 truncate min-w-0 ${
                 dietaryFilter === 'VEG'
-                  ? 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-400/50 shadow-[0_0_12px_rgba(52,211,153,0.3)]'
+                  ? 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-400/50'
                   : 'text-white/50 hover:text-emerald-400 hover:bg-white/[0.06]'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
               <span className="truncate">Veg Only</span>
             </button>
 
@@ -1466,11 +1466,11 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               onClick={() => setDietaryFilter('NON_VEG')}
               className={`flex-1 py-1.5 px-2 rounded-xl font-medium transition-all flex items-center justify-center gap-1.5 truncate min-w-0 ${
                 dietaryFilter === 'NON_VEG'
-                  ? 'bg-rose-500/25 text-rose-300 font-bold border border-rose-400/50 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                  ? 'bg-rose-500/25 text-rose-300 font-bold border border-rose-400/50'
                   : 'text-white/50 hover:text-rose-400 hover:bg-white/[0.06]'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0 shadow-[0_0_8px_rgba(244,63,94,0.9)]" />
+              <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />
               <span className="truncate">Non-Veg</span>
             </button>
           </div>
@@ -1661,7 +1661,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                             }}
                             className={`h-8 sm:h-9 px-3.5 sm:px-4 min-w-[64px] rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 shadow-lg shrink-0 whitespace-nowrap border-t border-white/60 ${
                               isJustAdded
-                                ? 'bg-emerald-500 text-slate-950 scale-105 shadow-[0_0_16px_rgba(16,185,129,0.6)]'
+                                ? 'bg-emerald-500 text-slate-950 scale-105'
                                 : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 shadow-[0_4px_16px_rgba(245,158,11,0.45)]'
                             }`}
                           >
@@ -1819,7 +1819,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                           onClick={() => setSelectedHookahBase(base)}
                           className={`p-2.5 rounded-xl border text-left transition-all flex items-start justify-between gap-2 ${
                             isSelected
-                              ? 'bg-amber-500/20 border-amber-400 text-white shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                              ? 'bg-amber-500/20 border-amber-400 text-white'
                               : 'bg-white/[0.04] border-white/10 text-white/70 hover:bg-white/[0.08] hover:border-white/20'
                           }`}
                         >
@@ -1863,7 +1863,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                           onClick={() => setSelectedHookahChillim(chillim)}
                           className={`p-2.5 rounded-xl border text-left transition-all flex items-start justify-between gap-1.5 ${
                             isSelected
-                              ? 'bg-amber-500/20 border-amber-400 text-white shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                              ? 'bg-amber-500/20 border-amber-400 text-white'
                               : 'bg-white/[0.04] border-white/10 text-white/70 hover:bg-white/[0.08]'
                           }`}
                         >
@@ -2246,13 +2246,13 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             className="liquid-glass-strong border border-white/[0.14] p-3 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl flex items-center justify-between gap-3 cursor-pointer group hover:border-amber-400/40 transition-all"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.3)]">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                 <Clock className="w-4 h-4" />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold text-white truncate">Live Order In Progress</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0 animate-pulse" />
                 </div>
                 <p className="text-[11px] text-white/60 font-mono truncate">
                   {customerOrders.filter((o) => o.status !== 'CANCELLED').length} {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} · Total: ₹

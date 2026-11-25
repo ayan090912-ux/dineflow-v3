@@ -1750,7 +1750,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold border shadow-sm">
             {currentRestaurant.lifecycleStatus === 'PENDING_APPROVAL' && (
               <span className="bg-amber-500/20 text-amber-400 border-amber-500/40 px-3 py-1 rounded-full font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" /> Status: Pending Approval ⏳
+                <span className="w-2 h-2 rounded-full bg-amber-400" /> Status: Pending Approval ⏳
               </span>
             )}
             {currentRestaurant.lifecycleStatus === 'CHANGES_REQUESTED' && (
@@ -2363,8 +2363,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   />
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                         {currentRestaurant?.lifecycleStatus === 'ACTIVE' || !currentRestaurant?.lifecycleStatus ? 'Live' : currentRestaurant?.lifecycleStatus}
                       </span>
                       <span className="text-xs text-slate-400 font-mono hidden sm:inline">
@@ -2382,10 +2382,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                 <div className="flex items-center gap-2.5 shrink-0">
                   <Button
-                    variant="brand"
+                    variant="secondary"
                     size="sm"
                     onClick={() => setActiveTab('waiter')}
-                    className="bg-orange-500 hover:bg-orange-600 text-white font-medium text-xs px-3.5 py-2"
+                    className="bg-orange-500 hover:bg-orange-400 text-slate-950 border-orange-500 font-semibold text-xs px-3.5 py-2"
                     icon={<PhoneCall className="w-3.5 h-3.5" />}
                   >
                     Launch Waiter OS
@@ -2465,7 +2465,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
                     {/* Card 1: Today's Gross Sales */}
-                    <Card className="liquid-glass-card border border-emerald-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                    <Card className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold block">Today's Gross Sales</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
                         {formatCurrency(totalSales, theme.currency)}
@@ -2476,7 +2476,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </Card>
 
                     {/* Card 2: Net Sales */}
-                    <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                    <Card className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">Net Sales</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
                         {formatCurrency(netSales, theme.currency)}
@@ -2487,7 +2487,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </Card>
 
                     {/* Card 3: Active Orders */}
-                    <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                    <Card className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">Active Orders</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
                         {activeDayOrders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED').length}
@@ -2498,7 +2498,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </Card>
 
                     {/* Card 4: Settled Receipts */}
-                    <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                    <Card className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">Settled Receipts</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
                         {shiftPaidBills.length}
@@ -2509,7 +2509,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </Card>
 
                     {/* Card 5: Floor Occupancy */}
-                    <Card className="liquid-glass-card border border-purple-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
+                    <Card className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-mono text-purple-400 uppercase font-semibold block">Floor Occupancy</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-purple-300 tracking-tight">
                         {tables.filter((t) => t.status === 'OCCUPIED' || t.isOccupied || activeSessions.some((s) => s.status === 'ACTIVE' && (s.tableId === t.id || s.tableNumber.toLowerCase() === t.tableNumber.toLowerCase()))).length} <span className="text-sm font-normal text-slate-400">/ {tables.length}</span>
@@ -2520,7 +2520,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     </Card>
 
                     {/* Card 6: Fulfilled Today */}
-                    <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
+                    <Card className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">Fulfilled Today</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
                         {completed.length}
@@ -2707,7 +2707,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     {posAutoWatch ? (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                         <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className=" absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                         </span>
                         LIVE WATCH: AUTO-STREAMING
@@ -3557,7 +3557,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             {/* Single Cohesive Liquid-Glass Menu Command Ribbon */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 lg:p-5 bg-[#0c1017]/80 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-xl">
               <div className="flex items-center gap-3.5">
-                <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <UtensilsCrossed className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
@@ -3645,7 +3645,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                 <button
                   onClick={() => setIsMenuLibraryOpen(true)}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-medium bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(99,102,241,0.15)]"
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-medium bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
                   <span>Library</span>
@@ -3671,7 +3671,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     setNewItem({ name: '', description: '', price: '', categoryId: firstCat, isVegetarian: true, image: '' });
                     setIsAddItemModalOpen(true);
                   }}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                   <span>{activeCatalogMode === 'HOOKAH' ? 'Add Hookah' : (isBarEnabled && activeCatalogMode === 'BAR') ? 'Add Drink' : 'Add Item'}</span>
@@ -3712,7 +3712,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         dietaryFilter === 'VEG' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-emerald-400'
                       }`}
                     >
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
                       <span>Veg</span>
                     </button>
                     <button
@@ -3721,7 +3721,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         dietaryFilter === 'NON_VEG' ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30' : 'text-slate-400 hover:text-rose-400'
                       }`}
                     >
-                      <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.5)]" />
+                      <span className="w-2 h-2 rounded-full bg-rose-400" />
                       <span>Non-Veg</span>
                     </button>
                   </div>
@@ -3734,7 +3734,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   onClick={() => setSelectedMenuCategory('ALL')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                     selectedMenuCategory === 'ALL'
-                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)] font-semibold'
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold'
                       : 'bg-white/[0.03] backdrop-blur-md border border-white/10 text-slate-300 hover:text-white hover:bg-white/[0.07] hover:border-white/20'
                   }`}
                 >
@@ -3760,7 +3760,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       onClick={() => setSelectedMenuCategory(catName)}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                         selectedMenuCategory === catName
-                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)] font-semibold'
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold'
                           : 'bg-white/[0.03] backdrop-blur-md border border-white/10 text-slate-300 hover:text-white hover:bg-white/[0.07] hover:border-white/20'
                       }`}
                     >
@@ -3789,7 +3789,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         </span>
                         <span className={`absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg text-[10px] font-bold backdrop-blur-md border ${
                           item.isAvailable
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                             : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                         }`}>
                           {item.isAvailable ? 'In Stock' : '86ed'}
@@ -3829,7 +3829,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer border ${
                           item.isAvailable
                             ? 'bg-white/[0.04] hover:bg-rose-500/15 text-slate-300 hover:text-rose-300 border-white/10 hover:border-rose-500/30'
-                            : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                            : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
                         }`}
                       >
                         {item.isAvailable ? 'Mark 86ed' : 'Enable Item'}
@@ -4009,7 +4009,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         >
                           {e.status === 'ON_CLOCK' ? (
                             <>
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                               <span>ON CLOCK</span>
                             </>
                           ) : e.status === 'ON_BREAK' ? (

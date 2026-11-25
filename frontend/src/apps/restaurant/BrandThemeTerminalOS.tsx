@@ -220,7 +220,7 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className=" absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
               </span>
               <span className="text-xs font-mono font-bold text-white tracking-wider uppercase">
@@ -816,7 +816,7 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
                   {/* Top Floating Table Pill Badge */}
                   <div className="absolute top-2.5 left-2.5 right-2.5 z-10 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full liquid-glass-pill text-[10px] text-white font-mono font-medium shadow-md">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       <span>Table 01</span>
                     </div>
 

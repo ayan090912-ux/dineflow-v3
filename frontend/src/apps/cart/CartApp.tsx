@@ -1806,7 +1806,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                           isRedeemed
                             ? 'bg-black/30 border-white/10 text-slate-400'
                             : ord.status === 'READY'
-                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
                             : ord.status === 'PREPARING'
                             ? 'bg-sky-500/15 border-sky-500/30 text-sky-300'
                             : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
@@ -1986,7 +1986,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                                         }
                                         className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all border ${
                                           isSel
-                                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                                            ? 'bg-amber-500 text-slate-950 border-amber-400'
                                             : 'bg-white/5 text-slate-300 border-white/10 hover:border-white/20'
                                         }`}
                                       >

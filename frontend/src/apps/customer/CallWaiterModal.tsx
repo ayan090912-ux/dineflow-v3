@@ -139,7 +139,7 @@ export const CallWaiterModal: React.FC<CallWaiterModalProps> = ({
           {/* Header */}
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-center justify-center text-amber-400 shadow-[0_0_12px_rgba(245,166,35,0.15)]">
+              <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-center justify-center text-amber-400">
                 <Bell className="w-5 h-5" />
               </div>
               <div>

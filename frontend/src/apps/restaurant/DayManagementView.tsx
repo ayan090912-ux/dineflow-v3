@@ -996,7 +996,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="success" className="font-mono text-[11px] px-3.5 py-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.15)]">
+            <Badge variant="success" className="font-mono text-[11px] px-3.5 py-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5 text-emerald-400" />
               <span>Zero Double-Counting Verified</span>
             </Badge>
@@ -1011,7 +1011,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             onClick={() => setActiveStationTab('all')}
             className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all cursor-pointer ${
               activeStationTab === 'all'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                 : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >
@@ -1021,7 +1021,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             onClick={() => setActiveStationTab('kitchen')}
             className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeStationTab === 'kitchen'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.2)]'
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
                 : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >
@@ -1032,7 +1032,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             onClick={() => setActiveStationTab('bar')}
             className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeStationTab === 'bar'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
                 : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >
@@ -1043,7 +1043,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             onClick={() => setActiveStationTab('hookah')}
             className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeStationTab === 'hookah'
-                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40 shadow-[0_0_15px_rgba(249,115,22,0.2)]'
+                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40'
                 : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
             }`}
           >

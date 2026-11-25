@@ -434,7 +434,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                     }}
                     className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                       selectedPaymentMethod === 'UPI'
-                        ? 'bg-amber-500/15 border-amber-400 text-white shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                        ? 'bg-amber-500/15 border-amber-400 text-white'
                         : 'bg-white/[0.02] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.05]'
                     }`}
                   >
@@ -453,7 +453,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                     }}
                     className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                       selectedPaymentMethod === 'CASH'
-                        ? 'bg-emerald-500/15 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        ? 'bg-emerald-500/15 border-emerald-400 text-white'
                         : 'bg-white/[0.02] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.05]'
                     }`}
                   >
@@ -472,7 +472,7 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
                     }}
                     className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                       selectedPaymentMethod === 'CARD'
-                        ? 'bg-purple-500/15 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                        ? 'bg-purple-500/15 border-purple-400 text-white'
                         : 'bg-white/[0.02] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.05]'
                     }`}
                   >

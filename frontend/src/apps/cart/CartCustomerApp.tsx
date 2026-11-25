@@ -635,7 +635,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         <main className="w-full px-4 py-5 space-y-4 flex-1 relative z-10">
           {/* HIGH VISIBILITY CELEBRATION BANNER: READY FOR PICKUP */}
           {isReady && (
-            <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/25 via-amber-400/30 to-amber-500/25 border-2 border-amber-400/80 text-amber-100 shadow-[0_0_30px_rgba(245,158,11,0.35)] animate-pulse text-center space-y-1">
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/25 via-amber-400/30 to-amber-500/25 border-2 border-amber-400/80 text-amber-100 animate-pulse text-center space-y-1">
               <div className="flex items-center justify-center gap-2 text-white font-black text-base sm:text-lg">
                 <Sparkles className="w-5 h-5 text-amber-300" />
                 <span>🎉 YOUR FOOD IS READY!</span>
@@ -672,7 +672,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             <div
               className={`p-5 rounded-2xl relative border-2 border-dashed transition-all ${
                 isReady
-                  ? 'bg-amber-500/20 border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.4)]'
+                  ? 'bg-amber-500/20 border-amber-400'
                   : 'bg-gradient-to-b from-amber-500/10 to-transparent border-amber-500/40 shadow-inner'
               }`}
             >
@@ -725,7 +725,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
                 <div
                   className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
                     isRedeemed || isReady
-                      ? 'bg-amber-500/30 text-amber-200 border-amber-400/80 font-black shadow-[0_0_15px_rgba(245,158,11,0.4)] animate-pulse'
+                      ? 'bg-amber-500/30 text-amber-200 border-amber-400/80 font-black animate-pulse'
                       : 'bg-white/[0.02] text-white/30 border-white/5'
                   }`}
                 >
@@ -879,7 +879,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
         {/* Top Header Floating Liquid-Glass Badges */}
         <div className="absolute top-3.5 left-3.5 right-3.5 z-10 flex items-center justify-between">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full liquid-glass-pill text-[11px] text-white font-mono font-medium shadow-md">
-            <span className={`w-2 h-2 rounded-full ${isCartOpen ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-400'}`} />
+            <span className={`w-2 h-2 rounded-full ${isCartOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
             <span className="truncate">{isCartOpen ? 'Open for Ordering' : 'Currently Closed'}</span>
           </div>
 

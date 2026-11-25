@@ -533,7 +533,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
         <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
           {/* Brand Header */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-300 shrink-0 shadow-[0_0_12px_rgba(56,189,248,0.25)]">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-300 shrink-0">
               <Wine className="w-4 h-4 sm:w-5 sm:h-5 text-sky-400" />
             </div>
             <div className="min-w-0">
@@ -638,7 +638,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
               onClick={() => setViewMode('active')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
                 viewMode === 'active'
-                  ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.25)]'
+                  ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40'
                   : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
               }`}
             >
@@ -650,7 +650,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
               onClick={() => setViewMode('history')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all duration-200 shrink-0 cursor-pointer active:scale-95 ${
                 viewMode === 'history'
-                  ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.25)]'
+                  ? 'bg-gradient-to-r from-sky-500/25 to-blue-500/20 text-sky-300 border border-sky-400/40'
                   : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]'
               }`}
             >
@@ -769,7 +769,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
 
               {activeOrders.length === 0 ? (
                 <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+                  <div className="w-12 h-12 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 mx-auto flex items-center justify-center">
                     <Wine className="w-6 h-6" />
                   </div>
                   <p className="font-semibold text-slate-200 text-sm">No active drink orders in queue</p>
@@ -790,7 +790,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
                         key={order.id}
                         className={`p-4 rounded-2xl border transition-all duration-300 space-y-3.5 shadow-xl liquid-glass-card ${
                           isPrep
-                            ? 'border-sky-400/50 shadow-[0_0_24px_rgba(56,189,248,0.2)]'
+                            ? 'border-sky-400/50'
                             : 'border-white/15 hover:border-white/30'
                         }`}
                       >
@@ -808,7 +808,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
                             </span>
                             <span className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold ${
                               isPrep
-                                ? 'bg-sky-500/25 text-sky-300 border border-sky-400/40 shadow-[0_0_8px_rgba(56,189,248,0.4)]'
+                                ? 'bg-sky-500/25 text-sky-300 border border-sky-400/40'
                                 : 'bg-white/10 text-white/70 border border-white/15'
                             }`}>
                               {order.barStatus || 'PENDING'}
@@ -908,7 +908,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
 
               {sentToWaiterOrders.length === 0 ? (
                 <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center">
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <p className="font-semibold text-slate-200 text-sm">All drinks collected from bar pass</p>

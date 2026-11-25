@@ -110,63 +110,34 @@
     border-color: var(--color-border-subtle);
   }
 
-  /* Liquid Glass Hospitality Utilities */
+  /* Clean Enterprise Dark Surfaces (No glassmorphism / neon glow) */
   .liquid-glass {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.035) 100%);
-    backdrop-filter: blur(24px) saturate(210%);
-    -webkit-backdrop-filter: blur(24px) saturate(210%);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-top: 1px solid rgba(255, 255, 255, 0.45);
-    border-left: 1px solid rgba(255, 255, 255, 0.25);
-    box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.55), inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.35);
+    background: #12151b;
+    border: 1px solid #1e232e;
   }
 
   .liquid-glass-card {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.04) 100%);
-    backdrop-filter: blur(28px) saturate(220%);
-    -webkit-backdrop-filter: blur(28px) saturate(220%);
-    border: 1px solid rgba(255, 255, 255, 0.20);
-    border-top: 1px solid rgba(255, 255, 255, 0.50);
-    border-left: 1px solid rgba(255, 255, 255, 0.25);
-    box-shadow: 0 16px 44px -6px rgba(0, 0, 0, 0.65), inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.35);
+    background: #12151b;
+    border: 1px solid #1e232e;
   }
 
   .liquid-glass-strong {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.07) 100%);
-    backdrop-filter: blur(32px) saturate(230%);
-    -webkit-backdrop-filter: blur(32px) saturate(230%);
-    border: 1px solid rgba(255, 255, 255, 0.24);
-    border-top: 1px solid rgba(255, 255, 255, 0.55);
-    border-left: 1px solid rgba(255, 255, 255, 0.30);
-    box-shadow: 0 24px 60px -8px rgba(0, 0, 0, 0.75), inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.45);
+    background: #151922;
+    border: 1px solid #262c3a;
   }
 
   .liquid-glass-pill {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%);
-    backdrop-filter: blur(20px) saturate(200%);
-    -webkit-backdrop-filter: blur(20px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.20);
-    border-top: 1px solid rgba(255, 255, 255, 0.45);
-    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4), inset 0 1px 1px 0 rgba(255, 255, 255, 0.3);
+    background: #161a23;
+    border: 1px solid #232938;
   }
 
   .liquid-glass-selected {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.32) 0%, rgba(245, 158, 11, 0.12) 100%);
-    backdrop-filter: blur(24px) saturate(220%);
-    -webkit-backdrop-filter: blur(24px) saturate(220%);
-    border: 1px solid rgba(245, 158, 11, 0.7);
-    border-top: 1px solid rgba(255, 255, 255, 0.65);
-    box-shadow: 0 10px 32px -4px rgba(245, 158, 11, 0.45), inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.5);
+    background: #1a202c;
+    border: 1px solid #f59e0b;
   }
 
-  /* Liquid Glass Ambient Mesh Container (optimized for mobile webkit/blink) */
   .liquid-glass-viewport {
-    background-color: #07090D;
-    background-image: 
-      radial-gradient(ellipse at 50% -10%, rgba(245, 158, 11, 0.32) 0%, transparent 65%),
-      radial-gradient(ellipse at 100% 25%, rgba(139, 92, 246, 0.22) 0%, transparent 55%),
-      radial-gradient(ellipse at 0% 55%, rgba(16, 185, 129, 0.18) 0%, transparent 50%),
-      radial-gradient(ellipse at 85% 80%, rgba(245, 158, 11, 0.22) 0%, transparent 60%);
+    background-color: #0b0d11;
   }
 
   /* Solid Fallback for Browsers Without Backdrop-Filter Support */
