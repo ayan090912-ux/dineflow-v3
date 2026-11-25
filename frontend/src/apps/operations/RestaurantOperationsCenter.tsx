@@ -480,11 +480,11 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white">
+    <div className="min-h-screen bg-[#0a0c10] text-slate-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white">
       {/* =========================================================================
           PERSISTENT TOP NAVIGATION BAR (COMMERCIAL RESTAURANT OPERATIONS BAR)
           ========================================================================= */}
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-xl">
+      <header className="bg-[#12151b] border-b border-[#1e232e] px-4 py-2.5 sticky top-0 z-50 flex items-center justify-between gap-3 shadow-xl">
         {/* Left: Brand, Restaurant, Live Indicator */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('operations')}>
@@ -503,13 +503,13 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
         </div>
 
         {/* Center: Realtime Operations Nav Tabs */}
-        <nav className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/90 overflow-x-auto scrollbar-none no-scrollbar">
+        <nav className="flex items-center gap-1 bg-[#0a0c10] p-1 rounded-xl border border-[#1e232e]/90 overflow-x-auto scrollbar-none no-scrollbar">
           <button
             onClick={() => setActiveTab('operations')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'operations'
                 ? 'bg-rose-600 text-white shadow-md shadow-rose-950/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
@@ -521,7 +521,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === 'orders'
                 ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <Utensils className="w-3.5 h-3.5 text-indigo-400" />
@@ -538,7 +538,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === 'tables'
                 ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <Layers className="w-3.5 h-3.5 text-emerald-400" />
@@ -555,7 +555,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === 'kitchen'
                 ? 'bg-amber-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <ChefHat className="w-3.5 h-3.5 text-amber-400" />
@@ -572,7 +572,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === 'bar'
                 ? 'bg-sky-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <Wine className="w-3.5 h-3.5 text-sky-400" />
@@ -589,7 +589,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === 'waiter'
                 ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
@@ -606,7 +606,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === 'inventory'
                 ? 'bg-rose-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <Package className="w-3.5 h-3.5 text-rose-400" />
@@ -623,7 +623,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
               activeTab === 'billing'
                 ? 'bg-violet-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#12151b]'
             }`}
           >
             <DollarSign className="w-3.5 h-3.5 text-violet-400" />
@@ -660,7 +660,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             onClick={() => setIsAudioMuted(!isAudioMuted)}
             className={`p-1.5 rounded-lg border transition-colors ${
               isAudioMuted
-                ? 'bg-slate-900 border-slate-800 text-slate-500'
+                ? 'bg-[#12151b] border-[#1e232e] text-slate-500'
                 : 'bg-slate-800 border-slate-700 text-slate-200 hover:text-white'
             }`}
             title={isAudioMuted ? 'Unmute Operational Chimes' : 'Mute Operational Chimes'}
@@ -671,14 +671,14 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
           {/* Manual Data Refresh */}
           <button
             onClick={() => loadAllOperationsData(false)}
-            className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg bg-[#12151b] border border-[#1e232e] text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title="Force Synchronize with Cloud Server"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-rose-400' : ''}`} />
           </button>
 
           {/* User / Role info */}
-          <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-800">
+          <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-[#1e232e]">
             <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
               {staffName.charAt(0).toUpperCase()}
             </div>
@@ -708,10 +708,10 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
       {/* =========================================================================
           OPERATIONAL KPI STRIP
           ========================================================================= */}
-      <div className="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+      <div className="bg-[#12151b]/60 border-b border-[#1e232e]/80 px-4 py-2 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         <div
           onClick={() => setActiveTab('orders')}
-          className="bg-slate-950/80 border border-slate-800 hover:border-indigo-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+          className="bg-[#0a0c10]/80 border border-[#1e232e] hover:border-indigo-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
         >
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">Active Orders</span>
@@ -724,7 +724,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
         <div
           onClick={() => setActiveTab('kitchen')}
-          className="bg-slate-950/80 border border-slate-800 hover:border-amber-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+          className="bg-[#0a0c10]/80 border border-[#1e232e] hover:border-amber-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
         >
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">Kitchen KDS</span>
@@ -735,7 +735,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
         <div
           onClick={() => setActiveTab('bar')}
-          className="bg-slate-950/80 border border-slate-800 hover:border-sky-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+          className="bg-[#0a0c10]/80 border border-[#1e232e] hover:border-sky-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
         >
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">Bar Orders</span>
@@ -746,7 +746,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
         <div
           onClick={() => setActiveTab('waiter')}
-          className="bg-slate-950/80 border border-slate-800 hover:border-amber-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+          className="bg-[#0a0c10]/80 border border-[#1e232e] hover:border-amber-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
         >
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">Waiter Calls</span>
@@ -759,7 +759,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
         <div
           onClick={() => setActiveTab('tables')}
-          className="bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+          className="bg-[#0a0c10]/80 border border-[#1e232e] hover:border-emerald-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
         >
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">Active Tables</span>
@@ -770,7 +770,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
         <div
           onClick={() => setActiveTab('inventory')}
-          className="bg-slate-950/80 border border-slate-800 hover:border-rose-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+          className="bg-[#0a0c10]/80 border border-[#1e232e] hover:border-rose-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all"
         >
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">Low Stock</span>
@@ -783,7 +783,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
         <div
           onClick={() => setActiveTab('billing')}
-          className="bg-slate-950/80 border border-slate-800 hover:border-violet-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all col-span-2 sm:col-span-1"
+          className="bg-[#0a0c10]/80 border border-[#1e232e] hover:border-violet-500/50 p-2 rounded-xl flex items-center justify-between cursor-pointer transition-all col-span-2 sm:col-span-1"
         >
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">Active Sales</span>
@@ -803,8 +803,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             {/* COLUMN 1 (4 COLS): ACTIVE ORDERS & BILLING ALERTS */}
             <div className="lg:col-span-4 space-y-4">
               {/* Active Orders Panel */}
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-2.5">
                   <div className="flex items-center gap-2">
                     <Utensils className="w-4 h-4 text-indigo-400" />
                     <h2 className="text-sm font-black text-white uppercase tracking-wide">Live Orders</h2>
@@ -819,7 +819,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
                 <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                   {orders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length === 0 ? (
-                    <div className="p-6 text-center bg-slate-950/60 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs">
+                    <div className="p-6 text-center bg-[#0a0c10]/60 rounded-xl border border-dashed border-[#1e232e] text-slate-400 text-xs">
                       No active orders right now.
                     </div>
                   ) : (
@@ -830,14 +830,14 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                         <div
                           key={ord.id}
                           onClick={() => setSelectedOrder(ord)}
-                          className="bg-slate-950 p-3 rounded-xl border border-slate-800/90 hover:border-indigo-500/40 transition-all cursor-pointer space-y-2 shadow-sm"
+                          className="bg-[#0a0c10] p-3 rounded-xl border border-[#1e232e]/90 hover:border-indigo-500/40 transition-all cursor-pointer space-y-2 shadow-sm"
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-black text-white font-mono">{ord.tableNumber}</span>
                               <span className="text-[11px] text-slate-400 font-mono">#{ord.id.slice(-4)}</span>
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                            <span className="text-[10px] font-mono text-slate-400 bg-[#12151b] px-2 py-0.5 rounded">
                               {getElapsedString(ord.createdAt)}
                             </span>
                           </div>
@@ -872,8 +872,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
               </Card>
 
               {/* Billing & Sales Snapshot */}
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-2.5">
                   <div className="flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-violet-400" />
                     <h2 className="text-sm font-black text-white uppercase tracking-wide">Billing & Payments</h2>
@@ -884,11 +884,11 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                  <div className="bg-[#0a0c10] p-2.5 rounded-xl border border-[#1e232e]/80">
                     <span className="text-[10px] text-slate-400 block font-mono">UNBILLED TABLES</span>
                     <span className="text-sm font-bold text-white mt-0.5 block">{billingSummary.unbilledTablesCount} Tables</span>
                   </div>
-                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                  <div className="bg-[#0a0c10] p-2.5 rounded-xl border border-[#1e232e]/80">
                     <span className="text-[10px] text-slate-400 block font-mono">PENDING PAYMENTS</span>
                     <span className="text-sm font-bold text-amber-400 mt-0.5 block">{billingSummary.pendingPaymentOrdersCount} Orders</span>
                   </div>
@@ -899,8 +899,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             {/* COLUMN 2 (4 COLS): WAITER REQUESTS & ACTIVE FLOOR TABLES */}
             <div className="lg:col-span-4 space-y-4">
               {/* Waiter Requests Panel */}
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-2.5">
                   <div className="flex items-center gap-2">
                     <PhoneCall className="w-4 h-4 text-amber-400" />
                     <h2 className="text-sm font-black text-white uppercase tracking-wide">Waiter Requests</h2>
@@ -915,7 +915,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
                 <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                   {pendingWaiterRequests.length === 0 ? (
-                    <div className="p-6 text-center bg-slate-950/60 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs">
+                    <div className="p-6 text-center bg-[#0a0c10]/60 rounded-xl border border-dashed border-[#1e232e] text-slate-400 text-xs">
                       <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-1.5" />
                       All table requests handled.
                     </div>
@@ -923,20 +923,20 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                     pendingWaiterRequests.map((req) => (
                       <div
                         key={req.id}
-                        className="bg-slate-950 p-3 rounded-xl border border-amber-500/40 hover:border-amber-400 transition-all space-y-2.5 shadow-md"
+                        className="bg-[#0a0c10] p-3 rounded-xl border border-amber-500/40 hover:border-amber-400 transition-all space-y-2.5 shadow-md"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-white font-mono">{req.tableNumber}</span>
                             <Badge variant={req.requestType === 'BILL' ? 'danger' : 'warning'}>{req.requestType}</Badge>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                          <span className="text-[10px] font-mono text-slate-400 bg-[#12151b] px-2 py-0.5 rounded">
                             {getElapsedString(req.requestedAt)}
                           </span>
                         </div>
 
                         {req.customerNotes && (
-                          <p className="text-xs text-slate-300 italic bg-slate-900 p-2 rounded-lg border border-slate-800">
+                          <p className="text-xs text-slate-300 italic bg-[#12151b] p-2 rounded-lg border border-[#1e232e]">
                             "{req.customerNotes}"
                           </p>
                         )}
@@ -969,8 +969,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
               </Card>
 
               {/* Active Floor Tables Panel */}
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-2.5">
                   <div className="flex items-center gap-2">
                     <Layers className="w-4 h-4 text-emerald-400" />
                     <h2 className="text-sm font-black text-white uppercase tracking-wide">Active Tables</h2>
@@ -983,7 +983,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                   {activeOccupiedTables.length === 0 ? (
-                    <div className="p-5 text-center bg-slate-950/60 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs">
+                    <div className="p-5 text-center bg-[#0a0c10]/60 rounded-xl border border-dashed border-[#1e232e] text-slate-400 text-xs">
                       All tables are available.
                     </div>
                   ) : (
@@ -999,7 +999,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       return (
                         <div
                           key={tbl.id}
-                          className="bg-slate-950 p-2.5 rounded-xl border border-emerald-500/30 flex items-center justify-between gap-2"
+                          className="bg-[#0a0c10] p-2.5 rounded-xl border border-emerald-500/30 flex items-center justify-between gap-2"
                         >
                           <div>
                             <div className="flex items-center gap-2">
@@ -1042,8 +1042,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             {/* COLUMN 3 (4 COLS): KITCHEN & BAR EXPEDITION TICKETS + INVENTORY ALERTS */}
             <div className="lg:col-span-4 space-y-4">
               {/* Kitchen KDS Live Panel */}
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-2.5">
                   <div className="flex items-center gap-2">
                     <ChefHat className="w-4 h-4 text-amber-400" />
                     <h2 className="text-sm font-black text-white uppercase tracking-wide">Kitchen Production</h2>
@@ -1056,7 +1056,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
                 <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
                   {kitchenOrders.length === 0 ? (
-                    <div className="p-6 text-center bg-slate-950/60 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs">
+                    <div className="p-6 text-center bg-[#0a0c10]/60 rounded-xl border border-dashed border-[#1e232e] text-slate-400 text-xs">
                       No kitchen tickets in queue.
                     </div>
                   ) : (
@@ -1065,7 +1065,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       return (
                         <div
                           key={ord.id}
-                          className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2"
+                          className="bg-[#0a0c10] p-3 rounded-xl border border-[#1e232e] space-y-2"
                         >
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-white font-mono">{ord.tableNumber}</span>
@@ -1132,8 +1132,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
               </Card>
 
               {/* Inventory Stock Alerts */}
-              <Card className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <Card className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between border-b border-[#1e232e] pb-2.5">
                   <div className="flex items-center gap-2">
                     <Package className="w-4 h-4 text-rose-400" />
                     <h2 className="text-sm font-black text-white uppercase tracking-wide">Inventory Alerts</h2>
@@ -1146,14 +1146,14 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
                 <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                   {inventoryAlerts.length === 0 ? (
-                    <div className="p-4 text-center bg-slate-950/60 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs">
+                    <div className="p-4 text-center bg-[#0a0c10]/60 rounded-xl border border-dashed border-[#1e232e] text-slate-400 text-xs">
                       All inventory stock levels optimal.
                     </div>
                   ) : (
                     inventoryAlerts.slice(0, 4).map((item) => (
                       <div
                         key={item.id}
-                        className="bg-slate-950 p-2.5 rounded-xl border border-rose-500/30 flex items-center justify-between"
+                        className="bg-[#0a0c10] p-2.5 rounded-xl border border-rose-500/30 flex items-center justify-between"
                       >
                         <div>
                           <span className="text-xs font-bold text-white block">{item.name}</span>
@@ -1198,10 +1198,10 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 .map((ord) => (
                   <Card
                     key={ord.id}
-                    className="bg-slate-900 border-slate-800 p-4 space-y-3 hover:border-indigo-500/40 transition-all cursor-pointer"
+                    className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 hover:border-indigo-500/40 transition-all cursor-pointer"
                     onClick={() => setSelectedOrder(ord)}
                   >
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-2">
                       <div>
                         <span className="text-base font-black text-white font-mono">{ord.tableNumber}</span>
                         <span className="text-xs text-slate-400 font-mono block">#{ord.id.slice(-6)}</span>
@@ -1230,7 +1230,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       ))}
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-mono">
+                    <div className="flex items-center justify-between pt-2 border-t border-[#1e232e] text-xs font-mono">
                       <span className="text-slate-400">Total</span>
                       <span className="text-sm font-black text-white">₹{ord.totalAmount.toFixed(2)}</span>
                     </div>
@@ -1266,8 +1266,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                     key={tbl.id}
                     className={`p-4 space-y-3 transition-all ${
                       isOccupied
-                        ? 'bg-slate-900 border-emerald-500/50 shadow-lg shadow-emerald-950/20'
-                        : 'bg-slate-950 border-slate-800/80'
+                        ? 'bg-[#12151b] border-emerald-500/50 shadow-lg shadow-emerald-950/20'
+                        : 'bg-[#0a0c10] border-[#1e232e]/80'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -1286,7 +1286,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       )}
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                    <div className="pt-2 border-t border-[#1e232e] flex items-center gap-2">
                       {isOccupied ? (
                         <>
                           <Button
@@ -1331,8 +1331,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
               {kitchenOrders.map((ord) => {
                 const kitchenItems = ord.items.filter((i) => (i.targetDestination || 'KITCHEN') !== 'BAR');
                 return (
-                  <Card key={ord.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <Card key={ord.id} className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-2">
                       <div>
                         <span className="text-base font-black text-white font-mono">{ord.tableNumber}</span>
                         <span className="text-xs text-slate-400 font-mono block">Order #{ord.id.slice(-4)}</span>
@@ -1342,7 +1342,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
                     <div className="space-y-2 text-xs">
                       {kitchenItems.map((item, idx) => (
-                        <div key={idx} className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                        <div key={idx} className="bg-[#0a0c10] p-2.5 rounded-lg border border-[#1e232e]">
                           <div className="flex justify-between font-bold text-white">
                             <span>
                               {item.quantity}x {item.name}
@@ -1353,7 +1353,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       ))}
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                    <div className="pt-2 border-t border-[#1e232e] flex items-center gap-2">
                       {ord.kitchenStatus !== 'PREPARING' && ord.kitchenStatus !== 'READY' && (
                         <Button
                           variant="brand"
@@ -1404,8 +1404,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
               {barOrders.map((ord) => {
                 const barItems = ord.items.filter((i) => (i.targetDestination || '').toUpperCase() === 'BAR' || i.isAlcoholic);
                 return (
-                  <Card key={ord.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <Card key={ord.id} className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-2">
                       <div>
                         <span className="text-base font-black text-white font-mono">{ord.tableNumber}</span>
                         <span className="text-xs text-slate-400 font-mono block">Drink #{ord.id.slice(-4)}</span>
@@ -1415,7 +1415,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
                     <div className="space-y-2 text-xs">
                       {barItems.map((item, idx) => (
-                        <div key={idx} className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                        <div key={idx} className="bg-[#0a0c10] p-2.5 rounded-lg border border-[#1e232e]">
                           <div className="flex justify-between font-bold text-white">
                             <span>
                               {item.quantity}x {item.name}
@@ -1426,7 +1426,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       ))}
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                    <div className="pt-2 border-t border-[#1e232e] flex items-center gap-2">
                       {ord.barStatus !== 'PREPARING' && ord.barStatus !== 'READY' && (
                         <Button
                           variant="brand"
@@ -1475,14 +1475,14 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {pendingWaiterRequests.map((req) => (
-                <Card key={req.id} className="bg-slate-950 p-4 rounded-2xl border border-amber-500/40 space-y-3 shadow-xl">
+                <Card key={req.id} className="bg-[#0a0c10] p-4 rounded-2xl border border-amber-500/40 space-y-3 shadow-xl">
                   <div className="flex items-center justify-between">
                     <span className="text-lg font-black text-white font-mono">{req.tableNumber}</span>
                     <Badge variant={req.requestType === 'BILL' ? 'danger' : 'warning'}>{req.requestType}</Badge>
                   </div>
 
                   {req.customerNotes && (
-                    <p className="text-xs text-slate-300 italic bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                    <p className="text-xs text-slate-300 italic bg-[#12151b] p-2.5 rounded-xl border border-[#1e232e]">
                       "{req.customerNotes}"
                     </p>
                   )}
@@ -1529,7 +1529,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {inventory.map((item) => (
-                <Card key={item.id} className="bg-slate-900 border-slate-800 p-4 space-y-3">
+                <Card key={item.id} className="bg-[#12151b] border-[#1e232e] p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold text-white">{item.name}</span>
                     <Badge
@@ -1578,8 +1578,8 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 const runningTotal = calculateAuthoritativeSessionBill(tableOrders, restaurant).grandTotal;
 
                 return (
-                  <Card key={tbl.id} className="bg-slate-900 border-slate-800 p-4 space-y-3 shadow-xl">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <Card key={tbl.id} className="bg-[#12151b] border-[#1e232e] p-4 space-y-3 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-[#1e232e] pb-2">
                       <span className="text-base font-black text-white font-mono">{tbl.tableNumber}</span>
                       <Badge variant="warning">BILL PENDING</Badge>
                     </div>
@@ -1589,7 +1589,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                       <div>Total Bill: ₹{runningTotal.toFixed(2)}</div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                    <div className="pt-2 border-t border-[#1e232e] flex items-center gap-2">
                       <Button
                         variant="brand"
                         size="sm"
@@ -1623,7 +1623,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
       {selectedOrder && (
         <Modal isOpen={Boolean(selectedOrder)} onClose={() => setSelectedOrder(null)} title={`Order #${selectedOrder.id.slice(-6)}`}>
           <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs font-mono border-b border-slate-800 pb-2">
+            <div className="flex items-center justify-between text-xs font-mono border-b border-[#1e232e] pb-2">
               <span className="text-slate-400">Table: <strong className="text-white">{selectedOrder.tableNumber}</strong></span>
               <span className="text-slate-400">Status: <strong className="text-rose-400">{selectedOrder.status}</strong></span>
             </div>
@@ -1631,7 +1631,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
             <div className="space-y-2">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block font-mono">Ordered Items</span>
               {selectedOrder.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs">
+                <div key={idx} className="flex justify-between items-center bg-[#0a0c10] p-2.5 rounded-lg border border-[#1e232e] text-xs">
                   <div>
                     <span className="font-bold text-white">{item.quantity}x {item.name}</span>
                     <span className="text-[10px] text-slate-400 block font-mono">Station: {item.targetDestination || 'KITCHEN'}</span>
@@ -1641,7 +1641,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
               ))}
             </div>
 
-            <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-sm font-mono">
+            <div className="pt-3 border-t border-[#1e232e] flex justify-between items-center text-sm font-mono">
               <span className="text-slate-400">Grand Total</span>
               <span className="text-base font-black text-white">₹{selectedOrder.totalAmount.toFixed(2)}</span>
             </div>
@@ -1671,7 +1671,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                     o.status !== 'CANCELLED'
                 )
                 .map((ord) => (
-                  <div key={ord.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2 text-xs">
+                  <div key={ord.id} className="bg-[#0a0c10] p-3 rounded-xl border border-[#1e232e] space-y-2 text-xs">
                     <div className="flex justify-between font-mono">
                       <span className="font-bold text-white">Order #{ord.id.slice(-4)}</span>
                       <span className="text-slate-400">₹{ord.totalAmount.toFixed(2)}</span>
@@ -1683,7 +1683,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 ))
             )}
 
-            <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+            <div className="pt-3 border-t border-[#1e232e] flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setSelectedTableForDetails(null)}>
                 Close
               </Button>
@@ -1737,7 +1737,7 @@ export const RestaurantOperationsCenter: React.FC<RestaurantOperationsCenterProp
                 ? 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200'
                 : toast.type === 'warning'
                 ? 'bg-amber-950/95 border-amber-500/50 text-amber-200'
-                : 'bg-slate-900/95 border-slate-800 text-slate-200'
+                : 'bg-[#12151b]/95 border-[#1e232e] text-slate-200'
             }`}
           >
             <Bell className="w-4 h-4 shrink-0 text-amber-400" />

@@ -179,7 +179,7 @@ export const RestaurantSignupPage: React.FC<RestaurantSignupPageProps> = ({ onNa
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[400px] bg-gradient-to-b from-amber-500/10 via-rose-500/5 to-transparent blur-3xl pointer-events-none" />
 
       {/* Navigation Header */}
-      <header className="relative z-10 w-full px-6 py-5 flex items-center justify-between border-b border-white/[0.06] backdrop-blur-md bg-slate-950/40">
+      <header className="relative z-10 w-full px-6 py-5 flex items-center justify-between border-b border-white/[0.06] backdrop-blur-md bg-[#0a0c10]/40">
         <div 
           className="flex items-center gap-3 cursor-pointer"
           onClick={() => onNavigate ? onNavigate('/') : (window.location.href = 'https://dinely.food')}

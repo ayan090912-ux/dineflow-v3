@@ -438,7 +438,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               {suppliers.map((sup) => (
                 <Card
                   key={sup.id}
-                  className="p-5 bg-slate-900/90 border-slate-800 rounded-2xl space-y-4 relative overflow-hidden group hover:border-slate-700 transition-all"
+                  className="p-5 bg-[#12151b]/90 border-[#1e232e] rounded-2xl space-y-4 relative overflow-hidden group hover:border-slate-700 transition-all"
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -462,7 +462,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                     </button>
                   </div>
 
-                  <div className="space-y-2 text-xs text-slate-300 border-t border-slate-800/80 pt-3">
+                  <div className="space-y-2 text-xs text-slate-300 border-t border-[#1e232e]/80 pt-3">
                     {sup.phone && (
                       <div className="flex items-center gap-2 text-slate-300">
                         <Phone className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -484,7 +484,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                   </div>
 
                   {sup.notes && (
-                    <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 italic">
+                    <div className="p-2.5 rounded-xl bg-[#0a0c10]/60 border border-[#1e232e] text-[11px] text-slate-400 italic">
                       "{sup.notes}"
                     </div>
                   )}
@@ -632,7 +632,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               value={newStock.name}
               onChange={(e) => setNewStock({ ...newStock, name: e.target.value })}
               placeholder="e.g. Milk, Wagyu Beef, Gin, Tonic Water"
-              className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-rose-500"
+              className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-rose-500"
             />
           </div>
 
@@ -642,7 +642,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               <select
                 value={newStock.station}
                 onChange={(e) => setNewStock({ ...newStock, station: e.target.value as 'KITCHEN' | 'BAR' })}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-rose-500 font-bold"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-rose-500 font-bold"
               >
                 <option value="KITCHEN">👨‍🍳 Kitchen Inventory</option>
                 <option value="BAR">🍸 Bar Inventory</option>
@@ -656,7 +656,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                 value={newStock.category}
                 onChange={(e) => setNewStock({ ...newStock, category: e.target.value })}
                 placeholder="e.g. Dairy, Spirits, Meat, Produce"
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-rose-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-rose-500"
               />
             </div>
           </div>
@@ -668,7 +668,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                 type="number"
                 value={newStock.quantity}
                 onChange={(e) => setNewStock({ ...newStock, quantity: e.target.value })}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-rose-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white font-mono focus:outline-none focus:border-rose-500"
               />
             </div>
 
@@ -677,7 +677,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               <select
                 value={newStock.unit}
                 onChange={(e) => setNewStock({ ...newStock, unit: e.target.value })}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-rose-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-rose-500"
               >
                 <option value="kg">kg</option>
                 <option value="liters">liters</option>
@@ -694,7 +694,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                 type="number"
                 value={newStock.minThreshold}
                 onChange={(e) => setNewStock({ ...newStock, minThreshold: e.target.value })}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-rose-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white font-mono focus:outline-none focus:border-rose-500"
               />
             </div>
           </div>
@@ -706,7 +706,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                 type="number"
                 value={newStock.costPerUnit}
                 onChange={(e) => setNewStock({ ...newStock, costPerUnit: e.target.value })}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-rose-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white font-mono focus:outline-none focus:border-rose-500"
               />
             </div>
 
@@ -724,7 +724,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                     supplierContact: s?.phone || '',
                   });
                 }}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-rose-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-rose-500"
               >
                 <option value="">-- Select Active Supplier --</option>
                 {suppliers.map((s) => (
@@ -743,7 +743,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               value={newStock.storageLocation}
               onChange={(e) => setNewStock({ ...newStock, storageLocation: e.target.value })}
               placeholder="e.g. Cold Storage #1, Bar Cellar Rack 3, Pantry B"
-              className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-rose-500"
+              className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-rose-500"
             />
           </div>
 
@@ -751,7 +751,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
             <Button
               onClick={() => setIsAddStockModalOpen(false)}
               variant="outline"
-              className="border-slate-800 text-slate-400 hover:text-white"
+              className="border-[#1e232e] text-slate-400 hover:text-white"
             >
               Cancel
             </Button>
@@ -779,7 +779,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               value={newSupplier.name}
               onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
               placeholder="e.g. Ayaan Food Industry, Apex Beverages Co."
-              className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+              className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -791,7 +791,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                 value={newSupplier.contactPerson}
                 onChange={(e) => setNewSupplier({ ...newSupplier, contactPerson: e.target.value })}
                 placeholder="e.g. Ayaan Ahmad"
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-blue-500"
               />
             </div>
 
@@ -800,7 +800,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               <select
                 value={newSupplier.supplyCategory}
                 onChange={(e) => setNewSupplier({ ...newSupplier, supplyCategory: e.target.value })}
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-blue-500"
               >
                 <option value="Dairy & Cheese">Dairy & Cheese</option>
                 <option value="Produce & Veggies">Produce & Veggies</option>
@@ -820,7 +820,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                 value={newSupplier.phone}
                 onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })}
                 placeholder="+91 98765-43210"
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-blue-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white font-mono focus:outline-none focus:border-blue-500"
               />
             </div>
 
@@ -831,7 +831,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
                 value={newSupplier.email}
                 onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
                 placeholder="supply@vendor.com"
-                className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+                className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
@@ -843,7 +843,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               value={newSupplier.address}
               onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
               placeholder="e.g. Warehouse #4, Industrial Zone"
-              className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+              className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -854,7 +854,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
               onChange={(e) => setNewSupplier({ ...newSupplier, notes: e.target.value })}
               placeholder="Payment terms, delivery schedules..."
               rows={2}
-              className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500"
+              className="w-full p-2.5 bg-[#0a0c10] border border-[#1e232e] rounded-xl text-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -862,7 +862,7 @@ export const InventoryTerminalOS: React.FC<InventoryTerminalOSProps> = ({
             <Button
               onClick={() => setIsAddSupplierModalOpen(false)}
               variant="outline"
-              className="border-slate-800 text-slate-400 hover:text-white"
+              className="border-[#1e232e] text-slate-400 hover:text-white"
             >
               Cancel
             </Button>

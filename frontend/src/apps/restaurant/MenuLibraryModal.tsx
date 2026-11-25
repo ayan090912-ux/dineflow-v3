@@ -484,7 +484,7 @@ export const MenuLibraryModal: React.FC<MenuLibraryModalProps> = ({
                     }`}
                   >
                     {/* Top image & badges */}
-                    <div className="relative h-40 w-full bg-slate-900 overflow-hidden">
+                    <div className="relative h-40 w-full bg-[#12151b] overflow-hidden">
                       <img
                         src={item.imageUrl || "https://images.unsplash.com/photo-1544025162-d76694265947?w=600"}
                         alt={item.name}
@@ -646,7 +646,7 @@ export const MenuLibraryModal: React.FC<MenuLibraryModalProps> = ({
         {previewItem && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
             <div className="bg-[#0e1117] border border-[#1e232e] rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-scaleUp">
-              <div className="relative h-48 bg-slate-900">
+              <div className="relative h-48 bg-[#12151b]">
                 <img
                   src={previewItem.imageUrl || "https://images.unsplash.com/photo-1544025162-d76694265947?w=600"}
                   alt={previewItem.name}

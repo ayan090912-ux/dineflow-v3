@@ -1072,7 +1072,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
                   }`}
                   title="Toggle guest ordering on/off"
                 >
-                  <span className={`w-2 h-2 rounded-full ${currentEvent.isOrderingOpen ? 'bg-slate-950 animate-pulse' : 'bg-white'}`} />
+                  <span className={`w-2 h-2 rounded-full ${currentEvent.isOrderingOpen ? 'bg-[#0a0c10] animate-pulse' : 'bg-white'}`} />
                   <span>{currentEvent.isOrderingOpen ? 'Live Ordering Open' : 'Ordering Paused'}</span>
                 </button>
 
@@ -2861,7 +2861,7 @@ export const WeddingsTab: React.FC<WeddingsTabProps> = ({ currentRestaurant, cur
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 max-h-[500px] overflow-y-auto p-4 bg-slate-900 rounded-xl print:bg-white print:text-black print:overflow-visible print:max-h-none">
+          <div className="grid grid-cols-2 gap-4 max-h-[500px] overflow-y-auto p-4 bg-[#12151b] rounded-xl print:bg-white print:text-black print:overflow-visible print:max-h-none">
             {terminalTables.map((tbl) => {
               const guestUrl = getEventGuestUrl(currentEvent?.id || '', tbl.tableNumber);
 

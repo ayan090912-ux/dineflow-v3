@@ -844,8 +844,8 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ${
                 confirmedOrder.status === 'READY'
-                  ? 'bg-slate-950 text-amber-300 animate-pulse'
-                  : 'bg-slate-950/20 text-slate-950'
+                  ? 'bg-[#0a0c10] text-amber-300 animate-pulse'
+                  : 'bg-[#0a0c10]/20 text-slate-950'
               }`}
             >
               {confirmedOrder.status === 'READY'
@@ -1185,7 +1185,7 @@ export const CartCustomerApp: React.FC<CartCustomerAppProps> = ({
               className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-black flex items-center justify-between shadow-2xl shadow-amber-950/60 hover:brightness-105 active:scale-[0.98] transition-all border border-amber-300/40 cursor-pointer"
             >
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center text-xs font-mono font-black shadow-inner">
+                <span className="w-7 h-7 rounded-xl bg-[#0a0c10] text-amber-400 flex items-center justify-center text-xs font-mono font-black shadow-inner">
                   {basketCount}
                 </span>
                 <span className="text-sm tracking-tight font-black">View Order Summary</span>

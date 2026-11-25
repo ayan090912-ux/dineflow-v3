@@ -455,7 +455,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                 render: (t) => (
                   <div className="flex items-center gap-1 flex-wrap">
                     {(t.applicableOrderTypes || ['DINE_IN', 'TAKEAWAY', 'DELIVERY']).map((ot) => (
-                      <span key={ot} className="px-1.5 py-0.5 rounded-md bg-slate-950 text-slate-300 text-[9px] font-mono border border-slate-800">
+                      <span key={ot} className="px-1.5 py-0.5 rounded-md bg-[#0a0c10] text-slate-300 text-[9px] font-mono border border-[#1e232e]">
                         {ot === 'DINE_IN' ? 'Dine-in' : ot === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
                       </span>
                     ))}
@@ -538,7 +538,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
               value={taxName}
               onChange={(e) => setTaxName(e.target.value)}
               placeholder="e.g. GST, Service Charge, VAT..."
-              className="bg-slate-950 border-slate-800 text-white font-bold"
+              className="bg-[#0a0c10] border-[#1e232e] text-white font-bold"
             />
           </div>
 
@@ -549,7 +549,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
               <select
                 value={taxType}
                 onChange={(e: any) => setTaxType(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl font-bold text-white focus:outline-none focus:border-rose-500"
+                className="w-full px-3 py-2 bg-[#0a0c10] border border-[#1e232e] rounded-xl font-bold text-white focus:outline-none focus:border-rose-500"
               >
                 <option value="PERCENTAGE">Percentage (%)</option>
                 <option value="FIXED">Fixed Amount ({currencySymbol})</option>
@@ -570,7 +570,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                     value={rate}
                     onChange={(e) => setRate(e.target.value)}
                     placeholder="5.0"
-                    className="bg-slate-950 border-slate-800 text-white font-bold pr-8"
+                    className="bg-[#0a0c10] border-[#1e232e] text-white font-bold pr-8"
                   />
                   <span className="absolute right-3 top-2.5 text-slate-500 font-bold">%</span>
                 </div>
@@ -584,7 +584,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                     value={fixedAmount}
                     onChange={(e) => setFixedAmount(e.target.value)}
                     placeholder="50"
-                    className="bg-slate-950 border-slate-800 text-white font-bold pl-8"
+                    className="bg-[#0a0c10] border-[#1e232e] text-white font-bold pl-8"
                   />
                 </div>
               )}
@@ -601,7 +601,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                 className={`p-2.5 rounded-xl border text-center font-bold transition-all ${
                   appliesTo === 'ORDER'
                     ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    : 'bg-[#0a0c10] border-[#1e232e] text-slate-400 hover:border-slate-700'
                 }`}
               >
                 Entire Order
@@ -613,7 +613,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                 className={`p-2.5 rounded-xl border text-center font-bold transition-all ${
                   appliesTo === 'CATEGORY'
                     ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    : 'bg-[#0a0c10] border-[#1e232e] text-slate-400 hover:border-slate-700'
                 }`}
               >
                 Selected Categories
@@ -625,7 +625,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                 className={`p-2.5 rounded-xl border text-center font-bold transition-all ${
                   appliesTo === 'ITEM'
                     ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    : 'bg-[#0a0c10] border-[#1e232e] text-slate-400 hover:border-slate-700'
                 }`}
               >
                 Selected Menu Items
@@ -635,11 +635,11 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
 
           {/* CATEGORIES PICKER IF SELECTED CATEGORIES */}
           {appliesTo === 'CATEGORY' && (
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div className="p-3 bg-[#0a0c10] border border-[#1e232e] rounded-xl space-y-2">
               <span className="text-[11px] font-bold text-slate-300 block">Select Restaurant Categories:</span>
               <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
                 {categories.map((cat) => (
-                  <label key={cat.id} className="flex items-center gap-2 cursor-pointer text-xs p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-rose-500/50">
+                  <label key={cat.id} className="flex items-center gap-2 cursor-pointer text-xs p-1.5 rounded bg-[#12151b] border border-[#1e232e] hover:border-rose-500/50">
                     <input
                       type="checkbox"
                       checked={selectedCategoryIds.includes(cat.id)}
@@ -655,11 +655,11 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
 
           {/* MENU ITEMS PICKER IF SELECTED MENU ITEMS */}
           {appliesTo === 'ITEM' && (
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div className="p-3 bg-[#0a0c10] border border-[#1e232e] rounded-xl space-y-2">
               <span className="text-[11px] font-bold text-slate-300 block">Select Restaurant Menu Items:</span>
               <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
                 {menuItems.map((item) => (
-                  <label key={item.id} className="flex items-center gap-2 cursor-pointer text-xs p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-rose-500/50">
+                  <label key={item.id} className="flex items-center gap-2 cursor-pointer text-xs p-1.5 rounded bg-[#12151b] border border-[#1e232e] hover:border-rose-500/50">
                     <input
                       type="checkbox"
                       checked={selectedMenuItemIds.includes(item.id)}
@@ -677,7 +677,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
           )}
 
           {/* TAX INCLUDED / EXCLUDED */}
-          <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+          <div className="p-3 bg-[#0a0c10] border border-[#1e232e] rounded-xl space-y-2">
             <span className="text-slate-300 font-bold block">Tax Included in Menu Price?</span>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -686,7 +686,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                 className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
                   isInclusive
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg'
-                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                    : 'bg-[#12151b] border-[#1e232e] text-slate-400'
                 }`}
               >
                 <div className="font-black text-xs">Yes (Included)</div>
@@ -701,7 +701,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                 className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
                   !isInclusive
                     ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                    : 'bg-[#12151b] border-[#1e232e] text-slate-400'
                 }`}
               >
                 <div className="font-black text-xs">No (Excluded)</div>
@@ -717,7 +717,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
             <label className="block text-slate-400 font-bold mb-1.5">Applicable Order Types:</label>
             <div className="flex items-center gap-3">
               {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as OrderType[]).map((ot) => (
-                <label key={ot} className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-200 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+                <label key={ot} className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-200 bg-[#0a0c10] px-3 py-2 rounded-xl border border-[#1e232e]">
                   <input
                     type="checkbox"
                     checked={applicableOrderTypes.includes(ot)}
@@ -761,11 +761,11 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
           </div>
 
           {/* LIVE TAX CALCULATION PREVIEW CARD */}
-          <div className="p-3.5 bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 rounded-2xl space-y-2">
+          <div className="p-3.5 bg-gradient-to-br from-slate-950 to-slate-900 border border-[#1e232e] rounded-2xl space-y-2">
             <span className="text-[11px] text-slate-400 font-bold uppercase flex items-center gap-1.5">
               <Calculator className="w-3.5 h-3.5 text-rose-500" /> Live Tax Calculation Preview (Sample Order)
             </span>
-            <div className="space-y-1 font-mono text-xs border-t border-slate-800 pt-2">
+            <div className="space-y-1 font-mono text-xs border-t border-[#1e232e] pt-2">
               <div className="flex justify-between text-slate-400">
                 <span>Sample Subtotal:</span>
                 <span>{currencySymbol}1,000.00</span>
@@ -777,7 +777,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
                 </span>
                 <span>{currencySymbol}{previewData.taxAmount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-white font-black pt-1 border-t border-slate-800">
+              <div className="flex justify-between text-white font-black pt-1 border-t border-[#1e232e]">
                 <span>Estimated Total:</span>
                 <span className="text-emerald-400">{currencySymbol}{previewData.estimatedTotal.toFixed(2)}</span>
               </div>
@@ -785,7 +785,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
           </div>
 
           {/* ACTIONS */}
-          <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-800">
+          <div className="pt-3 flex items-center justify-end gap-2 border-t border-[#1e232e]">
             <Button
               type="button"
               variant="outline"
@@ -826,7 +826,7 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1e232e]">
             <Button
               variant="outline"
               size="sm"

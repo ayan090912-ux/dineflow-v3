@@ -611,7 +611,7 @@ export const WeddingEventPortal: React.FC<WeddingEventPortalProps> = ({
                 ? 'bg-rose-950/90 text-rose-200 border-rose-500/40'
                 : t.type === 'warning'
                 ? 'bg-amber-950/90 text-amber-200 border-amber-500/40'
-                : 'bg-slate-900/90 text-slate-200 border-slate-700'
+                : 'bg-[#12151b]/90 text-slate-200 border-slate-700'
             }`}
           >
             {t.type === 'success' ? (

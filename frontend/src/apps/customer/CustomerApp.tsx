@@ -1730,7 +1730,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-bold p-3.5 rounded-2xl shadow-[0_12px_36px_rgba(245,166,35,0.4)] border border-amber-300/40 flex items-center justify-between transition-all active:scale-[0.99] group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-xl bg-slate-950/20 flex items-center justify-center font-mono text-xs font-black text-slate-950">
+              <div className="w-7 h-7 rounded-xl bg-[#0a0c10]/20 flex items-center justify-center font-mono text-xs font-black text-slate-950">
                 {totalCartCount}
               </div>
               <div className="text-left">

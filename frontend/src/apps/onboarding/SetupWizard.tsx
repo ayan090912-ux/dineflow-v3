@@ -37,6 +37,7 @@ import {
   LayoutDashboard,
   Check,
   QrCode,
+  Flame,
 } from 'lucide-react';
 import { Restaurant, User, BusinessType } from '../../packages/types';
 
@@ -177,6 +178,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   const [enableKitchen, setEnableKitchen] = useState<boolean>(true);
   const [enableWaiter, setEnableWaiter] = useState<boolean>(true);
   const [enableBar, setEnableBar] = useState<boolean>(false);
+  const [enableHookah, setEnableHookah] = useState<boolean>(false);
   const [enableInventory, setEnableInventory] = useState<boolean>(true);
   const [enableBilling, setEnableBilling] = useState<boolean>(true);
 
@@ -189,9 +191,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       setEnableBilling(true);
       setEnableWaiter(hasSeating);
       setEnableBar(false); // Bar is NEVER enabled for Food Cart
+      setEnableHookah(false);
       if (!hasSeating) setTablesCount(0);
     } else if (type === 'BAR') {
       setEnableBar(true);
+      setEnableHookah(false);
       setEnableKitchen(true);
       setEnableWaiter(true);
       setEnableInventory(true);
@@ -202,6 +206,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       setEnableKitchen(true);
       setEnableWaiter(true);
       setEnableBar(true);
+      setEnableHookah(false);
       setEnableInventory(true);
       setEnableBilling(true);
       setHasSeating(true);
@@ -211,6 +216,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       setEnableKitchen(true);
       setEnableWaiter(true);
       setEnableBar(false);
+      setEnableHookah(false);
       setEnableInventory(true);
       setEnableBilling(true);
       setHasSeating(true);
@@ -439,7 +445,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       }
     } else if (currentStep === 3) {
       if (businessType !== 'WEDDING_ORDERING') {
-        const anySelected = enableKitchen || enableWaiter || enableBar || enableInventory || enableBilling;
+        const anySelected = enableKitchen || enableWaiter || enableBar || enableHookah || enableInventory || enableBilling;
         if (!anySelected) {
           setErrorMessage('Please select at least one operational terminal for your business.');
           return;
@@ -568,6 +574,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       if (enableKitchen) enabledModules.push('kitchen');
       if (enableWaiter && !isNoSeating) enabledModules.push('waiter');
       if (enableBar && businessType !== 'FOOD_CART') enabledModules.push('bar');
+      if (enableHookah && businessType !== 'FOOD_CART') enabledModules.push('hookah');
       if (enableInventory) enabledModules.push('inventory');
       if (enableBilling) enabledModules.push('billing');
       if (!isNoSeating) enabledModules.push('tables');
@@ -580,6 +587,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         hasTables: !isNoSeating,
         hasKitchen: enableKitchen,
         hasWaiter: enableWaiter && !isNoSeating,
+        enabledModules,
         tableCount: finalTablesCount,
         address: fullAddress,
         phone: phone.trim(),
@@ -595,6 +603,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         restaurantName: restaurantName.trim(),
         businessType,
         hasBar: enableBar && businessType !== 'FOOD_CART',
+        hasHookah: enableHookah && businessType !== 'FOOD_CART',
         hasTables: !isNoSeating,
         hasKitchen: enableKitchen,
         hasWaiter: enableWaiter && !isNoSeating,
@@ -625,6 +634,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
         hasKitchen: enableKitchen,
         hasWaiter: enableWaiter && !isNoSeating,
         hasBar: enableBar && businessType !== 'FOOD_CART',
+        hasHookah: enableHookah && businessType !== 'FOOD_CART',
         hasInventory: enableInventory,
         hasBilling: enableBilling,
         hasTables: !isNoSeating,
@@ -1379,6 +1389,25 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                     </label>
                   )}
 
+                  {/* 4. Hookah Terminal */}
+                  {businessType !== 'FOOD_CART' && (
+                    <label className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-[#121620] transition-colors">
+                      <div className="flex items-start gap-3.5">
+                        <Flame className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                        <div>
+                          <span className="font-medium text-white text-sm block">Hookah & Shisha Terminal</span>
+                          <p className="text-xs text-slate-400 mt-0.5">Flavor blends, coal heating queue, and lounge table routing.</p>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={enableHookah}
+                        onChange={() => setEnableHookah(!enableHookah)}
+                        className="w-4 h-4 rounded accent-white cursor-pointer shrink-0"
+                      />
+                    </label>
+                  )}
+
                   {/* 4. Inventory Terminal */}
                   <label className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-[#121620] transition-colors">
                     <div className="flex items-start gap-3.5">
@@ -1504,6 +1533,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                       {enableKitchen && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Kitchen KDS</span>}
                       {enableWaiter && (businessType !== 'FOOD_CART' || hasSeating) && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Waiter Terminal</span>}
                       {enableBar && businessType !== 'FOOD_CART' && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Bar Terminal</span>}
+                      {enableHookah && businessType !== 'FOOD_CART' && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Hookah Terminal</span>}
                       {enableInventory && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Inventory</span>}
                       {enableBilling && <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#161a24] border border-[#232836] text-slate-200">Billing & UPI</span>}
                     </div>

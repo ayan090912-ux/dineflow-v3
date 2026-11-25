@@ -17,14 +17,14 @@ export const ModuleNotEnabledPage: React.FC<ModuleNotEnabledPageProps> = ({
   const businessType = restaurant?.businessType || 'RESTAURANT';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 relative font-sans overflow-hidden">
+    <div className="min-h-screen bg-[#0a0c10] text-slate-100 flex flex-col justify-center items-center p-4 relative font-sans overflow-hidden">
       {/* Background Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-amber-500/10 blur-[120px] rounded-full pointer-events-none" />
 
       <div className="w-full max-w-md space-y-6 relative z-10 text-center">
         <DinelyLogo size="md" className="justify-center mb-2" />
 
-        <Card className="bg-slate-900/90 border-slate-800 p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6 rounded-3xl text-center">
+        <Card className="bg-[#12151b]/90 border-[#1e232e] p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6 rounded-3xl text-center">
           <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
             <Layers className="w-8 h-8" />
           </div>
@@ -41,7 +41,7 @@ export const ModuleNotEnabledPage: React.FC<ModuleNotEnabledPageProps> = ({
             </p>
           </div>
 
-          <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs text-slate-400 text-left space-y-1">
+          <div className="p-3.5 bg-[#0a0c10] border border-[#1e232e] rounded-2xl text-xs text-slate-400 text-left space-y-1">
             <span className="text-[10px] text-slate-500 font-bold uppercase block">How to enable:</span>
             <p className="text-slate-300">
               The business owner can activate optional terminals anytime in <strong className="text-rose-400">Settings → Workspace / Terminals</strong>.
@@ -60,7 +60,7 @@ export const ModuleNotEnabledPage: React.FC<ModuleNotEnabledPageProps> = ({
             <Button
               variant="outline"
               onClick={() => onNavigate('/workspace')}
-              className="w-full text-xs text-slate-300 border-slate-800 hover:bg-slate-800"
+              className="w-full text-xs text-slate-300 border-[#1e232e] hover:bg-slate-800"
             >
               Select Another Workspace
             </Button>

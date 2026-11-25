@@ -436,7 +436,7 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
                 Official Restaurant Logo Emblem
               </label>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-3.5 rounded-xl bg-[#0b0d11] border border-white/[0.06]">
-                <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-white/10 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
+                <div className="w-16 h-16 rounded-2xl bg-[#12151b] border border-white/10 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
                   {theme.logo ? (
                     <img src={theme.logo} alt="Logo" className="w-full h-full object-cover" />
                   ) : (
@@ -519,7 +519,7 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
                 Customer Storefront Venue Hero Banner
               </label>
               <div className="space-y-2.5">
-                <div className="w-full h-32 rounded-2xl bg-slate-900 border border-white/10 overflow-hidden relative shadow-md">
+                <div className="w-full h-32 rounded-2xl bg-[#12151b] border border-white/10 overflow-hidden relative shadow-md">
                   {theme.bannerUrl ? (
                     <>
                       <img src={theme.bannerUrl} alt="Cover Banner" className="w-full h-full object-cover" />
@@ -974,7 +974,7 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
                         <img
                           src={item.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=120&auto=format&fit=crop&q=80'}
                           alt={item.name}
-                          className="w-12 h-12 rounded-xl object-cover border border-white/20 shrink-0 bg-slate-900"
+                          className="w-12 h-12 rounded-xl object-cover border border-white/20 shrink-0 bg-[#12151b]"
                         />
                         <div className="min-w-0">
                           <div className="flex items-center gap-1">
@@ -1029,7 +1029,7 @@ export const BrandThemeTerminalOS: React.FC<BrandThemeTerminalOSProps> = ({
                   {theme.logo ? (
                     <img src={theme.logo} alt="Logo" className="w-full h-full object-contain" />
                   ) : (
-                    <div className="w-full h-full bg-slate-900 rounded-xl flex items-center justify-center text-white/50">
+                    <div className="w-full h-full bg-[#12151b] rounded-xl flex items-center justify-center text-white/50">
                       <Store className="w-6 h-6" />
                     </div>
                   )}

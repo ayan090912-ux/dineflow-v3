@@ -1549,7 +1549,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     setChosenPrepTime(parsed);
                   }
                 }}
-                className="bg-slate-950 border-slate-800 font-mono text-lg font-bold text-white"
+                className="bg-[#0a0c10] border-[#1e232e] font-mono text-lg font-bold text-white"
               />
             </div>
 
@@ -1579,7 +1579,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 type="number"
                 value={customEtaInput}
                 onChange={(e) => setCustomEtaInput(e.target.value)}
-                className="bg-slate-950 border-slate-800 font-mono text-lg font-bold"
+                className="bg-[#0a0c10] border-[#1e232e] font-mono text-lg font-bold"
               />
             </div>
 
@@ -1590,7 +1590,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 placeholder="e.g. Wagyu steak resting, kitchen rush..."
                 value={etaChangeReason}
                 onChange={(e) => setEtaChangeReason(e.target.value)}
-                className="bg-slate-950 border-slate-800"
+                className="bg-[#0a0c10] border-[#1e232e]"
               />
             </div>
 
@@ -1625,7 +1625,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                 placeholder="e.g. Hot line delay 10 mins due to high rush..."
                 value={delayMessage}
                 onChange={(e) => setDelayMessage(e.target.value)}
-                className="bg-slate-950 border-slate-800 text-xs"
+                className="bg-[#0a0c10] border-[#1e232e] text-xs"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">
@@ -1653,7 +1653,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               <p className="text-slate-500 text-center py-6">No recently bumped orders to recall.</p>
             ) : (
               bumpedHistory.map((order) => (
-                <div key={order.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                <div key={order.id} className="p-3 bg-[#0a0c10] rounded-xl border border-[#1e232e] flex items-center justify-between">
                   <div>
                     <span className="font-mono font-bold text-amber-400">#{order.id}</span>
                     <p className="text-[11px] text-slate-400">{(order.tableNumber || '').trim().toLowerCase().startsWith('table') ? order.tableNumber : `Table ${order.tableNumber || ''}`} • {(order.items || []).length} items</p>
@@ -1676,7 +1676,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           title={`ETA Audit History — Ticket #${historyOrder.id}`}
         >
           <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+            <div className="p-3 bg-[#0a0c10] rounded-xl border border-[#1e232e]">
               <p className="font-bold text-white">Table: {historyOrder.tableNumber}</p>
               <p className="text-slate-400">Current ETA: {historyOrder.estimatedPrepTimeMinutes || 15} mins</p>
             </div>
@@ -1684,7 +1684,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             <div className="space-y-2">
               {historyOrder.etaHistory && historyOrder.etaHistory.length > 0 ? (
                 historyOrder.etaHistory.map((h, i) => (
-                  <div key={i} className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                  <div key={i} className="p-3 bg-[#12151b] rounded-xl border border-[#1e232e] space-y-1">
                     <div className="flex justify-between items-center">
                       <span className="font-bold text-amber-400">{h.changedBy}</span>
                       <span className="text-[10px] text-slate-500">{new Date(h.timestamp).toLocaleTimeString()}</span>

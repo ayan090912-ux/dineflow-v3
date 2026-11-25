@@ -213,7 +213,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
           <Button
             onClick={() => setPreviewModalOpen(true)}
             variant="outline"
-            className="border-slate-800 text-slate-300 text-xs flex items-center gap-1.5"
+            className="border-[#1e232e] text-slate-300 text-xs flex items-center gap-1.5"
           >
             <FileText className="w-3.5 h-3.5 text-cyan-400" />
             <span>Sample Receipt Preview</span>
@@ -238,7 +238,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
         </div>
       ) : printers.length === 0 ? (
         <Card className="bg-[#12151b] border-[#1e232e] p-8 text-center space-y-3">
-          <div className="w-12 h-12 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center mx-auto text-slate-500">
+          <div className="w-12 h-12 bg-[#12151b] border border-[#1e232e] rounded-2xl flex items-center justify-center mx-auto text-slate-500">
             <Printer className="w-6 h-6" />
           </div>
           <h3 className="text-sm font-semibold text-white">No Thermal Printers Configured</h3>
@@ -260,7 +260,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                  <div className="p-2 bg-[#12151b] rounded-lg border border-[#1e232e]">
                     {getConnectionIcon(p.connectionType)}
                   </div>
                   <div>
@@ -290,7 +290,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
               </div>
 
               {/* Details & Specs */}
-              <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1.5 font-mono text-[11px] mb-3">
+              <div className="bg-[#0a0c10] p-2.5 rounded-xl border border-[#1e232e] space-y-1.5 font-mono text-[11px] mb-3">
                 {p.connectionType === 'NETWORK_LAN' && (
                   <div className="flex justify-between text-slate-300">
                     <span className="text-slate-500">Socket IP:</span>
@@ -336,7 +336,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
                   onClick={() => handleTestPrint(p)}
                   disabled={testingPrinterId === p.id}
                   variant="outline"
-                  className="text-xs flex-1 py-1.5 border-slate-800 text-emerald-400 hover:bg-emerald-500/10"
+                  className="text-xs flex-1 py-1.5 border-[#1e232e] text-emerald-400 hover:bg-emerald-500/10"
                 >
                   {testingPrinterId === p.id ? (
                     <span className="animate-pulse">Testing...</span>
@@ -350,7 +350,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
                 <Button
                   onClick={() => handleOpenEdit(p)}
                   variant="outline"
-                  className="px-2.5 py-1.5 border-slate-800 text-slate-300 hover:text-white"
+                  className="px-2.5 py-1.5 border-[#1e232e] text-slate-300 hover:text-white"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </Button>
@@ -358,7 +358,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
                 <Button
                   onClick={() => handleDelete(p.id, p.name)}
                   variant="outline"
-                  className="px-2.5 py-1.5 border-slate-800 text-rose-400 hover:bg-rose-500/10"
+                  className="px-2.5 py-1.5 border-[#1e232e] text-rose-400 hover:bg-rose-500/10"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
@@ -369,25 +369,25 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
       )}
 
       {/* HARDWARE CONNECTION GUIDE */}
-      <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 space-y-2">
+      <div className="p-4 bg-[#0a0c10]/80 rounded-2xl border border-[#1e232e]/80 space-y-2">
         <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
           <HelpCircle className="w-4 h-4 text-cyan-400" />
           Supported Connection Methods & Hardware Realities
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-[11px] text-slate-400 font-mono">
-          <div className="p-3 bg-[#12151b] rounded-xl border border-slate-800 space-y-1">
+          <div className="p-3 bg-[#12151b] rounded-xl border border-[#1e232e] space-y-1">
             <strong className="text-cyan-400 block font-sans">Network / LAN</strong>
             Direct raw TCP socket to Port 9100. Best for reliable multi-terminal printing from cloud servers.
           </div>
-          <div className="p-3 bg-[#12151b] rounded-xl border border-slate-800 space-y-1">
+          <div className="p-3 bg-[#12151b] rounded-xl border border-[#1e232e] space-y-1">
             <strong className="text-amber-400 block font-sans">USB Local Bridge</strong>
             Local lightweight agent running on POS PC (<code className="text-slate-300">http://localhost:9191</code>) for direct USB ESC/POS forwarding.
           </div>
-          <div className="p-3 bg-[#12151b] rounded-xl border border-slate-800 space-y-1">
+          <div className="p-3 bg-[#12151b] rounded-xl border border-[#1e232e] space-y-1">
             <strong className="text-blue-400 block font-sans">Bluetooth ESC/POS</strong>
             Wireless battery-powered thermal printers paired via Web Bluetooth on supported Chrome/Android devices.
           </div>
-          <div className="p-3 bg-[#12151b] rounded-xl border border-slate-800 space-y-1">
+          <div className="p-3 bg-[#12151b] rounded-xl border border-[#1e232e] space-y-1">
             <strong className="text-emerald-400 block font-sans">Browser Fallback</strong>
             Universal, zero-driver CSS thermal print formatted for 58mm/80mm rolls. Works on all devices.
           </div>
@@ -417,7 +417,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
               <select
                 value={connectionType}
                 onChange={(e) => setConnectionType(e.target.value as PrinterConnectionType)}
-                className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg p-2 text-xs"
+                className="w-full bg-[#12151b] border border-[#1e232e] text-white rounded-lg p-2 text-xs"
               >
                 <option value="BROWSER">Browser Print (Universal)</option>
                 <option value="NETWORK_LAN">Network / LAN (Raw TCP Port 9100)</option>
@@ -431,7 +431,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
               <select
                 value={paperWidth}
                 onChange={(e) => setPaperWidth(e.target.value as PrinterPaperWidth)}
-                className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg p-2 text-xs"
+                className="w-full bg-[#12151b] border border-[#1e232e] text-white rounded-lg p-2 text-xs"
               >
                 <option value="80mm">80 mm (Standard POS - 48 cols)</option>
                 <option value="58mm">58 mm (Compact Roll - 32 cols)</option>
@@ -440,7 +440,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
           </div>
 
           {connectionType === 'NETWORK_LAN' && (
-            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
+            <div className="grid grid-cols-3 gap-3 p-3 bg-[#0a0c10] rounded-xl border border-[#1e232e]">
               <div className="col-span-2">
                 <label className="block text-[10px] text-slate-400 font-mono mb-1">Printer IP Address *</label>
                 <Input
@@ -462,7 +462,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
           )}
 
           {connectionType === 'USB_BRIDGE' && (
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+            <div className="p-3 bg-[#0a0c10] rounded-xl border border-[#1e232e]">
               <label className="block text-[10px] text-slate-400 font-mono mb-1">Local Bridge Agent Endpoint</label>
               <Input
                 value={bridgeUrl}
@@ -490,7 +490,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
                   type="checkbox"
                   checked={isDefault}
                   onChange={(e) => setIsDefault(e.target.checked)}
-                  className="rounded bg-slate-900 border-slate-800 text-emerald-500"
+                  className="rounded bg-[#12151b] border-[#1e232e] text-emerald-500"
                 />
                 <span>Set as Default Printer</span>
               </label>
@@ -500,19 +500,19 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
                   type="checkbox"
                   checked={autoPrintOnBill}
                   onChange={(e) => setAutoPrintOnBill(e.target.checked)}
-                  className="rounded bg-slate-900 border-slate-800 text-emerald-500"
+                  className="rounded bg-[#12151b] border-[#1e232e] text-emerald-500"
                 />
                 <span>Auto-print when Bill is requested</span>
               </label>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+          <div className="pt-3 border-t border-[#1e232e] flex justify-end gap-2">
             <Button
               type="button"
               onClick={() => setIsModalOpen(false)}
               variant="outline"
-              className="border-slate-800 text-slate-300 text-xs"
+              className="border-[#1e232e] text-slate-300 text-xs"
             >
               Cancel
             </Button>
@@ -535,7 +535,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
         title="Thermal ESC/POS Receipt Preview"
       >
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
+          <div className="flex justify-between items-center bg-[#0a0c10] p-2.5 rounded-xl border border-[#1e232e] text-xs">
             <span className="text-slate-400 font-medium">Select Paper Width:</span>
             <div className="flex gap-2">
               <button
@@ -544,7 +544,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
                 className={`px-3 py-1 rounded-lg font-mono text-xs ${
                   previewPaperWidth === '80mm'
                     ? 'bg-emerald-500 text-black font-bold'
-                    : 'bg-slate-900 text-slate-400 border border-slate-800'
+                    : 'bg-[#12151b] text-slate-400 border border-[#1e232e]'
                 }`}
               >
                 80 mm (48 cols)
@@ -555,7 +555,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
                 className={`px-3 py-1 rounded-lg font-mono text-xs ${
                   previewPaperWidth === '58mm'
                     ? 'bg-emerald-500 text-black font-bold'
-                    : 'bg-slate-900 text-slate-400 border border-slate-800'
+                    : 'bg-[#12151b] text-slate-400 border border-[#1e232e]'
                 }`}
               >
                 58 mm (32 cols)
@@ -660,7 +660,7 @@ export const ThermalPrinterSettings: React.FC<ThermalPrinterSettingsProps> = ({
             <Button
               onClick={() => setPreviewModalOpen(false)}
               variant="outline"
-              className="border-slate-800 text-slate-300 text-xs"
+              className="border-[#1e232e] text-slate-300 text-xs"
             >
               Close
             </Button>

@@ -2980,7 +2980,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                       : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
                   }`}
                 >
-                  <span className={`w-2 h-2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-slate-950 animate-pulse' : 'bg-emerald-400'}`} />
+                  <span className={`w-2 h-2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-[#0a0c10] animate-pulse' : 'bg-emerald-400'}`} />
                   <span>Today ({formatReadableDate(activeBusinessDate)})</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-black/20 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
                     {dayWiseRecords.find((r) => r.isToday)?.ordersCount || 0}
@@ -3016,11 +3016,11 @@ export const CartApp: React.FC<CartAppProps> = ({
                         : 'text-slate-300 hover:bg-white/10'
                     }`}
                   >
-                    <option value="" disabled className="bg-slate-900 text-slate-400">Past Shift Records...</option>
+                    <option value="" disabled className="bg-[#12151b] text-slate-400">Past Shift Records...</option>
                     {dayWiseRecords
                       .filter((r) => !r.isToday && !r.isYesterday)
                       .map((r) => (
-                        <option key={r.dateKey} value={r.dateKey} className="bg-slate-900 text-white">
+                        <option key={r.dateKey} value={r.dateKey} className="bg-[#12151b] text-white">
                           {r.formattedDate} ({r.ordersCount} orders • ₹{r.grossSales})
                         </option>
                       ))}
@@ -3307,7 +3307,7 @@ export const CartApp: React.FC<CartAppProps> = ({
                       : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
                   }`}
                 >
-                  <span className={`w-2 h-2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-slate-950 animate-pulse' : 'bg-emerald-400'}`} />
+                  <span className={`w-2 h-2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-[#0a0c10] animate-pulse' : 'bg-emerald-400'}`} />
                   <span>Today ({formatReadableDate(activeBusinessDate)})</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedDateFilter === 'TODAY' ? 'bg-black/20 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
                     {dayWiseRecords.find((r) => r.isToday)?.ordersCount || 0}
@@ -3343,11 +3343,11 @@ export const CartApp: React.FC<CartAppProps> = ({
                         : 'text-slate-300 hover:bg-white/10'
                     }`}
                   >
-                    <option value="" disabled className="bg-slate-900 text-slate-400">Past Shift Records...</option>
+                    <option value="" disabled className="bg-[#12151b] text-slate-400">Past Shift Records...</option>
                     {dayWiseRecords
                       .filter((r) => !r.isToday && !r.isYesterday)
                       .map((r) => (
-                        <option key={r.dateKey} value={r.dateKey} className="bg-slate-900 text-white">
+                        <option key={r.dateKey} value={r.dateKey} className="bg-[#12151b] text-white">
                           {r.formattedDate} ({r.ordersCount} orders • ₹{r.grossSales})
                         </option>
                       ))}
@@ -3842,8 +3842,8 @@ export const CartApp: React.FC<CartAppProps> = ({
         {/* Modal: Print Counter Standee Sign */}
         {isPrintModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-[#0f1420] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-6 shadow-2xl relative">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="bg-[#0f1420] border border-[#1e232e] rounded-3xl max-w-md w-full p-6 space-y-6 shadow-2xl relative">
+              <div className="flex items-center justify-between pb-3 border-b border-[#1e232e]">
                 <div className="flex items-center gap-2">
                   <Printer className="w-5 h-5 text-sky-400" />
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">Print Counter Sign</h3>

@@ -2623,7 +2623,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
             return (
               <div className="space-y-4 font-sans text-slate-100">
                 {/* Header Metadata */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs font-mono">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#12151b] border border-[#1e232e] p-4 rounded-2xl text-xs font-mono">
                   <div>
                     <span className="text-slate-400 block text-[10px]">Session ID:</span>
                     <strong className="text-amber-300">{activeSession ? `#${activeSession.id}` : 'No Session'}</strong>
@@ -2648,13 +2648,13 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                     Session Orders ({sessionOrders.length})
                   </h4>
                   {sessionOrders.length === 0 ? (
-                    <div className="p-6 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 text-xs text-slate-500">
+                    <div className="p-6 text-center bg-[#0a0c10]/60 rounded-2xl border border-dashed border-[#1e232e] text-xs text-slate-500">
                       No orders placed yet for this active table session.
                     </div>
                   ) : (
                     <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                       {sessionOrders.map((ord) => (
-                        <div key={ord.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-2 text-xs">
+                        <div key={ord.id} className="p-3.5 bg-[#0a0c10] border border-[#1e232e] rounded-2xl space-y-2 text-xs">
                           <div className="flex justify-between items-center">
                             <span className="font-bold font-mono text-white">Order #{ord.id}</span>
                             <div className="flex items-center gap-2">
@@ -2690,7 +2690,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
                 {/* Customer Requests */}
                 {tableRequests.length > 0 && (
-                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <div className="space-y-2 pt-2 border-t border-[#1e232e]">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                       <PhoneCall className="w-3.5 h-3.5" /> Pending Service Requests ({tableRequests.length})
                     </h4>
@@ -2720,7 +2720,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                   >
                     Close Table
                   </Button>
-                  <Button variant="outline" onClick={() => setSelectedTableForView(null)} className="border-slate-800 text-slate-300">
+                  <Button variant="outline" onClick={() => setSelectedTableForView(null)} className="border-[#1e232e] text-slate-300">
                     Close Window
                   </Button>
                 </div>
@@ -2759,8 +2759,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                   </p>
                 </div>
 
-                <div className="space-y-2 bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs font-mono">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <div className="space-y-2 bg-[#12151b] border border-[#1e232e] p-4 rounded-2xl text-xs font-mono">
+                  <div className="flex justify-between items-center pb-2 border-b border-[#1e232e]">
                     <span className="text-slate-400">Session ID:</span>
                     <span className="font-bold text-amber-300">{activeSession ? `#${activeSession.id}` : 'ACTIVE'}</span>
                   </div>
@@ -2774,7 +2774,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                       {allPaid ? 'PAID / ZERO BALANCE' : 'PAYMENT PENDING'}
                     </Badge>
                   </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-sm">
+                  <div className="flex justify-between items-center pt-2 border-t border-[#1e232e] text-sm">
                     <span className="font-bold text-white">TOTAL BILL AMOUNT:</span>
                     <span className="font-black text-emerald-400 text-base">₹{sessionTotal.toFixed(2)}</span>
                   </div>
@@ -2785,7 +2785,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                     variant="outline"
                     onClick={() => setSelectedTableForClose(null)}
                     disabled={isClosingTableLoading}
-                    className="border-slate-800 text-slate-300 min-h-[40px] px-4 touch-manipulation"
+                    className="border-[#1e232e] text-slate-300 min-h-[40px] px-4 touch-manipulation"
                   >
                     Cancel
                   </Button>
