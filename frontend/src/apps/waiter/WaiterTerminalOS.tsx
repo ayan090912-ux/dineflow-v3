@@ -1125,16 +1125,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     const hasBar = barItems.length > 0;
     const hasHookah = hookahItems.length > 0;
 
-    const isKitchenReady = !hasKitchen || o.kitchenStatus === 'READY' || o.kitchenStatus === 'COMPLETED';
-    const isBarReady = !hasBar || o.barStatus === 'READY' || o.barStatus === 'COMPLETED';
-    const isHookahReady = !hasHookah || o.hookahStatus === 'READY' || o.hookahStatus === 'COMPLETED';
+    const isStationReady = (s?: string) => s === 'READY' || s === 'READY_FOR_PICKUP';
+    const isStationDelivered = (s?: string) => s === 'COMPLETED' || s === 'DELIVERED' || s === 'SERVED';
+
+    const isKitchenDone = !hasKitchen || isStationReady(o.kitchenStatus) || isStationDelivered(o.kitchenStatus);
+    const isBarDone = !hasBar || isStationReady(o.barStatus) || isStationDelivered(o.barStatus);
+    const isHookahDone = !hasHookah || isStationReady(o.hookahStatus) || isStationDelivered(o.hookahStatus);
 
     const readyItems: Array<{ item: OrderItem; station: string }> = [];
+    const deliveredItems: Array<{ item: OrderItem; station: string }> = [];
     const outstandingItems: Array<{ item: OrderItem; station: string; stationStatus: string }> = [];
 
     if (hasKitchen) {
-      if (o.kitchenStatus === 'READY' || o.kitchenStatus === 'COMPLETED') {
+      if (isStationReady(o.kitchenStatus)) {
         kitchenItems.forEach((i) => readyItems.push({ item: i, station: 'KITCHEN' }));
+      } else if (isStationDelivered(o.kitchenStatus)) {
+        kitchenItems.forEach((i) => deliveredItems.push({ item: i, station: 'KITCHEN' }));
       } else {
         kitchenItems.forEach((i) =>
           outstandingItems.push({ item: i, station: 'KITCHEN', stationStatus: o.kitchenStatus || 'Cooking' })
@@ -1143,8 +1149,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     }
 
     if (hasBar) {
-      if (o.barStatus === 'READY' || o.barStatus === 'COMPLETED') {
+      if (isStationReady(o.barStatus)) {
         barItems.forEach((i) => readyItems.push({ item: i, station: 'BAR' }));
+      } else if (isStationDelivered(o.barStatus)) {
+        barItems.forEach((i) => deliveredItems.push({ item: i, station: 'BAR' }));
       } else {
         barItems.forEach((i) =>
           outstandingItems.push({ item: i, station: 'BAR', stationStatus: o.barStatus || 'Mixology' })
@@ -1153,8 +1161,10 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     }
 
     if (hasHookah) {
-      if (o.hookahStatus === 'READY' || o.hookahStatus === 'COMPLETED') {
+      if (isStationReady(o.hookahStatus)) {
         hookahItems.forEach((i) => readyItems.push({ item: i, station: 'HOOKAH' }));
+      } else if (isStationDelivered(o.hookahStatus)) {
+        hookahItems.forEach((i) => deliveredItems.push({ item: i, station: 'HOOKAH' }));
       } else {
         hookahItems.forEach((i) =>
           outstandingItems.push({ item: i, station: 'HOOKAH', stationStatus: o.hookahStatus || 'Heating' })
@@ -1163,16 +1173,17 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
     }
 
     // Fallback if no specific stations marked but order is marked READY
-    if (readyItems.length === 0 && o.status === 'READY') {
+    if (readyItems.length === 0 && deliveredItems.length === 0 && o.status === 'READY') {
       allItems.forEach((i) => readyItems.push({ item: i, station: getFulfillmentStation(i) }));
     }
 
     const isCompleteOrderReady = (hasKitchen || hasBar || hasHookah)
-      ? (isKitchenReady && isBarReady && isHookahReady)
+      ? (isKitchenDone && isBarDone && isHookahDone)
       : o.status === 'READY';
 
     return {
       readyItems,
+      deliveredItems,
       outstandingItems,
       isCompleteOrderReady,
       hasKitchen,
@@ -1600,20 +1611,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
                   {/* SECTION A: READY FOR SERVICE & KITCHEN ETA PASS */}
                   <div className="bg-[#12151b] border border-[#1e232e] p-4 sm:p-5 lg:p-6 rounded-xl space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-white/10 pb-3">
-                      <div className="flex items-center gap-2">
-                        <Flame className="w-4 h-4 text-emerald-400" />
-                        <h2 className="text-sm font-bold text-white uppercase tracking-tight">
-                          Section A: Kitchen Pass & Orders
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[#1e232e] pb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Flame className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <h2 className="text-sm font-bold text-white uppercase tracking-tight whitespace-nowrap">
+                          Kitchen Pass & Orders
                         </h2>
                       </div>
-                      <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10 text-[11px] font-mono self-start sm:self-auto overflow-x-auto max-w-full">
+                      <div className="flex items-center gap-1 bg-[#0b0e14] p-1 rounded-xl border border-[#1e232e] text-[11px] font-mono self-start sm:self-auto shrink-0">
                         <button
                           type="button"
                           onClick={() => setTicketFilter('ready')}
-                          className={`px-2.5 py-1 rounded-lg transition-all touch-manipulation cursor-pointer active:scale-95 ${
+                          className={`px-2.5 py-1 rounded-lg transition-colors touch-manipulation cursor-pointer whitespace-nowrap shrink-0 ${
                             ticketFilter === 'ready'
-                              ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 font-bold shadow-sm'
+                              ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 font-bold'
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
@@ -1622,20 +1633,20 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                         <button
                           type="button"
                           onClick={() => setTicketFilter('prep')}
-                          className={`px-2.5 py-1 rounded-lg transition-all touch-manipulation cursor-pointer active:scale-95 ${
+                          className={`px-2.5 py-1 rounded-lg transition-colors touch-manipulation cursor-pointer whitespace-nowrap shrink-0 ${
                             ticketFilter === 'prep'
-                              ? 'bg-amber-500/25 text-amber-300 border border-amber-400/40 font-bold shadow-sm'
+                              ? 'bg-amber-500/25 text-amber-300 border border-amber-400/40 font-bold'
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          Cooking & ETA ({cookingPlatesList.length})
+                          Cooking ({cookingPlatesList.length})
                         </button>
                         <button
                           type="button"
                           onClick={() => setTicketFilter('all')}
-                          className={`px-2.5 py-1 rounded-lg transition-all touch-manipulation cursor-pointer active:scale-95 ${
+                          className={`px-2.5 py-1 rounded-lg transition-colors touch-manipulation cursor-pointer whitespace-nowrap shrink-0 ${
                             ticketFilter === 'all'
-                              ? 'bg-sky-500/25 text-sky-300 border border-sky-400/40 font-bold shadow-sm'
+                              ? 'bg-[#1e232e] text-white border border-[#2d3545] font-bold'
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
@@ -1770,7 +1781,8 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                               </div>
 
                               {/* Ready Items List with Station Breakdown */}
-                              <div className="bg-[#12151b] p-3 rounded-lg border border-[#1e232e] space-y-2">
+                              {readiness.readyItems.length > 0 && (
+                              <div className="bg-[#0e1117] p-3 rounded-lg border border-[#1e232e] space-y-2">
                                 <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold border-b border-[#1e232e] pb-1.5">
                                   <span>Ready for Collection:</span>
                                   <span>{readiness.readyItems.length} items</span>
@@ -1786,7 +1798,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                           <span className="text-white font-medium">{r.item.name}</span>
                                         </div>
                                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#181d27] text-slate-300 border border-[#2d3545]">
-                                          {r.station === 'BAR' ? '🍸 Bar' : r.station === 'HOOKAH' ? '💨 Hookah' : '🍳 Kitchen'}
+                                          {r.station === 'BAR' ? 'Bar' : r.station === 'HOOKAH' ? 'Hookah' : 'Kitchen'}
                                         </span>
                                       </div>
                                       {r.item.notes && (
@@ -1800,6 +1812,18 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                   ))}
                                 </div>
                               </div>
+                              )}
+
+                              {/* Already Delivered Items Summary (for partially delivered multi-station orders) */}
+                              {readiness.deliveredItems.length > 0 && (
+                                <div className="bg-[#0e1117]/60 px-3 py-2 rounded-lg border border-[#1e232e] flex items-center justify-between text-[11px] font-mono text-slate-400">
+                                  <span className="flex items-center gap-1.5">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/70" />
+                                    Delivered to table
+                                  </span>
+                                  <span>{readiness.deliveredItems.length} items served</span>
+                                </div>
+                              )}
 
                               {/* Outstanding Items List (if multi-station order still has dishes cooking) */}
                               {readiness.outstandingItems.length > 0 && (
@@ -1839,21 +1863,21 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                 </div>
                               )}
 
-                              {/* 1-Click Action Workflow: Collect -> Served */}
-                              <div className="flex items-center gap-2 pt-1">
-                                {readiness.readyItems.length === 0 && !readiness.isCompleteOrderReady ? (
-                                  <div className="w-full min-h-[40px] py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-400/20 text-amber-300 text-xs font-mono flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5">
-                                      <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                                      In Kitchen Prep ({order.kitchenStatus || 'COOKING'})
-                                    </span>
-                                    {order.estimatedPrepTimeMinutes && (
-                                      <span className="text-[11px] font-bold text-amber-200 bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-400/30">
-                                        ETA: ~{order.estimatedPrepTimeMinutes} min
+                                {/* 1-Click Action Workflow: Collect -> Served */}
+                                <div className="flex items-center gap-2 pt-1">
+                                  {readiness.readyItems.length === 0 ? (
+                                    <div className="w-full min-h-[40px] py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-400/20 text-amber-300 text-xs font-mono flex items-center justify-between">
+                                      <span className="flex items-center gap-1.5">
+                                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                                        {readiness.deliveredItems.length > 0 ? 'Partial Served · Remaining In Prep' : `In Kitchen Prep (${order.kitchenStatus || 'COOKING'})`}
                                       </span>
-                                    )}
-                                  </div>
-                                ) : (
+                                      {order.estimatedPrepTimeMinutes && (
+                                        <span className="text-[11px] font-bold text-amber-200 bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-400/30">
+                                          ETA: ~{order.estimatedPrepTimeMinutes} min
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
                                   <>
                                     {order.deliveryStatus !== 'COLLECTED' && (
                                       <button

@@ -2114,37 +2114,42 @@ async def collect_order(
 
     order_dict = format_order_response(order)
 
-    try:
-        from app.modules.websocket.manager import ws_manager
-        await ws_manager.broadcast_event(
-            restaurant_id=order.restaurant_id,
-            event_type="order_collected",
-            payload={
-                "orderId": order.id,
-                "order_id": order.id,
-                "station": payload.station,
-                "waiterName": waiter_name,
-                "tableNumber": order.table_number,
-                "order": order_dict,
-                "requests": updated_req_dicts,
-            },
-            target_audience=["WAITER", "OWNER", "KITCHEN", "BAR", "HOOKAH"]
-        )
-        for r_dict in updated_req_dicts:
+    import asyncio
+    from app.modules.websocket.manager import ws_manager
+
+    async def _broadcast_collect():
+        try:
             await ws_manager.broadcast_event(
                 restaurant_id=order.restaurant_id,
-                event_type="service_request_updated",
-                payload=r_dict,
-                target_audience=["WAITER", "OWNER"]
+                event_type="order_collected",
+                payload={
+                    "orderId": order.id,
+                    "order_id": order.id,
+                    "station": payload.station,
+                    "waiterName": waiter_name,
+                    "tableNumber": order.table_number,
+                    "order": order_dict,
+                    "requests": updated_req_dicts,
+                },
+                target_audience=["WAITER", "OWNER", "KITCHEN", "BAR", "HOOKAH"]
             )
-        await ws_manager.broadcast_event(
-            restaurant_id=order.restaurant_id,
-            event_type="order_status_updated",
-            payload=order_dict,
-            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
-        )
-    except Exception as e:
-        print("[WS BROADCAST] collect_order notice:", e)
+            for r_dict in updated_req_dicts:
+                await ws_manager.broadcast_event(
+                    restaurant_id=order.restaurant_id,
+                    event_type="service_request_updated",
+                    payload=r_dict,
+                    target_audience=["WAITER", "OWNER"]
+                )
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="order_status_updated",
+                payload=order_dict,
+                target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
+            )
+        except Exception as e:
+            print("[WS BROADCAST] collect_order notice:", e)
+
+    asyncio.create_task(_broadcast_collect())
 
     return {
         "success": True,
@@ -2267,38 +2272,43 @@ async def deliver_order(
 
     order_dict = format_order_response(order)
 
-    try:
-        from app.modules.websocket.manager import ws_manager
-        await ws_manager.broadcast_event(
-            restaurant_id=order.restaurant_id,
-            event_type="order_delivered",
-            payload={
-                **order_dict,
-                "orderId": order.id,
-                "order_id": order.id,
-                "station": target_station,
-                "waiterName": waiter_name,
-                "tableNumber": order.table_number,
-                "order": order_dict,
-                "completedRequests": completed_req_dicts,
-            },
-            target_audience=["WAITER", "CUSTOMER", "OWNER", "POS", "KITCHEN", "BAR", "HOOKAH"]
-        )
-        for c_dict in completed_req_dicts:
+    import asyncio
+    from app.modules.websocket.manager import ws_manager
+
+    async def _broadcast_deliver():
+        try:
             await ws_manager.broadcast_event(
                 restaurant_id=order.restaurant_id,
-                event_type="service_request_updated",
-                payload=c_dict,
-                target_audience=["WAITER", "OWNER"]
+                event_type="order_delivered",
+                payload={
+                    **order_dict,
+                    "orderId": order.id,
+                    "order_id": order.id,
+                    "station": target_station,
+                    "waiterName": waiter_name,
+                    "tableNumber": order.table_number,
+                    "order": order_dict,
+                    "completedRequests": completed_req_dicts,
+                },
+                target_audience=["WAITER", "CUSTOMER", "OWNER", "POS", "KITCHEN", "BAR", "HOOKAH"]
             )
-        await ws_manager.broadcast_event(
-            restaurant_id=order.restaurant_id,
-            event_type="order_status_updated",
-            payload=order_dict,
-            target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
-        )
-    except Exception as e:
-        print("[WS BROADCAST] deliver_order notice:", e)
+            for c_dict in completed_req_dicts:
+                await ws_manager.broadcast_event(
+                    restaurant_id=order.restaurant_id,
+                    event_type="service_request_updated",
+                    payload=c_dict,
+                    target_audience=["WAITER", "OWNER"]
+                )
+            await ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="order_status_updated",
+                payload=order_dict,
+                target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
+            )
+        except Exception as e:
+            print("[WS BROADCAST] deliver_order notice:", e)
+
+    asyncio.create_task(_broadcast_deliver())
 
     return {
         "success": True,

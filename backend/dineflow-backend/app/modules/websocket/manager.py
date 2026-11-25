@@ -154,15 +154,20 @@ class ConnectionManager:
         return json.dumps(event_data)
 
     async def _send_to_connections(self, conns: List[Dict[str, Any]], json_str: str):
-        """Send to a pre-filtered list of connections, pruning stale ones."""
+        """Send to a pre-filtered list of connections concurrently, pruning stale ones."""
+        if not conns:
+            return
         stale = []
-        for conn in conns:
+
+        async def _send_one(conn: Dict[str, Any]):
             ws = conn["websocket"]
             try:
-                await asyncio.wait_for(ws.send_text(json_str), timeout=1.5)
+                await asyncio.wait_for(ws.send_text(json_str), timeout=0.5)
             except Exception as err:
-                print(f"[WS_SEND_ERROR] error={err}")
+                print(f"[WS_SEND_ERROR] error={type(err).__name__}: {err}")
                 stale.append(ws)
+
+        await asyncio.gather(*(_send_one(c) for c in conns), return_exceptions=True)
         if stale:
             async with self._lock:
                 self.active_connections = [
