@@ -1621,8 +1621,20 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         restaurantId: currentRestaurant?.id || ''
       } : undefined);
       const isTableOccupied = Boolean(activeSessionId) || tbl.status === 'OCCUPIED' || tbl.isOccupied === true;
+      const activeSessionStartTime = activeSess?.sessionStartedAt ? new Date(activeSess.sessionStartedAt).getTime() : 0;
       const tableOrders = activeSessionId
-        ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+        ? orders.filter((o) => {
+            if (o.status === 'CANCELLED') return false;
+            if (o.tableSessionId === activeSessionId) return true;
+            if (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID') {
+              if (activeSessionStartTime > 0) {
+                const ordTime = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+                return ordTime >= (activeSessionStartTime - 10000);
+              }
+              return true;
+            }
+            return false;
+          })
         : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
       const matchingBill = activeSessionId
         ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')
@@ -7030,9 +7042,26 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       paymentBillModal.id,
                       paymentMethodInput,
                       paymentVerifiedByInput || 'Staff',
-                      paymentRefInput || undefined
+                      paymentRefInput || undefined,
+                      {
+                        autoCloseTable: true,
+                        tableNumber: paymentBillModal.tableNumber,
+                        tableSessionId: paymentBillModal.tableSessionId,
+                      }
                     );
-                    addToast('success', 'Payment Confirmed & Recorded 🎉', `₹${updated.grandTotal.toFixed(2)} marked PAID via ${updated.paymentMethod}`);
+                    if (paymentBillModal.tableNumber) {
+                      setTables((prev) =>
+                        prev.map((t) =>
+                          matchTableNumber(t.tableNumber, paymentBillModal.tableNumber)
+                            ? { ...t, status: 'AVAILABLE', isOccupied: false, activeSessionId: undefined }
+                            : t
+                        )
+                      );
+                      setActiveSessions((prev) =>
+                        prev.filter((s) => !matchTableNumber(s.tableNumber, paymentBillModal.tableNumber))
+                      );
+                    }
+                    addToast('success', 'Payment Recorded & Table Closed 🎉', `₹${updated.grandTotal.toFixed(2)} marked PAID via ${updated.paymentMethod} and table reset to AVAILABLE.`);
                     setPaymentBillModal(null);
                     setPaymentRefInput('');
                     await loadData();

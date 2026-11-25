@@ -742,6 +742,10 @@ export class BillingClient {
       if (res && res.bill) {
         const idx = this.base.bills.findIndex((b) => b.id === billId);
         if (idx >= 0) this.base.bills[idx] = res.bill;
+        if (options?.autoCloseTable) {
+          this.base.queryCache.delete(`tables:${targetId}`);
+          this.base.queryCache.delete(`active_sessions:${targetId}`);
+        }
         this.base.saveDatabase();
         return res.bill;
       }

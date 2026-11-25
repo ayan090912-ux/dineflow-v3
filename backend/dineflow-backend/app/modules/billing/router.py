@@ -974,31 +974,92 @@ async def record_bill_payment(
     auto_close = bool(payload.auto_close_table or payload.autoCloseTable)
     if auto_close and updated_bill.payment_status == "PAID":
         updated_bill.status = "CLOSED"
-        if updated_bill.table_session_id:
-            sess_stmt = select(TableSession).where(TableSession.id == updated_bill.table_session_id)
-            sess_res = await db.execute(sess_stmt)
-            sess = sess_res.scalar_one_or_none()
-            if sess:
-                sess.status = "CLOSED"
-                sess.session_closed_at = datetime.now(timezone.utc)
-                sess.closed_by_waiter_name = vb
+        now_closed = datetime.now(timezone.utc)
 
+        # Close the specific session AND any other open sessions for this table
+        sess_conditions = [
+            TableSession.restaurant_id == target_rest_id,
+            TableSession.status != "CLOSED",
+        ]
+        if updated_bill.table_session_id and updated_bill.table_number:
+            sess_conditions.append(
+                or_(
+                    TableSession.id == updated_bill.table_session_id,
+                    TableSession.table_number == updated_bill.table_number,
+                )
+            )
+        elif updated_bill.table_session_id:
+            sess_conditions.append(TableSession.id == updated_bill.table_session_id)
+        elif updated_bill.table_number:
+            sess_conditions.append(TableSession.table_number == updated_bill.table_number)
+
+        await db.execute(
+            update(TableSession)
+            .where(*sess_conditions)
+            .values(
+                status="CLOSED",
+                session_closed_at=now_closed,
+                closed_by_waiter_name=vb,
+            )
+        )
+
+        # Mark session orders as PAID
+        if updated_bill.table_session_id:
             await db.execute(
                 update(Order)
                 .where(Order.restaurant_id == target_rest_id, Order.table_session_id == updated_bill.table_session_id)
                 .values(payment_status="PAID")
             )
 
-        tbl_stmt = select(Table).where(Table.restaurant_id == target_rest_id, Table.table_number == updated_bill.table_number)
-        tbl_res = await db.execute(tbl_stmt)
-        tbl = tbl_res.scalar_one_or_none()
-        if tbl:
-            tbl.status = "AVAILABLE"
-            tbl.active_session_id = None
-            tbl.is_occupied = False
+        # Auto-complete any pending customer requests for this table/session
+        from app.modules.customer_requests.models import CustomerRequestModel
+        req_conditions = [
+            CustomerRequestModel.restaurant_id == target_rest_id,
+            CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS", "ACCEPTED"]),
+        ]
+        if updated_bill.table_session_id and updated_bill.table_number:
+            req_conditions.append(
+                or_(
+                    CustomerRequestModel.table_session_id == updated_bill.table_session_id,
+                    CustomerRequestModel.table_number == updated_bill.table_number,
+                )
+            )
+        elif updated_bill.table_session_id:
+            req_conditions.append(CustomerRequestModel.table_session_id == updated_bill.table_session_id)
+        elif updated_bill.table_number:
+            req_conditions.append(CustomerRequestModel.table_number == updated_bill.table_number)
+
+        await db.execute(
+            update(CustomerRequestModel)
+            .where(*req_conditions)
+            .values(status="COMPLETED", waiter_name=vb)
+        )
+
+        # Reset Table to AVAILABLE
+        tbl_cond = [Table.restaurant_id == target_rest_id]
+        if updated_bill.table_id and updated_bill.table_number:
+            tbl_cond.append(or_(Table.id == updated_bill.table_id, Table.table_number == updated_bill.table_number))
+        elif updated_bill.table_id:
+            tbl_cond.append(Table.id == updated_bill.table_id)
+        elif updated_bill.table_number:
+            tbl_cond.append(Table.table_number == updated_bill.table_number)
+
+        await db.execute(
+            update(Table)
+            .where(*tbl_cond)
+            .values(status="AVAILABLE", active_session_id=None, is_occupied=False)
+        )
 
     await db.commit()
     await db.refresh(updated_bill)
+
+    if auto_close and updated_bill.payment_status == "PAID":
+        from app.modules.tables.router import invalidate_tables_cache
+        invalidate_tables_cache(target_rest_id)
+        if getattr(rest, "slug", None):
+            invalidate_tables_cache(rest.slug)
+        if getattr(rest, "public_slug", None):
+            invalidate_tables_cache(rest.public_slug)
 
     if auto_close:
         try:
