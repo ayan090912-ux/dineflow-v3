@@ -900,6 +900,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           );
         }
         api.getBills(restId).then((b) => setBills(b || [])).catch(() => {});
+        api.getOrders(restId).then(setOrders).catch(() => {});
+        api.getTables(restId).then((tbls) => { if (tbls && tbls.length > 0) setTables(tbls); }).catch(() => {});
         api.getCurrentBusinessDay(restId).then(setCurrentBusinessDay).catch(() => {});
         api.getBusinessDayPrecheck(restId).then(setDayClosePrecheck).catch(() => {});
       } else if (event.type === 'ETAUpdated') {
@@ -2402,49 +2404,62 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
             {/* Real Today Metrics Computation */}
             {(() => {
-              const openBday = currentBusinessDay;
-              const dayOrders = orders.filter(
-                (o) => o.restaurantId === currentRestaurant?.id && (openBday ? o.businessDayId === openBday.id || new Date(o.createdAt).getTime() >= new Date(openBday.openedAt).getTime() : true)
-              );
+              const openBday = currentBusinessDay?.status === 'OPEN' ? currentBusinessDay : null;
+              const dayOrders = orders.filter((o) => {
+                if (o.restaurantId !== currentRestaurant?.id) return false;
+                if (openBday) {
+                  if (o.businessDayId && o.businessDayId === openBday.id) return true;
+                  if (openBday.openedAt) {
+                    return new Date(o.createdAt).getTime() >= new Date(openBday.openedAt).getTime();
+                  }
+                }
+                return getDayKey(o.createdAt) === todayKeyStr;
+              });
 
-              const completed = dayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
+              const activeDayOrders = dayOrders.filter((o) => o.status !== 'CANCELLED');
+              const completed = activeDayOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.paymentStatus === 'PAID');
               const cancelled = dayOrders.filter((o) => o.status === 'CANCELLED');
 
-              const foodOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
-              const barOrders = dayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'));
+              const foodOrders = activeDayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
+              const barOrders = activeDayOrders.filter((o) => o.items.some((i) => getFulfillmentStation(i) === 'BAR'));
 
               let foodSales = 0;
               let barSales = 0;
 
-              dayOrders.forEach((o) => {
-                if (o.status !== 'CANCELLED') {
-                  o.items.forEach((item) => {
-                    const itemTotal = item.price * item.quantity;
-                    if (getFulfillmentStation(item) === 'BAR') {
-                      barSales += itemTotal;
-                    } else {
-                      foodSales += itemTotal;
-                    }
-                  });
-                }
+              activeDayOrders.forEach((o) => {
+                o.items.forEach((item) => {
+                  const itemTotal = item.price * item.quantity;
+                  if (getFulfillmentStation(item) === 'BAR') {
+                    barSales += itemTotal;
+                  } else {
+                    foodSales += itemTotal;
+                  }
+                });
               });
 
               const dayBills = (bills || []).filter((b) => {
                 if (b.restaurantId !== currentRestaurant?.id) return false;
-                if (!openBday) return true;
-                if (b.businessDayId) return b.businessDayId === openBday.id;
-                if (openBday.openedAt) {
-                  return new Date(b.createdAt).getTime() >= new Date(openBday.openedAt).getTime();
+                if (openBday) {
+                  if (b.businessDayId && b.businessDayId === openBday.id) return true;
+                  if (openBday.openedAt) {
+                    return new Date(b.createdAt).getTime() >= new Date(openBday.openedAt).getTime();
+                  }
                 }
-                return true;
+                return getDayKey(b.createdAt) === todayKeyStr;
               });
 
-              const shiftPaidBills = dayBills.filter((b) => b.status === 'PAID' || b.paymentStatus === 'PAID');
+              const shiftPaidBills = dayBills.filter((b) => b.status === 'PAID' || b.status === 'CLOSED' || b.paymentStatus === 'PAID');
               const shiftPaidTotal = shiftPaidBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
 
-              const totalSales = currentBusinessDay?.totalSales !== undefined
-                ? (currentBusinessDay.totalSales || 0)
-                : shiftPaidTotal;
+              const ordersGross = activeDayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+              const ordersSubtotal = activeDayOrders.reduce(
+                (sum, o) => sum + (o.subtotal || (o.totalAmount ? o.totalAmount / 1.05 : 0)),
+                0
+              );
+
+              const totalSales = Math.max(ordersGross, shiftPaidTotal);
+              const netSales = ordersSubtotal > 0 ? ordersSubtotal : totalSales / 1.05;
+              const taxesTotal = Math.max(0, totalSales - netSales);
 
               return (
                 <>
@@ -2456,7 +2471,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                         {formatCurrency(totalSales, theme.currency)}
                       </p>
                       <span className="text-[10px] font-mono text-slate-500 block">
-                        {dayOrders.length} orders • {currentBusinessDay?.status === 'OPEN' ? 'Open' : 'Closed'}
+                        {activeDayOrders.length} orders • {currentBusinessDay?.status === 'OPEN' ? 'Open' : 'Closed'}
                       </span>
                     </Card>
 
@@ -2464,10 +2479,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <Card className="liquid-glass-card border border-white/[0.08] p-4 rounded-2xl space-y-1 shadow-sm">
                       <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold block">Net Sales</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-white tracking-tight">
-                        {formatCurrency(totalSales / 1.05, theme.currency)}
+                        {formatCurrency(netSales, theme.currency)}
                       </p>
                       <span className="text-[10px] font-mono text-slate-500 block">
-                        Taxes: {formatCurrency(totalSales - totalSales / 1.05, theme.currency)}
+                        Taxes: {formatCurrency(taxesTotal, theme.currency)}
                       </span>
                     </Card>
 
@@ -2475,7 +2490,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <Card className="liquid-glass-card border border-sky-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
                       <span className="text-[10px] font-mono text-sky-400 uppercase font-semibold block">Active Orders</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-sky-300 tracking-tight">
-                        {orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length}
+                        {activeDayOrders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'COMPLETED').length}
                       </p>
                       <span className="text-[10px] font-mono text-slate-500 block">
                         In Prep / Ready at Pass
@@ -2486,10 +2501,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     <Card className="liquid-glass-card border border-amber-500/20 p-4 rounded-2xl space-y-1 shadow-sm">
                       <span className="text-[10px] font-mono text-amber-400 uppercase font-semibold block">Settled Receipts</span>
                       <p className="text-xl lg:text-2xl font-bold font-mono text-amber-300 tracking-tight">
-                        {bills.filter((b) => b.paymentStatus === 'PAID' || b.status === 'CLOSED').length}
+                        {shiftPaidBills.length}
                       </p>
                       <span className="text-[10px] font-mono text-slate-500 block">
-                        Paid invoices
+                        Paid invoices today
                       </span>
                     </Card>
 
