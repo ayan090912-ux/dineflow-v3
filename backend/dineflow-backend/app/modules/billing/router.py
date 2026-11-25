@@ -68,6 +68,12 @@ class MarkPaymentSchema(BaseModel):
     payment_reference: Optional[str] = None
     amountPaid: Optional[float] = None
     amount_paid: Optional[float] = None
+    autoCloseTable: Optional[bool] = None
+    auto_close_table: Optional[bool] = None
+    tableNumber: Optional[str] = None
+    table_number: Optional[str] = None
+    tableSessionId: Optional[str] = None
+    table_session_id: Optional[str] = None
 
 class QrUploadSchema(BaseModel):
     qrDataUrl: str
@@ -894,7 +900,41 @@ async def record_bill_payment(
     res = await db.execute(stmt)
     bill = res.scalar_one_or_none()
     if not bill:
-        raise HTTPException(status_code=404, detail="Bill not found")
+        # Check if table_number or table_session_id can resolve or create provisional bill
+        target_tbl_num = payload.table_number or payload.tableNumber
+        target_sess_id = payload.table_session_id or payload.tableSessionId
+        if not target_tbl_num and "table" in bill_id.lower():
+            import re
+            m = re.findall(r'table[_-]?(\d+)', bill_id.lower())
+            if m:
+                target_tbl_num = f"Table {m[0].zfill(2)}"
+
+        if target_tbl_num or target_sess_id:
+            calc_data = await BillingService.calculate_table_bill_data(
+                rest=rest,
+                table_number=target_tbl_num or "Table 01",
+                table_session_id=target_sess_id,
+                db=db
+            )
+            bill = Bill(
+                id=bill_id if not bill_id.startswith("provisional-") else f"bill-{uuid.uuid4().hex[:12]}",
+                restaurant_id=target_rest_id,
+                table_number=calc_data["tableNumber"],
+                table_id=calc_data["tableId"],
+                table_session_id=calc_data["tableSessionId"],
+                subtotal=calc_data["subtotal"],
+                tax_amount=calc_data["taxAmount"],
+                grand_total=calc_data["grandTotal"],
+                amount_due=calc_data["balanceDue"],
+                payment_status="UNPAID",
+                status="OPEN",
+                items_snapshot_json=calc_data["items"],
+                orders_snapshot_json=calc_data["orders"]
+            )
+            db.add(bill)
+            await db.flush()
+        else:
+            raise HTTPException(status_code=404, detail="Bill not found")
 
     pm = payload.payment_method or payload.paymentMethod or "CASH"
     vb = payload.verified_by or payload.verifiedBy or caller.email or caller.uid or "Staff"
@@ -930,8 +970,50 @@ async def record_bill_payment(
         if active_bday_id:
             updated_bill.business_day_id = active_bday_id
 
+    # Auto-close table settlement in a single atomic transaction if requested
+    auto_close = bool(payload.auto_close_table or payload.autoCloseTable)
+    if auto_close and updated_bill.payment_status == "PAID":
+        updated_bill.status = "CLOSED"
+        if updated_bill.table_session_id:
+            sess_stmt = select(TableSession).where(TableSession.id == updated_bill.table_session_id)
+            sess_res = await db.execute(sess_stmt)
+            sess = sess_res.scalar_one_or_none()
+            if sess:
+                sess.status = "CLOSED"
+                sess.session_closed_at = datetime.now(timezone.utc)
+                sess.closed_by_waiter_name = vb
+
+            await db.execute(
+                update(Order)
+                .where(Order.restaurant_id == target_rest_id, Order.table_session_id == updated_bill.table_session_id)
+                .values(payment_status="PAID")
+            )
+
+        tbl_stmt = select(Table).where(Table.restaurant_id == target_rest_id, Table.table_number == updated_bill.table_number)
+        tbl_res = await db.execute(tbl_stmt)
+        tbl = tbl_res.scalar_one_or_none()
+        if tbl:
+            tbl.status = "AVAILABLE"
+            tbl.active_session_id = None
+            tbl.is_occupied = False
+
     await db.commit()
     await db.refresh(updated_bill)
+
+    if auto_close:
+        try:
+            await ws_manager.broadcast_event(
+                restaurant_id=target_rest_id,
+                event_type="TableSessionClosed",
+                payload={
+                    "tableNumber": updated_bill.table_number,
+                    "tableSessionId": updated_bill.table_session_id,
+                    "closedBy": vb,
+                },
+                target_audience=["WAITER", "OWNER", "POS"]
+            )
+        except Exception:
+            pass
 
     formatted = format_bill_response(updated_bill)
 
@@ -1110,17 +1192,22 @@ async def razorpay_payment_webhook(
     if rest and getattr(rest, "billing_settings_json", None):
         webhook_secret = rest.billing_settings_json.get("razorpay_webhook_secret") or webhook_secret
 
-    if webhook_secret and x_razorpay_signature:
-        is_valid = PaymentService.verify_razorpay_webhook_signature(
-            raw_body=raw_body,
-            signature=x_razorpay_signature,
-            secret=webhook_secret
+    if not webhook_secret or not x_razorpay_signature:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing webhook secret or Razorpay signature header"
         )
-        if not is_valid:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid cryptographic webhook signature"
-            )
+
+    is_valid = PaymentService.verify_razorpay_webhook_signature(
+        raw_body=raw_body,
+        signature=x_razorpay_signature,
+        secret=webhook_secret
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid cryptographic webhook signature"
+        )
 
     try:
         payload = json.loads(raw_body.decode('utf-8'))

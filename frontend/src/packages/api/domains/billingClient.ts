@@ -715,7 +715,14 @@ export class BillingClient {
     return b!;
   }
 
-  async markBillPayment(restaurantId: string, billId: string, paymentMethod: PaymentMethod = 'CASH', verifiedBy: string = 'Staff', paymentReference?: string): Promise<Bill> {
+  async markBillPayment(
+    restaurantId: string,
+    billId: string,
+    paymentMethod: PaymentMethod = 'CASH',
+    verifiedBy: string = 'Staff',
+    paymentReference?: string,
+    options?: { autoCloseTable?: boolean; tableNumber?: string; tableSessionId?: string }
+  ): Promise<Bill> {
     const targetId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId;
     try {
       const res = await this.base.executeProtectedRequest<any>(
@@ -726,6 +733,9 @@ export class BillingClient {
             paymentMethod,
             verifiedBy,
             paymentReference,
+            autoCloseTable: options?.autoCloseTable,
+            tableNumber: options?.tableNumber,
+            tableSessionId: options?.tableSessionId,
           }),
         }
       );

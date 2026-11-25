@@ -29,6 +29,8 @@ import {
   AddLibraryItemsResponse,
   DescriptionGenerateRequest,
   DescriptionGenerateResponse,
+  CustomerRequest,
+  Bill,
 } from '../../types';
 import { firebaseAuth } from '../../auth/firebase';
 import { BaseApiClient } from '../core/baseClient';
@@ -840,6 +842,100 @@ export class RestaurantClient {
       }
       return [];
     });
+  }
+
+  async getWaiterSnapshot(restaurantId?: string): Promise<{
+    tables: Table[];
+    activeSessions: any[];
+    orders: Order[];
+    customerRequests: CustomerRequest[];
+    bills: Bill[];
+  }> {
+    const targetId = this.base.resolveTenantRestaurantId(restaurantId);
+    if (!targetId) {
+      return {
+        tables: [],
+        activeSessions: [],
+        orders: [],
+        customerRequests: [],
+        bills: [],
+      };
+    }
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(targetId)}/waiter-snapshot`);
+      if (res.ok) {
+        const data = await res.json();
+        const rawTables = Array.isArray(data.tables) ? data.tables : [];
+        const rest = this.base.restaurants.find((r) => r.id === targetId);
+        const slug = rest?.publicSlug || rest?.slug || targetId;
+
+        const mappedTables: Table[] = rawTables.map((t: any) => {
+          const rawQr = t.qr_code_url || t.qrCodeUrl || '';
+          const cleanQr = (rawQr && !rawQr.includes('.dinely.app') && !rawQr.includes('dinely.food/customer?tenant=') && !rawQr.includes('/customer?restaurant='))
+            ? rawQr
+            : getRestaurantCustomerUrl(slug, t.table_number || t.tableNumber, t.id);
+          return {
+            id: t.id,
+            restaurantId: t.restaurant_id || t.restaurantId || targetId,
+            tableNumber: t.table_number || t.tableNumber,
+            section: t.section || 'Main Hall',
+            capacity: t.capacity || 4,
+            status: t.status || 'AVAILABLE',
+            isOccupied: t.is_occupied || t.isOccupied || false,
+            shape: t.shape || 'RECTANGLE',
+            isVip: t.is_vip ?? t.isVip ?? false,
+            positionX: t.position_x ?? t.positionX ?? 0,
+            positionY: t.position_y ?? t.positionY ?? 0,
+            rotation: t.rotation ?? 0,
+            qrCodeUrl: cleanQr,
+            activeSessionId: t.active_session_id || t.activeSessionId,
+          };
+        });
+
+        const mappedOrders: Order[] = (Array.isArray(data.orders) ? data.orders : []).map((o: any) => normalizeOrder(o));
+
+        const mappedSessions = (Array.isArray(data.activeSessions) ? data.activeSessions : []).map((s: any) => ({
+          id: s.id,
+          restaurantId: s.restaurant_id || s.restaurantId || targetId,
+          tableId: s.table_id || s.tableId,
+          tableNumber: s.table_number || s.tableNumber,
+          status: s.status || 'ACTIVE',
+          sessionStartedAt: s.session_started_at || s.sessionStartedAt,
+          sessionClosedAt: s.session_closed_at || s.sessionClosedAt,
+          closedByWaiterName: s.closed_by_waiter_name || s.closedByWaiterName,
+        }));
+
+        const mappedRequests = Array.isArray(data.customerRequests) ? data.customerRequests : [];
+        const mappedBills = Array.isArray(data.bills) ? data.bills : [];
+
+        return {
+          tables: mappedTables,
+          activeSessions: mappedSessions,
+          orders: mappedOrders,
+          customerRequests: mappedRequests,
+          bills: mappedBills,
+        };
+      }
+    } catch (e) {
+      console.warn('API fetch for waiter snapshot failed, falling back:', e);
+    }
+
+    // Fallback: local store / getTables
+    const tbls = await this.getTables(targetId).catch(() => []);
+    const sesss = await this.getActiveTableSessions(targetId).catch(() => []);
+    const ords = this.base.orders.filter((o) => o.restaurantId === targetId && o.status !== 'CANCELLED');
+    const reqs = this.base.customerRequests.filter((r) => r.restaurantId === targetId && r.status !== 'COMPLETED');
+    const blls = this.base.bills.filter((b) => b.restaurantId === targetId && b.paymentStatus !== 'PAID');
+
+    return {
+      tables: tbls,
+      activeSessions: sesss || [],
+      orders: ords || [],
+      customerRequests: reqs || [],
+      bills: blls || [],
+    };
   }
 
   async createTable(tableData: Partial<Table>): Promise<Table> {

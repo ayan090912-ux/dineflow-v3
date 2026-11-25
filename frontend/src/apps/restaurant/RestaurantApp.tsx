@@ -4543,8 +4543,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                             sessionStartedAt: new Date().toISOString(),
                             restaurantId: currentRestaurant?.id || ''
                           } : undefined);
+                          const activeSessionStartTime = activeSess?.sessionStartedAt ? new Date(activeSess.sessionStartedAt).getTime() : 0;
                           const tableOrders = activeSessionId
-                            ? orders.filter((o) => (o.tableSessionId === activeSessionId || (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID')) && o.status !== 'CANCELLED')
+                            ? orders.filter((o) => {
+                                if (o.status === 'CANCELLED') return false;
+                                if (o.tableSessionId === activeSessionId) return true;
+                                if (!o.tableSessionId && matchTableNumber(o.tableNumber, tbl.tableNumber) && o.paymentStatus !== 'PAID') {
+                                  const orderTime = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+                                  return orderTime >= (activeSessionStartTime - 10000);
+                                }
+                                return false;
+                              })
                             : orders.filter((o) => (o.tableId === tbl.id || matchTableNumber(o.tableNumber, tbl.tableNumber)) && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID');
                           const activeBill = activeSessionId
                             ? bills.find((b) => b.tableSessionId === activeSessionId && b.status !== 'CLOSED' && b.status !== 'CANCELLED')

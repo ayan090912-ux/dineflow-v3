@@ -198,6 +198,7 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
 
     # Authoritative session order aggregation (Single source of truth for table sessions)
     active_sess_ids = [s.id for s in active_sessions]
+    session_start_map = {s.id: s.session_started_at for s in active_sessions if s.session_started_at}
     session_totals_map = {}
     if active_sess_ids or tables:
         from app.modules.orders.models import Order
@@ -224,7 +225,11 @@ async def get_tables(restaurant_id: str, db: AsyncSession = Depends(get_db)):
             for ord in o_res.scalars().all():
                 sid = ord.table_session_id
                 if not sid and ord.table_number in table_num_to_sess_id:
-                    sid = table_num_to_sess_id[ord.table_number]
+                    candidate_sid = table_num_to_sess_id[ord.table_number]
+                    sess_start = session_start_map.get(candidate_sid)
+                    # Authoritative protection: Only link unassigned orders placed AFTER the active session started
+                    if sess_start and ord.created_at and ord.created_at >= sess_start:
+                        sid = candidate_sid
                 if sid and sid in active_sess_ids:
                     if sid not in session_totals_map:
                         session_totals_map[sid] = {
@@ -337,6 +342,101 @@ async def get_active_table_sessions(restaurant_id: str, db: AsyncSession = Depen
     for rid in valid_rest_ids:
         _ACTIVE_SESSIONS_CACHE[rid] = (now_t, serialized_sessions)
     return serialized_sessions
+
+@router.get("/{restaurant_id}/waiter-snapshot")
+async def get_waiter_snapshot(
+    restaurant_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    High-performance consolidated snapshot for Waiter Terminal.
+    Returns tables, active sessions, active orders, customer requests, and open bills
+    in a single roundtrip to eliminate multi-call network latency.
+    """
+    try:
+        from app.core.tenant.resolver import resolve_canonical_restaurant_id
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    from app.modules.orders.models import Order, Bill
+    from app.modules.customer_requests.models import CustomerRequestModel
+    from app.modules.orders.router import format_order_response
+    from app.modules.billing.router import format_bill_response
+
+    # 1. Tables and active sessions
+    tables_list = await get_tables(canonical_id, db)
+    sessions_list = await get_active_table_sessions(canonical_id, db)
+    active_sess_ids = [s["id"] for s in sessions_list if isinstance(s, dict) and "id" in s]
+
+    # 2. Active orders for floor waiters
+    ord_conditions = [
+        Order.restaurant_id == canonical_id,
+        Order.status.notin_(["CANCELLED", "VOID"]),
+    ]
+    if active_sess_ids:
+        ord_conditions.append(
+            or_(
+                Order.table_session_id.in_(active_sess_ids),
+                Order.status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"]),
+                and_(Order.payment_status != "PAID", Order.delivery_status != "DELIVERED")
+            )
+        )
+    else:
+        ord_conditions.append(Order.status.in_(["PENDING", "ACCEPTED", "PREPARING", "READY"]))
+
+    ord_stmt = select(Order).where(*ord_conditions).order_by(Order.created_at.desc()).limit(150)
+    ord_res = await db.execute(ord_stmt)
+    raw_orders = ord_res.scalars().all()
+    formatted_orders = [format_order_response(o) for o in raw_orders]
+
+    # 3. Active service requests
+    req_stmt = select(CustomerRequestModel).where(
+        CustomerRequestModel.restaurant_id == canonical_id,
+        CustomerRequestModel.status.in_(["PENDING", "IN_PROGRESS", "ACCEPTED"]),
+        CustomerRequestModel.request_type != "ORDER_READY",
+        CustomerRequestModel.order_id.is_(None)
+    ).order_by(CustomerRequestModel.created_at.desc()).limit(50)
+    req_res = await db.execute(req_stmt)
+    raw_reqs = req_res.scalars().all()
+    formatted_requests = [
+        {
+            "id": r.id,
+            "restaurantId": r.restaurant_id,
+            "tableId": r.table_id,
+            "tableNumber": r.table_number or "Table 01",
+            "requestType": r.request_type,
+            "customTitle": r.custom_title,
+            "message": r.message,
+            "customerNotes": r.customer_notes,
+            "priority": r.priority or "MEDIUM",
+            "status": r.status or "PENDING",
+            "requestedAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
+            "acceptedAt": r.accepted_at.isoformat() if getattr(r, "accepted_at", None) else None,
+            "completedAt": r.completed_at.isoformat() if getattr(r, "completed_at", None) else None,
+            "assignedWaiterName": r.waiter_name or r.assigned_staff_name,
+            "tableSessionId": r.table_session_id,
+        }
+        for r in raw_reqs
+    ]
+
+    # 4. Open / Unpaid Bills
+    bill_stmt = select(Bill).where(
+        Bill.restaurant_id == canonical_id,
+        Bill.status.notin_(["CLOSED", "CANCELLED"]),
+        Bill.payment_status != "PAID"
+    ).order_by(Bill.created_at.desc()).limit(50)
+    bill_res = await db.execute(bill_stmt)
+    raw_bills = bill_res.scalars().all()
+    formatted_bills = [format_bill_response(b) for b in raw_bills]
+
+    return {
+        "tables": tables_list,
+        "activeSessions": sessions_list,
+        "orders": formatted_orders,
+        "customerRequests": formatted_requests,
+        "bills": formatted_bills
+    }
 
 from app.core.security.tenant_auth import (
     get_caller_context,

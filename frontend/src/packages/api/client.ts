@@ -1023,9 +1023,14 @@ export class DinelyApiClient extends BaseApiClient {
     billId: string,
     paymentMethod: PaymentMethod = 'CASH',
     verifiedBy: string = 'Staff',
-    paymentReference?: string
+    paymentReference?: string,
+    options?: { autoCloseTable?: boolean; tableNumber?: string; tableSessionId?: string }
   ): Promise<Bill> {
-    return this.billing.markBillPayment(restaurantId, billId, paymentMethod, verifiedBy, paymentReference);
+    return this.billing.markBillPayment(restaurantId, billId, paymentMethod, verifiedBy, paymentReference, options);
+  }
+
+  async getWaiterSnapshot(restaurantId?: string) {
+    return this.restaurant.getWaiterSnapshot(restaurantId);
   }
 
   async reportCustomerPayment(restaurantId: string, billId: string, details?: any): Promise<any> {

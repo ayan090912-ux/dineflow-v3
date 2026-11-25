@@ -2593,6 +2593,7 @@ async def redeem_pickup_code(
 @router.get("/{order_id}")
 async def get_order_by_id(
     order_id: str,
+    restaurant_id: Optional[str] = Query(None),
     caller: CallerContext = Depends(get_caller_context),
     db: AsyncSession = Depends(get_db)
 ):
@@ -2605,6 +2606,16 @@ async def get_order_by_id(
             Order.order_number == order_id,
         )
     )
+    if restaurant_id:
+        try:
+            from app.core.tenant.resolver import resolve_canonical_restaurant_id
+            target_rest = await resolve_canonical_restaurant_id(restaurant_id, db)
+        except Exception:
+            target_rest = restaurant_id
+        query = query.where(Order.restaurant_id == target_rest)
+    elif caller.is_authenticated and caller.restaurant_id and not caller.is_admin:
+        query = query.where(Order.restaurant_id == caller.restaurant_id)
+
     result = await db.execute(query)
     order = result.scalar_one_or_none()
     if not order:
