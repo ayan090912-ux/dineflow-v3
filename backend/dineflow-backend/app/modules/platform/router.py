@@ -874,42 +874,20 @@ async def get_platform_stats(
     admin_claims: Dict[str, Any] = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
-    total_stmt = select(func.count(Restaurant.id)).where(Restaurant.deleted_at.is_(None))
-    total_res = await db.execute(total_stmt)
-    total_count = total_res.scalar() or 0
-
-    live_stmt = select(func.count(Restaurant.id)).where(
-        Restaurant.deleted_at.is_(None),
-        Restaurant.lifecycle_status == "LIVE",
-        Restaurant.is_approved.is_(True)
+    from sqlalchemy import case
+    orders_sq = select(func.count(Order.id)).scalar_subquery()
+    stats_stmt = select(
+        func.count(Restaurant.id),
+        func.coalesce(func.sum(case(((Restaurant.lifecycle_status == "LIVE") & (Restaurant.is_approved.is_(True)), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((Restaurant.lifecycle_status == "PENDING_APPROVAL", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((Restaurant.lifecycle_status == "REJECTED", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((Restaurant.lifecycle_status == "SUSPENDED", 1), else_=0)), 0),
+        orders_sq,
+    ).where(Restaurant.deleted_at.is_(None))
+    res = await db.execute(stats_stmt)
+    total_count, live_count, pending_count, rejected_count, suspended_count, total_orders = (
+        int(v or 0) for v in res.one()
     )
-    live_res = await db.execute(live_stmt)
-    live_count = live_res.scalar() or 0
-
-    pending_stmt = select(func.count(Restaurant.id)).where(
-        Restaurant.deleted_at.is_(None),
-        Restaurant.lifecycle_status == "PENDING_APPROVAL"
-    )
-    pending_res = await db.execute(pending_stmt)
-    pending_count = pending_res.scalar() or 0
-
-    rejected_stmt = select(func.count(Restaurant.id)).where(
-        Restaurant.deleted_at.is_(None),
-        Restaurant.lifecycle_status == "REJECTED"
-    )
-    rejected_res = await db.execute(rejected_stmt)
-    rejected_count = rejected_res.scalar() or 0
-
-    suspended_stmt = select(func.count(Restaurant.id)).where(
-        Restaurant.deleted_at.is_(None),
-        Restaurant.lifecycle_status == "SUSPENDED"
-    )
-    suspended_res = await db.execute(suspended_stmt)
-    suspended_count = suspended_res.scalar() or 0
-
-    orders_stmt = select(func.count(Order.id))
-    orders_res = await db.execute(orders_stmt)
-    total_orders = orders_res.scalar() or 0
 
     return {
         "totalRestaurants": total_count,

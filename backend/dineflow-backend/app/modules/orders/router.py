@@ -1687,9 +1687,9 @@ async def update_order_status(
             order.delivery_status = "DELIVERED"
             if not order.delivered_at:
                 order.delivered_at = datetime.now(timezone.utc)
-        elif target_status == "READY" or (k_ready and b_ready and h_ready):
+        elif (not req_station and target_status == "READY") or (k_ready and b_ready and h_ready):
             order.status = "READY"
-            if target_status == "READY":
+            if not req_station and target_status == "READY":
                 if has_k_items and order.kitchen_status in ["PENDING", "ACCEPTED", "PREPARING", None]:
                     order.kitchen_status = "READY"
                 if has_b_items and order.bar_status in ["PENDING", "ACCEPTED", "PREPARING", None]:
@@ -1704,7 +1704,7 @@ async def update_order_status(
                 order.hookah_status in ["COMPLETED", "DELIVERED", "SERVED"],
             ]):
                 order.delivery_status = "PARTIALLY_DELIVERED"
-            elif order.delivery_status not in ["COLLECTED", "DELIVERED"]:
+            elif order.delivery_status not in ["COLLECTED", "DELIVERED", "OUT_FOR_DELIVERY"]:
                 order.delivery_status = "WAITING_FOR_WAITER"
         elif any([
             order.kitchen_status in ["COMPLETED", "DELIVERED", "SERVED"],

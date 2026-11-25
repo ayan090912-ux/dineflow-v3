@@ -72,6 +72,20 @@ const formatElapsed = (timestamp?: string) => {
   return `${Math.floor(m / 60)}h ${m % 60}m ago`;
 };
 
+// Standalone Live Clock component to avoid re-rendering entire HookahTerminal every second
+const LiveClock: React.FC = () => {
+  const [time, setTime] = useState<string>('');
+  useEffect(() => {
+    const updateClock = () => {
+      setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
+    };
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <span className="font-tabular">{time || '03:20 PM'}</span>;
+};
+
 interface HookahTerminalProps {
   restaurant?: any;
   onLogout?: () => void;
@@ -93,7 +107,6 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
 
   // View mode: 'active' (Dual-Section 1-Screen Floor) or 'history' (Shift Work Audit)
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
-  const [currentTime, setCurrentTime] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<{ title: string; desc: string; type: 'info' | 'success' | 'warning' } | null>(null);
   const [isErrorState, setIsErrorState] = useState(false);
@@ -122,22 +135,9 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
     isAudioMutedRef.current = isAudioMuted;
   }, [isAudioMuted]);
 
-  // Live clock
+  // Tick for elapsed times (15s avoids 1Hz full-terminal re-renders)
   useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
-      );
-    };
-    updateClock();
-    const clockTimer = setInterval(updateClock, 1000);
-    return () => clearInterval(clockTimer);
-  }, []);
-
-  // Tick for elapsed times
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 1000);
+    const timer = setInterval(() => setTick((t) => t + 1), 15000);
     return () => clearInterval(timer);
   }, []);
 
@@ -587,7 +587,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
             {/* Clock */}
             <div className="hidden md:flex bg-white/[0.06] backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15 items-center gap-1.5 font-mono text-slate-200 text-xs">
               <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span className="font-tabular">{currentTime || '03:20 PM'}</span>
+              <LiveClock />
             </div>
 
             {/* Audio Chime Toggle */}
