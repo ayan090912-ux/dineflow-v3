@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, or_, and_, func
+from sqlalchemy import select, update, or_, and_, func, case
 
 from app.core.database.connection import get_db
 from app.core.security.tenant_auth import require_tenant_owner_or_admin, get_caller_context, CallerContext
@@ -295,75 +295,57 @@ async def get_current_business_day(
             cc = parts[0] + "".join(p.title() for p in parts[1:])
             formatted[cc] = v
 
-    # Live operational station counters (with strict exclusion of DELIVERED / COMPLETED / CANCELLED orders)
-    tbl_res = await db.execute(
-        select(func.count(Table.id)).where(Table.restaurant_id == rest.id, Table.status == "OCCUPIED")
+    # Live operational station counters in 1 combined DB round-trip
+    tbl_sq = select(func.count(Table.id)).where(
+        Table.restaurant_id == rest.id, Table.status == "OCCUPIED"
+    ).scalar_subquery()
+    sess_sq = select(func.count(TableSession.id)).where(
+        TableSession.restaurant_id == rest.id, TableSession.status == "ACTIVE"
+    ).scalar_subquery()
+    bills_sq = select(func.count(Bill.id)).where(
+        Bill.restaurant_id == rest.id,
+        or_(
+            Bill.status.in_(["OPEN", "PENDING", "BILL_REQUESTED", "PAYMENT_PENDING"]),
+            Bill.payment_status.in_(["UNPAID", "PAYMENT_PENDING", "PAYMENT_VERIFICATION_REQUIRED", "PENDING"])
+        ),
+        Bill.status.notin_(["CANCELLED", "PAID"])
+    ).scalar_subquery()
+    waiter_sq = select(func.count(CustomerRequestModel.id)).where(
+        CustomerRequestModel.restaurant_id == rest.id,
+        CustomerRequestModel.status == "PENDING"
+    ).scalar_subquery()
+
+    counts_res = await db.execute(select(tbl_sq, sess_sq, bills_sq, waiter_sq))
+    active_tables_count, active_sessions_count, unpaid_bills_count, waiter_pending_count = (
+        int(v or 0) for v in counts_res.one()
     )
-    active_tables_count = tbl_res.scalar() or 0
+
+    ord_counts_res = await db.execute(
+        select(
+            func.coalesce(func.sum(case((Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"]), 1), else_=0)), 0),
+            func.coalesce(func.sum(case((Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"]), 1), else_=0)), 0),
+            func.coalesce(func.sum(case((Order.hookah_status.in_(["PENDING", "ACCEPTED", "PREPARING"]), 1), else_=0)), 0),
+        ).where(
+            Order.restaurant_id == rest.id,
+            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+        )
+    )
+    kitchen_pending_count, bar_pending_count, hookah_pending_count = (
+        int(v or 0) for v in ord_counts_res.one()
+    )
+
     formatted["active_tables_count"] = active_tables_count
     formatted["activeTablesCount"] = active_tables_count
-
-    sess_res = await db.execute(
-        select(func.count(TableSession.id)).where(TableSession.restaurant_id == rest.id, TableSession.status == "ACTIVE")
-    )
-    active_sessions_count = sess_res.scalar() or 0
     formatted["active_sessions_count"] = active_sessions_count
     formatted["activeSessionsCount"] = active_sessions_count
-
-    bills_res = await db.execute(
-        select(func.count(Bill.id)).where(
-            Bill.restaurant_id == rest.id,
-            or_(
-                Bill.status.in_(["OPEN", "PENDING", "BILL_REQUESTED", "PAYMENT_PENDING"]),
-                Bill.payment_status.in_(["UNPAID", "PAYMENT_PENDING", "PAYMENT_VERIFICATION_REQUIRED", "PENDING"])
-            ),
-            Bill.status.notin_(["CANCELLED", "PAID"])
-        )
-    )
-    unpaid_bills_count = bills_res.scalar() or 0
     formatted["unpaid_bills_count"] = unpaid_bills_count
     formatted["unpaidBillsCount"] = unpaid_bills_count
-
-    k_res = await db.execute(
-        select(func.count(Order.id)).where(
-            Order.restaurant_id == rest.id,
-            Order.kitchen_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
-            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
-        )
-    )
-    kitchen_pending_count = k_res.scalar() or 0
     formatted["kitchen_pending_count"] = kitchen_pending_count
     formatted["kitchenPendingCount"] = kitchen_pending_count
-
-    b_res = await db.execute(
-        select(func.count(Order.id)).where(
-            Order.restaurant_id == rest.id,
-            Order.bar_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
-            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
-        )
-    )
-    bar_pending_count = b_res.scalar() or 0
     formatted["bar_pending_count"] = bar_pending_count
     formatted["barPendingCount"] = bar_pending_count
-
-    h_res = await db.execute(
-        select(func.count(Order.id)).where(
-            Order.restaurant_id == rest.id,
-            Order.hookah_status.in_(["PENDING", "ACCEPTED", "PREPARING"]),
-            Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
-        )
-    )
-    hookah_pending_count = h_res.scalar() or 0
     formatted["hookah_pending_count"] = hookah_pending_count
     formatted["hookahPendingCount"] = hookah_pending_count
-
-    w_res = await db.execute(
-        select(func.count(CustomerRequestModel.id)).where(
-            CustomerRequestModel.restaurant_id == rest.id,
-            CustomerRequestModel.status == "PENDING"
-        )
-    )
-    waiter_pending_count = w_res.scalar() or 0
     formatted["waiter_pending_count"] = waiter_pending_count
     formatted["waiterPendingCount"] = waiter_pending_count
 

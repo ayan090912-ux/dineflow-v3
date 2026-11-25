@@ -536,7 +536,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
 
       {/* HEADER BAR (Standalone Mode) */}
       {!isEmbedded && (
-        <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+        <header className="bg-[#0b0e14] border-b border-[#1e232e] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           {/* Brand Header */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-300 shrink-0">
@@ -638,7 +638,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
       {/* MAIN CONTENT AREA */}
       <main className={`flex-1 overflow-y-auto space-y-4 relative z-10 ${isEmbedded ? 'p-0' : 'p-3 sm:p-4 lg:p-6'}`}>
         {/* OPERATIONAL QUEUE FILTERS & ACTIONS */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 sm:p-3 rounded-xl">
           <div className="flex items-center gap-2 overflow-x-auto">
             <button
               onClick={() => setViewMode('active')}

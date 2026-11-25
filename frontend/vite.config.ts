@@ -15,6 +15,16 @@ export default defineConfig(() => {
       outDir: 'dist',
       emptyOutDir: true,
       chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-firebase': ['firebase/app', 'firebase/auth'],
+            'vendor-charts': ['recharts'],
+            'vendor-motion': ['motion'],
+          },
+        },
+      },
     },
     server: {
       port: 3007,

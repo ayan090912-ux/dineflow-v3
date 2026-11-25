@@ -414,7 +414,7 @@ async def get_waiter_snapshot(
     ).order_by(Bill.created_at.desc()).limit(50)
     bill_res = await db.execute(bill_stmt)
     raw_bills = bill_res.scalars().all()
-    formatted_bills = [format_bill_response(b) for b in raw_bills]
+    formatted_bills = [format_bill_response(b, include_qr=False) for b in raw_bills]
 
     return {
         "tables": tables_list,

@@ -115,7 +115,7 @@ async def find_restaurant_by_identifier(restaurant_id: str, db: AsyncSession) ->
     # Strict zero fallback: NEVER return default, earliest, or first restaurant
     return None
 
-def format_bill_response(bill: Bill) -> dict:
+def format_bill_response(bill: Bill, include_qr: bool = True) -> dict:
     created_at_val = None
     if getattr(bill, "created_at", None):
         try:
@@ -136,16 +136,17 @@ def format_bill_response(bill: Bill) -> dict:
 
     qr_payload = getattr(bill, "payment_qr_payload", None)
     qr_data_url = None
-    if not qr_payload and bill.payment_status != "PAID" and getattr(bill, "grand_total", 0.0) > 0:
-        upi_id = "dinely.pos@icici"
-        merchant_name = "Restaurant"
-        qr_payload = f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(merchant_name)}&am={bill.grand_total:.2f}&cu=INR&tr={bill.id}&tn=Bill_{bill.invoice_number or bill.id}"
-    if qr_payload:
-        from app.modules.payments.service import PaymentService
-        try:
-            qr_data_url = PaymentService.generate_qr_data_url(qr_payload)
-        except Exception:
-            pass
+    if include_qr:
+        if not qr_payload and bill.payment_status != "PAID" and getattr(bill, "grand_total", 0.0) > 0:
+            upi_id = "dinely.pos@icici"
+            merchant_name = "Restaurant"
+            qr_payload = f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(merchant_name)}&am={bill.grand_total:.2f}&cu=INR&tr={bill.id}&tn=Bill_{bill.invoice_number or bill.id}"
+        if qr_payload:
+            from app.modules.payments.service import PaymentService
+            try:
+                qr_data_url = PaymentService.generate_qr_data_url(qr_payload)
+            except Exception:
+                pass
 
     return {
         "id": bill.id,
@@ -879,7 +880,7 @@ async def list_restaurant_bills(
     query = query.limit(limit).offset(offset)
     res = await db.execute(query)
     bills = list(res.scalars().all())
-    return [format_bill_response(b) for b in bills]
+    return [format_bill_response(b, include_qr=(b.payment_status != "PAID")) for b in bills]
 
 
 @router.post("/{restaurant_id}/billing/{bill_id}/mark-payment")

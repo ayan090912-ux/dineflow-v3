@@ -836,7 +836,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
       {/* HEADER BAR (Standalone Terminal Mode) */}
       {!isEmbedded && (
-        <header className="bg-[#080b11]/85 backdrop-blur-2xl border-b border-white/[0.12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 shadow-xl">
+        <header className="bg-[#0b0e14] border-b border-[#1e232e] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           {/* Brand Header */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0">
@@ -934,7 +934,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         isEmbedded ? 'p-0' : 'max-w-7xl mx-auto px-3 sm:px-6 pt-4 sm:pt-6'
       }`}>
         {/* STAGE FILTERS & SEARCH BAR */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-2.5 sm:p-3 rounded-2xl shadow-xl">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 sm:p-3 rounded-xl">
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 lg:pb-0">
             {[
               { id: 'ALL', label: 'All Active Tickets', icon: <Flame className="w-3.5 h-3.5 text-emerald-400" />, badge: pendingOrders.length + inKitchenOrders.length + readyOrders.length },
@@ -1413,7 +1413,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
           </div>
         ) : (
           /* VIEW: COMPLETED SHIFT ORDERS HISTORY */
-          <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-5 shadow-2xl backdrop-blur-2xl">
+          <div className="bg-[#12151b] border border-[#1e232e] p-5 lg:p-6 rounded-xl space-y-5">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
