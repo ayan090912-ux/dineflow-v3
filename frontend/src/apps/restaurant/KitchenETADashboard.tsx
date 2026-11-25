@@ -1016,18 +1016,18 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
             <div className={kitchenFilter === 'ALL' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start"}>
               {/* COLUMN 1: NEW INCOMING ORDERS */}
               {(kitchenFilter === 'ALL' || kitchenFilter === 'NEW') && (
-                <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
-                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                    <div className="flex items-center gap-2.5">
-                      <Bell className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold text-white tracking-wider uppercase font-mono">
-                        1. Incoming Queue
+                <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-xl space-y-4">
+                  <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#1e232e]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Bell className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="text-sm font-semibold text-white whitespace-nowrap">
+                        Incoming
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs">
-                        {pendingOrders.length} New
+                      <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap shrink-0">
+                        {pendingOrders.length}
                       </span>
                     </div>
-                    <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
+                    <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">
                       Awaiting Kitchen
                     </span>
                   </div>
@@ -1186,19 +1186,19 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 2: ACTIVE COOKING STATION */}
             {(kitchenFilter === 'ALL' || kitchenFilter === 'COOKING') && (
-              <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
-                <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                  <div className="flex items-center gap-2.5">
-                    <Flame className="w-4 h-4 text-sky-400" />
-                    <span className="text-xs font-bold text-white tracking-wider uppercase font-mono">
-                      2. Active Cooking Grid
+              <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-xl space-y-4">
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#1e232e]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Flame className="w-4 h-4 text-sky-400 shrink-0" />
+                    <span className="text-sm font-semibold text-white whitespace-nowrap">
+                      Cooking
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs">
-                      {inKitchenOrders.length} Cooking
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30 whitespace-nowrap shrink-0">
+                      {inKitchenOrders.length}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
-                    Live Bump Board
+                  <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">
+                    Prep Board
                   </span>
                 </div>
 
@@ -1333,19 +1333,19 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
             {/* COLUMN 3: PLATED & READY FOR PASS PICKUP */}
             {(kitchenFilter === 'ALL' || kitchenFilter === 'READY') && (
-              <div className="liquid-glass-card border border-white/10 p-5 lg:p-6 rounded-2xl space-y-4 shadow-2xl backdrop-blur-2xl">
-                <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-bold text-white tracking-wider uppercase font-mono">
-                      3. Plated & Ready
+              <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-xl space-y-4">
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#1e232e]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-sm font-semibold text-white whitespace-nowrap">
+                      Ready
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs">
-                      {readyOrders.length} Ready
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 whitespace-nowrap shrink-0">
+                      {readyOrders.length}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
-                    Pass Pickup Window
+                  <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">
+                    Pass Window
                   </span>
                 </div>
 

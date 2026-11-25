@@ -321,9 +321,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
   }, [currentRestaurantId]);
 
   // Task 6.4: Realtime Reliability & Dropped WebSocket Fallback Polling
-  // Aggressive adaptive interval (8s when WS is DISCONNECTED/RECONNECTING, 30s background safety when healthy)
+  // Fast adaptive interval (2.5s when WS is DISCONNECTED/RECONNECTING, 6s background safety when healthy)
   useEffect(() => {
-    const pollIntervalMs = wsStatus === 'CONNECTED' ? 30000 : 8000;
+    const pollIntervalMs = wsStatus === 'CONNECTED' ? 6000 : 2500;
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadData(true);

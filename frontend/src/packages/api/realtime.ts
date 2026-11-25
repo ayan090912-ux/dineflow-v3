@@ -293,11 +293,43 @@ class RealTimeEventBus {
 
     this.setStatus(this.reconnectAttempts > 0 ? 'RECONNECTING' : 'CONNECTING');
 
-    const wsUrl = getWebSocketUrl(cleanRest, normalizedRole, tableSessionId, this.currentExplicitToken || undefined, this.currentChannel || undefined);
-    console.log('[WS_CONNECTING] URL:', wsUrl.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]'));
+    const openSocket = (resolvedToken?: string) => {
+      const wsUrl = getWebSocketUrl(cleanRest, normalizedRole, tableSessionId, resolvedToken || this.currentExplicitToken || undefined, this.currentChannel || undefined);
+      console.log('[WS_CONNECTING] URL:', wsUrl.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]'));
 
+      try {
+        this.ws = new WebSocket(wsUrl);
+        this.bindSocketHandlers(cleanRest, normalizedRole);
+      } catch (err) {
+        console.error('[WS_INIT_ERROR]:', err);
+        this.setStatus('DISCONNECTED');
+      }
+    };
+
+    const hasStoredStaffToken = typeof window !== 'undefined' && Boolean(
+      this.currentExplicitToken ||
+      localStorage.getItem(`dinely_staff_token_${normalizedRole.toLowerCase()}`) ||
+      sessionStorage.getItem(`dinely_staff_token_${normalizedRole.toLowerCase()}`) ||
+      localStorage.getItem('dinely_staff_token') ||
+      localStorage.getItem('dinely_auth_token')
+    );
+
+    if (!hasStoredStaffToken && normalizedRole !== 'CUSTOMER') {
+      getValidFirebaseIdToken()
+        .then((fbToken) => {
+          if (fbToken) this.currentExplicitToken = fbToken;
+          openSocket(fbToken || undefined);
+        })
+        .catch(() => openSocket());
+      return;
+    }
+
+    openSocket();
+  }
+
+  private bindSocketHandlers(cleanRest: string, normalizedRole: string) {
+    if (!this.ws) return;
     try {
-      this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
         console.log('[WS_CONNECTED] Scoped to restaurant:', cleanRest, 'role:', normalizedRole, 'channel:', this.currentChannel || 'auto');
