@@ -12,102 +12,156 @@ export interface ReceiptOptions {
   paymentQrPayload?: string;
 }
 
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let truncated = text;
+  while (truncated.length > 0 && ctx.measureText(`${truncated}…`).width > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return `${truncated}…`;
+}
+
 export async function downloadDigitalReceiptPNG(
   bill: Bill,
   restaurantName: string = 'Dinely Cloud POS',
   options?: ReceiptOptions
 ): Promise<void> {
   const canvas = document.createElement('canvas');
-  const width = 640;
-  const itemsCount = (bill.items || []).length;
-  const taxBreakdownCount = (bill.taxBreakdown || []).length;
-  const extraHeaderLines = (options?.gstin || options?.pan || options?.address) ? 30 : 0;
-  let effectiveQrUrl = options?.qrDataUrl || bill.qrDataUrl;
-  if (!effectiveQrUrl && bill.paymentStatus !== 'PAID') {
-    const payload = options?.paymentQrPayload || bill.paymentQrPayload || (options?.upiId ? `upi://pay?pa=${encodeURIComponent(options.upiId)}&pn=${encodeURIComponent(restaurantName)}&am=${(bill.grandTotal || 0).toFixed(2)}&cu=INR` : '');
-    if (payload) {
-      effectiveQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}`;
-    }
+  const width = 620;
+  const items = bill.items || [];
+  const taxBreakdown = bill.taxBreakdown || [];
+
+  // Calculate exact dynamic height (no QR code)
+  let calcY = 56; // Top padding + brand title
+  calcY += 22; // Subtitle
+  if (options?.address) calcY += 18;
+  if (options?.gstin || options?.pan) calcY += 18;
+  calcY += 24; // Divider gap
+  calcY += 68; // Metadata grid
+  calcY += 56; // Payment status pill bar
+  calcY += 44; // Items table header
+  calcY += Math.max(1, items.length) * 44; // Item rows
+  calcY += 26; // Subtotal divider + subtotal row
+  if ((bill.discountAmount || 0) > 0) calcY += 24;
+  if ((bill.serviceChargeAmount || 0) > 0) calcY += 24;
+  if (taxBreakdown.length > 0) {
+    calcY += taxBreakdown.length * 24;
+  } else if ((bill.taxAmount || 0) > 0) {
+    calcY += 24;
   }
-  const qrExtraHeight = (effectiveQrUrl && bill.paymentStatus !== 'PAID') ? 190 : 0;
-  const height = 820 + itemsCount * 45 + taxBreakdownCount * 22 + extraHeaderLines + qrExtraHeight;
+  if (bill.roundOffAmount && bill.roundOffAmount !== 0) calcY += 24;
+  calcY += 76; // Grand total box
+  calcY += 84; // Clean footer
+  const height = Math.max(540, calcY);
 
   canvas.width = width * 2; // High-DPI 2x scale
   canvas.height = height * 2;
   const ctx = canvas.getContext('2d');
-
   if (!ctx) return;
 
   ctx.scale(2, 2);
 
-  // Background Gradient (Dark Navy / Slate)
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, '#090d16');
-  grad.addColorStop(1, '#0f172a');
-  ctx.fillStyle = grad;
+  // Clean Warm-White Paper Background
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
 
-  // Outer Border Box
-  ctx.strokeStyle = '#1e293b';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(16, 16, width - 32, height - 32);
+  // Subtle Outer Hairline Frame
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1.5;
+  drawRoundedRect(ctx, 16, 16, width - 32, height - 32, 16);
+  ctx.stroke();
 
-  // Top Brand Header Banner
-  ctx.fillStyle = '#10b981';
-  ctx.fillRect(16, 16, width - 32, 8);
+  // Top Minimal Accent Bar
+  ctx.fillStyle = '#0f172a';
+  drawRoundedRect(ctx, 16, 16, width - 32, 6, 3);
+  ctx.fill();
 
   // Header Title
-  const displayTitle = options?.legalName || restaurantName || 'Dinely Fine Dining';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '900 22px Inter, system-ui, sans-serif';
+  const displayTitle = options?.legalName || restaurantName || 'Restaurant';
+  let y = 58;
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '800 22px Inter, system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(displayTitle.toUpperCase(), width / 2, 55);
+  ctx.fillText(displayTitle.toUpperCase(), width / 2, y);
 
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('OFFICIAL GST TAX INVOICE & DIGITAL RECEIPT', width / 2, 75);
+  y += 20;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '600 10px Inter, system-ui, -apple-system, sans-serif';
+  ctx.fillText('TAX INVOICE  •  DIGITAL RECEIPT', width / 2, y);
 
-  let headerY = 92;
   if (options?.address) {
+    y += 18;
     ctx.fillStyle = '#64748b';
-    ctx.font = '500 10px Inter, system-ui, sans-serif';
-    ctx.fillText(options.address, width / 2, headerY);
-    headerY += 15;
+    ctx.font = '500 11px Inter, system-ui, -apple-system, sans-serif';
+    ctx.fillText(truncateText(ctx, options.address, width - 100), width / 2, y);
   }
 
   const gstPanParts: string[] = [];
   if (options?.gstin) gstPanParts.push(`GSTIN: ${options.gstin}`);
   if (options?.pan) gstPanParts.push(`PAN: ${options.pan}`);
   if (gstPanParts.length > 0) {
-    ctx.fillStyle = '#10b981';
-    ctx.font = '700 10px monospace';
-    ctx.fillText(gstPanParts.join('  |  '), width / 2, headerY);
-    headerY += 15;
+    y += 18;
+    ctx.fillStyle = '#334155';
+    ctx.font = '600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillText(gstPanParts.join('   |   '), width / 2, y);
   }
 
   // Divider Line
-  ctx.strokeStyle = '#334155';
+  y += 22;
+  ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(40, headerY);
-  ctx.lineTo(width - 40, headerY);
+  ctx.moveTo(40, y);
+  ctx.lineTo(width - 40, y);
   ctx.stroke();
 
-  const metaStartY = headerY + 25;
+  // Invoice & Table Metadata Card
+  y += 18;
+  ctx.fillStyle = '#f8fafc';
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  drawRoundedRect(ctx, 40, y, width - 80, 56, 10);
+  ctx.fill();
+  ctx.stroke();
 
-  // Invoice & Table Metadata Grid
+  const col1X = 56;
+  const col2X = 240;
+  const col3X = width - 56;
+
   ctx.textAlign = 'left';
   ctx.fillStyle = '#64748b';
-  ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('INVOICE NO', 40, metaStartY);
-  ctx.fillText('DATE & TIME', 230, metaStartY);
-  ctx.fillText('TABLE & SESSION', 440, metaStartY);
+  ctx.font = '600 9.5px Inter, system-ui, sans-serif';
+  ctx.fillText('INVOICE NO', col1X, y + 20);
+  ctx.fillText('DATE & TIME', col2X, y + 20);
+  ctx.textAlign = 'right';
+  ctx.fillText('TABLE', col3X, y + 20);
 
-  ctx.fillStyle = '#10b981';
-  ctx.font = '700 13px monospace';
-  ctx.fillText(bill.invoiceNumber || bill.id || 'INV-1001', 40, metaStartY + 20);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.fillText(bill.invoiceNumber || bill.id || 'INV-1001', col1X, y + 40);
 
-  ctx.fillStyle = '#f8fafc';
   ctx.font = '600 12px Inter, system-ui, sans-serif';
   const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN', {
     day: '2-digit',
@@ -116,219 +170,190 @@ export async function downloadDigitalReceiptPNG(
     hour: '2-digit',
     minute: '2-digit',
   });
-  ctx.fillText(dateStr, 230, metaStartY + 20);
+  ctx.fillText(dateStr, col2X, y + 40);
 
-  ctx.fillStyle = '#f59e0b';
-  const standardTableLabel = formatStandardTableNumber(bill.tableNumber);
-  ctx.fillText(`${standardTableLabel} (#${bill.tableSessionId ? String(bill.tableSessionId).slice(-6) : '001'})`, 440, metaStartY + 20);
-
-  // Status & Payment Method Box
-  const boxY = metaStartY + 40;
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(40, boxY, width - 80, 42);
-  ctx.strokeStyle = '#334155';
-  ctx.strokeRect(40, boxY, width - 80, 42);
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('PAYMENT STATUS:', 55, boxY + 25);
-  ctx.fillStyle = bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? '#10b981' : '#f59e0b';
-  ctx.font = '800 12px Inter, system-ui, sans-serif';
-  ctx.fillText(bill.paymentStatus === 'PAID' || bill.status === 'CLOSED' ? '● PAID & VERIFIED' : '○ PAYMENT PENDING', 165, boxY + 25);
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('PAYMENT METHOD:', 350, boxY + 25);
-  ctx.fillStyle = '#f8fafc';
-  ctx.font = '700 12px Inter, system-ui, sans-serif';
-  ctx.fillText((bill.paymentMethod || 'UPI / CASH').toUpperCase(), 465, boxY + 25);
-
-  // Itemized Header
-  let y = boxY + 65;
-  ctx.fillStyle = '#475569';
-  ctx.fillRect(40, y, width - 80, 28);
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '700 11px Inter, system-ui, sans-serif';
-  ctx.fillText('ITEM DESCRIPTION', 55, y + 18);
-  ctx.textAlign = 'center';
-  ctx.fillText('QTY', 380, y + 18);
   ctx.textAlign = 'right';
-  ctx.fillText('PRICE (₹)', width - 55, y + 18);
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 12.5px Inter, system-ui, sans-serif';
+  const standardTableLabel = formatStandardTableNumber(bill.tableNumber);
+  ctx.fillText(standardTableLabel, col3X, y + 40);
 
-  // Itemized Rows
-  y += 35;
+  // Payment Status & Method Strip
+  y += 70;
+  const isPaid = bill.paymentStatus === 'PAID' || bill.status === 'CLOSED';
+  ctx.fillStyle = isPaid ? '#ecfdf5' : '#fffbeb';
+  ctx.strokeStyle = isPaid ? '#a7f3d0' : '#fde68a';
+  ctx.lineWidth = 1;
+  drawRoundedRect(ctx, 40, y, width - 80, 38, 8);
+  ctx.fill();
+  ctx.stroke();
+
   ctx.textAlign = 'left';
+  ctx.fillStyle = isPaid ? '#047857' : '#b45309';
+  ctx.font = '700 11.5px Inter, system-ui, sans-serif';
+  ctx.fillText(isPaid ? '●  PAID & VERIFIED' : '○  PAYMENT PENDING', 56, y + 23);
 
-  (bill.items || []).forEach((item) => {
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '600 13px Inter, system-ui, sans-serif';
-    ctx.fillText(item.name, 55, y);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#475569';
+  ctx.font = '600 11px Inter, system-ui, sans-serif';
+  const methodLabel = (bill.paymentMethod || 'CASH / UPI').toUpperCase();
+  ctx.fillText(`METHOD: ${methodLabel}`, width - 56, y + 23);
 
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '600 13px monospace';
-    ctx.fillText(`${item.quantity}x`, 380, y);
+  // Itemized Table Header
+  y += 56;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '700 10px Inter, system-ui, sans-serif';
+  ctx.fillText('ITEM DESCRIPTION', 40, y);
+  ctx.textAlign = 'center';
+  ctx.fillText('QTY', 400, y);
+  ctx.textAlign = 'right';
+  ctx.fillText('AMOUNT', width - 40, y);
 
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 13px monospace';
-    ctx.fillText(formatCurrency(item.totalPrice), width - 55, y);
-
-    // Dashed line under item
-    ctx.strokeStyle = '#1e293b';
-    ctx.beginPath();
-    ctx.moveTo(40, y + 12);
-    ctx.lineTo(width - 40, y + 12);
-    ctx.stroke();
-
-    y += 40;
-  });
-
-  // Totals Section
   y += 10;
-  ctx.strokeStyle = '#334155';
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(40, y);
   ctx.lineTo(width - 40, y);
   ctx.stroke();
 
-  y += 25;
+  // Itemized Rows
+  y += 28;
+  items.forEach((item, idx) => {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 13px Inter, system-ui, sans-serif';
+    ctx.fillText(truncateText(ctx, item.name || 'Item', 310), 40, y);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#475569';
+    ctx.font = '600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillText(`${item.quantity}x`, 400, y);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '700 13px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillText(formatCurrency(item.totalPrice), width - 40, y);
+
+    if (idx < items.length - 1) {
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(40, y + 14);
+      ctx.lineTo(width - 40, y + 14);
+      ctx.stroke();
+    }
+
+    y += 42;
+  });
+
+  // Totals Divider
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(40, y - 14);
+  ctx.lineTo(width - 40, y - 14);
+  ctx.stroke();
+
+  // Subtotal
+  y += 10;
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 12px Inter, system-ui, sans-serif';
-  ctx.fillText('Item Subtotal:', 40, y);
+  ctx.fillStyle = '#475569';
+  ctx.font = '500 12.5px Inter, system-ui, sans-serif';
+  ctx.fillText('Subtotal', 40, y);
   ctx.textAlign = 'right';
-  ctx.fillStyle = '#f8fafc';
-  ctx.font = '600 12px monospace';
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
   ctx.fillText(formatCurrency(bill.subtotal || 0), width - 40, y);
 
   if ((bill.discountAmount || 0) > 0) {
-    y += 22;
+    y += 24;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#10b981';
-    ctx.font = '600 12px Inter, system-ui, sans-serif';
-    ctx.fillText(`Discount (${bill.discountPercentage || 0}%):`, 40, y);
+    ctx.fillStyle = '#059669';
+    ctx.font = '500 12.5px Inter, system-ui, sans-serif';
+    ctx.fillText(`Discount (${bill.discountPercentage || 0}%)`, 40, y);
     ctx.textAlign = 'right';
-    ctx.font = '600 12px monospace';
+    ctx.font = '600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillText(`-${formatCurrency(bill.discountAmount)}`, width - 40, y);
   }
 
   if ((bill.serviceChargeAmount || 0) > 0) {
-    y += 22;
+    y += 24;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#f59e0b';
-    ctx.font = '600 12px Inter, system-ui, sans-serif';
-    ctx.fillText(`Service Charge (${bill.serviceChargePercentage || 0}%):`, 40, y);
+    ctx.fillStyle = '#475569';
+    ctx.font = '500 12.5px Inter, system-ui, sans-serif';
+    ctx.fillText(`Service Charge (${bill.serviceChargePercentage || 0}%)`, 40, y);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '600 12px monospace';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillText(formatCurrency(bill.serviceChargeAmount), width - 40, y);
   }
 
-  if (bill.taxBreakdown && bill.taxBreakdown.length > 0) {
-    bill.taxBreakdown.forEach((t) => {
-      y += 22;
+  if (taxBreakdown.length > 0) {
+    taxBreakdown.forEach((t) => {
+      y += 24;
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '600 12px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#475569';
+      ctx.font = '500 12.5px Inter, system-ui, sans-serif';
       const tName = t.name || t.taxName || 'GST';
       const tRate = t.rate || t.taxRate || 0;
-      ctx.fillText(`${tName} (${tRate}%${t.isInclusive ? ' Incl.' : ''}):`, 40, y);
+      ctx.fillText(`${tName} (${tRate}%${t.isInclusive ? ' Incl.' : ''})`, 40, y);
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = '600 12px monospace';
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
       ctx.fillText(formatCurrency(t.amount || t.taxAmount || 0), width - 40, y);
     });
   } else if ((bill.taxAmount || 0) > 0) {
-    y += 22;
+    y += 24;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '600 12px Inter, system-ui, sans-serif';
-    ctx.fillText('GST / Applicable Taxes:', 40, y);
+    ctx.fillStyle = '#475569';
+    ctx.font = '500 12.5px Inter, system-ui, sans-serif';
+    ctx.fillText('GST / Applicable Taxes', 40, y);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '600 12px monospace';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillText(formatCurrency(bill.taxAmount), width - 40, y);
   }
 
   if (bill.roundOffAmount && bill.roundOffAmount !== 0) {
-    y += 22;
+    y += 24;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '600 12px Inter, system-ui, sans-serif';
-    ctx.fillText('Round Off:', 40, y);
+    ctx.fillStyle = '#475569';
+    ctx.font = '500 12.5px Inter, system-ui, sans-serif';
+    ctx.fillText('Round Off', 40, y);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '600 12px monospace';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillText(formatCurrency(bill.roundOffAmount), width - 40, y);
   }
 
-  // Grand Total Box
-  y += 35;
-  ctx.fillStyle = '#064e3b';
-  ctx.fillRect(40, y - 20, width - 80, 50);
-  ctx.strokeStyle = '#059669';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(40, y - 20, width - 80, 50);
+  // Grand Total Card
+  y += 22;
+  ctx.fillStyle = '#0f172a';
+  drawRoundedRect(ctx, 40, y, width - 80, 52, 10);
+  ctx.fill();
 
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#a7f3d0';
-  ctx.font = '800 15px Inter, system-ui, sans-serif';
-  ctx.fillText('GRAND TOTAL:', 60, y + 12);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 13px Inter, system-ui, sans-serif';
+  ctx.fillText('TOTAL PAYABLE', 58, y + 31);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#34d399';
-  ctx.font = '900 22px monospace';
-  ctx.fillText(formatCurrency(bill.grandTotal || 0), width - 60, y + 14);
+  ctx.font = '800 20px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.fillText(formatCurrency(bill.grandTotal || 0), width - 58, y + 33);
 
-  // Dynamic UPI Payment QR Code
-  if (effectiveQrUrl && bill.paymentStatus !== 'PAID') {
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = effectiveQrUrl;
-      await new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-      if (img.complete && img.naturalWidth > 0) {
-        y += 45;
-        const qrBoxSize = 130;
-        const qrX = (width - qrBoxSize) / 2;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(qrX - 5, y - 5, qrBoxSize + 10, qrBoxSize + 10);
-        ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(qrX - 5, y - 5, qrBoxSize + 10, qrBoxSize + 10);
-        ctx.drawImage(img, qrX, y, qrBoxSize, qrBoxSize);
-
-        y += qrBoxSize + 18;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#fbbf24';
-        ctx.font = '700 11px Inter, system-ui, sans-serif';
-        ctx.fillText('SCAN TO PAY VIA UPI (GPay, PhonePe, Paytm, BHIM)', width / 2, y);
-
-        y += 16;
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '600 11px monospace';
-        ctx.fillText(`Exact Amount: ${formatCurrency(bill.grandTotal || 0)}`, width / 2, y);
-      }
-    } catch (e) {
-      console.warn('QR image render skipped:', e);
-    }
-  }
-
-  // Footer Verification & Compliance Notice
-  y += 65;
+  // Clean Footer
+  y += 80;
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 11px Inter, system-ui, sans-serif';
-  ctx.fillText('Thank you for dining with us! 🙏', width / 2, y);
+  ctx.fillStyle = '#334155';
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
+  ctx.fillText('Thank you for dining with us!', width / 2, y);
 
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = '#94a3b8';
   ctx.font = '500 10px Inter, system-ui, sans-serif';
-  ctx.fillText('Digital GST Tax Invoice • E-invoicing integration not configured (IRN/IRP not applicable)', width / 2, y + 18);
-  ctx.fillText('Powered by Dinely Multi-Tenant Restaurant Operating System', width / 2, y + 34);
+  ctx.fillText('Powered by Dinely', width / 2, y + 18);
 
   // Convert Canvas to Blob and Trigger Download / Native Mobile Share
   const fileName = `Tax_Invoice_${bill.invoiceNumber || bill.id || 'DLY'}_${Date.now()}.png`;
@@ -336,7 +361,6 @@ export async function downloadDigitalReceiptPNG(
   try {
     canvas.toBlob(async (blob) => {
       if (!blob) {
-        // Fallback dataURL
         const imageURI = canvas.toDataURL('image/png');
         const a = document.createElement('a');
         a.href = imageURI;
@@ -381,7 +405,6 @@ export async function downloadDigitalReceiptPNG(
     }, 'image/png');
   } catch (e) {
     console.error('Failed to download digital receipt:', e);
-    // Ultimate fallback
     const imageURI = canvas.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = imageURI;
