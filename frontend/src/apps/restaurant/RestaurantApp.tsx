@@ -2341,23 +2341,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 Add Raw Material
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (allMyRestaurants.length > 1) {
-                  setIsOutletModalOpen(true);
-                } else if (onNavigate) {
-                  onNavigate('/workspace');
-                } else {
-                  window.location.href = 'https://dinely.food/workspace';
-                }
-              }}
-              className="text-xs border-[#1e232e] bg-[#12151b] text-slate-300 hover:text-white hover:bg-[#181d27]"
-              icon={<Store className="w-3.5 h-3.5 mr-1 text-slate-400" />}
-            >
-              Switch Restaurant
-            </Button>
           </div>
         </header>
 
