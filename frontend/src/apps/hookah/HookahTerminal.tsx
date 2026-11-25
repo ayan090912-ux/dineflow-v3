@@ -377,7 +377,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
         prev.map((o) => (o.id === orderId ? { ...o, hookahStatus: 'PREPARING' } : o))
       );
       await api.updateFulfillmentTicketStatus(orderId, 'PREPARING', 'HOOKAH');
-      await api.updateHookahStatus(orderId, 'PREPARING');
+      await api.updateHookahStatus(orderId, 'PREPARING', isEmbedded ? undefined : 'HOOKAH');
       setToastMessage({
         title: 'Preparation Started',
         desc: `Order #${orderId.slice(-4)} is now being prepared.`,
@@ -410,7 +410,7 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
         prev.map((o) => (o.id === orderId ? { ...o, hookahStatus: 'READY' } : o))
       );
       await api.updateFulfillmentTicketStatus(orderId, 'READY', 'HOOKAH');
-      await api.updateHookahStatus(orderId, 'READY');
+      await api.updateHookahStatus(orderId, 'READY', isEmbedded ? undefined : 'HOOKAH');
       await api.requestWaiter(orderId, 'HOOKAH');
       setCompletedHistory((prev) => [
         {

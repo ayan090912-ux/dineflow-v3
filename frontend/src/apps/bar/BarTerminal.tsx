@@ -372,7 +372,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
         prev.map((o) => (o.id === orderId ? { ...o, barStatus: 'PREPARING' } : o))
       );
       await api.updateFulfillmentTicketStatus(orderId, 'PREPARING', 'BAR');
-      await api.updateBarStatus(orderId, 'PREPARING');
+      await api.updateBarStatus(orderId, 'PREPARING', isEmbedded ? undefined : 'BAR');
       setToastMessage({
         title: 'Mixology Started',
         desc: `Drink Order #${orderId.slice(-4)} is now being prepared.`,
@@ -405,7 +405,7 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
         prev.map((o) => (o.id === orderId ? { ...o, barStatus: 'READY' } : o))
       );
       await api.updateFulfillmentTicketStatus(orderId, 'READY', 'BAR');
-      await api.updateBarStatus(orderId, 'READY');
+      await api.updateBarStatus(orderId, 'READY', isEmbedded ? undefined : 'BAR');
       await api.requestWaiter(orderId, 'BAR');
       setCompletedHistory((prev) => [
         {

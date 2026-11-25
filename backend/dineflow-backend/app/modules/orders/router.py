@@ -1498,7 +1498,7 @@ async def update_order_status(
             is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
             if not is_owner:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"]:
+        elif caller.role in ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         else:
@@ -1579,6 +1579,13 @@ async def update_order_status(
 
     # Station-specific mutation role authorization
     req_station = (payload.station or "").upper() if payload.station else None
+    if not req_station:
+        if payload.hookahStatus and not payload.kitchenStatus and not payload.barStatus:
+            req_station = "HOOKAH"
+        elif payload.barStatus and not payload.kitchenStatus and not payload.hookahStatus:
+            req_station = "BAR"
+        elif payload.kitchenStatus and not payload.barStatus and not payload.hookahStatus:
+            req_station = "KITCHEN"
     if req_station == "HOOKAH" and not payload.hookahStatus and target_status:
         payload.hookahStatus = target_status
     elif req_station == "BAR" and not payload.barStatus and target_status:

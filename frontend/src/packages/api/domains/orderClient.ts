@@ -411,7 +411,7 @@ export class OrderClient {
     const targetOrderId = parentOrder?.id || ticket.parentOrderId || ticketIdOrOrderId;
     if (targetOrderId) {
       try {
-        const updateBody: any = {};
+        const updateBody: any = { station: ticket.station };
         if (ticket.station === 'KITCHEN') {
           updateBody.kitchenStatus = status;
         } else if (ticket.station === 'BAR') {
@@ -936,6 +936,7 @@ export class OrderClient {
     const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
     const bodyPayload: any = {
+      station: 'BAR',
       status: isParentReady ? 'READY' : (order?.status || orderStatus),
       barStatus: status,
     };
@@ -1012,6 +1013,7 @@ export class OrderClient {
     const orderStatus = isParentReady ? 'READY' : (status === 'PREPARING' || status === 'ACCEPTED' ? 'PREPARING' : (order?.status || 'PREPARING'));
 
     const bodyPayload: any = {
+      station: 'HOOKAH',
       status: isParentReady ? 'READY' : (order?.status || orderStatus),
       hookahStatus: status,
     };
