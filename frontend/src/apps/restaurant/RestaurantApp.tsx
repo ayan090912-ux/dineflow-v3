@@ -2328,15 +2328,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             >
               Switch Restaurant
             </Button>
-            <a
-              href={getRestaurantCustomerUrl(currentRestaurant)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-lg bg-[#141822] border border-[#222838] text-emerald-400 hover:border-emerald-500/40 transition-colors"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>{getRestaurantPublicDomain(currentRestaurant).replace(/^https?:\/\//, '')}</span>
-            </a>
           </div>
         </header>
 
@@ -2362,15 +2353,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                     className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-[#1e232e] bg-[#0e1117] shrink-0"
                   />
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        {currentRestaurant?.lifecycleStatus === 'ACTIVE' || !currentRestaurant?.lifecycleStatus ? 'Live' : currentRestaurant?.lifecycleStatus}
-                      </span>
-                      <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                        {getRestaurantPublicDomain(currentRestaurant).replace(/^https?:\/\//, '')}
-                      </span>
-                    </div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
                       {theme?.restaurantName || currentRestaurant?.name || 'Restaurant'}
                     </h1>
