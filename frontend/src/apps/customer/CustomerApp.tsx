@@ -249,18 +249,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     fetchLiveCustomerOrders();
 
-    // Adaptive polling: when WebSocket is actively connected, back off to 30s heartbeat.
-    // If WebSocket is disconnected or reconnecting, poll every 8s.
+    // Adaptive polling: when WebSocket is actively connected, 8s safety heartbeat.
+    // If WebSocket is disconnected or reconnecting (common on mobile), poll every 3s.
     const pollInterval = setInterval(() => {
       if (realtimeBus.getStatus() === 'CONNECTED') {
         return;
       }
       fetchLiveCustomerOrders();
-    }, 8000);
+    }, 3000);
 
     const heartbeatInterval = setInterval(() => {
       fetchLiveCustomerOrders();
-    }, 30000);
+    }, 8000);
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -305,66 +305,121 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       setIsRecentStatusPulse(true);
       setTimeout(() => setIsRecentStatusPulse(false), 3500);
 
-      // Silently update live state from events without disruptive popup spam
-      if (event.type === 'BarStatusUpdated') {
-        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
-        const bStatus = (event as any).barStatus || (event as any).payload?.barStatus;
+      const p = (event as any).payload || (event as any).data || event;
+      const oId = p.orderId || p.order_id || p.id || (event as any).orderId || (event as any).order_id || (event as any).id;
+
+      // Instantly update live state from events without waiting for HTTP poll
+      if (event.type === 'KitchenStatusUpdated' || event.type === 'kitchen_status_updated') {
+        const kStatus = p.kitchenStatus || p.kitchen_status || (event as any).kitchenStatus;
+        const pStatus = p.status || (event as any).status;
         if (oId) {
           setCustomerOrders((prev) =>
             prev.map((o) =>
               o.id === oId
-                ? {
-                    ...o,
-                    barStatus: bStatus || o.barStatus,
-                    status: (event as any).status || (event as any).payload?.status || o.status,
-                  }
+                ? { ...o, kitchenStatus: kStatus || o.kitchenStatus, status: pStatus || o.status }
                 : o
             )
           );
         }
-      } else if (event.type === 'HookahStatusUpdated') {
-        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
-        const hStatus = (event as any).hookahStatus || (event as any).payload?.hookahStatus;
+      } else if (event.type === 'BarStatusUpdated' || event.type === 'bar_status_updated') {
+        const bStatus = p.barStatus || p.bar_status || (event as any).barStatus;
+        const pStatus = p.status || (event as any).status;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) =>
+              o.id === oId
+                ? { ...o, barStatus: bStatus || o.barStatus, status: pStatus || o.status }
+                : o
+            )
+          );
+        }
+      } else if (event.type === 'HookahStatusUpdated' || event.type === 'hookah_status_updated') {
+        const hStatus = p.hookahStatus || p.hookah_status || (event as any).hookahStatus;
+        const pStatus = p.status || (event as any).status;
+        if (oId) {
+          setCustomerOrders((prev) =>
+            prev.map((o) =>
+              o.id === oId
+                ? { ...o, hookahStatus: hStatus || o.hookahStatus, status: pStatus || o.status }
+                : o
+            )
+          );
+        }
+      } else if (event.type === 'ETAUpdated' || (event as any).type === 'eta_updated') {
+        const mins = p.estimatedPrepTimeMinutes ?? p.estimated_prep_time_minutes ?? (event as any).estimatedPrepTimeMinutes;
+        const target = p.etaTargetTimestamp ?? p.eta_target_timestamp ?? (event as any).etaTargetTimestamp;
         if (oId) {
           setCustomerOrders((prev) =>
             prev.map((o) =>
               o.id === oId
                 ? {
                     ...o,
-                    hookahStatus: hStatus || o.hookahStatus,
-                    status: (event as any).status || (event as any).payload?.status || o.status,
+                    estimatedPrepTimeMinutes: mins !== undefined ? mins : o.estimatedPrepTimeMinutes,
+                    etaTargetTimestamp: target !== undefined ? target : o.etaTargetTimestamp,
                   }
                 : o
             )
           );
         }
       } else if (event.type === 'OrderReady' || event.type === 'order_ready') {
-        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        const station = (p.station || (event as any).station || '').toUpperCase();
         if (oId) {
           setCustomerOrders((prev) =>
-            prev.map((o) => (o.id === oId ? { ...o, status: 'READY', kitchenStatus: 'READY' } : o))
+            prev.map((o) => {
+              if (o.id !== oId) return o;
+              if (station === 'BAR') return { ...o, barStatus: 'READY', status: p.status || o.status };
+              if (station === 'HOOKAH') return { ...o, hookahStatus: 'READY', status: p.status || o.status };
+              if (station === 'KITCHEN') return { ...o, kitchenStatus: 'READY', status: p.status || o.status };
+              return {
+                ...o,
+                status: p.status || 'READY',
+                kitchenStatus: p.kitchenStatus || (o.kitchenStatus ? 'READY' : o.kitchenStatus),
+                barStatus: p.barStatus || o.barStatus,
+                hookahStatus: p.hookahStatus || o.hookahStatus,
+              };
+            })
           );
         }
       } else if (event.type === 'OrderDelivered' || event.type === 'order_delivered') {
-        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
+        const station = (p.station || (event as any).station || '').toUpperCase();
         if (oId) {
           setCustomerOrders((prev) =>
-            prev.map((o) => (o.id === oId ? { ...o, status: 'DELIVERED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
+            prev.map((o) => {
+              if (o.id !== oId) return o;
+              if (station === 'KITCHEN') {
+                return { ...o, kitchenStatus: 'COMPLETED', status: p.status || o.status, deliveryStatus: p.deliveryStatus || o.deliveryStatus };
+              }
+              if (station === 'BAR') {
+                return { ...o, barStatus: 'COMPLETED', status: p.status || o.status, deliveryStatus: p.deliveryStatus || o.deliveryStatus };
+              }
+              if (station === 'HOOKAH') {
+                return { ...o, hookahStatus: 'COMPLETED', status: p.status || o.status, deliveryStatus: p.deliveryStatus || o.deliveryStatus };
+              }
+              return {
+                ...o,
+                status: p.status || 'DELIVERED',
+                deliveryStatus: p.deliveryStatus || 'DELIVERED',
+                kitchenStatus: p.kitchenStatus || (o.kitchenStatus ? 'COMPLETED' : o.kitchenStatus),
+                barStatus: p.barStatus || (o.barStatus ? 'COMPLETED' : o.barStatus),
+                hookahStatus: p.hookahStatus || (o.hookahStatus ? 'COMPLETED' : o.hookahStatus),
+              };
+            })
           );
         }
       } else if (event.type === 'OrderCompleted' || event.type === 'order_completed') {
-        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
         if (oId) {
           setCustomerOrders((prev) =>
             prev.map((o) => (o.id === oId ? { ...o, status: 'COMPLETED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
           );
         }
       } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
-        const oId = (event as any).orderId || (event as any).order_id || (event as any).id;
-        const newStatus = (event as any).status || (event as any).payload?.status;
-        const newKitchenStatus = (event as any).kitchenStatus || (event as any).payload?.kitchenStatus;
-        const newBarStatus = (event as any).barStatus || (event as any).payload?.barStatus || (event as any).payload?.bar_status;
-        const newHookahStatus = (event as any).hookahStatus || (event as any).payload?.hookahStatus || (event as any).payload?.hookah_status;
+        const newStatus = p.status || (event as any).status;
+        const newKitchenStatus = p.kitchenStatus || p.kitchen_status || (event as any).kitchenStatus;
+        const newBarStatus = p.barStatus || p.bar_status || (event as any).barStatus;
+        const newHookahStatus = p.hookahStatus || p.hookah_status || (event as any).hookahStatus;
+        const newDeliveryStatus = p.deliveryStatus || p.delivery_status || (event as any).deliveryStatus;
+        const mins = p.estimatedPrepTimeMinutes ?? p.estimated_prep_time_minutes;
+        const target = p.etaTargetTimestamp ?? p.eta_target_timestamp;
         if (oId) {
           setCustomerOrders((prev) =>
             prev.map((o) =>
@@ -375,6 +430,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     kitchenStatus: newKitchenStatus || o.kitchenStatus,
                     barStatus: newBarStatus || o.barStatus,
                     hookahStatus: newHookahStatus || o.hookahStatus,
+                    deliveryStatus: newDeliveryStatus || o.deliveryStatus,
+                    estimatedPrepTimeMinutes: mins !== undefined ? mins : o.estimatedPrepTimeMinutes,
+                    etaTargetTimestamp: target !== undefined ? target : o.etaTargetTimestamp,
                   }
                 : o
             )
