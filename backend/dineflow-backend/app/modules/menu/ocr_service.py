@@ -5,13 +5,13 @@ import json
 import base64
 import urllib.request
 from typing import List, Dict, Any, Optional
-from PIL import Image, ImageOps, ImageEnhance
+from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 
 
 NON_VEG_HINTS = {
     "chicken", "chiken", "mutton", "lamb", "fish", "prawn", "prawns", "shrimp",
-    "egg", "keema", "kheema", "murgh", "gosht", "meat", "beef", "pork", "bacon",
-    "crab", "lobster", "salmon", "tuna", "duck", "turkey", "salami", "pepperoni"
+    "egg", "eggs", "keema", "kheema", "murgh", "gosht", "meat", "beef", "pork", "bacon",
+    "crab", "lobster", "salmon", "tuna", "duck", "turkey", "salami", "pepperoni", "tandoori chicken"
 }
 
 BAR_HINTS = {
@@ -34,6 +34,10 @@ CATEGORY_HINTS = {
     "tandoor": "Tandoor & Grills",
     "kebab": "Tandoor & Grills",
     "main": "Main Course",
+    "sabzi": "Main Course",
+    "sabji": "Main Course",
+    "paneer": "Main Course",
+    "dal": "Main Course",
     "curry": "Main Course",
     "gravy": "Main Course",
     "biryani": "Rice & Biryani",
@@ -42,6 +46,7 @@ CATEGORY_HINTS = {
     "bread": "Breads & Naans",
     "naan": "Breads & Naans",
     "roti": "Breads & Naans",
+    "paratha": "Breads & Naans",
     "chinese": "Chinese & Asian",
     "noodle": "Chinese & Asian",
     "pasta": "Pizza & Pasta",
@@ -56,8 +61,16 @@ CATEGORY_HINTS = {
     "coffee": "Coffee & Tea",
     "dessert": "Desserts & Sweets",
     "sweet": "Desserts & Sweets",
+    "raita": "Sides & Raita",
+    "thali": "Thali & Combos",
+    "combo": "Thali & Combos",
     "hookah": "Hookah & Shisha",
     "shisha": "Hookah & Shisha",
+}
+
+HEADER_NOISE_WORDS = {
+    "half", "full", "quarter", "qtr", "plate", "price", "rate", "rates", "rs", "inr",
+    "veg", "non veg", "non-veg", "menu", "dhaba", "restaurant", "special", "items", "qty"
 }
 
 
@@ -82,6 +95,8 @@ def _detect_heading_category(line: str) -> Optional[str]:
     if not cleaned or len(cleaned) > 42 or any(ch.isdigit() for ch in cleaned):
         return None
     low = cleaned.lower()
+    if low in HEADER_NOISE_WORDS:
+        return None
     for kw, mapped in CATEGORY_HINTS.items():
         if kw in low:
             return mapped
@@ -90,9 +105,22 @@ def _detect_heading_category(line: str) -> Optional[str]:
     return None
 
 
+def _clean_dish_name(raw_name: str) -> str:
+    s = raw_name.strip()
+    # Strip dot leaders, dashes, pipes, brackets, currency prefixes/suffixes
+    s = re.sub(r"[\.\-–—•|_~:\[\]]+$", "", s).strip()
+    s = re.sub(r"^[•\-\*\|\d\.\)\]\s]+", "", s).strip()
+    s = re.sub(r"(?:₹|rs\.?|inr)\s*$", "", s, flags=re.IGNORECASE).strip()
+    s = re.sub(r"\((?:veg|non[- ]?veg|v|nv)\)", "", s, flags=re.IGNORECASE).strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
 def parse_menu_text(raw_text: str, station_mode: str = "FOOD") -> List[Dict[str, Any]]:
     """
-    Parses OCR or pasted menu text into structured menu items with name, price, category, and Veg/Non-Veg.
+    Parses OCR or pasted menu text into structured menu items.
+    Supports single-column, multi-column lines (multiple dish+price pairs per line),
+    and dual Half/Full prices (e.g. 'Dal Tadka 120 / 180' or 'Dal Tadka 120 180').
     """
     items: List[Dict[str, Any]] = []
     seen_names = set()
@@ -103,9 +131,9 @@ def parse_menu_text(raw_text: str, station_mode: str = "FOOD") -> List[Dict[str,
     )
     current_category = default_cat
 
-    # Match trailing price like: "... 280", "₹ 280.00", "Rs.280/-", "280 /-"
-    price_re = re.compile(
-        r"(?:₹|rs\.?|inr)?\s*(\d{2,5}(?:\.\d{1,2})?)\s*(?:/-)?\s*$",
+    # Match prices like: "280", "₹280", "Rs. 280/-", "120/180", "120 180" (with optional trailing OCR punctuation)
+    token_price_re = re.compile(
+        r"(?:₹|rs\.?|inr)?\s*(\d{2,4}(?:\.\d{1,2})?)(?:\s*/\s*(\d{2,4}(?:\.\d{1,2})?))?\s*(?:/-)?(?=[\s\.,;|\)\]]|$)",
         re.IGNORECASE
     )
 
@@ -114,68 +142,94 @@ def parse_menu_text(raw_text: str, station_mode: str = "FOOD") -> List[Dict[str,
         if not line or len(line) < 3:
             continue
 
-        # Check if this line is a section heading (no price)
-        if not price_re.search(line):
+        matches = list(token_price_re.finditer(line))
+        # Filter out numbers that are clearly part of a dish name (e.g. "65" in "Chicken 65" if followed by another price, or "24-Hour")
+        valid_price_matches = []
+        for idx, m in enumerate(matches):
+            val_str = m.group(2) or m.group(1)
+            try:
+                val = float(val_str)
+            except ValueError:
+                continue
+            if val < 10 or val > 25000:
+                continue
+            # Check if followed by "-hour" / "ml" / "gm" / "pcs" (portion/unit, not price)
+            after = line[m.end():m.end() + 8].lower()
+            if re.match(r"^\s*(?:ml|gm|g|kg|l|pcs|pc|hour|hr|inch|oz)\b", after):
+                continue
+            valid_price_matches.append((m, val))
+
+        if not valid_price_matches:
             heading = _detect_heading_category(line)
             if heading:
                 current_category = heading
             continue
 
-        m = price_re.search(line)
-        if not m:
-            continue
+        # Collapse adjacent dual prices (e.g. Half 120  Full 180 -> keep Full 180 for the preceding dish)
+        merged_segments: List[tuple] = []
+        last_end = 0
+        i = 0
+        while i < len(valid_price_matches):
+            m, val = valid_price_matches[i]
+            raw_segment_name = line[last_end:m.start()]
+            # Check if next match is right after this match (only spaces/slash/dash between them -> Half/Full dual price!)
+            if i + 1 < len(valid_price_matches):
+                next_m, next_val = valid_price_matches[i + 1]
+                between = line[m.end():next_m.start()].strip()
+                if len(between) <= 2 and re.match(r"^[/\-|]*$", between):
+                    # Take the Full (second) price
+                    merged_segments.append((raw_segment_name, next_val))
+                    last_end = next_m.end()
+                    i += 2
+                    continue
+            merged_segments.append((raw_segment_name, val))
+            last_end = m.end()
+            i += 1
 
-        try:
-            price_val = float(m.group(1))
-        except ValueError:
-            continue
+        for raw_name_part, price_val in merged_segments:
+            name_part = _clean_dish_name(raw_name_part)
+            if len(name_part) < 2 or name_part.isdigit():
+                continue
+            if name_part.lower() in HEADER_NOISE_WORDS:
+                continue
+            # Require at least 2 alphabetic characters in dish name
+            if len(re.findall(r"[a-zA-Z]", name_part)) < 2:
+                continue
 
-        if price_val <= 0 or price_val > 50000:
-            continue
+            norm_key = name_part.lower()
+            if norm_key in seen_names:
+                continue
+            seen_names.add(norm_key)
 
-        name_part = line[:m.start()].strip()
-        # Strip dot leaders, dashes, pipes, bullets, and currency symbols at the end
-        name_part = re.sub(r"[\.\-–—•|_~:]+$", "", name_part).strip()
-        name_part = re.sub(r"^[•\-\*\d\.\)\s]+", "", name_part).strip()
-        # Remove trailing (V)/(NV)/(Veg)/(Non-Veg) markers while remembering them
-        is_veg = _infer_is_veg(name_part, line)
-        if re.search(r"\b(non[- ]?veg|nv)\b", line, re.IGNORECASE):
-            is_veg = False
-        name_part = re.sub(r"\((?:veg|non[- ]?veg|v|nv)\)", "", name_part, flags=re.IGNORECASE).strip()
+            is_veg = _infer_is_veg(name_part, raw_name_part)
+            if re.search(r"\b(non[- ]?veg|nv)\b", raw_name_part, re.IGNORECASE):
+                is_veg = False
 
-        if len(name_part) < 2 or name_part.isdigit():
-            continue
+            dest = _infer_station(name_part, current_category, "KITCHEN" if station_mode == "FOOD" else station_mode)
+            if dest == "FOOD":
+                dest = "KITCHEN"
 
-        norm_key = name_part.lower()
-        if norm_key in seen_names:
-            continue
-        seen_names.add(norm_key)
-
-        dest = _infer_station(name_part, current_category, "KITCHEN" if station_mode == "FOOD" else station_mode)
-        if dest == "FOOD":
-            dest = "KITCHEN"
-
-        items.append({
-            "name": name_part[:80],
-            "price": round(price_val, 2),
-            "category": current_category,
-            "isVegetarian": is_veg,
-            "targetDestination": dest,
-            "description": "",
-        })
+            items.append({
+                "name": name_part[:80],
+                "price": round(price_val, 2),
+                "category": current_category,
+                "isVegetarian": is_veg,
+                "targetDestination": dest,
+                "description": "",
+            })
 
     return items
 
 
-def _preprocess_for_ocr(image_bytes: bytes) -> Image.Image:
-    img = Image.open(io.BytesIO(image_bytes))
-    img = ImageOps.exif_transpose(img)
-    img = img.convert("L")  # Grayscale
+def _preprocess_pil(img: Image.Image) -> Image.Image:
+    img = img.convert("L")
     w, h = img.size
-    if max(w, h) < 1600:
-        scale = 1600 / max(w, h)
+    if max(w, h) < 2200:
+        scale = 2200 / max(w, h)
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    img = ImageEnhance.Contrast(img).enhance(1.7)
+    img = ImageOps.autocontrast(img, cutoff=1)
+    img = ImageEnhance.Contrast(img).enhance(1.6)
+    img = img.filter(ImageFilter.SHARPEN)
     return img
 
 
@@ -234,14 +288,38 @@ def _try_gemini_vision(image_bytes: bytes, mime_type: str, station_mode: str) ->
 def scan_menu_image(image_bytes: bytes, mime_type: str = "image/jpeg", station_mode: str = "FOOD") -> Dict[str, Any]:
     """
     Extracts structured menu items from a hardcopy menu photo using Gemini Vision (if configured)
-    or local Tesseract OCR + smart menu parser.
+    or multi-pass Tesseract OCR (full page + column-split for multi-column menus).
     """
     gemini_items = _try_gemini_vision(image_bytes, mime_type, station_mode)
     if gemini_items:
         return {"items": gemini_items, "rawText": "", "engine": "gemini-vision"}
 
     import pytesseract
-    processed = _preprocess_for_ocr(image_bytes)
-    raw_text = pytesseract.image_to_string(processed, config="--psm 6")
-    items = parse_menu_text(raw_text, station_mode=station_mode)
-    return {"items": items, "rawText": raw_text, "engine": "tesseract-ocr"}
+    orig = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes)))
+    processed = _preprocess_pil(orig)
+
+    # Pass 1: Auto page segmentation (handles multi-column layouts)
+    text_auto = pytesseract.image_to_string(processed, config="--psm 3")
+    items_auto = parse_menu_text(text_auto, station_mode=station_mode)
+
+    # Pass 2: Split into Left & Right halves (for 2-column printed menu cards)
+    w, h = processed.size
+    left_crop = processed.crop((0, 0, int(w * 0.53), h))
+    right_crop = processed.crop((int(w * 0.47), 0, w, h))
+    text_left = pytesseract.image_to_string(left_crop, config="--psm 6")
+    text_right = pytesseract.image_to_string(right_crop, config="--psm 6")
+    combined_split_text = f"{text_left}\n{text_right}"
+    items_split = parse_menu_text(combined_split_text, station_mode=station_mode)
+
+    # Merge best results (preserving order and deduplicating by lowercase name)
+    merged: List[Dict[str, Any]] = []
+    seen = set()
+    primary, secondary = (items_split, items_auto) if len(items_split) >= len(items_auto) else (items_auto, items_split)
+    for it in primary + secondary:
+        key = it["name"].lower()
+        if key not in seen:
+            seen.add(key)
+            merged.append(it)
+
+    best_raw = combined_split_text if len(items_split) >= len(items_auto) else text_auto
+    return {"items": merged, "rawText": best_raw.strip(), "engine": "tesseract-ocr-v2"}
