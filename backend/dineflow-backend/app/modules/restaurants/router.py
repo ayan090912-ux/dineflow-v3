@@ -1383,6 +1383,51 @@ async def get_restaurant_staff(
         for m in members
     ]
 
+@router.get("/{restaurant_id}/staff/check-username")
+async def check_staff_username_availability(
+    restaurant_id: str,
+    username: str,
+    caller: CallerContext = Depends(require_tenant_owner_or_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    clean_username = (username or "").strip().lower()
+    if len(clean_username) < 3 or not re.match(r"^[a-z0-9_-]+$", clean_username):
+        return {
+            "available": False,
+            "reason": "Use at least 3 characters (letters, numbers, _ or -).",
+            "suggestion": None,
+        }
+
+    dup_stmt = select(RestaurantMembership.id).where(
+        RestaurantMembership.username.is_not(None),
+        func.lower(RestaurantMembership.username) == clean_username
+    ).limit(1)
+    exists = (await db.execute(dup_stmt)).scalar_one_or_none()
+    if not exists:
+        return {"available": True, "username": clean_username, "suggestion": None}
+
+    # Build a clean restaurant-scoped suggestion
+    rest_obj = await db.get(Restaurant, restaurant_id)
+    slug_hint = re.sub(r"[^a-z0-9]", "", ((rest_obj.slug if rest_obj else "") or "").lower())[:8] or uuid.uuid4().hex[:4]
+    candidate = f"{clean_username}_{slug_hint}"
+    cand_exists = (
+        await db.execute(
+            select(RestaurantMembership.id).where(
+                RestaurantMembership.username.is_not(None),
+                func.lower(RestaurantMembership.username) == candidate
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if cand_exists:
+        candidate = f"{clean_username}_{uuid.uuid4().hex[:4]}"
+
+    return {
+        "available": False,
+        "reason": f"'{clean_username}' is already taken.",
+        "suggestion": candidate,
+    }
+
+
 @router.post("/{restaurant_id}/staff", status_code=status.HTTP_201_CREATED)
 async def create_restaurant_staff(
     restaurant_id: str,

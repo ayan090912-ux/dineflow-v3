@@ -475,6 +475,54 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [isCreatingStaff, setIsCreatingStaff] = useState(false);
   const [staffModalError, setStaffModalError] = useState<string | null>(null);
   const [showAdvancedStaffFields, setShowAdvancedStaffFields] = useState(false);
+  const [usernameEditedManually, setUsernameEditedManually] = useState(false);
+  const [usernameCheck, setUsernameCheck] = useState<{
+    status: 'idle' | 'checking' | 'available' | 'taken';
+    message?: string;
+    suggestion?: string | null;
+  }>({ status: 'idle' });
+  const [createdStaffCreds, setCreatedStaffCreds] = useState<{
+    name: string;
+    username: string;
+    password: string;
+    role: string;
+    terminal: string;
+    restaurantName: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isAddStaffModalOpen || createdStaffCreds) return;
+    const uname = (newStaff.username || '').trim().toLowerCase();
+    if (uname.length < 3) {
+      setUsernameCheck({ status: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setUsernameCheck({ status: 'checking' });
+    const timer = setTimeout(async () => {
+      try {
+        const restId = activeRestaurant?.id || api.getCurrentRestaurantId() || '';
+        if (!restId) return;
+        const res = await api.restaurant.checkStaffUsername(restId, uname);
+        if (cancelled) return;
+        if (res.available) {
+          setUsernameCheck({ status: 'available', message: 'Unique ID available' });
+        } else {
+          setUsernameCheck({
+            status: 'taken',
+            message: res.reason || 'Already taken',
+            suggestion: res.suggestion || null,
+          });
+        }
+      } catch {
+        if (!cancelled) setUsernameCheck({ status: 'idle' });
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [newStaff.username, isAddStaffModalOpen, createdStaffCreds, activeRestaurant?.id]);
 
   // Edit & Reset Password Staff State
   const [editingStaff, setEditingStaff] = useState<Employee | null>(null);
@@ -1471,9 +1519,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (created) {
         setEmployees((prev) => [...prev.filter((e) => e.id !== created.id), created]);
         addToast('success', 'Employee Added', `${created.name} (@${created.username}) is ready to sign in.`);
-        setIsAddStaffModalOpen(false);
+        setCreatedStaffCreds({
+          name: created.name,
+          username: created.username || cleanUsername,
+          password: initialPass,
+          role: String(created.role || newStaff.role),
+          terminal: created.terminal || (newStaff.terminal || defaultTerminal).trim().toUpperCase(),
+          restaurantName: currentRestaurant?.name || 'Your Restaurant',
+        });
         setShowAdvancedStaffFields(false);
         setStaffModalError(null);
+        setUsernameEditedManually(false);
+        setUsernameCheck({ status: 'idle' });
         setNewStaff({
           name: '',
           username: '',
@@ -5731,15 +5788,70 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         }}
       />
 
-      {/* Add Staff Member Modal — Simple 3-Field Quick Create */}
+      {/* Add Staff Member Modal — Unique Staff ID & Credentials */}
       <Modal
         isOpen={isAddStaffModalOpen}
         onClose={() => {
           setIsAddStaffModalOpen(false);
           setStaffModalError(null);
+          setCreatedStaffCreds(null);
+          setUsernameEditedManually(false);
         }}
-        title="Add Employee"
+        title={createdStaffCreds ? 'Staff Credentials Ready' : 'Add Employee & Login ID'}
       >
+        {createdStaffCreds ? (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-emerald-300 font-semibold">{createdStaffCreds.name}</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px]">
+                  {createdStaffCreds.role} · {createdStaffCreds.terminal}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                <div className="bg-[#0d1017] p-2.5 rounded-lg border border-[#1e232e]">
+                  <span className="text-slate-400 block text-[10px]">Unique Staff ID</span>
+                  <span className="text-white font-mono font-bold">{createdStaffCreds.username}</span>
+                </div>
+                <div className="bg-[#0d1017] p-2.5 rounded-lg border border-[#1e232e]">
+                  <span className="text-slate-400 block text-[10px]">Password</span>
+                  <span className="text-white font-mono font-bold">{createdStaffCreds.password}</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                Staff can sign in from <code className="text-emerald-300 font-mono">/staff/login</code> — Dinely automatically detects <strong>{createdStaffCreds.restaurantName}</strong> and opens their <strong>{createdStaffCreds.role}</strong> terminal.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  const text = `Dinely Staff Login (${createdStaffCreds.restaurantName})\nURL: ${window.location.origin}/staff/login\nUsername: ${createdStaffCreds.username}\nPassword: ${createdStaffCreds.password}\nRole: ${createdStaffCreds.role} (${createdStaffCreds.terminal})`;
+                  navigator.clipboard?.writeText(text);
+                  addToast('success', 'Copied', 'Staff login credentials copied to clipboard.');
+                }}
+              >
+                Copy Credentials
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setCreatedStaffCreds(null)}
+              >
+                Add Another
+              </Button>
+              <Button
+                variant="brand"
+                onClick={() => {
+                  setCreatedStaffCreds(null);
+                  setIsAddStaffModalOpen(false);
+                }}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : (
         <div className="space-y-4">
           {staffModalError && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
@@ -5747,19 +5859,64 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             </div>
           )}
 
-          <Input
-            label="Full Name *"
-            placeholder="e.g. Rahul Sharma"
-            value={newStaff.name}
-            onChange={(e) => {
-              setStaffModalError(null);
-              setNewStaff({ ...newStaff, name: e.target.value });
-            }}
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Full Name *"
+              placeholder="e.g. Rahul Sharma"
+              value={newStaff.name}
+              onChange={(e) => {
+                const val = e.target.value;
+                setStaffModalError(null);
+                if (!usernameEditedManually) {
+                  const slugHint = (currentRestaurant?.slug || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6);
+                  const base = val.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                  const suggested = base ? (slugHint ? `${base.slice(0, 12)}_${slugHint}` : base.slice(0, 16)) : '';
+                  setNewStaff({ ...newStaff, name: val, username: suggested });
+                } else {
+                  setNewStaff({ ...newStaff, name: val });
+                }
+              }}
+            />
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-300">Unique Staff ID *</label>
+                {usernameCheck.status === 'checking' && (
+                  <span className="text-[10px] text-slate-400">Checking...</span>
+                )}
+                {usernameCheck.status === 'available' && (
+                  <span className="text-[10px] text-emerald-400 font-medium">✓ Available</span>
+                )}
+                {usernameCheck.status === 'taken' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (usernameCheck.suggestion) {
+                        setUsernameEditedManually(true);
+                        setNewStaff({ ...newStaff, username: usernameCheck.suggestion });
+                      }
+                    }}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 font-medium underline cursor-pointer"
+                  >
+                    ✗ Taken{usernameCheck.suggestion ? ` · Use ${usernameCheck.suggestion}` : ''}
+                  </button>
+                )}
+              </div>
+              <Input
+                placeholder="e.g. rahul_sazz"
+                value={newStaff.username}
+                onChange={(e) => {
+                  setStaffModalError(null);
+                  setUsernameEditedManually(true);
+                  setNewStaff({ ...newStaff, username: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') });
+                }}
+              />
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Role *</label>
+              <label className="text-xs font-semibold text-slate-300">Role &amp; Terminal *</label>
               <select
                 value={newStaff.role}
                 onChange={(e: any) => {
@@ -5779,17 +5936,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 }}
                 className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
               >
-                <option value="WAITER">Floor Waiter</option>
-                <option value="CHEF">Kitchen Chef</option>
-                <option value="BARTENDER">Bartender</option>
-                <option value="HOOKAH">Hookah Staff</option>
-                <option value="MANAGER">Manager</option>
-                <option value="CASHIER">Cashier</option>
+                <option value="WAITER">Floor Waiter (WAITER-01)</option>
+                <option value="CHEF">Kitchen Chef (KITCHEN-01)</option>
+                <option value="BARTENDER">Bartender (BAR-01)</option>
+                <option value="HOOKAH">Hookah Staff (HOOKAH-01)</option>
+                <option value="MANAGER">Manager (MANAGER-01)</option>
+                <option value="CASHIER">Cashier (CASHIER-01)</option>
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Login Password (Optional)</label>
+              <label className="text-xs font-semibold text-slate-300">Login Password *</label>
               <Input
                 type="text"
                 placeholder={
@@ -5805,7 +5962,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           </div>
 
           <p className="text-[11px] text-slate-400">
-            Username &amp; terminal are auto-assigned. Leave password blank to use{' '}
+            This unique ID links the employee to <strong>{currentRestaurant?.name || 'this restaurant'}</strong> and their assigned terminal. Leave password blank to use{' '}
             <code className="text-emerald-400 font-mono">
               {newStaff.role === 'CHEF' ? 'kitchen123' :
                newStaff.role === 'WAITER' ? 'waiter123' :
@@ -5819,56 +5976,32 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             onClick={() => setShowAdvancedStaffFields((v) => !v)}
             className="text-xs text-slate-400 hover:text-white underline-offset-4 hover:underline"
           >
-            {showAdvancedStaffFields ? 'Hide optional details' : '+ Customize username, terminal, email & shift'}
+            {showAdvancedStaffFields ? 'Hide optional details' : '+ Customize terminal, shift & contact'}
           </button>
 
           {showAdvancedStaffFields && (
             <div className="space-y-3 pt-2 border-t border-[#1e232e]">
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  label="Custom Username"
-                  placeholder="Auto-generated if blank"
-                  value={newStaff.username}
-                  onChange={(e) => {
-                    setStaffModalError(null);
-                    setNewStaff({ ...newStaff, username: e.target.value });
-                  }}
-                />
-                <Input
                   label="Assigned Terminal"
                   placeholder={newStaff.terminal}
                   value={newStaff.terminal}
                   onChange={(e) => setNewStaff({ ...newStaff, terminal: e.target.value })}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="Email Address"
                   placeholder="Auto-generated if blank"
                   value={newStaff.email}
                   onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="Contact Phone"
                   placeholder="+91 98765 43210"
                   value={newStaff.phone}
                   onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Shift Schedule</label>
-                  <select
-                    value={newStaff.shift}
-                    onChange={(e) => setNewStaff({ ...newStaff, shift: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="Morning (8AM - 4PM)">Morning Shift (8AM - 4PM)</option>
-                    <option value="Evening (4PM - 12AM)">Evening Shift (4PM - 12AM)</option>
-                    <option value="Night (12AM - 8AM)">Night Shift (12AM - 8AM)</option>
-                    <option value="Full Day (10AM - 10PM)">Full Day (10AM - 10PM)</option>
-                  </select>
-                </div>
                 <Input
                   label="Hourly Wage (₹ INR)"
                   type="number"
@@ -5877,6 +6010,19 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   onChange={(e) => setNewStaff({ ...newStaff, hourlyRate: e.target.value })}
                 />
               </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Shift Schedule</label>
+                <select
+                  value={newStaff.shift}
+                  onChange={(e) => setNewStaff({ ...newStaff, shift: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Morning (8AM - 4PM)">Morning Shift (8AM - 4PM)</option>
+                  <option value="Evening (4PM - 12AM)">Evening Shift (4PM - 12AM)</option>
+                  <option value="Night (12AM - 8AM)">Night Shift (12AM - 8AM)</option>
+                  <option value="Full Day (10AM - 10PM)">Full Day (10AM - 10PM)</option>
+                </select>
+              </div>
             </div>
           )}
 
@@ -5884,11 +6030,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             variant="brand"
             className="w-full mt-2"
             onClick={handleAddStaff}
-            disabled={isCreatingStaff}
+            disabled={isCreatingStaff || usernameCheck.status === 'taken'}
           >
-            {isCreatingStaff ? 'Creating Employee...' : 'Create Employee'}
+            {isCreatingStaff ? 'Creating Employee...' : 'Create Employee & Generate Login'}
           </Button>
         </div>
+        )}
       </Modal>
 
       {/* Edit Staff Member Modal */}

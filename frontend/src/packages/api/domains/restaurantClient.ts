@@ -1848,6 +1848,18 @@ export class RestaurantClient {
     return res;
   }
 
+  async checkStaffUsername(
+    restaurantId: string,
+    username: string
+  ): Promise<{ available: boolean; username?: string; reason?: string; suggestion?: string | null }> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
+    return this.base.executeProtectedRequest(
+      `/restaurants/${encodeURIComponent(restId)}/staff/check-username?username=${encodeURIComponent(username)}`,
+      { method: 'GET' },
+      'OWNER'
+    );
+  }
+
   async getDescriptionTemplates(): Promise<any> {
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/menu/library/templates/descriptions`, {
