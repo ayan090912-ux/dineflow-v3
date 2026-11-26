@@ -1427,7 +1427,7 @@ async def create_restaurant_staff(
             detail="Password must be at least 4 characters."
         )
 
-    # Enforce global username uniqueness
+    # Enforce global username uniqueness; auto-disambiguate when username was derived from name/email
     dup_stmt = select(RestaurantMembership).where(
         RestaurantMembership.username.is_not(None),
         func.lower(RestaurantMembership.username) == clean_username
@@ -1435,10 +1435,13 @@ async def create_restaurant_staff(
     dup_res = await db.execute(dup_stmt)
     existing_user = dup_res.scalar_one_or_none()
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Username '{clean_username}' is already in use. Please select a unique username."
-        )
+        if not payload.username:
+            clean_username = f"{clean_username}_{uuid.uuid4().hex[:4]}"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Username '{clean_username}' is already in use. Please choose another username or leave blank to auto-generate."
+            )
 
     hashed_pw = hash_password(payload.password)
     clean_terminal = (payload.terminal or f"{clean_role}-01").strip().upper()

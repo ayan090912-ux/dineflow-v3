@@ -469,6 +469,9 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
     hourlyRate: '18.50',
   });
   const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [isCreatingStaff, setIsCreatingStaff] = useState(false);
+  const [staffModalError, setStaffModalError] = useState<string | null>(null);
+  const [showAdvancedStaffFields, setShowAdvancedStaffFields] = useState(false);
 
   // Edit & Reset Password Staff State
   const [editingStaff, setEditingStaff] = useState<Employee | null>(null);
@@ -1409,31 +1412,51 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   // Staff CRUD Handlers
   const handleAddStaff = async () => {
+    if (isCreatingStaff) return;
+    setStaffModalError(null);
     if (!newStaff.name.trim()) {
-      addToast('error', 'Validation Failed', 'Staff member name is required.');
+      setStaffModalError('Please enter the employee full name.');
       return;
     }
-    const cleanUsername = (newStaff.username || newStaff.name.toLowerCase().replace(/\s+/g, '')).trim().toLowerCase();
-    if (!cleanUsername) {
-      addToast('error', 'Validation Failed', 'Staff username is required.');
+    const baseSlug = newStaff.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'staff';
+    const explicitUsername = newStaff.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const cleanUsername = explicitUsername || `${baseSlug.slice(0, 14)}_${Math.floor(100 + Math.random() * 900)}`;
+    if (cleanUsername.length < 3) {
+      setStaffModalError('Username must be at least 3 characters.');
       return;
     }
+    const roleDefaultPass =
+      newStaff.role === 'CHEF' ? 'kitchen123' :
+      newStaff.role === 'WAITER' ? 'waiter123' :
+      newStaff.role === 'BARTENDER' ? 'bar123' :
+      (newStaff.role as string) === 'HOOKAH' ? 'hookah123' : 'staff123';
+    const initialPass = (newStaffPassword || roleDefaultPass).trim();
+    if (initialPass.length < 4) {
+      setStaffModalError('Password must be at least 4 characters.');
+      return;
+    }
+
+    setIsCreatingStaff(true);
     try {
       const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
-      const initialPass = newStaffPassword || (newStaff.role === 'CHEF' ? 'kitchen123' : newStaff.role === 'WAITER' ? 'waiter123' : 'staff123');
+      const defaultTerminal =
+        newStaff.role === 'CHEF' ? 'KITCHEN-01' :
+        newStaff.role === 'BARTENDER' ? 'BAR-01' :
+        (newStaff.role as string) === 'HOOKAH' ? 'HOOKAH-01' :
+        `${newStaff.role}-01`;
       const created = await api.addEmployee({
         restaurantId: restId,
         name: newStaff.name.trim(),
         username: cleanUsername,
         role: newStaff.role,
-        terminal: (newStaff.terminal || `${newStaff.role}-01`).trim().toUpperCase(),
-        terminalId: (newStaff.terminal || `${newStaff.role}-01`).trim().toUpperCase(),
-        email: newStaff.email || `${cleanUsername}@staff.dinely.internal`,
-        phone: newStaff.phone || '+1 555-0100',
+        terminal: (newStaff.terminal || defaultTerminal).trim().toUpperCase(),
+        terminalId: (newStaff.terminal || defaultTerminal).trim().toUpperCase(),
+        email: newStaff.email.trim() || `${cleanUsername}@staff.dinely.internal`,
+        phone: newStaff.phone.trim() || '+91 00000 00000',
         status: 'OFF_CLOCK',
         shift: newStaff.shift,
         assignedSection: newStaff.assignedSection,
-        hourlyRate: parseFloat(newStaff.hourlyRate) || 18,
+        hourlyRate: parseFloat(newStaff.hourlyRate) || 350,
         password: initialPass,
         isActive: true,
         isAccountDisabled: false,
@@ -1441,8 +1464,10 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
       if (created) {
         setEmployees((prev) => [...prev.filter((e) => e.id !== created.id), created]);
-        addToast('success', 'Staff Member Created 🎉', `${created.name} (@${created.username}) assigned to ${created.terminal || created.role}`);
+        addToast('success', 'Employee Added', `${created.name} (@${created.username}) is ready to sign in.`);
         setIsAddStaffModalOpen(false);
+        setShowAdvancedStaffFields(false);
+        setStaffModalError(null);
         setNewStaff({
           name: '',
           username: '',
@@ -1452,12 +1477,16 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           phone: '',
           shift: 'Evening (4PM - 12AM)',
           assignedSection: 'Front Floor & POS',
-          hourlyRate: '18.50',
+          hourlyRate: '350',
         });
         setNewStaffPassword('');
       }
     } catch (err: any) {
-      addToast('error', 'Staff Creation Failed ❌', err.message || 'Error persisting employee record to database.');
+      const msg = err?.message || 'Could not create employee. Please try again.';
+      setStaffModalError(msg);
+      addToast('error', 'Staff Creation Failed', msg);
+    } finally {
+      setIsCreatingStaff(false);
     }
   };
 
@@ -5676,117 +5705,162 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         }}
       />
 
-      {/* Add Staff Member Modal */}
+      {/* Add Staff Member Modal — Simple 3-Field Quick Create */}
       <Modal
         isOpen={isAddStaffModalOpen}
-        onClose={() => setIsAddStaffModalOpen(false)}
-        title="Generate Employee Account & Credentials"
+        onClose={() => {
+          setIsAddStaffModalOpen(false);
+          setStaffModalError(null);
+        }}
+        title="Add Employee"
       >
         <div className="space-y-4">
+          {staffModalError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+              {staffModalError}
+            </div>
+          )}
+
           <Input
             label="Full Name *"
-            placeholder="e.g. David Miller"
+            placeholder="e.g. Rahul Sharma"
             value={newStaff.name}
-            onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+            onChange={(e) => {
+              setStaffModalError(null);
+              setNewStaff({ ...newStaff, name: e.target.value });
+            }}
           />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Staff Username *"
-              placeholder="e.g. rahul01"
-              value={newStaff.username}
-              onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
-            />
-            <Input
-              label="Assigned Terminal *"
-              placeholder={newStaff.role === 'CHEF' ? 'KITCHEN-01' : newStaff.role === 'WAITER' ? 'WAITER-01' : `${newStaff.role}-01`}
-              value={newStaff.terminal}
-              onChange={(e) => setNewStaff({ ...newStaff, terminal: e.target.value })}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Email Address *"
-              placeholder="david@lumiere.com"
-              value={newStaff.email}
-              onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-            />
-            <Input
-              label="Contact Phone"
-              placeholder="+1 555-0188"
-              value={newStaff.phone}
-              onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
-            />
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Staff Role *</label>
+              <label className="text-xs font-semibold text-slate-300">Role *</label>
               <select
                 value={newStaff.role}
-                onChange={(e: any) => setNewStaff({ ...newStaff, role: e.target.value })}
-                className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+                onChange={(e: any) => {
+                  const r = e.target.value;
+                  const term =
+                    r === 'CHEF' ? 'KITCHEN-01' :
+                    r === 'BARTENDER' ? 'BAR-01' :
+                    r === 'HOOKAH' ? 'HOOKAH-01' :
+                    `${r}-01`;
+                  const sec =
+                    r === 'CHEF' ? 'Main Kitchen Station' :
+                    r === 'BARTENDER' ? 'Bar & Beverage Counter' :
+                    r === 'HOOKAH' ? 'Hookah Lounge' :
+                    r === 'CASHIER' ? 'Cashier Counter' :
+                    'Front Floor & POS';
+                  setNewStaff({ ...newStaff, role: r, terminal: term, assignedSection: sec });
+                }}
+                className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
               >
-                <option value="MANAGER">Manager</option>
-                <option value="CHEF">Kitchen Chef</option>
                 <option value="WAITER">Floor Waiter</option>
+                <option value="CHEF">Kitchen Chef</option>
                 <option value="BARTENDER">Bartender</option>
+                <option value="HOOKAH">Hookah Staff</option>
+                <option value="MANAGER">Manager</option>
                 <option value="CASHIER">Cashier</option>
               </select>
             </div>
 
-            <Input
-              label="Hourly Wage (₹ INR)"
-              type="number"
-              placeholder="350"
-              value={newStaff.hourlyRate}
-              onChange={(e) => setNewStaff({ ...newStaff, hourlyRate: e.target.value })}
-            />
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Login Password (Optional)</label>
+              <Input
+                type="text"
+                placeholder={
+                  newStaff.role === 'CHEF' ? 'kitchen123' :
+                  newStaff.role === 'WAITER' ? 'waiter123' :
+                  newStaff.role === 'BARTENDER' ? 'bar123' :
+                  (newStaff.role as string) === 'HOOKAH' ? 'hookah123' : 'staff123'
+                }
+                value={newStaffPassword}
+                onChange={(e) => setNewStaffPassword(e.target.value)}
+              />
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Login Password (Portal Credentials)</label>
-            <Input
-              type="text"
-              placeholder={newStaff.role === 'CHEF' ? 'kitchen123' : newStaff.role === 'WAITER' ? 'waiter123' : 'staff123'}
-              value={newStaffPassword}
-              onChange={(e) => setNewStaffPassword(e.target.value)}
-            />
-            <p className="text-[10px] text-slate-400">
-              Default password if left blank: <code className="text-amber-400 font-mono font-bold">{newStaff.role === 'CHEF' ? 'kitchen123' : newStaff.role === 'WAITER' ? 'waiter123' : 'staff123'}</code>
-            </p>
-          </div>
+          <p className="text-[11px] text-slate-400">
+            Username &amp; terminal are auto-assigned. Leave password blank to use{' '}
+            <code className="text-emerald-400 font-mono">
+              {newStaff.role === 'CHEF' ? 'kitchen123' :
+               newStaff.role === 'WAITER' ? 'waiter123' :
+               newStaff.role === 'BARTENDER' ? 'bar123' :
+               (newStaff.role as string) === 'HOOKAH' ? 'hookah123' : 'staff123'}
+            </code>.
+          </p>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Shift Schedule *</label>
-            <select
-              value={newStaff.shift}
-              onChange={(e) => setNewStaff({ ...newStaff, shift: e.target.value })}
-              className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-            >
-              <option value="Morning (8AM - 4PM)">Morning Shift (8AM - 4PM)</option>
-              <option value="Evening (4PM - 12AM)">Evening Shift (4PM - 12AM)</option>
-              <option value="Night (12AM - 8AM)">Night Shift (12AM - 8AM)</option>
-              <option value="Full Day (10AM - 10PM)">Full Day (10AM - 10PM)</option>
-            </select>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowAdvancedStaffFields((v) => !v)}
+            className="text-xs text-slate-400 hover:text-white underline-offset-4 hover:underline"
+          >
+            {showAdvancedStaffFields ? 'Hide optional details' : '+ Customize username, terminal, email & shift'}
+          </button>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Floor Station / Duty</label>
-            <select
-              value={newStaff.assignedSection}
-              onChange={(e) => setNewStaff({ ...newStaff, assignedSection: e.target.value })}
-              className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-            >
-              <option value="Front Floor & POS">Front Floor & POS</option>
-              <option value="Main Kitchen Station">Main Kitchen Station</option>
-              <option value="Patio / Outdoor">Patio / Outdoor</option>
-              <option value="Bar & Beverage Counter">Bar & Beverage Counter</option>
-              <option value="Cashier Counter">Cashier Counter</option>
-            </select>
-          </div>
+          {showAdvancedStaffFields && (
+            <div className="space-y-3 pt-2 border-t border-[#1e232e]">
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Custom Username"
+                  placeholder="Auto-generated if blank"
+                  value={newStaff.username}
+                  onChange={(e) => {
+                    setStaffModalError(null);
+                    setNewStaff({ ...newStaff, username: e.target.value });
+                  }}
+                />
+                <Input
+                  label="Assigned Terminal"
+                  placeholder={newStaff.terminal}
+                  value={newStaff.terminal}
+                  onChange={(e) => setNewStaff({ ...newStaff, terminal: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Email Address"
+                  placeholder="Auto-generated if blank"
+                  value={newStaff.email}
+                  onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+                />
+                <Input
+                  label="Contact Phone"
+                  placeholder="+91 98765 43210"
+                  value={newStaff.phone}
+                  onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300">Shift Schedule</label>
+                  <select
+                    value={newStaff.shift}
+                    onChange={(e) => setNewStaff({ ...newStaff, shift: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="Morning (8AM - 4PM)">Morning Shift (8AM - 4PM)</option>
+                    <option value="Evening (4PM - 12AM)">Evening Shift (4PM - 12AM)</option>
+                    <option value="Night (12AM - 8AM)">Night Shift (12AM - 8AM)</option>
+                    <option value="Full Day (10AM - 10PM)">Full Day (10AM - 10PM)</option>
+                  </select>
+                </div>
+                <Input
+                  label="Hourly Wage (₹ INR)"
+                  type="number"
+                  placeholder="350"
+                  value={newStaff.hourlyRate}
+                  onChange={(e) => setNewStaff({ ...newStaff, hourlyRate: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
 
-          <Button variant="brand" className="w-full mt-2" onClick={handleAddStaff}>
-            Generate Employee Account
+          <Button
+            variant="brand"
+            className="w-full mt-2"
+            onClick={handleAddStaff}
+            disabled={isCreatingStaff}
+          >
+            {isCreatingStaff ? 'Creating Employee...' : 'Create Employee'}
           </Button>
         </div>
       </Modal>
