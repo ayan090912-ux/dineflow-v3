@@ -1,7 +1,9 @@
 import uuid
+import re
+import asyncio
 from typing import Optional, List
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from starlette.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -522,4 +524,150 @@ async def delete_menu_item(
         print("[WS_BROADCAST_NOTICE] menu_item_deleted:", ws_err)
 
     return {"success": True, "message": "Menu item deleted"}
+
+
+class ParseMenuTextSchema(BaseModel):
+    rawText: str
+    stationMode: Optional[str] = "FOOD"
+
+
+class BulkMenuItemInput(BaseModel):
+    name: str
+    price: float = Field(..., gt=0)
+    category: Optional[str] = "Main Course"
+    categoryId: Optional[str] = None
+    description: Optional[str] = ""
+    isVegetarian: Optional[bool] = True
+    targetDestination: Optional[str] = "KITCHEN"
+    isAvailable: Optional[bool] = True
+
+
+class BulkCreateMenuItemsSchema(BaseModel):
+    items: List[BulkMenuItemInput]
+
+
+@router.post("/{restaurant_id}/menu/scan-image")
+async def scan_menu_photo(
+    restaurant_id: str,
+    file: UploadFile = File(...),
+    station_mode: str = Form("FOOD"),
+    caller: CallerContext = Depends(require_tenant_menu_manager),
+):
+    from app.modules.menu.ocr_service import scan_menu_image
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded image file is empty")
+    if len(content) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image must be under 12MB")
+
+    try:
+        result = await asyncio.to_thread(
+            scan_menu_image,
+            content,
+            file.content_type or "image/jpeg",
+            (station_mode or "FOOD").upper(),
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Could not read menu image: {str(exc)}"
+        )
+
+
+@router.post("/{restaurant_id}/menu/parse-text")
+async def parse_menu_raw_text(
+    restaurant_id: str,
+    payload: ParseMenuTextSchema,
+    caller: CallerContext = Depends(require_tenant_menu_manager),
+):
+    from app.modules.menu.ocr_service import parse_menu_text
+    items = parse_menu_text(payload.rawText, station_mode=(payload.stationMode or "FOOD").upper())
+    return {"items": items}
+
+
+@router.post("/{restaurant_id}/menu/bulk", status_code=status.HTTP_201_CREATED)
+async def bulk_create_menu_items(
+    restaurant_id: str,
+    payload: BulkCreateMenuItemsSchema,
+    caller: CallerContext = Depends(require_tenant_menu_manager),
+    db: AsyncSession = Depends(get_db)
+):
+    target_rest_id = caller.restaurant_id or restaurant_id
+    if not payload.items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No items provided")
+
+    # Pre-load existing categories for this restaurant
+    cats_res = await db.execute(select(MenuCategory).where(MenuCategory.restaurant_id == target_rest_id))
+    existing_cats = list(cats_res.scalars().all())
+    cat_by_lower = {c.name.strip().lower(): c for c in existing_cats if c.name}
+    cat_by_id = {c.id: c for c in existing_cats}
+    max_sort = max((c.sort_order or 0 for c in existing_cats), default=0)
+
+    created_items = []
+    now_utc = datetime.now(timezone.utc)
+
+    for idx, entry in enumerate(payload.items):
+        raw_cat = (entry.categoryId or entry.category or "Main Course").strip()
+        cat_obj = cat_by_id.get(raw_cat) or cat_by_lower.get(raw_cat.lower())
+        if not cat_obj:
+            mapped_name = KNOWN_CATEGORY_MAP.get(raw_cat.lower(), raw_cat)
+            cat_obj = cat_by_lower.get(mapped_name.lower())
+            if not cat_obj:
+                max_sort += 1
+                sanitized_suffix = re.sub(r"[^a-z0-9_]", "_", mapped_name.lower())[:40]
+                new_cat_id = f"cat-{target_rest_id}-{sanitized_suffix}-{uuid.uuid4().hex[:4]}"
+                cat_obj = MenuCategory(
+                    id=new_cat_id,
+                    restaurant_id=target_rest_id,
+                    name=mapped_name,
+                    sort_order=max_sort,
+                    is_enabled=True,
+                )
+                db.add(cat_obj)
+                await db.flush()
+                cat_by_lower[mapped_name.lower()] = cat_obj
+                cat_by_id[cat_obj.id] = cat_obj
+
+        dest = (entry.targetDestination or "KITCHEN").upper()
+        if dest not in ("KITCHEN", "BAR", "HOOKAH"):
+            dest = "KITCHEN"
+
+        item_id = f"item-{target_rest_id}-{int(now_utc.timestamp() * 1000)}-{idx}-{uuid.uuid4().hex[:4]}"
+        new_item = MenuItem(
+            id=item_id,
+            restaurant_id=target_rest_id,
+            category_id=cat_obj.id,
+            name=entry.name.strip()[:120],
+            description=(entry.description or "").strip(),
+            price=float(entry.price),
+            is_available=entry.isAvailable if entry.isAvailable is not None else True,
+            is_vegetarian=entry.isVegetarian if entry.isVegetarian is not None else True,
+            target_destination=dest,
+        )
+        db.add(new_item)
+        created_items.append(new_item)
+
+    await db.commit()
+    invalidate_menu_cache(target_rest_id, restaurant_id)
+
+    for it in created_items:
+        await db.refresh(it)
+
+    try:
+        await ws_manager.broadcast_event(
+            restaurant_id=target_rest_id,
+            event_type="menu_item_created",
+            payload={"restaurantId": target_rest_id, "count": len(created_items)},
+            target_audience=["WAITER", "KITCHEN", "BAR", "HOOKAH", "CUSTOMER", "OWNER"],
+        )
+    except Exception as ws_err:
+        print("[WS_BROADCAST_NOTICE] bulk_create_menu_items:", ws_err)
+
+    return {
+        "success": True,
+        "count": len(created_items),
+        "items": [format_menu_item_response(it) for it in created_items],
+    }
 

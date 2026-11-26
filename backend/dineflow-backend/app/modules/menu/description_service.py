@@ -1,78 +1,218 @@
-"""
-Description Library & Generator Service for DineFlow Global Menu Library
-Provides offline, deterministic template generation and AI augmentation
-for Food, Drinks/Bar, and Hookah/Shisha items across classic, modern, concise,
-and artisanal culinary tones.
-"""
+from typing import Optional, List, Dict, Any
 
-from typing import List, Dict, Any, Optional
-
-DESCRIPTION_TEMPLATES: Dict[str, Dict[str, Dict[str, str]]] = {
-    "FOOD": {
+# Dish-aware description templates across tones so Auto-Generate produces varied, accurate copy
+STYLE_TEMPLATES: Dict[str, Dict[str, Dict[str, str]]] = {
+    "INDIAN_CURRY": {
         "classic": {
-            "short": "Traditional {cuisine} recipe of tender {item_name} simmered with authentic spices.",
-            "long": "An authentic {cuisine} specialty prepared with time-honored culinary methods. Featuring fresh {ingredients_summary}, gently simmered to perfection and infused with {flavour_profile}. Best enjoyed with hot rice or fresh Indian flatbreads."
-        },
-        "modern": {
-            "short": "Pan-seared {item_name} highlighted with {flavour_profile} and fresh herbs.",
-            "long": "A contemporary interpretation of {cuisine} dining. Crafted with {ingredients_summary}, balanced with {flavour_profile} notes for an elevated sensory experience. Presented fresh for {serving_size}."
-        },
-        "concise": {
-            "short": "{item_name} with {ingredients_summary} and signature {flavour_profile}.",
-            "long": "Freshly prepared {item_name} cooked with {ingredients_summary} in a fragrant {cuisine} spice blend. {serving_size}."
+            "short": "Slow-simmered {item_name} prepared in a rich, aromatic gravy with traditional spices.",
+            "long": "{item_name} cooked gently in a spiced gravy for balanced warmth and depth. {serving_size}."
         },
         "artisanal": {
-            "short": "Handcrafted {item_name} slow-cooked with freshly ground {cuisine} aromatics.",
-            "long": "Slow-crafted with culinary reverence. Tender {item_name} married with hand-selected {ingredients_summary}, gently braised to bring out natural aromas and {flavour_profile} depth. A testament to artisanal {cuisine} cooking."
-        }
+            "short": "Chef-crafted {item_name} finished with toasted whole spices, herbs, and a velvety finish.",
+            "long": "Prepared fresh to order, {item_name} pairs slow-cooked aromatics with a rich, comforting sauce. {serving_size}."
+        },
+        "modern": {
+            "short": "Rich, comforting {item_name} layered with house-roasted masala and fresh herbs.",
+            "long": "A crowd-favourite {item_name} finished with fresh coriander and balanced spice. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature house {item_name} simmered to perfection and served piping hot.",
+            "long": "Our kitchen's signature take on {item_name}, rich in flavour and ideal with naan or steamed rice. {serving_size}."
+        },
+    },
+    "TANDOOR_GRILL": {
+        "classic": {
+            "short": "Char-grilled {item_name} marinated in spiced yogurt and roasted in the tandoor.",
+            "long": "Succulent {item_name} marinated with aromatic spices and charred over live embers for a smoky finish. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Smoky, flame-kissed {item_name} finished with melted butter, lime, and chaat masala.",
+            "long": "Tender {item_name} roasted to golden perfection in our clay tandoor and served with mint chutney. {serving_size}."
+        },
+        "modern": {
+            "short": "Juicy tandoor-roasted {item_name} with crisp charred edges and zesty herb notes.",
+            "long": "High-heat clay-oven seared {item_name} bursting with smoky flavour. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Chef's special {item_name}, double-marinated and char-grilled for maximum tenderness.",
+            "long": "Our signature {item_name} straight from the skewers, served sizzling with crisp onions and chutney. {serving_size}."
+        },
+    },
+    "BIRYANI_RICE": {
+        "classic": {
+            "short": "Fragrant long-grain basmati {item_name} layered with saffron, herbs, and whole spices.",
+            "long": "Slow-cooked dum {item_name} infused with whole spices, caramelized onions, and fresh mint. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Aromatic dum-cooked {item_name} sealed with saffron, crispy shallots, and delicate spice.",
+            "long": "Fluffy aged basmati rice steamed with tender {item_name} aromatics and served with cooling raita. {serving_size}."
+        },
+        "modern": {
+            "short": "Fluffy, spice-infused {item_name} cooked to order with caramelized onions and mint.",
+            "long": "Light yet deeply flavourful {item_name} crafted with fragrant basmati and house spice blend. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Royal house-style {item_name} slow-steamed for rich aroma in every spoonful.",
+            "long": "Chef's signature {item_name} prepared in traditional dum style and served hot. {serving_size}."
+        },
+    },
+    "BREAD": {
+        "classic": {
+            "short": "Freshly baked {item_name} straight from the clay tandoor, soft and lightly blistered.",
+            "long": "Hand-stretched {item_name} baked crisp on the outside and pillowy inside. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Warm, hand-tossed {item_name} brushed lightly and served fresh off the tandoor.",
+            "long": "Made fresh to order, {item_name} pairs effortlessly with any curry or kebab. {serving_size}."
+        },
+        "modern": {
+            "short": "Golden, blistered {item_name} baked to order for the perfect scoop.",
+            "long": "Light and airy {item_name} served hot from the oven. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Crisp-edged, pillowy {item_name} finished fresh for your table.",
+            "long": "Freshly baked {item_name} crafted to complement rich gravies and grills. {serving_size}."
+        },
+    },
+    "ITALIAN": {
+        "classic": {
+            "short": "Freshly prepared {item_name} finished with herbs, olive oil, and aged cheese.",
+            "long": "Authentic {item_name} crafted to order with rich sauce, aromatic herbs, and a comforting finish. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Al dente / stone-baked {item_name} tossed with garlic, basil, and creamy perfection.",
+            "long": "Prepared fresh in-house, {item_name} balances savoury richness with bright herb notes. {serving_size}."
+        },
+        "modern": {
+            "short": "Warm, indulgent {item_name} loaded with herbs and melted cheese.",
+            "long": "A comforting Italian-style {item_name} served hot and garnished with fresh herbs. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Chef's signature {item_name} crafted with slow-simmered sauce and toasted garlic.",
+            "long": "Our house-style {item_name} made fresh to order for bold, satisfying flavour. {serving_size}."
+        },
+    },
+    "ASIAN": {
+        "classic": {
+            "short": "Wok-tossed {item_name} glazed in savoury soy, garlic, and toasted sesame.",
+            "long": "High-flame wok-seared {item_name} with crisp vegetables, ginger-garlic, and umami sauce. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Fiery wok-fired {item_name} finished with spring onions, cracked pepper, and aromatics.",
+            "long": "Prepared fresh over a roaring wok for crisp texture and bold Indo-Asian flavour. {serving_size}."
+        },
+        "modern": {
+            "short": "Crisp, saucy {item_name} tossed with fresh scallions, garlic, and chilli.",
+            "long": "Vibrant street-style {item_name} balancing sweet, savoury, and spicy notes. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature wok-tossed {item_name} packed with smoky heat and crunch.",
+            "long": "Our chef's bold {item_name} cooked to order and garnished with fresh greens. {serving_size}."
+        },
+    },
+    "CONTINENTAL": {
+        "classic": {
+            "short": "Freshly prepared {item_name} served hot with house seasoning and signature dip.",
+            "long": "Crisp, savoury {item_name} cooked to golden perfection and plated fresh. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Golden-seared {item_name} layered with melted cheese, herbs, and house sauce.",
+            "long": "Crafted to order for satisfying crunch and rich flavour in every bite. {serving_size}."
+        },
+        "modern": {
+            "short": "Loaded {item_name} seasoned with cracked pepper, herbs, and zesty dressing.",
+            "long": "Crowd-pleasing {item_name} served piping hot alongside house dips. {serving_size}."
+        },
+        "chef_special": {
+            "short": "House-favourite {item_name} made fresh with bold seasoning and crisp texture.",
+            "long": "Our kitchen's signature {item_name}, ideal for sharing or solo indulgence. {serving_size}."
+        },
+    },
+    "DESSERT": {
+        "classic": {
+            "short": "Indulgent {item_name} crafted for a rich, melt-in-the-mouth sweet finish.",
+            "long": "Freshly plated {item_name} offering balanced sweetness and velvety texture. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Delicate {item_name} finished with warm, comforting sweetness and rich aroma.",
+            "long": "A timeless {item_name} prepared to end your meal on a memorable note. {serving_size}."
+        },
+        "modern": {
+            "short": "Decadent {item_name} with silky texture and irresistible sweetness.",
+            "long": "Hand-finished {item_name} served fresh for dessert lovers. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature sweet {item_name} crafted fresh to delight every palate.",
+            "long": "Our pastry station's favourite {item_name}, rich and satisfying. {serving_size}."
+        },
     },
     "BAR": {
         "classic": {
-            "short": "Refreshing {cuisine} cooler made with {ingredients_summary}.",
-            "long": "A timeless thirst-quencher hand-crafted at our beverage bar. Combining chilled {ingredients_summary} with notes of {flavour_profile}. Served cold over crystal ice for an invigorating refreshment."
-        },
-        "modern": {
-            "short": "Chilled {item_name} infused with {flavour_profile} and sparkling effervescence.",
-            "long": "A sleek, mixologist-crafted drink designed for discerning palates. Blends {ingredients_summary} to achieve a harmonious balance of sweet, tangy, and {flavour_profile} nuances. Served in a {serving_size}."
-        },
-        "concise": {
-            "short": "Iced {item_name} with {ingredients_summary} and zesty finish.",
-            "long": "Freshly stirred {item_name} featuring {ingredients_summary}. Crisp, chilled, and delivering clean {flavour_profile} brightness."
+            "short": "Chilled {item_name} shaken fresh with crisp citrus, botanicals, and ice.",
+            "long": "Refreshing {item_name} crafted to order at the bar for a clean, balanced sip. {serving_size}."
         },
         "artisanal": {
-            "short": "Botanical-infused {item_name} hand-pressed with fresh local citrus and herbs.",
-            "long": "Handcrafted in small batches with cold-pressed natural essences. Highlighting {ingredients_summary} and balanced with {flavour_profile}. Poured fresh over rocks."
-        }
+            "short": "Hand-muddled {item_name} layered with bright citrus, crushed ice, and fresh garnish.",
+            "long": "Bartender-crafted {item_name} delivering vibrant aroma and crisp refreshment. {serving_size}."
+        },
+        "modern": {
+            "short": "Ice-cold {item_name} bursting with zesty freshness and smooth finish.",
+            "long": "A cool, invigorating {item_name} poured fresh to pair with your meal. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature house {item_name} mixed fresh with premium ingredients over ice.",
+            "long": "Our bar's signature {item_name} served chilled with aromatic garnish. {serving_size}."
+        },
     },
     "HOOKAH": {
         "classic": {
-            "short": "Premium {item_name} shisha session with rich {flavour_profile} aroma.",
-            "long": "The definitive lounge experience packed with top-tier blonde leaf molasses. Delivers dense, velvety clouds featuring notes of {flavour_profile}. Prepared in an authentic clay head for a smooth, lasting {serving_size}."
-        },
-        "modern": {
-            "short": "Ultra-smooth {item_name} cloud session with an icy {flavour_profile} exhale.",
-            "long": "A modern shisha blend curated for cloud density and crisp throat feel. Notes of {flavour_profile} unfold across the session, paired with natural coconut coals for clean, odorless heat."
-        },
-        "concise": {
-            "short": "{item_name} shisha with thick clouds and {flavour_profile}.",
-            "long": "Signature {item_name} blend featuring {flavour_profile}. Smooth draw, thick smoke output, and lasting flavour for {serving_size}."
+            "short": "Smooth {item_name} shisha blend packed fresh for rich clouds and clean draw.",
+            "long": "Carefully prepared {item_name} hookah session with natural coconut coals and balanced flavour. {serving_size}."
         },
         "artisanal": {
-            "short": "Master-blended {item_name} molasses infused with real botanical extracts.",
-            "long": "Hand-mixed shisha formulation using whole-leaf tobacco steeped in natural essential oils. Features layered notes of {flavour_profile} with sub-zero smoothness for a premium {serving_size}."
-        }
-    }
+            "short": "Aromatic {item_name} lounge blend offering cool, long-lasting flavour.",
+            "long": "Hand-packed {item_name} bowl heated evenly for dense, smooth draws. {serving_size}."
+        },
+        "modern": {
+            "short": "Refreshing {item_name} shisha mix crafted for an effortless lounge session.",
+            "long": "Rich, cooling {item_name} flavour profile prepared fresh at the hookah bar. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature {item_name} hookah session with crisp aroma and silky clouds.",
+            "long": "Our lounge's signature {item_name} preparation, ready for relaxed table service. {serving_size}."
+        },
+    },
 }
 
 
-def _summarize_ingredients(ingredients: Optional[List[str]]) -> str:
-    if not ingredients or len(ingredients) == 0:
-        return "selected farm ingredients and spices"
-    if len(ingredients) == 1:
-        return ingredients[0]
-    if len(ingredients) == 2:
-        return f"{ingredients[0]} and {ingredients[1]}"
-    return f"{ingredients[0]}, {ingredients[1]}, and {ingredients[2]}"
+def _detect_dish_style(item_name: str, category: str) -> str:
+    n = (item_name or "").lower()
+    c = (category or "").lower()
+    if any(k in c for k in ("hookah", "shisha")) or any(k in n for k in ("hookah", "shisha", "chillam", "sheesha", "paan ras", "brain freezer", "double apple")):
+        return "HOOKAH"
+    if any(k in c for k in ("bar", "beverage", "drink", "cocktail", "mocktail", "shake", "coffee", "tea", "juice")) or any(
+        k in n for k in ("mojito", "cocktail", "mocktail", "shake", "smoothie", "latte", "cappuccino", "espresso", "iced tea", "lemonade", "soda", "cola", "beer", "whisky", "vodka", "gin", "rum", "wine", "margarita", "martini", "lassi", "chai", "coffee")
+    ):
+        return "BAR"
+    if any(k in c for k in ("dessert", "sweet", "bakery", "cake", "ice cream")) or any(
+        k in n for k in ("cake", "brownie", "pastry", "tiramisu", "cheesecake", "ice cream", "gelato", "gulab jamun", "rasmalai", "kheer", "halwa", "jalebi", "kulfi", "sundae", "pudding", "mousse")
+    ):
+        return "DESSERT"
+    if any(k in c for k in ("bread", "naan", "roti")) or any(
+        k in n for k in ("naan", "roti", "rooti", "kulcha", "paratha", "parotta", "chapati", "phulka", "bhakri")
+    ):
+        return "BREAD"
+    if any(k in n for k in ("biryani", "pulao", "pulav", "khichdi", "fried rice", "jeera rice")) and "fried rice" not in n:
+        return "BIRYANI_RICE"
+    if any(k in n for k in ("pasta", "pizza", "risotto", "lasagna", "spaghetti", "penne", "alfredo", "arrabbiata", "margherita", "garlic bread", "bruschetta", "ravioli")):
+        return "ITALIAN"
+    if any(k in n for k in ("noodle", "hakka", "chowmein", "manchurian", "momo", "dimsum", "dim sum", "chilli", "schezwan", "fried rice", "spring roll", "wonton", "ramen", "sushi", "pad thai", "kung pao")):
+        return "ASIAN"
+    if any(k in n for k in ("burger", "fries", "sandwich", "wrap", "panini", "taco", "nachos", "quesadilla", "wings", "nuggets", "steak", "salad", "cutlet")):
+        return "CONTINENTAL"
+    if any(k in n for k in ("tikka", "kebab", "kabab", "tandoori", "seekh", "malai", "reshmi", "harabhara", "hara bhara", "paneer tikka", "angara")):
+        return "TANDOOR_GRILL"
+    return "INDIAN_CURRY"
 
 
 def generate_item_descriptions(
@@ -86,49 +226,45 @@ def generate_item_descriptions(
     preferred_tone: str = "classic"
 ) -> Dict[str, Any]:
     """
-    Generates verifiable short and long descriptions based strictly on verified inputs.
-    Never invents unverified health claims or ingredients.
+    Generates varied, dish-aware short and long descriptions from item name & category.
     """
-    cat_key = (category or "FOOD").upper()
-    if cat_key not in DESCRIPTION_TEMPLATES:
-        cat_key = "FOOD"
+    style_key = _detect_dish_style(item_name, category)
+    templates_for_style = STYLE_TEMPLATES[style_key]
 
     tone_key = (preferred_tone or "classic").lower()
-    if tone_key not in DESCRIPTION_TEMPLATES[cat_key]:
+    if tone_key == "concise":
+        tone_key = "chef_special"
+    if tone_key not in templates_for_style:
         tone_key = "classic"
 
-    c_cuisine = cuisine or ("Bengali" if "bengali" in (item_name or "").lower() else "Indian")
-    c_flavour = flavour_profile or "balanced aromatic spices"
-    c_ingredients = _summarize_ingredients(ingredients)
-    c_serving = serving_size or ("Serves 1-2" if cat_key == "FOOD" else "Single portion")
+    c_serving = serving_size or ("Single glass" if style_key == "BAR" else "1 session" if style_key == "HOOKAH" else "Served fresh")
 
     context = {
         "item_name": item_name.strip(),
-        "cuisine": c_cuisine,
-        "flavour_profile": c_flavour,
-        "ingredients_summary": c_ingredients,
         "serving_size": c_serving,
     }
 
-    # Selected tone outputs
-    selected_tpl = DESCRIPTION_TEMPLATES[cat_key][tone_key]
+    selected_tpl = templates_for_style[tone_key]
     short_desc = selected_tpl["short"].format(**context)
     long_desc = selected_tpl["long"].format(**context)
 
-    # Generate all tone variants for preview & selection
-    variants = []
-    for t_name, t_tpl in DESCRIPTION_TEMPLATES[cat_key].items():
-        variants.append({
+    variants = [
+        {
             "tone": t_name,
             "shortDescription": t_tpl["short"].format(**context),
-            "longDescription": t_tpl["long"].format(**context)
-        })
+            "longDescription": t_tpl["long"].format(**context),
+        }
+        for t_name, t_tpl in templates_for_style.items()
+    ]
 
     return {
         "itemName": item_name,
-        "category": cat_key,
+        "category": style_key,
         "tone": tone_key,
         "shortDescription": short_desc,
         "longDescription": long_desc,
-        "variants": variants
+        "variants": variants,
     }
+
+
+DESCRIPTION_TEMPLATES = STYLE_TEMPLATES

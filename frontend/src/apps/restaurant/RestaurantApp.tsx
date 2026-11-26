@@ -106,6 +106,7 @@ import { ThermalPrinterSettings } from './ThermalPrinterSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
 import { MenuLibraryModal } from './MenuLibraryModal';
+import { MenuPhotoScanModal } from './MenuPhotoScanModal';
 import { BrandThemeTerminalOS } from './BrandThemeTerminalOS';
 import { isModuleEnabled } from '../../packages/types';
 import { firebaseAuth } from '../../packages/auth/firebase';
@@ -378,6 +379,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [isMenuLibraryOpen, setIsMenuLibraryOpen] = useState(false);
+  const [isMenuPhotoScanOpen, setIsMenuPhotoScanOpen] = useState(false);
+  const descToneIdxRef = React.useRef(0);
   const [menuCatalogMode, setMenuCatalogMode] = useState<'FOOD' | 'BAR' | 'HOOKAH'>('FOOD');
   const [libraryCacheByMode, setLibraryCacheByMode] = useState<Record<string, CatalogueItem[]>>({});
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
@@ -1381,10 +1384,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       return;
     }
     try {
+      const tones: Array<'classic' | 'artisanal' | 'modern' | 'concise'> = ['classic', 'artisanal', 'modern', 'concise'];
+      const chosenTone = tones[descToneIdxRef.current % tones.length];
+      descToneIdxRef.current += 1;
       const res = await api.restaurant.generateDescription({
         itemName: itemName.trim(),
         category: cat,
-        tone: 'artisanal',
+        tone: chosenTone,
       });
       if (res && (res.shortDescription || res.longDescription)) {
         const desc = res.shortDescription || res.longDescription;
@@ -3656,6 +3662,14 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   <span>Library</span>
                 </button>
 
+                <button
+                  onClick={() => setIsMenuPhotoScanOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Scan Menu Photo</span>
+                </button>
+
                 {isBarEnabled && activeCatalogMode === 'BAR' && (
                   <button
                     onClick={handleBulkImportBarDrinks}
@@ -5702,6 +5716,18 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         onItemsAdded={() => {
           handleRefreshMenu();
           addToast('success', 'Catalogue Imported', 'Selected items have been added to your restaurant menu.');
+        }}
+      />
+
+      {/* Scan Hardcopy Menu Photo Modal */}
+      <MenuPhotoScanModal
+        isOpen={isMenuPhotoScanOpen}
+        onClose={() => setIsMenuPhotoScanOpen(false)}
+        restaurantId={currentRestaurant?.id || activeRestaurant?.id || ''}
+        stationMode={activeCatalogMode}
+        onItemsImported={() => {
+          handleRefreshMenu();
+          addToast('success', 'Menu Imported', 'Scanned menu items have been added to your digital menu.');
         }}
       />
 

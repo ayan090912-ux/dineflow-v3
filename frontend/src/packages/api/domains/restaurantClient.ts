@@ -1796,6 +1796,58 @@ export class RestaurantClient {
     return await res.json();
   }
 
+  async scanMenuImage(
+    restaurantId: string,
+    file: File,
+    stationMode: 'FOOD' | 'BAR' | 'HOOKAH' = 'FOOD'
+  ): Promise<{ items: any[]; rawText: string; engine: string }> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('station_mode', stationMode);
+    return this.base.executeProtectedRequest(
+      `/restaurants/${encodeURIComponent(restId)}/menu/scan-image`,
+      { method: 'POST', body: formData },
+      'OWNER'
+    );
+  }
+
+  async parseMenuText(
+    restaurantId: string,
+    rawText: string,
+    stationMode: 'FOOD' | 'BAR' | 'HOOKAH' = 'FOOD'
+  ): Promise<{ items: any[] }> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
+    return this.base.executeProtectedRequest(
+      `/restaurants/${encodeURIComponent(restId)}/menu/parse-text`,
+      { method: 'POST', body: JSON.stringify({ rawText, stationMode }) },
+      'OWNER'
+    );
+  }
+
+  async bulkCreateMenuItems(
+    restaurantId: string,
+    items: Array<{
+      name: string;
+      price: number;
+      category?: string;
+      description?: string;
+      isVegetarian?: boolean;
+      targetDestination?: 'KITCHEN' | 'BAR' | 'HOOKAH';
+    }>
+  ): Promise<{ success: boolean; count: number; items: any[] }> {
+    const restId = this.base.resolveTenantRestaurantId(restaurantId) || restaurantId || this.base.getCurrentRestaurantId() || '';
+    const res = await this.base.executeProtectedRequest(
+      `/restaurants/${encodeURIComponent(restId)}/menu/bulk`,
+      { method: 'POST', body: JSON.stringify({ items }) },
+      'OWNER'
+    );
+    this.base.invalidateQueryCache('menu:');
+    this.base.invalidateQueryCache('categories:');
+    realtimeBus.emit('MenuItemCreated' as any, { restaurantId: restId });
+    return res;
+  }
+
   async getDescriptionTemplates(): Promise<any> {
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/menu/library/templates/descriptions`, {
