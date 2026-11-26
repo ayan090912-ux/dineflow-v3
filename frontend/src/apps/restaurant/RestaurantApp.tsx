@@ -5915,6 +5915,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Phone Number"
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={newStaff.phone}
+              onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
+            />
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">Role &amp; Terminal *</label>
               <select
@@ -5944,21 +5951,21 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 <option value="CASHIER">Cashier (CASHIER-01)</option>
               </select>
             </div>
+          </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Login Password *</label>
-              <Input
-                type="text"
-                placeholder={
-                  newStaff.role === 'CHEF' ? 'kitchen123' :
-                  newStaff.role === 'WAITER' ? 'waiter123' :
-                  newStaff.role === 'BARTENDER' ? 'bar123' :
-                  (newStaff.role as string) === 'HOOKAH' ? 'hookah123' : 'staff123'
-                }
-                value={newStaffPassword}
-                onChange={(e) => setNewStaffPassword(e.target.value)}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300">Login Password *</label>
+            <Input
+              type="text"
+              placeholder={
+                newStaff.role === 'CHEF' ? 'kitchen123' :
+                newStaff.role === 'WAITER' ? 'waiter123' :
+                newStaff.role === 'BARTENDER' ? 'bar123' :
+                (newStaff.role as string) === 'HOOKAH' ? 'hookah123' : 'staff123'
+              }
+              value={newStaffPassword}
+              onChange={(e) => setNewStaffPassword(e.target.value)}
+            />
           </div>
 
           <p className="text-[11px] text-slate-400">
