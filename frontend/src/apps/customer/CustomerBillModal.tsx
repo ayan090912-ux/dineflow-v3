@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Download,
+  Image as ImageIcon,
   PhoneCall,
   CreditCard,
   Building2,
@@ -24,7 +25,7 @@ import { Bill, Restaurant, TableSession, PaymentMethod, BillingConfig } from '..
 import { api } from '../../packages/api/client';
 import { realtimeBus, RealTimeEventPayload } from '../../packages/api/realtime';
 import { formatCurrency } from '../../packages/utils/currency';
-import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
+import { downloadDigitalReceiptPNG, saveDigitalReceiptToGallery } from '../../packages/utils/receiptDownloader';
 import { formatStandardTableNumber } from '../../packages/utils/tableUtils';
 
 interface CustomerBillModalProps {
@@ -202,23 +203,39 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
 
   // Instant Digital Receipt PNG Exporter Trigger (Mobile iOS & Android Compatible)
-  const handleDownloadReceipt = () => {
+  const getReceiptMeta = () => ({
+    legalName: billingConfig?.legalName || currentRestaurant?.legalName,
+    gstin: billingConfig?.gstin || currentRestaurant?.gstin || currentRestaurant?.gstNumber,
+    pan: billingConfig?.pan || currentRestaurant?.pan,
+    address: billingConfig?.address || currentRestaurant?.address,
+    qrDataUrl: bill?.qrDataUrl,
+    paymentQrPayload: bill?.paymentQrPayload,
+    upiId: activeUpiId,
+  });
+
+  const handleDownloadReceipt = async () => {
     if (bill) {
-      downloadDigitalReceiptPNG(
+      await downloadDigitalReceiptPNG(
         bill,
         activeMerchantName || currentRestaurant?.name || 'Restaurant',
-        {
-          legalName: billingConfig?.legalName || currentRestaurant?.legalName,
-          gstin: billingConfig?.gstin || currentRestaurant?.gstin || currentRestaurant?.gstNumber,
-          pan: billingConfig?.pan || currentRestaurant?.pan,
-          address: billingConfig?.address || currentRestaurant?.address,
-          qrDataUrl: bill.qrDataUrl,
-          paymentQrPayload: bill.paymentQrPayload,
-          upiId: activeUpiId,
-        }
+        getReceiptMeta()
       );
       setNotificationToast('Receipt downloaded successfully.');
       setTimeout(() => setNotificationToast(null), 4000);
+    }
+  };
+
+  const handleSaveToGallery = async () => {
+    if (bill) {
+      const res = await saveDigitalReceiptToGallery(
+        bill,
+        activeMerchantName || currentRestaurant?.name || 'Restaurant',
+        getReceiptMeta()
+      );
+      if (res !== 'cancelled') {
+        setNotificationToast(res === 'shared' ? 'Choose "Save Image" to add to Photos/Gallery.' : 'Receipt image saved to your device.');
+        setTimeout(() => setNotificationToast(null), 4000);
+      }
     }
   };
 
@@ -580,14 +597,22 @@ export const CustomerBillModal: React.FC<CustomerBillModalProps> = ({
 
             {/* ACTION BUTTONS */}
             <div className="space-y-2.5 pt-1 no-print print:hidden">
-              <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button
+                  onClick={handleSaveToGallery}
+                  variant="brand"
+                  className="w-full text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>Save to Gallery</span>
+                </Button>
                 <Button
                   onClick={handleDownloadReceipt}
                   variant="outline"
                   className="w-full text-xs font-medium py-2.5 rounded-lg flex items-center justify-center gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/80 hover:text-white"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download Digital Receipt (.png)</span>
+                  <span>Download Bill (.png)</span>
                 </Button>
               </div>
             </div>

@@ -45,8 +45,8 @@ function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: num
 export async function downloadDigitalReceiptPNG(
   bill: Bill,
   restaurantName: string = 'Dinely Cloud POS',
-  options?: ReceiptOptions
-): Promise<void> {
+  options?: ReceiptOptions & { mode?: 'download' | 'gallery' }
+): Promise<'shared' | 'downloaded' | 'cancelled'> {
   const canvas = document.createElement('canvas');
   const width = 620;
   const items = bill.items || [];
@@ -355,62 +355,71 @@ export async function downloadDigitalReceiptPNG(
   ctx.font = '500 10px Inter, system-ui, sans-serif';
   ctx.fillText('Powered by Dinely', width / 2, y + 18);
 
-  // Convert Canvas to Blob and Trigger Download / Native Mobile Share
+  // Convert Canvas to Blob and Trigger Download / Native Mobile Save-to-Gallery Share
   const fileName = `Tax_Invoice_${bill.invoiceNumber || bill.id || 'DLY'}_${Date.now()}.png`;
+  const mode = options?.mode || 'download';
 
-  try {
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        const imageURI = canvas.toDataURL('image/png');
-        const a = document.createElement('a');
-        a.href = imageURI;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        return;
-      }
-
-      // 1. Native Mobile Share Sheet (iOS Safari / Android Chrome)
-      if (typeof navigator !== 'undefined' && navigator.canShare) {
-        try {
-          const file = new File([blob], fileName, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: `Tax Invoice — ${restaurantName}`,
-              text: `Tax Invoice ${bill.invoiceNumber || bill.id} for Table ${bill.tableNumber} • Total: ${formatCurrency(bill.grandTotal || 0)}`,
-              files: [file],
-            });
-            return;
-          }
-        } catch (err: any) {
-          if (err.name === 'AbortError') return;
-          console.warn('Native share fallback to download link:', err);
-        }
-      }
-
-      // 2. Standard Blob Object URL Download
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = fileName;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 2000);
-    }, 'image/png');
-  } catch (e) {
-    console.error('Failed to download digital receipt:', e);
-    const imageURI = canvas.toDataURL('image/png');
+  const triggerFallbackDownload = (href: string, revokeAfter: boolean = false) => {
     const a = document.createElement('a');
-    a.href = imageURI;
+    a.href = href;
     a.download = fileName;
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-  }
+    setTimeout(() => {
+      if (a.parentNode) document.body.removeChild(a);
+      if (revokeAfter) URL.revokeObjectURL(href);
+    }, 2000);
+  };
+
+  return new Promise<'shared' | 'downloaded' | 'cancelled'>((resolve) => {
+    try {
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          triggerFallbackDownload(canvas.toDataURL('image/png'));
+          resolve('downloaded');
+          return;
+        }
+
+        // Native Mobile Share Sheet (iOS "Save Image" / Android "Save to Photos / Gallery")
+        if (mode === 'gallery' && typeof navigator !== 'undefined' && navigator.canShare) {
+          try {
+            const file = new File([blob], fileName, { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                title: `Tax Invoice — ${restaurantName}`,
+                text: `Tax Invoice ${bill.invoiceNumber || bill.id} for Table ${bill.tableNumber} • Total: ${formatCurrency(bill.grandTotal || 0)}`,
+                files: [file],
+              });
+              resolve('shared');
+              return;
+            }
+          } catch (err: any) {
+            if (err.name === 'AbortError') {
+              resolve('cancelled');
+              return;
+            }
+            console.warn('Native share fallback to download link:', err);
+          }
+        }
+
+        // Standard Blob Object URL Download (saves directly to Downloads / Photos on Android)
+        const blobUrl = URL.createObjectURL(blob);
+        triggerFallbackDownload(blobUrl, true);
+        resolve('downloaded');
+      }, 'image/png');
+    } catch (e) {
+      console.error('Failed to download digital receipt:', e);
+      triggerFallbackDownload(canvas.toDataURL('image/png'));
+      resolve('downloaded');
+    }
+  });
+}
+
+export async function saveDigitalReceiptToGallery(
+  bill: Bill,
+  restaurantName: string = 'Dinely Cloud POS',
+  options?: ReceiptOptions
+): Promise<'shared' | 'downloaded' | 'cancelled'> {
+  return downloadDigitalReceiptPNG(bill, restaurantName, { ...options, mode: 'gallery' });
 }
