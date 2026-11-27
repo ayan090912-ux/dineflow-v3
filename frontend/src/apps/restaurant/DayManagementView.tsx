@@ -23,6 +23,7 @@ import {
   Layers,
   TrendingUp,
   TableProperties,
+  Truck,
 } from 'lucide-react';
 import {
   Card,
@@ -329,7 +330,7 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   const [isHistOrdersLoading, setIsHistOrdersLoading] = useState(false);
 
   // Section Tab Navigation
-  const [activeStationTab, setActiveStationTab] = useState<'all' | 'kitchen' | 'bar' | 'hookah'>('all');
+  const [activeStationTab, setActiveStationTab] = useState<'all' | 'kitchen' | 'bar' | 'hookah' | 'delivery'>('all');
   const [kitchenViewMode, setKitchenViewMode] = useState<'items' | 'orders'>('items');
   const [barViewMode, setBarViewMode] = useState<'items' | 'orders'>('items');
   const [hookahViewMode, setHookahViewMode] = useState<'items' | 'orders'>('items');
@@ -469,6 +470,22 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
   // Fallback client sections calculation
   const clientSections = useMemo(() => {
     return computeClientSections(activeDayOrders);
+  }, [activeDayOrders]);
+
+  const deliverySection = useMemo(() => {
+    const list = activeDayOrders.filter(
+      (o) => (o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY') && o.status !== 'CANCELLED'
+    );
+    const sales = Math.round(list.reduce((s, o) => s + Number(o.totalAmount || 0), 0) * 100) / 100;
+    const deliveryFees = Math.round(
+      list.reduce((s, o) => s + Number(o.deliveryMeta?.deliveryFee || 0), 0) * 100
+    ) / 100;
+    return {
+      orders: list,
+      ordersCount: list.length,
+      sales,
+      deliveryFees,
+    };
   }, [activeDayOrders]);
 
   // Merge server authoritative sections with client fallback
@@ -1050,6 +1067,17 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             <Flame className="w-3.5 h-3.5" />
             Hookah ({formatCurrency(hookahSection.sales, theme.currency)})
           </button>
+          <button
+            onClick={() => setActiveStationTab('delivery')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeStationTab === 'delivery'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                : 'bg-white/[0.03] backdrop-blur-md text-slate-400 hover:text-white hover:bg-white/[0.07] border border-white/10'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5" />
+            Delivery ({formatCurrency(deliverySection.sales, theme.currency)})
+          </button>
         </div>
       </div>
 
@@ -1525,6 +1553,98 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             )}
           </div>
         )}
+
+        {/* ==================== D. DELIVERY ORDERS SECTION ==================== */}
+        {(activeStationTab === 'all' || activeStationTab === 'delivery') && (
+          <div className="bg-[#0c1017]/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-5 lg:p-6 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white tracking-tight">
+                      D. Delivery Orders
+                    </h3>
+                    <Badge variant="info" className="font-mono text-[10px] bg-emerald-500/10 text-emerald-300 border-emerald-500/20">
+                      {deliverySection.ordersCount} Orders
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Online delivery orders placed via the delivery link, including delivery fees and rider collection status.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right font-mono">
+                  <span className="text-[10px] text-slate-400 uppercase block">Delivery Fees</span>
+                  <span className="text-sm font-bold text-slate-200">{formatCurrency(deliverySection.deliveryFees, theme.currency)}</span>
+                </div>
+                <div className="text-right font-mono">
+                  <span className="text-[10px] text-slate-400 uppercase block">Delivery Total</span>
+                  <span className="text-lg font-bold text-emerald-400">{formatCurrency(deliverySection.sales, theme.currency)}</span>
+                </div>
+              </div>
+            </div>
+
+            {deliverySection.orders.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 font-mono text-xs">
+                No delivery orders recorded for this day.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {deliverySection.orders.map((ord) => (
+                  <div
+                    key={ord.id}
+                    className="p-3.5 bg-white/[0.02] hover:bg-white/[0.04] rounded-xl border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono transition-all"
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-white">#{ord.orderNumber || ord.id.slice(-4)}</span>
+                        <span className="text-emerald-300 font-semibold">{ord.customerName || 'Customer'}</span>
+                        {(ord.deliveryMeta?.customerPhone || ord.customerPhone) && (
+                          <span className="text-slate-400">{ord.deliveryMeta?.customerPhone || ord.customerPhone}</span>
+                        )}
+                        <Badge variant="outline" className="text-[10px] border-white/10 text-slate-300">
+                          {ord.status.replace(/_/g, ' ')}
+                        </Badge>
+                        <Badge
+                          variant={ord.paymentStatus === 'PAID' ? 'success' : 'warning'}
+                          className="text-[10px]"
+                        >
+                          {ord.paymentStatus}
+                        </Badge>
+                      </div>
+                      {ord.deliveryMeta?.deliveryAddress && (
+                        <div className="text-[11px] text-slate-400 truncate">
+                          📍 {ord.deliveryMeta.deliveryAddress}
+                          {typeof ord.deliveryMeta.distanceKm === 'number' ? ` (${ord.deliveryMeta.distanceKm.toFixed(1)} km)` : ''}
+                        </div>
+                      )}
+                      <div className="text-[11px] text-slate-400">
+                        {(ord.items || []).map((i) => `${i.quantity}x ${i.name}`).join(' • ')}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-sm font-bold text-emerald-400">
+                        {formatCurrency(ord.totalAmount, theme.currency)}
+                      </span>
+                      {typeof ord.deliveryMeta?.deliveryFee === 'number' && ord.deliveryMeta.deliveryFee > 0 && (
+                        <span className="text-[10px] text-slate-400 block">
+                          incl. {formatCurrency(ord.deliveryMeta.deliveryFee, theme.currency)} fee
+                        </span>
+                      )}
+                      <span className="text-[10px] text-slate-500 block">
+                        {ord.createdAt ? new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* FINANCIAL RECONCILIATION LEDGER */}
@@ -1561,6 +1681,10 @@ export const DayManagementView: React.FC<DayManagementViewProps> = ({
             <div className="flex justify-between items-center text-slate-300">
               <span className="text-slate-400 pl-3">• Kitchen Sales:</span>
               <span className="text-sky-300">{formatCurrency(kitchenSection.sales, theme.currency)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="text-slate-400 pl-3">• Delivery Orders ({deliverySection.ordersCount}):</span>
+              <span className="text-emerald-300">{formatCurrency(deliverySection.sales, theme.currency)}</span>
             </div>
             <div className="flex justify-between items-center text-slate-300">
               <span className="text-slate-400 pl-3">• Bar Sales:</span>

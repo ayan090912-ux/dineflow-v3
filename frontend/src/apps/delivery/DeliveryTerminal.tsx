@@ -66,6 +66,7 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
   onLogout,
 }) => {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(propRestaurant || null);
+  const [billingConfig, setBillingConfig] = useState<{ upiId?: string; upiMerchantName?: string; upiQrUrl?: string } | null>(null);
   const [orders, setOrders] = useState<Order[]>(propOrders || []);
   const [wsStatus, setWsStatus] = useState<ConnectionStatusType>('DISCONNECTED');
   const [viewMode, setViewMode] = useState<'LIVE' | 'HISTORY'>('LIVE');
@@ -141,6 +142,9 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
     }
     api.getDeliverySettings(restId).then((cfg) => {
       if (cfg) setDeliverySettings(cfg);
+    }).catch(() => {});
+    api.getBillingConfig(restId).then((bCfg) => {
+      if (bCfg) setBillingConfig(bCfg);
     }).catch(() => {});
     fetchOrders(true);
     realtimeBus.connect(restId, isEmbedded ? 'OWNER' : 'DELIVERY');
@@ -1035,8 +1039,9 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
         title={qrPassOrder ? `Rider Pass · Order #${qrPassOrder.id.slice(-4)}` : 'Rider Pass'}
       >
         {qrPassOrder && (() => {
-          const upiId = restaurant?.upiId;
-          const merchantName = restaurant?.upiMerchantName || restaurant?.name || 'Dinely Merchant';
+          const upiId = (billingConfig?.upiId || restaurant?.upiId || '').trim();
+          const activeQrUrl = billingConfig?.upiQrUrl || restaurant?.upiQrUrl || '';
+          const merchantName = billingConfig?.upiMerchantName || restaurant?.upiMerchantName || restaurant?.name || 'Dinely Merchant';
           const upiUri = upiId
             ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(merchantName)}&am=${qrPassOrder.totalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Order #${qrPassOrder.id.slice(-4)}`)}`
             : null;
@@ -1059,8 +1064,8 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
 
               <div className="p-4 rounded-xl bg-white text-slate-900 flex flex-col items-center text-center space-y-2">
                 <span className="text-xs font-bold">Scan to Pay {formatCurrency(qrPassOrder.totalAmount)}</span>
-                {restaurant?.upiQrUrl ? (
-                  <img src={restaurant.upiQrUrl} alt="Payment QR" className="w-44 h-44 object-contain rounded-lg border border-slate-200" />
+                {activeQrUrl ? (
+                  <img src={activeQrUrl} alt="Payment QR" className="w-44 h-44 object-contain rounded-lg border border-slate-200" />
                 ) : upiUri ? (
                   <QRCodeSVG value={upiUri} size={176} level="M" includeMargin={true} />
                 ) : (

@@ -10,6 +10,7 @@ import { DinelyLogo } from '../../packages/ui';
 export const RiderPassPage: React.FC<{ restaurant?: Restaurant | null }> = ({ restaurant: propRest }) => {
   const [order, setOrder] = useState<Order | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(propRest || null);
+  const [billingConfig, setBillingConfig] = useState<{ upiId?: string; upiMerchantName?: string; upiQrUrl?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,13 +32,17 @@ export const RiderPassPage: React.FC<{ restaurant?: Restaurant | null }> = ({ re
           return;
         }
         setOrder(ord);
-        if (!restaurant && ord.restaurantId) {
-          const domainInfo = getTenantFromHostname();
-          const list = await api.getRestaurants().catch(() => []);
-          const match = Array.isArray(list)
-            ? list.find((r) => r.id === ord.restaurantId || (domainInfo.slug && r.slug === domainInfo.slug))
-            : null;
-          if (match) setRestaurant(match);
+        if (ord.restaurantId) {
+          const [list, bCfg] = await Promise.all([
+            !restaurant ? api.getRestaurants().catch(() => []) : Promise.resolve([]),
+            api.getBillingConfig(ord.restaurantId).catch(() => null),
+          ]);
+          if (bCfg) setBillingConfig(bCfg);
+          if (!restaurant && Array.isArray(list)) {
+            const domainInfo = getTenantFromHostname();
+            const match = list.find((r) => r.id === ord.restaurantId || (domainInfo.slug && r.slug === domainInfo.slug));
+            if (match) setRestaurant(match);
+          }
         }
       } catch (err: any) {
         setError(err?.message || 'Unable to load delivery pass.');
@@ -77,8 +82,9 @@ export const RiderPassPage: React.FC<{ restaurant?: Restaurant | null }> = ({ re
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(meta.deliveryAddress)}`
     : null;
 
-  const upiId = restaurant?.upiId;
-  const merchantName = restaurant?.upiMerchantName || restaurant?.name || 'Dinely Merchant';
+  const upiId = (billingConfig?.upiId || restaurant?.upiId || '').trim();
+  const activeQrUrl = billingConfig?.upiQrUrl || restaurant?.upiQrUrl || '';
+  const merchantName = billingConfig?.upiMerchantName || restaurant?.upiMerchantName || restaurant?.name || 'Dinely Merchant';
   const upiUri = upiId
     ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(merchantName)}&am=${order.totalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Order #${order.id.slice(-4)}`)}`
     : null;
@@ -176,9 +182,9 @@ export const RiderPassPage: React.FC<{ restaurant?: Restaurant | null }> = ({ re
             <span>Scan to Pay {formatCurrency(order.totalAmount)}</span>
           </div>
 
-          {restaurant?.upiQrUrl ? (
+          {activeQrUrl ? (
             <img
-              src={restaurant.upiQrUrl}
+              src={activeQrUrl}
               alt="Restaurant Payment QR"
               className="w-48 h-48 object-contain rounded-lg border border-slate-200"
             />
