@@ -164,6 +164,96 @@ STYLE_TEMPLATES: Dict[str, Dict[str, Dict[str, str]]] = {
             "long": "Our bar's signature {item_name} served chilled with aromatic garnish. {serving_size}."
         },
     },
+    "CAFE_BEVERAGE": {
+        "classic": {
+            "short": "Freshly brewed {item_name} served warm and aromatic.",
+            "long": "Crafted to order, {item_name} delivers rich aroma and smooth, comforting flavour. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Velvety {item_name} prepared with freshly ground beans or hand-steeped leaves.",
+            "long": "Balanced and fragrant {item_name} made fresh for an uplifting sip. {serving_size}."
+        },
+        "modern": {
+            "short": "Smooth, café-style {item_name} with rich crema and delicate sweetness.",
+            "long": "Handcrafted {item_name} brewed fresh to pair with snacks or desserts. {serving_size}."
+        },
+        "chef_special": {
+            "short": "House-brewed {item_name} finished fresh for a crisp, aromatic cup.",
+            "long": "Our café counter's signature {item_name} served at the ideal temperature. {serving_size}."
+        },
+    },
+    "MOCKTAIL_COOLER": {
+        "classic": {
+            "short": "Chilled {item_name} muddled fresh with mint, zesty citrus, and crushed ice.",
+            "long": "Crisp and refreshing {item_name} crafted to order for a bright, cooling sip. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Refreshing {item_name} layered with fresh herbs, tangy lime, and sparkling fizz.",
+            "long": "Hand-shaken {item_name} bursting with cool citrus and garden-fresh aroma. {serving_size}."
+        },
+        "modern": {
+            "short": "Ice-cold {item_name} with vibrant fruit notes and a crisp, clean finish.",
+            "long": "A zero-proof crowd-pleaser, {item_name} brings zesty refreshment to any meal. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature house {item_name} poured over crushed ice with fresh garnish.",
+            "long": "Our bar's refreshing take on {item_name}, bright and invigorating. {serving_size}."
+        },
+    },
+    "SOUP_SALAD": {
+        "classic": {
+            "short": "Freshly prepared {item_name} bursting with crisp greens, herbs, and light seasoning.",
+            "long": "Wholesome {item_name} crafted to order for clean, vibrant flavour. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Light, nourishing {item_name} finished with house dressing and cracked pepper.",
+            "long": "Made fresh from crisp seasonal produce, {item_name} offers bright, balanced taste. {serving_size}."
+        },
+        "modern": {
+            "short": "Vibrant {item_name} tossed fresh with zesty dressing and toasted crunch.",
+            "long": "Refreshing and satisfying {item_name} plated fresh for a lighter start. {serving_size}."
+        },
+        "chef_special": {
+            "short": "House-style {item_name} prepared fresh with delicate herbs and clean flavour.",
+            "long": "Our kitchen's crisp {item_name} served fresh to awaken the palate. {serving_size}."
+        },
+    },
+    "VEG_INDIAN": {
+        "classic": {
+            "short": "Homestyle {item_name} simmered with fresh tomatoes, ginger, and roasted cumin.",
+            "long": "Comforting vegetarian {item_name} slow-cooked for rich texture and balanced spice. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Rich, creamy {item_name} finished with fenugreek leaves, butter, and warm spices.",
+            "long": "Crafted fresh in-house, {item_name} pairs velvety gravy with hearty flavours. {serving_size}."
+        },
+        "modern": {
+            "short": "Flavour-packed {item_name} tossed with caramelized onions, garlic, and coriander.",
+            "long": "A vibrant vegetarian favourite, {item_name} is cooked fresh and ideal with tandoori roti or rice. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature {item_name} slow-simmered to silky perfection and garnished fresh.",
+            "long": "Our chef's comforting {item_name} rich in aroma and homestyle warmth. {serving_size}."
+        },
+    },
+    "NONVEG_INDIAN": {
+        "classic": {
+            "short": "Succulent {item_name} slow-cooked in a rich, spiced gravy until tender.",
+            "long": "Juicy cuts simmered in house-roasted masala for deep, hearty flavour in {item_name}. {serving_size}."
+        },
+        "artisanal": {
+            "short": "Tender {item_name} folded into a velvety, slow-simmered sauce with warm spices.",
+            "long": "Prepared fresh to order, {item_name} balances rich gravy with smoky, savoury depth. {serving_size}."
+        },
+        "modern": {
+            "short": "Bold, aromatic {item_name} simmered with toasted spices, ginger, and fresh herbs.",
+            "long": "A hearty classic, {item_name} is cooked tender and served piping hot with naan or rice. {serving_size}."
+        },
+        "chef_special": {
+            "short": "Signature house {item_name} crafted for melt-in-the-mouth tenderness.",
+            "long": "Our kitchen's signature {item_name}, rich, savoury, and full of character. {serving_size}."
+        },
+    },
     "HOOKAH": {
         "classic": {
             "short": "Smooth {item_name} shisha blend packed fresh for rich clouds and clean draw.",
@@ -190,8 +280,12 @@ def _detect_dish_style(item_name: str, category: str) -> str:
     c = (category or "").lower()
     if any(k in c for k in ("hookah", "shisha")) or any(k in n for k in ("hookah", "shisha", "chillam", "sheesha", "paan ras", "brain freezer", "double apple")):
         return "HOOKAH"
-    if any(k in c for k in ("bar", "beverage", "drink", "cocktail", "mocktail", "shake", "coffee", "tea", "juice")) or any(
-        k in n for k in ("mojito", "cocktail", "mocktail", "shake", "smoothie", "latte", "cappuccino", "espresso", "iced tea", "lemonade", "soda", "cola", "beer", "whisky", "vodka", "gin", "rum", "wine", "margarita", "martini", "lassi", "chai", "coffee")
+    if any(k in n for k in ("latte", "cappuccino", "espresso", "americano", "mocha", "cold coffee", "chai", "tea", "matcha", "hot chocolate")) or any(k in c for k in ("coffee", "tea", "cafe")):
+        return "CAFE_BEVERAGE"
+    if any(k in n for k in ("mojito", "mocktail", "lemonade", "cooler", "iced tea", "smoothie", "shake", "lassi", "fresh lime", "mint cooler", "virgin")) or any(k in c for k in ("mocktail", "cooler", "shake", "juice", "soft drink")):
+        return "MOCKTAIL_COOLER"
+    if any(k in c for k in ("bar", "beverage", "drink", "cocktail", "wine", "beer", "whiskey", "spirits")) or any(
+        k in n for k in ("cocktail", "soda", "cola", "beer", "whisky", "whiskey", "vodka", "gin", "rum", "wine", "margarita", "martini", "negroni", "spritz")
     ):
         return "BAR"
     if any(k in c for k in ("dessert", "sweet", "bakery", "cake", "ice cream")) or any(
@@ -202,16 +296,22 @@ def _detect_dish_style(item_name: str, category: str) -> str:
         k in n for k in ("naan", "roti", "rooti", "kulcha", "paratha", "parotta", "chapati", "phulka", "bhakri")
     ):
         return "BREAD"
-    if any(k in n for k in ("biryani", "pulao", "pulav", "khichdi", "fried rice", "jeera rice")) and "fried rice" not in n:
+    if any(k in n for k in ("soup", "shorba", "broth", "salad", "caesar", "fattoush", "greek salad")):
+        return "SOUP_SALAD"
+    if any(k in n for k in ("biryani", "pulao", "pulav", "khichdi", "jeera rice")) and "fried rice" not in n:
         return "BIRYANI_RICE"
     if any(k in n for k in ("pasta", "pizza", "risotto", "lasagna", "spaghetti", "penne", "alfredo", "arrabbiata", "margherita", "garlic bread", "bruschetta", "ravioli")):
         return "ITALIAN"
     if any(k in n for k in ("noodle", "hakka", "chowmein", "manchurian", "momo", "dimsum", "dim sum", "chilli", "schezwan", "fried rice", "spring roll", "wonton", "ramen", "sushi", "pad thai", "kung pao")):
         return "ASIAN"
-    if any(k in n for k in ("burger", "fries", "sandwich", "wrap", "panini", "taco", "nachos", "quesadilla", "wings", "nuggets", "steak", "salad", "cutlet")):
+    if any(k in n for k in ("burger", "fries", "sandwich", "wrap", "panini", "taco", "nachos", "quesadilla", "wings", "nuggets", "steak", "cutlet", "samosa", "pakora", "chaat")):
         return "CONTINENTAL"
-    if any(k in n for k in ("tikka", "kebab", "kabab", "tandoori", "seekh", "malai", "reshmi", "harabhara", "hara bhara", "paneer tikka", "angara")):
+    if any(k in n for k in ("tikka", "kebab", "kabab", "tandoori", "seekh", "malai", "reshmi", "harabhara", "hara bhara", "angara")):
         return "TANDOOR_GRILL"
+    if any(k in n for k in ("paneer", "dal", "chole", "rajma", "kadai", "palak", "kofta")):
+        return "VEG_INDIAN"
+    if any(k in n for k in ("chicken", "chiken", "mutton", "lamb", "fish", "prawn", "keema", "butter chicken", "rogan josh")):
+        return "NONVEG_INDIAN"
     return "INDIAN_CURRY"
 
 

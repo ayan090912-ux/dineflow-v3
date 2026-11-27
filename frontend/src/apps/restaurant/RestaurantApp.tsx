@@ -105,7 +105,6 @@ import { OwnerBillingSettings } from './OwnerBillingSettings';
 import { ThermalPrinterSettings } from './ThermalPrinterSettings';
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab';
 import { DayManagementView } from './DayManagementView';
-import { MenuLibraryModal } from './MenuLibraryModal';
 import { MenuPhotoScanModal } from './MenuPhotoScanModal';
 import { BrandThemeTerminalOS } from './BrandThemeTerminalOS';
 import { isModuleEnabled } from '../../packages/types';
@@ -378,7 +377,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [deletingCategory, setDeletingCategory] = useState<{ id: string; name: string; type: 'FOOD' | 'BAR' } | null>(null);
 
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
-  const [isMenuLibraryOpen, setIsMenuLibraryOpen] = useState(false);
   const [isMenuPhotoScanOpen, setIsMenuPhotoScanOpen] = useState(false);
   const descToneIdxRef = React.useRef(0);
   const [menuCatalogMode, setMenuCatalogMode] = useState<'FOOD' | 'BAR' | 'HOOKAH'>('FOOD');
@@ -1426,7 +1424,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
   const handleQuickGenerateDescription = async (target: 'NEW' | 'EDIT') => {
     const itemName = target === 'NEW' ? newItem.name : editingItem?.name;
-    const cat = target === 'NEW' ? newItem.categoryId : editingItem?.categoryId;
+    const rawCatId = target === 'NEW' ? newItem.categoryId : editingItem?.categoryId;
+    const resolvedCatName =
+      foodCategories.find((c) => c.id === rawCatId || c.name === rawCatId)?.name ||
+      barCategories.find((c) => c.id === rawCatId || c.name === rawCatId)?.name ||
+      rawCatId ||
+      activeCatalogMode;
+    const isVeg = target === 'NEW' ? newItem.isVegetarian : editingItem?.isVegetarian;
     if (!itemName?.trim()) {
       addToast('error', 'Item Name Required', 'Please enter an item name first to generate a description.');
       return;
@@ -1437,7 +1441,8 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       descToneIdxRef.current += 1;
       const res = await api.restaurant.generateDescription({
         itemName: itemName.trim(),
-        category: cat,
+        category: resolvedCatName,
+        dietaryType: isVeg === false ? 'NON_VEG' : 'VEG',
         tone: chosenTone,
       });
       if (res && (res.shortDescription || res.longDescription)) {
@@ -3712,14 +3717,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setIsMenuLibraryOpen(true)}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-medium bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Library</span>
-                </button>
-
-                <button
                   onClick={() => setIsMenuPhotoScanOpen(true)}
                   className="px-3.5 py-1.5 rounded-xl text-xs font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
@@ -5762,19 +5759,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
           </div>
         )}
       </Modal>
-
-      {/* Global Menu Library Modal */}
-      <MenuLibraryModal
-        isOpen={isMenuLibraryOpen}
-        onClose={() => setIsMenuLibraryOpen(false)}
-        restaurantId={currentRestaurant?.id || activeRestaurant?.id || ''}
-        existingCategories={[...foodCategories, ...barCategories]}
-        existingMenuItems={menuItems}
-        onItemsAdded={() => {
-          handleRefreshMenu();
-          addToast('success', 'Catalogue Imported', 'Selected items have been added to your restaurant menu.');
-        }}
-      />
 
       {/* Scan Hardcopy Menu Photo Modal */}
       <MenuPhotoScanModal
