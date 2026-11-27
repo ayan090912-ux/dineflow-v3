@@ -639,9 +639,14 @@ async def create_order(
                 m_name = (m_rec.name or "").lower()
                 m_cat = (getattr(m_rec, "category_id", "") or getattr(i, "category", "") or getattr(i, "categoryName", "") or "").lower()
                 i_custom = getattr(i, "customization", None) or {}
-                if (
-                    m_dest in ("HOOKAH", "SHISHA")
-                    or "hookah" in m_name
+                if m_dest in ("HOOKAH", "SHISHA"):
+                    station = "HOOKAH"
+                elif m_dest == "BAR":
+                    station = "BAR"
+                elif m_dest in ("KITCHEN", "COOK", "CHEF"):
+                    station = "KITCHEN"
+                elif (
+                    "hookah" in m_name
                     or "shisha" in m_name
                     or "hookah" in m_cat
                     or "shisha" in m_cat
@@ -651,8 +656,7 @@ async def create_order(
                 ):
                     station = "HOOKAH"
                 elif (
-                    m_dest == "BAR"
-                    or m_rec.is_alcoholic
+                    m_rec.is_alcoholic
                     or getattr(i, "isAlcoholic", False)
                     or any(k in m_cat for k in ("bar", "cocktail", "mocktail", "wine", "beer", "whiskey", "beverage", "drink"))
                     or any(k in m_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda"))
@@ -660,7 +664,7 @@ async def create_order(
                     station = "BAR"
                 else:
                     station = "KITCHEN"
-                is_alc = bool(m_rec.is_alcoholic)
+                is_alc = bool(m_rec.is_alcoholic) and station != "KITCHEN"
 
                 rec_price = float(m_rec.price or 0.0)
                 if not is_wedding_event and rec_price <= 0.0:
@@ -693,9 +697,14 @@ async def create_order(
                 p_name = (i.name or "").lower()
                 p_cat = (getattr(i, "category", "") or getattr(i, "categoryName", "") or "").lower()
                 i_custom = getattr(i, "customization", None) or {}
-                if (
-                    p_dest in ("HOOKAH", "SHISHA")
-                    or "hookah" in p_name
+                if p_dest in ("HOOKAH", "SHISHA"):
+                    station = "HOOKAH"
+                elif p_dest == "BAR":
+                    station = "BAR"
+                elif p_dest in ("KITCHEN", "COOK", "CHEF"):
+                    station = "KITCHEN"
+                elif (
+                    "hookah" in p_name
                     or "shisha" in p_name
                     or "hookah" in p_cat
                     or "shisha" in p_cat
@@ -705,15 +714,14 @@ async def create_order(
                 ):
                     station = "HOOKAH"
                 elif (
-                    p_dest == "BAR"
-                    or i.isAlcoholic
+                    i.isAlcoholic
                     or any(k in p_cat for k in ("bar", "cocktail", "mocktail", "wine", "beer", "whiskey", "beverage", "drink"))
                     or any(k in p_name for k in ("cocktail", "mocktail", "wine", "beer", "whiskey", "vodka", "gin", "rum", "beverage", "drink", "soda"))
                 ):
                     station = "BAR"
                 else:
-                    station = p_dest or "KITCHEN"
-                is_alc = bool(i.isAlcoholic)
+                    station = "KITCHEN"
+                is_alc = bool(i.isAlcoholic) and station != "KITCHEN"
                 auth_price = float(i.price or 0.0)
                 if not is_wedding_event and auth_price <= 0.0:
                     raise HTTPException(

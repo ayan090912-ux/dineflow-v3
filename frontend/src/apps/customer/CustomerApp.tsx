@@ -84,6 +84,7 @@ export const isHookahProduct = (item: any): boolean => {
   if (!item) return false;
   const dest = (item.targetDestination || item.target_destination || item.station || '').toUpperCase();
   if (dest === 'HOOKAH' || dest === 'SHISHA') return true;
+  if (dest === 'KITCHEN' || dest === 'COOK' || dest === 'CHEF' || dest === 'BAR') return false;
   const name = (item.name || '').toLowerCase().trim();
   const cat = (item.categoryId || item.category || item.categoryName || '').toLowerCase().trim();
   return (

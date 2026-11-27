@@ -64,7 +64,7 @@ def format_menu_item_response(item: MenuItem) -> dict:
     track_val = bool(getattr(item, "track_inventory", False))
     dest = (getattr(item, "target_destination", None) or "").upper()
     name_lower = (item.name or "").lower()
-    is_hookah = dest == "HOOKAH" or "shisha" in name_lower or "hookah" in name_lower
+    is_hookah = dest == "HOOKAH" or (dest not in ("KITCHEN", "BAR") and ("shisha" in name_lower or "hookah" in name_lower))
 
     # Hookah products are strictly non-food items: omit veg / non-veg dietary classifications
     is_veg_val = None if is_hookah else item.is_vegetarian
