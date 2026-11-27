@@ -22,6 +22,7 @@ import {
   QrCode,
   Share2,
   BellRing,
+  Download,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { DeliverySettings, Order, Restaurant } from '../../packages/types';
@@ -78,6 +79,7 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [qrPassOrder, setQrPassOrder] = useState<Order | null>(null);
   const [isDeliveryQrModalOpen, setIsDeliveryQrModalOpen] = useState(false);
+  const deliveryQrRef = useRef<HTMLDivElement | null>(null);
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
     baseLat: null,
     baseLng: null,
@@ -1062,12 +1064,56 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
           <p className="text-slate-400">
             Customers can scan this QR code or open the link to browse your menu, pin their GPS location, and place delivery orders directly to this terminal.
           </p>
-          <div className="p-5 rounded-xl bg-white text-slate-900 flex flex-col items-center text-center space-y-2.5">
+          <div ref={deliveryQrRef} className="p-5 rounded-xl bg-white text-slate-900 flex flex-col items-center text-center space-y-2.5">
             <span className="text-xs font-bold uppercase tracking-wide">{restaurant?.name || 'Order Delivery'}</span>
             <QRCodeSVG value={deliveryShareUrl} size={196} level="M" includeMargin={true} />
             <span className="text-[11px] font-mono text-slate-600 break-all">{deliveryShareUrl}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const svgEl = deliveryQrRef.current?.querySelector('svg');
+                if (!svgEl) return;
+                const serializer = new XMLSerializer();
+                const svgStr = serializer.serializeToString(svgEl);
+                const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(svgBlob);
+                const img = new Image();
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = 600;
+                  canvas.height = 680;
+                  const ctx = canvas.getContext('2d');
+                  if (!ctx) return;
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.fillStyle = '#0f172a';
+                  ctx.font = 'bold 24px sans-serif';
+                  ctx.textAlign = 'center';
+                  ctx.fillText((restaurant?.name || 'ORDER DELIVERY').toUpperCase(), 300, 56);
+                  ctx.drawImage(img, 70, 80, 460, 460);
+                  ctx.fillStyle = '#475569';
+                  ctx.font = '16px monospace';
+                  ctx.fillText(deliveryShareUrl, 300, 585);
+                  ctx.fillStyle = '#059669';
+                  ctx.font = 'bold 16px sans-serif';
+                  ctx.fillText('Scan to Order Delivery', 300, 625);
+                  URL.revokeObjectURL(url);
+                  const link = document.createElement('a');
+                  const slug = (restaurant?.slug || restaurant?.name || 'delivery').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                  link.download = `${slug}-delivery-qr.png`;
+                  link.href = canvas.toDataURL('image/png');
+                  link.click();
+                  showToast('success', 'QR Downloaded', 'Delivery QR PNG saved.');
+                };
+                img.src = url;
+              }}
+              className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download</span>
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -1086,7 +1132,7 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
               className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-1.5"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span>Share on WhatsApp</span>
+              <span>WhatsApp</span>
             </a>
           </div>
         </div>
