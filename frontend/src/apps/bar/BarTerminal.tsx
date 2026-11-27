@@ -571,7 +571,6 @@ export const BarTerminal: React.FC<BarTerminalProps> = ({ restaurant, onLogout, 
           {/* Staff Shift Info & Utility Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
             <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
-              <Avatar src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100" name="Head Bartender" size="sm" />
               <div className="hidden xs:block">
                 <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Bar Staff</p>
                 <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>

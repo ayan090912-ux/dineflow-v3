@@ -577,7 +577,6 @@ export const HookahTerminal: React.FC<HookahTerminalProps> = ({ restaurant, onLo
           {/* Staff Shift Info & Utility Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs text-slate-300">
             <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.06] backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/15 shadow-sm">
-              <Avatar src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100" name="Hookah Master" size="sm" />
               <div className="hidden xs:block">
                 <p className="font-bold text-white text-xs truncate max-w-[80px] sm:max-w-none">Hookah Staff</p>
                 <p className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">ON SHIFT</p>
