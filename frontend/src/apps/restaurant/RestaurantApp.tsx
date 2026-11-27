@@ -5983,7 +5983,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
             onClick={() => setShowAdvancedStaffFields((v) => !v)}
             className="text-xs text-slate-400 hover:text-white underline-offset-4 hover:underline"
           >
-            {showAdvancedStaffFields ? 'Hide optional details' : '+ Customize terminal, shift & contact'}
+            {showAdvancedStaffFields ? 'Hide optional details' : '+ Customize terminal & wage'}
           </button>
 
           {showAdvancedStaffFields && (
@@ -5996,39 +5996,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   onChange={(e) => setNewStaff({ ...newStaff, terminal: e.target.value })}
                 />
                 <Input
-                  label="Email Address"
-                  placeholder="Auto-generated if blank"
-                  value={newStaff.email}
-                  onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  label="Contact Phone"
-                  placeholder="+91 98765 43210"
-                  value={newStaff.phone}
-                  onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
-                />
-                <Input
                   label="Hourly Wage (₹ INR)"
                   type="number"
                   placeholder="350"
                   value={newStaff.hourlyRate}
                   onChange={(e) => setNewStaff({ ...newStaff, hourlyRate: e.target.value })}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Shift Schedule</label>
-                <select
-                  value={newStaff.shift}
-                  onChange={(e) => setNewStaff({ ...newStaff, shift: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="Morning (8AM - 4PM)">Morning Shift (8AM - 4PM)</option>
-                  <option value="Evening (4PM - 12AM)">Evening Shift (4PM - 12AM)</option>
-                  <option value="Night (12AM - 8AM)">Night Shift (12AM - 8AM)</option>
-                  <option value="Full Day (10AM - 10PM)">Full Day (10AM - 10PM)</option>
-                </select>
               </div>
             </div>
           )}
@@ -6059,18 +6032,13 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               onChange={(e) => setEditingStaff({ ...editingStaff, name: e.target.value })}
             />
 
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Email Address *"
-                value={editingStaff.email}
-                onChange={(e) => setEditingStaff({ ...editingStaff, email: e.target.value })}
-              />
-              <Input
-                label="Phone Number"
-                value={editingStaff.phone}
-                onChange={(e) => setEditingStaff({ ...editingStaff, phone: e.target.value })}
-              />
-            </div>
+            <Input
+              label="Phone Number"
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={editingStaff.phone}
+              onChange={(e) => setEditingStaff({ ...editingStaff, phone: e.target.value })}
+            />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -6084,6 +6052,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                   <option value="CHEF">Kitchen Chef</option>
                   <option value="WAITER">Floor Waiter</option>
                   <option value="BARTENDER">Bartender</option>
+                  <option value="HOOKAH_STAFF">Hookah Staff</option>
                   <option value="CASHIER">Cashier</option>
                 </select>
               </div>
@@ -6094,20 +6063,6 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 value={editingStaff.terminal || editingStaff.terminalId || ''}
                 onChange={(e) => setEditingStaff({ ...editingStaff, terminal: e.target.value, terminalId: e.target.value })}
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Shift Schedule</label>
-              <select
-                value={editingStaff.shift || 'Evening (4PM - 12AM)'}
-                onChange={(e) => setEditingStaff({ ...editingStaff, shift: e.target.value })}
-                className="w-full px-3 py-2 bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-100 focus:outline-none focus:border-rose-500"
-              >
-                <option value="Morning (8AM - 4PM)">Morning Shift (8AM - 4PM)</option>
-                <option value="Evening (4PM - 12AM)">Evening Shift (4PM - 12AM)</option>
-                <option value="Night (12AM - 8AM)">Night Shift (12AM - 8AM)</option>
-                <option value="Full Day (10AM - 10PM)">Full Day (10AM - 10PM)</option>
-              </select>
             </div>
 
             <div className="space-y-1.5">
