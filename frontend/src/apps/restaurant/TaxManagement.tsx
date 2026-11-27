@@ -527,265 +527,260 @@ export const TaxManagement: React.FC<TaxManagementProps> = ({
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingTax ? 'Edit Tax Configuration 🏷️' : '+ Add New Tax 🏷️'}
+        title={editingTax ? 'Edit Tax Rule' : 'Add New Tax'}
       >
-        <div className="space-y-4 text-xs text-slate-200 max-h-[75vh] overflow-y-auto pr-1">
-          {/* TAX NAME */}
-          <div>
-            <label className="block text-slate-400 font-bold mb-1.5">Tax Name *</label>
-            <Input
-              type="text"
-              value={taxName}
-              onChange={(e) => setTaxName(e.target.value)}
-              placeholder="e.g. GST, Service Charge, VAT..."
-              className="bg-[#0a0c10] border-[#1e232e] text-white font-bold"
-            />
-          </div>
-
-          {/* TAX TYPE & RATE */}
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-4 text-xs text-slate-200">
+          <div className="space-y-4 max-h-[68vh] overflow-y-auto pr-1">
+            {/* TAX NAME */}
             <div>
-              <label className="block text-slate-400 font-bold mb-1.5">Tax Type</label>
-              <select
-                value={taxType}
-                onChange={(e: any) => setTaxType(e.target.value)}
-                className="w-full px-3 py-2 bg-[#0a0c10] border border-[#1e232e] rounded-xl font-bold text-white focus:outline-none focus:border-rose-500"
-              >
-                <option value="PERCENTAGE">Percentage (%)</option>
-                <option value="FIXED">Fixed Amount ({currencySymbol})</option>
-              </select>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">Tax Name *</label>
+              <Input
+                type="text"
+                value={taxName}
+                onChange={(e) => setTaxName(e.target.value)}
+                placeholder="e.g. GST, Service Charge, VAT..."
+                className="bg-[#0b0d11] border-white/[0.1] text-white"
+              />
             </div>
 
-            <div>
-              <label className="block text-slate-400 font-bold mb-1.5">
-                {taxType === 'PERCENTAGE' ? 'Rate (%) *' : `Amount (${currencySymbol}) *`}
-              </label>
-              {taxType === 'PERCENTAGE' ? (
-                <div className="relative">
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={rate}
-                    onChange={(e) => setRate(e.target.value)}
-                    placeholder="5.0"
-                    className="bg-[#0a0c10] border-[#1e232e] text-white font-bold pr-8"
-                  />
-                  <span className="absolute right-3 top-2.5 text-slate-500 font-bold">%</span>
-                </div>
-              ) : (
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-slate-500 font-bold">{currencySymbol}</span>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={fixedAmount}
-                    onChange={(e) => setFixedAmount(e.target.value)}
-                    placeholder="50"
-                    className="bg-[#0a0c10] border-[#1e232e] text-white font-bold pl-8"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* TAX APPLICATION SCOPE */}
-          <div>
-            <label className="block text-slate-400 font-bold mb-1.5">Apply Tax To:</label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setAppliesTo('ORDER')}
-                className={`p-2.5 rounded-xl border text-center font-bold transition-all ${
-                  appliesTo === 'ORDER'
-                    ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-[#0a0c10] border-[#1e232e] text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                Entire Order
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAppliesTo('CATEGORY')}
-                className={`p-2.5 rounded-xl border text-center font-bold transition-all ${
-                  appliesTo === 'CATEGORY'
-                    ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-[#0a0c10] border-[#1e232e] text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                Selected Categories
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAppliesTo('ITEM')}
-                className={`p-2.5 rounded-xl border text-center font-bold transition-all ${
-                  appliesTo === 'ITEM'
-                    ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-[#0a0c10] border-[#1e232e] text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                Selected Menu Items
-              </button>
-            </div>
-          </div>
-
-          {/* CATEGORIES PICKER IF SELECTED CATEGORIES */}
-          {appliesTo === 'CATEGORY' && (
-            <div className="p-3 bg-[#0a0c10] border border-[#1e232e] rounded-xl space-y-2">
-              <span className="text-[11px] font-bold text-slate-300 block">Select Restaurant Categories:</span>
-              <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
-                {categories.map((cat) => (
-                  <label key={cat.id} className="flex items-center gap-2 cursor-pointer text-xs p-1.5 rounded bg-[#12151b] border border-[#1e232e] hover:border-rose-500/50">
-                    <input
-                      type="checkbox"
-                      checked={selectedCategoryIds.includes(cat.id)}
-                      onChange={() => handleToggleCategory(cat.id)}
-                      className="rounded accent-rose-500 w-3.5 h-3.5"
-                    />
-                    <span className="font-semibold text-white">{cat.name}</span>
-                  </label>
-                ))}
+            {/* TAX TYPE & RATE */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Tax Type</label>
+                <select
+                  value={taxType}
+                  onChange={(e: any) => setTaxType(e.target.value)}
+                  className="w-full h-10 px-3 bg-[#0b0d11] border border-white/[0.1] rounded-xl text-xs font-medium text-white focus:outline-none focus:border-emerald-500/60"
+                >
+                  <option value="PERCENTAGE">Percentage (%)</option>
+                  <option value="FIXED">Fixed Amount ({currencySymbol})</option>
+                </select>
               </div>
-            </div>
-          )}
 
-          {/* MENU ITEMS PICKER IF SELECTED MENU ITEMS */}
-          {appliesTo === 'ITEM' && (
-            <div className="p-3 bg-[#0a0c10] border border-[#1e232e] rounded-xl space-y-2">
-              <span className="text-[11px] font-bold text-slate-300 block">Select Restaurant Menu Items:</span>
-              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-                {menuItems.map((item) => (
-                  <label key={item.id} className="flex items-center gap-2 cursor-pointer text-xs p-1.5 rounded bg-[#12151b] border border-[#1e232e] hover:border-rose-500/50">
-                    <input
-                      type="checkbox"
-                      checked={selectedMenuItemIds.includes(item.id)}
-                      onChange={() => handleToggleMenuItem(item.id)}
-                      className="rounded accent-rose-500 w-3.5 h-3.5"
-                    />
-                    <div className="truncate">
-                      <span className="font-semibold text-white block truncate">{item.name}</span>
-                      <span className="text-[10px] font-mono text-emerald-400">{currencySymbol}{item.price}</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAX INCLUDED / EXCLUDED */}
-          <div className="p-3 bg-[#0a0c10] border border-[#1e232e] rounded-xl space-y-2">
-            <span className="text-slate-300 font-bold block">Tax Included in Menu Price?</span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setIsInclusive(true)}
-                className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
-                  isInclusive
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg'
-                    : 'bg-[#12151b] border-[#1e232e] text-slate-400'
-                }`}
-              >
-                <div className="font-black text-xs">Yes (Included)</div>
-                <div className="text-[10px] font-normal text-indigo-200 mt-0.5">
-                  Displayed menu price already contains the tax.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsInclusive(false)}
-                className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
-                  !isInclusive
-                    ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
-                    : 'bg-[#12151b] border-[#1e232e] text-slate-400'
-                }`}
-              >
-                <div className="font-black text-xs">No (Excluded)</div>
-                <div className="text-[10px] font-normal text-rose-200 mt-0.5">
-                  Tax is calculated and added during billing.
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* APPLICABLE ORDER TYPES */}
-          <div>
-            <label className="block text-slate-400 font-bold mb-1.5">Applicable Order Types:</label>
-            <div className="flex items-center gap-3">
-              {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as OrderType[]).map((ot) => (
-                <label key={ot} className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-200 bg-[#0a0c10] px-3 py-2 rounded-xl border border-[#1e232e]">
-                  <input
-                    type="checkbox"
-                    checked={applicableOrderTypes.includes(ot)}
-                    onChange={() => handleToggleOrderType(ot)}
-                    className="rounded accent-rose-500 w-4 h-4"
-                  />
-                  <span>{ot === 'DINE_IN' ? 'Dine-in 🍽️' : ot === 'TAKEAWAY' ? 'Takeaway 🛍️' : 'Delivery 🛵'}</span>
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  {taxType === 'PERCENTAGE' ? 'Rate (%) *' : `Amount (${currencySymbol}) *`}
                 </label>
-              ))}
-            </div>
-          </div>
-
-          {/* STATUS TOGGLE */}
-          <div>
-            <label className="block text-slate-400 font-bold mb-1.5">Status:</label>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs">
-                <input
-                  type="radio"
-                  name="status"
-                  value="ACTIVE"
-                  checked={status === 'ACTIVE'}
-                  onChange={() => setStatus('ACTIVE')}
-                  className="accent-emerald-500 w-4 h-4"
-                />
-                <span className="text-emerald-400">Active</span>
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs">
-                <input
-                  type="radio"
-                  name="status"
-                  value="INACTIVE"
-                  checked={status === 'INACTIVE'}
-                  onChange={() => setStatus('INACTIVE')}
-                  className="accent-rose-500 w-4 h-4"
-                />
-                <span className="text-slate-400">Inactive</span>
-              </label>
-            </div>
-          </div>
-
-          {/* LIVE TAX CALCULATION PREVIEW CARD */}
-          <div className="p-3.5 bg-gradient-to-br from-slate-950 to-slate-900 border border-[#1e232e] rounded-2xl space-y-2">
-            <span className="text-[11px] text-slate-400 font-bold uppercase flex items-center gap-1.5">
-              <Calculator className="w-3.5 h-3.5 text-rose-500" /> Live Tax Calculation Preview (Sample Order)
-            </span>
-            <div className="space-y-1 font-mono text-xs border-t border-[#1e232e] pt-2">
-              <div className="flex justify-between text-slate-400">
-                <span>Sample Subtotal:</span>
-                <span>{currencySymbol}1,000.00</span>
+                {taxType === 'PERCENTAGE' ? (
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={rate}
+                      onChange={(e) => setRate(e.target.value)}
+                      placeholder="5.0"
+                      className="bg-[#0b0d11] border-white/[0.1] text-white pr-8"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono">%</span>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono">{currencySymbol}</span>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={fixedAmount}
+                      onChange={(e) => setFixedAmount(e.target.value)}
+                      placeholder="50"
+                      className="bg-[#0b0d11] border-white/[0.1] text-white pl-8"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between text-rose-400 font-bold">
-                <span>
-                  {taxName || 'Tax'} ({taxType === 'PERCENTAGE' ? `${rate}%` : `${currencySymbol}${fixedAmount}`}
-                  {isInclusive ? ' - Included' : ''}):
-                </span>
-                <span>{currencySymbol}{previewData.taxAmount.toFixed(2)}</span>
+            </div>
+
+            {/* TAX APPLICATION SCOPE */}
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">Apply Tax To</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: 'ORDER', label: 'Entire Order' },
+                  { key: 'CATEGORY', label: 'Categories' },
+                  { key: 'ITEM', label: 'Menu Items' },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setAppliesTo(opt.key as any)}
+                    className={`px-3 py-2.5 rounded-xl border text-center font-semibold transition-all cursor-pointer ${
+                      appliesTo === opt.key
+                        ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                        : 'bg-[#0b0d11] border-white/[0.08] text-slate-400 hover:border-white/20 hover:text-slate-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
-              <div className="flex justify-between text-white font-black pt-1 border-t border-[#1e232e]">
-                <span>Estimated Total:</span>
-                <span className="text-emerald-400">{currencySymbol}{previewData.estimatedTotal.toFixed(2)}</span>
+            </div>
+
+            {/* CATEGORIES PICKER IF SELECTED CATEGORIES */}
+            {appliesTo === 'CATEGORY' && (
+              <div className="p-3 bg-[#0b0d11] border border-white/[0.08] rounded-xl space-y-2">
+                <span className="text-[11px] font-semibold text-slate-300 block">Select Categories</span>
+                <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
+                  {categories.map((cat) => (
+                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer text-xs p-2 rounded-lg bg-[#12151b] border border-white/[0.08] hover:border-emerald-500/40">
+                      <input
+                        type="checkbox"
+                        checked={selectedCategoryIds.includes(cat.id)}
+                        onChange={() => handleToggleCategory(cat.id)}
+                        className="rounded accent-emerald-500 w-3.5 h-3.5"
+                      />
+                      <span className="font-medium text-white truncate">{cat.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* MENU ITEMS PICKER IF SELECTED MENU ITEMS */}
+            {appliesTo === 'ITEM' && (
+              <div className="p-3 bg-[#0b0d11] border border-white/[0.08] rounded-xl space-y-2">
+                <span className="text-[11px] font-semibold text-slate-300 block">Select Menu Items</span>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                  {menuItems.map((item) => (
+                    <label key={item.id} className="flex items-center gap-2 cursor-pointer text-xs p-2 rounded-lg bg-[#12151b] border border-white/[0.08] hover:border-emerald-500/40">
+                      <input
+                        type="checkbox"
+                        checked={selectedMenuItemIds.includes(item.id)}
+                        onChange={() => handleToggleMenuItem(item.id)}
+                        className="rounded accent-emerald-500 w-3.5 h-3.5"
+                      />
+                      <div className="truncate">
+                        <span className="font-medium text-white block truncate">{item.name}</span>
+                        <span className="text-[10px] font-mono text-emerald-400">{currencySymbol}{item.price}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAX INCLUDED / EXCLUDED */}
+            <div className="space-y-1.5">
+              <span className="block text-xs font-medium text-slate-300">Pricing Mode</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsInclusive(true)}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    isInclusive
+                      ? 'bg-emerald-500/15 border-emerald-500/50 text-white'
+                      : 'bg-[#0b0d11] border-white/[0.08] text-slate-400 hover:border-white/20'
+                  }`}
+                >
+                  <div className={`font-semibold text-xs ${isInclusive ? 'text-emerald-300' : 'text-slate-200'}`}>Included in Price</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    Menu price already includes tax.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsInclusive(false)}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    !isInclusive
+                      ? 'bg-emerald-500/15 border-emerald-500/50 text-white'
+                      : 'bg-[#0b0d11] border-white/[0.08] text-slate-400 hover:border-white/20'
+                  }`}
+                >
+                  <div className={`font-semibold text-xs ${!isInclusive ? 'text-emerald-300' : 'text-slate-200'}`}>Added at Billing</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    Tax is added on top of subtotal.
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* APPLICABLE ORDER TYPES & STATUS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Order Types</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as OrderType[]).map((ot) => {
+                    const checked = applicableOrderTypes.includes(ot);
+                    return (
+                      <label
+                        key={ot}
+                        className={`flex items-center gap-1.5 cursor-pointer text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+                          checked
+                            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
+                            : 'bg-[#0b0d11] border-white/[0.08] text-slate-400'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleToggleOrderType(ot)}
+                          className="rounded accent-emerald-500 w-3.5 h-3.5"
+                        />
+                        <span>{ot === 'DINE_IN' ? 'Dine-in' : ot === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Status</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatus('ACTIVE')}
+                    className={`py-1.5 px-3 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                      status === 'ACTIVE'
+                        ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                        : 'bg-[#0b0d11] border-white/[0.08] text-slate-400'
+                    }`}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatus('INACTIVE')}
+                    className={`py-1.5 px-3 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                      status === 'INACTIVE'
+                        ? 'bg-white/10 border-white/25 text-white'
+                        : 'bg-[#0b0d11] border-white/[0.08] text-slate-400'
+                    }`}
+                  >
+                    Inactive
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* LIVE TAX CALCULATION PREVIEW CARD */}
+            <div className="p-3.5 bg-[#0b0d11] border border-white/[0.08] rounded-xl space-y-2">
+              <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                <Calculator className="w-3.5 h-3.5 text-emerald-400" /> Sample Order Preview
+              </span>
+              <div className="space-y-1 font-mono text-xs border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between text-slate-400">
+                  <span>Subtotal</span>
+                  <span>{currencySymbol}1,000.00</span>
+                </div>
+                <div className="flex justify-between text-slate-200">
+                  <span>
+                    {taxName || 'Tax'} ({taxType === 'PERCENTAGE' ? `${rate}%` : `${currencySymbol}${fixedAmount}`}
+                    {isInclusive ? ' · Included' : ''})
+                  </span>
+                  <span>{currencySymbol}{previewData.taxAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-white font-bold pt-1.5 border-t border-white/[0.06]">
+                  <span>Estimated Total</span>
+                  <span className="text-emerald-400">{currencySymbol}{previewData.estimatedTotal.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           </div>
 
           {/* ACTIONS */}
-          <div className="pt-3 flex items-center justify-end gap-2 border-t border-[#1e232e]">
+          <div className="pt-3 flex items-center justify-end gap-2 border-t border-white/[0.08]">
             <Button
               type="button"
               variant="outline"
