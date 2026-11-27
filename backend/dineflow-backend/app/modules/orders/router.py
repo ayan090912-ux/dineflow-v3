@@ -2302,34 +2302,37 @@ async def deliver_order(
 
     async def _broadcast_deliver():
         try:
-            await ws_manager.broadcast_event(
-                restaurant_id=order.restaurant_id,
-                event_type="order_delivered",
-                payload={
-                    **order_dict,
-                    "orderId": order.id,
-                    "order_id": order.id,
-                    "station": target_station,
-                    "waiterName": waiter_name,
-                    "tableNumber": order.table_number,
-                    "order": order_dict,
-                    "completedRequests": completed_req_dicts,
-                },
-                target_audience=["WAITER", "CUSTOMER", "OWNER", "POS", "KITCHEN", "BAR", "HOOKAH"]
-            )
+            tasks = [
+                ws_manager.broadcast_event(
+                    restaurant_id=order.restaurant_id,
+                    event_type="order_delivered",
+                    payload={
+                        **order_dict,
+                        "orderId": order.id,
+                        "order_id": order.id,
+                        "station": target_station,
+                        "waiterName": waiter_name,
+                        "tableNumber": order.table_number,
+                        "order": order_dict,
+                        "completedRequests": completed_req_dicts,
+                    },
+                    target_audience=["WAITER", "CUSTOMER", "OWNER", "POS", "KITCHEN", "BAR", "HOOKAH"]
+                ),
+                ws_manager.broadcast_event(
+                    restaurant_id=order.restaurant_id,
+                    event_type="order_status_updated",
+                    payload=order_dict,
+                    target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
+                ),
+            ]
             for c_dict in completed_req_dicts:
-                await ws_manager.broadcast_event(
+                tasks.append(ws_manager.broadcast_event(
                     restaurant_id=order.restaurant_id,
                     event_type="service_request_updated",
                     payload=c_dict,
                     target_audience=["WAITER", "OWNER"]
-                )
-            await ws_manager.broadcast_event(
-                restaurant_id=order.restaurant_id,
-                event_type="order_status_updated",
-                payload=order_dict,
-                target_audience=["KITCHEN", "BAR", "HOOKAH", "WAITER", "CUSTOMER", "OWNER", "CART", "STAFF"]
-            )
+                ))
+            await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
             print("[WS BROADCAST] deliver_order notice:", e)
 

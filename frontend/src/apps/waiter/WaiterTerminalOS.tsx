@@ -330,7 +330,7 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
   // Task 6.4: Realtime Reliability & Dropped WebSocket Fallback Polling
   // Fast adaptive interval (2.5s when WS is DISCONNECTED/RECONNECTING, 6s background safety when healthy)
   useEffect(() => {
-    const pollIntervalMs = wsStatus === 'CONNECTED' ? 6000 : 2500;
+    const pollIntervalMs = wsStatus === 'CONNECTED' ? 3500 : 1500;
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadData(true);
@@ -891,6 +891,16 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
           updated.deliveryStatus = 'PARTIALLY_DELIVERED';
         }
         return updated;
+      })
+    );
+    setRequests((prev) =>
+      prev.map((r) => {
+        const rOrderId = (r as any).orderId || (r as any).order_id;
+        const rStation = ((r as any).station || '').toUpperCase();
+        if (rOrderId === orderId && (!station || station === 'ALL' || !rStation || rStation === station.toUpperCase())) {
+          return { ...r, status: 'COMPLETED' };
+        }
+        return r;
       })
     );
     if (ordToDeliver) {

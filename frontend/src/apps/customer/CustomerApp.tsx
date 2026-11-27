@@ -261,7 +261,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
     const heartbeatInterval = setInterval(() => {
       fetchLiveCustomerOrders();
-    }, 8000);
+    }, 4000);
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {

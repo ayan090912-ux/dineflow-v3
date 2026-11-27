@@ -47,6 +47,8 @@ export class CustomerClient {
           customerNotes: data.customerNotes || data.notes,
           priority: data.priority || 'MEDIUM',
           tableSessionId: data.tableSessionId,
+          station: data.station,
+          itemsSummary: data.itemsSummary,
         }),
       });
       if (res.ok) {
