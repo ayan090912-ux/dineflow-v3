@@ -862,6 +862,34 @@ export class OrderClient {
     return resp && resp.id ? normalizeOrder(resp) : null;
   }
 
+  async rejectDeliveryOrder(orderId: string, reason?: string): Promise<Order | null> {
+    const resp = await this.base.executeProtectedRequest<any>(
+      `/orders/${encodeURIComponent(orderId)}/reject-delivery`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason || 'Declined by Delivery Terminal' }),
+      }
+    );
+    return resp && resp.id ? normalizeOrder(resp) : null;
+  }
+
+  async getDeliverySettings(restaurantId: string) {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/restaurants/${encodeURIComponent(restaurantId)}/delivery-settings`);
+    if (!res.ok) return null;
+    return res.json();
+  }
+
+  async updateDeliverySettings(restaurantId: string, settings: any) {
+    return this.base.executeProtectedRequest<any>(
+      `/restaurants/${encodeURIComponent(restaurantId)}/delivery-settings`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+      }
+    );
+  }
+
   async updateDeliveryLocation(
     orderId: string,
     loc: { latitude: number; longitude: number; accuracy?: number; address?: string; liveLocationEnabled?: boolean }

@@ -1669,3 +1669,83 @@ async def delete_restaurant_staff(
     return {"status": "success", "message": "Staff member removed"}
 
 
+class DeliverySettingsSchema(BaseModel):
+    baseLat: Optional[float] = None
+    baseLng: Optional[float] = None
+    baseAddress: Optional[str] = ""
+    maxDistanceKm: float = 10.0
+    baseDistanceKm: float = 3.0
+    baseFee: float = 30.0
+    perKmFee: float = 10.0
+    freeAboveSubtotal: float = 499.0
+
+
+@router.get("/{restaurant_id}/delivery-settings")
+async def get_restaurant_delivery_settings(
+    restaurant_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    res = await db.execute(select(Restaurant).where(Restaurant.id == canonical_id))
+    rest = res.scalar_one_or_none()
+    if not rest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
+    cfg = (getattr(rest, "billing_settings_json", None) or {}).get("deliverySettings") or {}
+    return {
+        "baseLat": cfg.get("baseLat"),
+        "baseLng": cfg.get("baseLng"),
+        "baseAddress": cfg.get("baseAddress", ""),
+        "maxDistanceKm": float(cfg.get("maxDistanceKm", 10.0)),
+        "baseDistanceKm": float(cfg.get("baseDistanceKm", 3.0)),
+        "baseFee": float(cfg.get("baseFee", 30.0)),
+        "perKmFee": float(cfg.get("perKmFee", 10.0)),
+        "freeAboveSubtotal": float(cfg.get("freeAboveSubtotal", 499.0)),
+    }
+
+
+@router.put("/{restaurant_id}/delivery-settings")
+async def update_restaurant_delivery_settings(
+    restaurant_id: str,
+    payload: DeliverySettingsSchema,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    if not caller.is_authenticated:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    from app.core.tenant.resolver import resolve_canonical_restaurant_id
+    try:
+        canonical_id = await resolve_canonical_restaurant_id(restaurant_id, db)
+    except Exception:
+        canonical_id = restaurant_id
+
+    res = await db.execute(select(Restaurant).where(Restaurant.id == canonical_id))
+    rest = res.scalar_one_or_none()
+    if not rest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+
+    if not caller.is_admin and caller.restaurant_id and caller.restaurant_id != canonical_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this restaurant")
+
+    billing_cfg = dict(getattr(rest, "billing_settings_json", None) or {})
+    new_settings = {
+        "baseLat": payload.baseLat,
+        "baseLng": payload.baseLng,
+        "baseAddress": (payload.baseAddress or "").strip(),
+        "maxDistanceKm": max(0.5, float(payload.maxDistanceKm)),
+        "baseDistanceKm": max(0.0, float(payload.baseDistanceKm)),
+        "baseFee": max(0.0, float(payload.baseFee)),
+        "perKmFee": max(0.0, float(payload.perKmFee)),
+        "freeAboveSubtotal": max(0.0, float(payload.freeAboveSubtotal)),
+    }
+    billing_cfg["deliverySettings"] = new_settings
+    rest.billing_settings_json = billing_cfg
+    await db.commit()
+    return new_settings
+
+

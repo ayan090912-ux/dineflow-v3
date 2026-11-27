@@ -169,8 +169,31 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [isFetchingGps, setIsFetchingGps] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isLiveGpsSharing, setIsLiveGpsSharing] = useState(false);
+  const [deliverySettings, setDeliverySettings] = useState<{
+    baseLat?: number | null;
+    baseLng?: number | null;
+    baseAddress?: string;
+    maxDistanceKm: number;
+    baseDistanceKm: number;
+    baseFee: number;
+    perKmFee: number;
+    freeAboveSubtotal: number;
+  } | null>(null);
   const liveWatchIdRef = React.useRef<number | null>(null);
   const lastGpsSentRef = React.useRef<number>(0);
+
+  const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    return Math.round(2 * R * Math.asin(Math.sqrt(a)) * 100) / 100;
+  };
 
   const stopLiveGpsSharing = () => {
     if (liveWatchIdRef.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -285,6 +308,9 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       // 3. Load table & active session details (or saved delivery orders in delivery mode)
       if (isDeliveryMode) {
+        api.getDeliverySettings(targetRestId).then((cfg) => {
+          if (cfg) setDeliverySettings(cfg);
+        }).catch(() => {});
         try {
           const savedIds: string[] = JSON.parse(localStorage.getItem(`dinely_delivery_orders_${targetRestId}`) || '[]');
           if (savedIds.length > 0) {
@@ -1019,6 +1045,19 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         addToast('error', 'Address or GPS Required', 'Please enter your delivery address or tap Use GPS Location.');
         setIsSubmittingOrder(false);
         return;
+      }
+      if (
+        deliverySettings &&
+        typeof deliverySettings.baseLat === 'number' &&
+        typeof deliverySettings.baseLng === 'number' &&
+        deliveryCoords
+      ) {
+        const distKm = haversineKm(deliverySettings.baseLat, deliverySettings.baseLng, deliveryCoords.lat, deliveryCoords.lng);
+        if (deliverySettings.maxDistanceKm > 0 && distKm > deliverySettings.maxDistanceKm) {
+          addToast('error', 'Outside Delivery Zone', `Your location (${distKm.toFixed(1)} km away) is beyond our ${deliverySettings.maxDistanceKm} km limit.`);
+          setIsSubmittingOrder(false);
+          return;
+        }
       }
     }
 
@@ -2420,20 +2459,68 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             )}
 
             <div className="p-3.5 liquid-glass rounded-2xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
-              <div className="flex justify-between text-white/60">
-                <span>Subtotal</span>
-                <span>{formatPrice(subtotal)}</span>
-              </div>
-              {(typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) > 0 && (
-                <div className="flex justify-between text-white/60">
-                  <span>GST / Taxes ({typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5}%)</span>
-                  <span>{formatPrice(Math.round(subtotal * (((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5)) / 100) * 100) / 100)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-white font-semibold text-xs pt-2 border-t border-white/[0.08]">
-                <span>Total Payable</span>
-                <span className="text-amber-400 font-bold">{formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
-              </div>
+              {(() => {
+                const taxPct = typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5;
+                const taxAmt = Math.round(subtotal * (taxPct / 100) * 100) / 100;
+                let distKm: number | null = null;
+                let delivFee = 0;
+                let outOfRange = false;
+                if (isDeliveryMode && deliverySettings) {
+                  if (
+                    typeof deliverySettings.baseLat === 'number' &&
+                    typeof deliverySettings.baseLng === 'number' &&
+                    deliveryCoords
+                  ) {
+                    distKm = haversineKm(deliverySettings.baseLat, deliverySettings.baseLng, deliveryCoords.lat, deliveryCoords.lng);
+                    outOfRange = deliverySettings.maxDistanceKm > 0 && distKm > deliverySettings.maxDistanceKm;
+                    if (deliverySettings.freeAboveSubtotal > 0 && subtotal >= deliverySettings.freeAboveSubtotal) {
+                      delivFee = 0;
+                    } else {
+                      delivFee = Math.round(
+                        (deliverySettings.baseFee + Math.max(0, distKm - deliverySettings.baseDistanceKm) * deliverySettings.perKmFee) * 100
+                      ) / 100;
+                    }
+                  } else if (deliverySettings.freeAboveSubtotal > 0 && subtotal >= deliverySettings.freeAboveSubtotal) {
+                    delivFee = 0;
+                  } else {
+                    delivFee = deliverySettings.baseFee || 0;
+                  }
+                }
+                const grandTotal = Math.round((subtotal + taxAmt + delivFee) * 100) / 100;
+                return (
+                  <>
+                    <div className="flex justify-between text-white/60">
+                      <span>Subtotal</span>
+                      <span>{formatPrice(subtotal)}</span>
+                    </div>
+                    {taxPct > 0 && (
+                      <div className="flex justify-between text-white/60">
+                        <span>GST / Taxes ({taxPct}%)</span>
+                        <span>{formatPrice(taxAmt)}</span>
+                      </div>
+                    )}
+                    {isDeliveryMode && (
+                      <div className="flex justify-between text-white/75">
+                        <span>
+                          Delivery Fee{distKm !== null ? ` (${distKm.toFixed(1)} km)` : ''}
+                        </span>
+                        <span className={delivFee === 0 ? 'text-emerald-400 font-semibold' : ''}>
+                          {delivFee === 0 ? 'FREE' : formatPrice(delivFee)}
+                        </span>
+                      </div>
+                    )}
+                    {outOfRange && deliverySettings && (
+                      <div className="p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-sans">
+                        Your location ({distKm?.toFixed(1)} km away) is outside our {deliverySettings.maxDistanceKm} km delivery zone.
+                      </div>
+                    )}
+                    <div className="flex justify-between text-white font-semibold text-xs pt-2 border-t border-white/[0.08]">
+                      <span>Total Payable</span>
+                      <span className="text-amber-400 font-bold">{formatPrice(grandTotal)}</span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Inline Age Requirement Checkbox if Bar or Hookah items present */}

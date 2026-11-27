@@ -987,7 +987,9 @@ async def create_order(
                     return format_order_response(cand, hide_financials=(is_wedding_event and not is_staff_caller))
 
         delivery_meta_payload = None
+        delivery_fee_amt = 0.0
         if is_delivery_order:
+            import math
             base_meta = dict(payload.deliveryMeta or {})
             if payload.customerPhone:
                 base_meta["customerPhone"] = payload.customerPhone
@@ -1003,6 +1005,45 @@ async def create_order(
             if base_meta.get("latitude") is not None and not base_meta.get("locationUpdatedAt"):
                 base_meta["locationUpdatedAt"] = now_utc.isoformat()
             base_meta["dispatchedToKitchen"] = False
+
+            # Distance & Swiggy/Zomato-style fee validation
+            rest_row = (await db.execute(select(Restaurant).where(Restaurant.id == restaurant.id))).scalar_one_or_none()
+            d_cfg = ((getattr(rest_row, "billing_settings_json", None) or {}).get("deliverySettings") or {}) if rest_row else {}
+            base_lat = d_cfg.get("baseLat")
+            base_lng = d_cfg.get("baseLng")
+            cust_lat = base_meta.get("latitude")
+            cust_lng = base_meta.get("longitude")
+            max_km = float(d_cfg.get("maxDistanceKm", 10.0))
+            base_km = float(d_cfg.get("baseDistanceKm", 3.0))
+            base_fee = float(d_cfg.get("baseFee", 30.0))
+            per_km = float(d_cfg.get("perKmFee", 10.0))
+            free_above = float(d_cfg.get("freeAboveSubtotal", 499.0))
+
+            if isinstance(base_lat, (int, float)) and isinstance(base_lng, (int, float)) and isinstance(cust_lat, (int, float)) and isinstance(cust_lng, (int, float)):
+                r_earth = 6371.0
+                dlat = math.radians(float(cust_lat) - float(base_lat))
+                dlng = math.radians(float(cust_lng) - float(base_lng))
+                a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(float(base_lat))) * math.cos(math.radians(float(cust_lat))) * math.sin(dlng / 2) ** 2
+                dist_km = round(2 * r_earth * math.asin(math.sqrt(a)), 2)
+                base_meta["distanceKm"] = dist_km
+                if max_km > 0 and dist_km > max_km:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Delivery location is {dist_km:.1f} km away, outside our {max_km:.1f} km delivery range."
+                    )
+                if free_above > 0 and subtotal >= free_above:
+                    delivery_fee_amt = 0.0
+                else:
+                    delivery_fee_amt = round(base_fee + max(0.0, dist_km - base_km) * per_km, 2)
+            elif base_meta.get("deliveryFee") is not None:
+                delivery_fee_amt = max(0.0, float(base_meta.get("deliveryFee") or 0.0))
+            elif free_above > 0 and subtotal >= free_above:
+                delivery_fee_amt = 0.0
+            else:
+                delivery_fee_amt = round(base_fee, 2)
+
+            base_meta["deliveryFee"] = delivery_fee_amt
+            total = round(total + delivery_fee_amt, 2)
             delivery_meta_payload = base_meta
 
         new_order = Order(
@@ -2746,6 +2787,62 @@ async def dispatch_delivery_order_to_kitchen(
         )
 
     asyncio.create_task(_broadcast_dispatch())
+    return resp_data
+
+
+@router.post("/{order_id}/reject-delivery")
+async def reject_delivery_order(
+    order_id: str,
+    payload: Optional[Dict[str, Any]] = None,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to reject order"
+        )
+    allowed_roles = [
+        "OWNER", "RESTAURANT_OWNER", "MANAGER", "ADMIN", "SUPER_ADMIN",
+        "DELIVERY", "DRIVER", "RIDER", "DELIVERY_STAFF", "WAITER", "STAFF"
+    ]
+    if not caller.is_admin and (caller.role or "").upper() not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Not authorized to reject delivery orders"
+        )
+
+    res = await db.execute(select(Order).where(Order.id == order_id))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if not caller.is_admin and caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff does not belong to this restaurant")
+
+    reason = (payload or {}).get("reason") or "Declined by Delivery Terminal"
+    order.status = "CANCELLED"
+    order.delivery_status = "REJECTED"
+    meta = dict(order.delivery_meta_json or {})
+    meta["rejected"] = True
+    meta["rejectionReason"] = reason
+    order.delivery_meta_json = meta
+
+    await db.commit()
+    await db.refresh(order)
+    resp_data = format_order_response(order)
+
+    import asyncio
+    from app.modules.websocket.manager import ws_manager
+
+    asyncio.create_task(
+        ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_status_updated",
+            payload=resp_data,
+            target_audience=["CUSTOMER", "DELIVERY", "OWNER"]
+        )
+    )
     return resp_data
 
 

@@ -17,8 +17,10 @@ import {
   ChefHat,
   Wine,
   Sparkles,
+  Settings,
+  X,
 } from 'lucide-react';
-import { Order, Restaurant } from '../../packages/types';
+import { DeliverySettings, Order, Restaurant } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
 import { Badge, Button, DinelyLogo, SearchInput, ToastContainer, ToastMessage } from '../../packages/ui';
@@ -67,6 +69,18 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
+    baseLat: null,
+    baseLng: null,
+    baseAddress: '',
+    maxDistanceKm: 10,
+    baseDistanceKm: 3,
+    baseFee: 30,
+    perKmFee: 10,
+    freeAboveSubtotal: 499,
+  });
 
   const restId = restaurant?.id || propRestaurant?.id || api.getCurrentRestaurantId() || '';
   const botStorageKey = restId ? `dinely_delivery_auto_bot_${restId}` : 'dinely_delivery_auto_bot';
@@ -120,6 +134,9 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
         if (match) setRestaurant(match);
       }).catch(() => {});
     }
+    api.getDeliverySettings(restId).then((cfg) => {
+      if (cfg) setDeliverySettings(cfg);
+    }).catch(() => {});
     fetchOrders(true);
     realtimeBus.connect(restId, isEmbedded ? 'OWNER' : 'DELIVERY');
     const unsubStatus = realtimeBus.subscribeStatus(setWsStatus);
@@ -228,6 +245,61 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, autoBotEnabled]);
+
+  const handleRejectOrder = async (order: Order) => {
+    if (processingIds.has(order.id)) return;
+    setProcessingIds((prev) => new Set(prev).add(order.id));
+    setOrders((prev) => prev.filter((o) => o.id !== order.id));
+    try {
+      await api.rejectDeliveryOrder(order.id, 'Declined by Delivery Terminal');
+      showToast('info', 'Order Rejected', `Delivery #${order.id.slice(-4)} was declined.`);
+    } catch (err: any) {
+      showToast('error', 'Reject Failed', err.message || 'Could not reject order.');
+      fetchOrders(true);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
+    }
+  };
+
+  const handleSaveDeliverySettings = async () => {
+    if (!restId) return;
+    setIsSavingSettings(true);
+    try {
+      const saved = await api.updateDeliverySettings(restId, deliverySettings);
+      if (saved) setDeliverySettings(saved);
+      showToast('success', 'Delivery Rules Saved', 'Max distance and Swiggy/Zomato fee tiers updated.');
+      setIsSettingsOpen(false);
+    } catch (err: any) {
+      showToast('error', 'Save Failed', err.message || 'Could not save delivery settings.');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleUseRestaurantGps = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      showToast('error', 'GPS Unavailable', 'Browser geolocation is not available.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setDeliverySettings((prev) => ({
+          ...prev,
+          baseLat: Math.round(pos.coords.latitude * 1000000) / 1000000,
+          baseLng: Math.round(pos.coords.longitude * 1000000) / 1000000,
+        }));
+        showToast('success', 'Restaurant GPS Captured', 'Click Save Rules to apply this location.');
+      },
+      (err) => {
+        showToast('error', 'GPS Error', err.message || 'Could not get current location.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const handleOutForDelivery = async (order: Order) => {
     if (processingIds.has(order.id)) return;
@@ -340,7 +412,17 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
         </div>
 
         <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/[0.06]">
-          <div className="flex items-center gap-1.5 text-[11px]">
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            {typeof meta.distanceKm === 'number' && (
+              <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono">
+                {meta.distanceKm.toFixed(1)} km
+              </span>
+            )}
+            {typeof meta.deliveryFee === 'number' && (
+              <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">
+                Fee: {meta.deliveryFee === 0 ? 'FREE' : formatCurrency(meta.deliveryFee)}
+              </span>
+            )}
             {meta.liveLocationEnabled && hasCoords ? (
               <span className="inline-flex items-center gap-1 text-emerald-400 font-mono font-semibold">
                 <Radio className="w-3 h-3 animate-pulse" />
@@ -458,6 +540,19 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
           <div className="lg:col-span-6 flex flex-wrap items-center justify-between lg:justify-end gap-2">
             <button
               type="button"
+              onClick={() => setIsSettingsOpen((v) => !v)}
+              className={`h-8 px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                isSettingsOpen
+                  ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                  : 'bg-white/[0.04] border-white/15 text-slate-300 hover:text-white'
+              }`}
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Zone & Fee Rules ({deliverySettings.maxDistanceKm} km)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setAutoBotEnabled((v) => !v)}
               className={`h-8 px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
                 autoBotEnabled
@@ -499,6 +594,117 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
         </div>
 
         {/* Search */}
+        {isSettingsOpen && (
+          <div className="bg-[#12151b] border border-emerald-500/30 p-4 rounded-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+              <div>
+                <h3 className="text-sm font-bold text-white">Delivery Zone & Distance Fee Model (Swiggy / Zomato Style)</h3>
+                <p className="text-[11px] text-slate-400">Set your restaurant GPS pin, max delivery radius, base fee, and per-km rate.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleUseRestaurantGps}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Navigation className="w-3.5 h-3.5" />
+                <span>Use Current GPS</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">Restaurant Latitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={deliverySettings.baseLat ?? ''}
+                  onChange={(e) => setDeliverySettings((p) => ({ ...p, baseLat: e.target.value ? parseFloat(e.target.value) : null }))}
+                  placeholder="e.g. 28.6139"
+                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Restaurant Longitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={deliverySettings.baseLng ?? ''}
+                  onChange={(e) => setDeliverySettings((p) => ({ ...p, baseLng: e.target.value ? parseFloat(e.target.value) : null }))}
+                  placeholder="e.g. 77.2090"
+                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Max Delivery Radius (km)</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.5"
+                  value={deliverySettings.maxDistanceKm}
+                  onChange={(e) => setDeliverySettings((p) => ({ ...p, maxDistanceKm: parseFloat(e.target.value) || 1 }))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Base Fee (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={deliverySettings.baseFee}
+                  onChange={(e) => setDeliverySettings((p) => ({ ...p, baseFee: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Base Distance Included (km)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={deliverySettings.baseDistanceKm}
+                  onChange={(e) => setDeliverySettings((p) => ({ ...p, baseDistanceKm: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Extra Charge Per km (₹/km)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={deliverySettings.perKmFee}
+                  onChange={(e) => setDeliverySettings((p) => ({ ...p, perKmFee: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Free Delivery Above Order (₹, 0 = off)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={deliverySettings.freeAboveSubtotal}
+                  onChange={(e) => setDeliverySettings((p) => ({ ...p, freeAboveSubtotal: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-white/[0.08]">
+              <p className="text-[11px] text-slate-400 font-mono">
+                Preview: 5 km order = ₹{(deliverySettings.baseFee + Math.max(0, 5 - deliverySettings.baseDistanceKm) * deliverySettings.perKmFee).toFixed(0)} delivery fee (Free above ₹{deliverySettings.freeAboveSubtotal})
+              </p>
+              <Button
+                variant="brand"
+                size="sm"
+                disabled={isSavingSettings}
+                onClick={handleSaveDeliverySettings}
+                icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+              >
+                {isSavingSettings ? 'Saving...' : 'Save Delivery Rules'}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-3">
           <SearchInput
             value={searchQuery}
@@ -556,16 +762,28 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
                       ))}
                     </div>
 
-                    <Button
-                      variant="brand"
-                      size="sm"
-                      disabled={processingIds.has(order.id)}
-                      onClick={() => handleDispatchToKitchen(order)}
-                      className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
-                      icon={<Send className="w-3.5 h-3.5" />}
-                    >
-                      {processingIds.has(order.id) ? 'Sending...' : 'Send to Kitchen'}
-                    </Button>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={processingIds.has(order.id)}
+                        onClick={() => handleRejectOrder(order)}
+                        className="col-span-1 border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-bold"
+                        icon={<X className="w-3.5 h-3.5" />}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        variant="brand"
+                        size="sm"
+                        disabled={processingIds.has(order.id)}
+                        onClick={() => handleDispatchToKitchen(order)}
+                        className="col-span-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
+                        icon={<Send className="w-3.5 h-3.5" />}
+                      >
+                        {processingIds.has(order.id) ? 'Sending...' : 'Accept & Send to Kitchen'}
+                      </Button>
+                    </div>
                   </div>
                 ))
               )}

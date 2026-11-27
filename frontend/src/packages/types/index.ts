@@ -977,6 +977,21 @@ export interface DeliveryMeta {
   dispatchedToKitchen?: boolean;
   dispatchedAt?: string;
   driverName?: string;
+  distanceKm?: number;
+  deliveryFee?: number;
+  rejected?: boolean;
+  rejectionReason?: string;
+}
+
+export interface DeliverySettings {
+  baseLat?: number | null;
+  baseLng?: number | null;
+  baseAddress?: string;
+  maxDistanceKm: number;
+  baseDistanceKm: number;
+  baseFee: number;
+  perKmFee: number;
+  freeAboveSubtotal: number;
 }
 
 export interface OrderItem {

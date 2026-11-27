@@ -922,6 +922,18 @@ export class DinelyApiClient extends BaseApiClient {
     return this.orderClient.dispatchDeliveryOrderToKitchen(orderId);
   }
 
+  async rejectDeliveryOrder(orderId: string, reason?: string) {
+    return this.orderClient.rejectDeliveryOrder(orderId, reason);
+  }
+
+  async getDeliverySettings(restaurantId: string) {
+    return this.orderClient.getDeliverySettings(restaurantId);
+  }
+
+  async updateDeliverySettings(restaurantId: string, settings: any) {
+    return this.orderClient.updateDeliverySettings(restaurantId, settings);
+  }
+
   async updateDeliveryLocation(
     orderId: string,
     loc: { latitude: number; longitude: number; accuracy?: number; address?: string; liveLocationEnabled?: boolean }
