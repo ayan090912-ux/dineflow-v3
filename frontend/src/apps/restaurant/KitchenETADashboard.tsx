@@ -706,15 +706,17 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
   const handleMarkReady = async (order: Order) => {
     if (processingOrderIds.has(order.id)) return;
     setProcessingOrderIds((prev) => new Set(prev).add(order.id));
+    setWaiterRequestedOrderIds((prev) => new Set(prev).add(order.id));
     try {
       await api.updateFulfillmentTicketStatus(order.id, 'READY', 'KITCHEN');
       await api.updateKitchenStatus(order.id, 'READY');
+      await api.requestWaiter(order.id, 'KITCHEN').catch(() => {});
       setBumpedHistory((prev) => [order, ...prev.slice(0, 19)]);
       if (!isMuted) playKitchenChime('BUMP');
-      showToast(`Order #${order.id.slice(-4)} plated & ready for pass! ✨`, 'success');
+      showToast(`Order #${order.id.slice(-4)} passed to waiter! ✨`, 'success');
       onRefreshOrdersRef.current?.();
     } catch (err: any) {
-      showToast(err.message || 'Failed to mark ready', 'warning');
+      showToast(err.message || 'Failed to pass order to waiter', 'warning');
       onRefreshOrdersRef.current?.();
     } finally {
       setProcessingOrderIds((prev) => {
@@ -936,11 +938,8 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#12151b] border border-[#1e232e] p-2.5 sm:p-3 rounded-xl">
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar pb-1 lg:pb-0">
             {[
-              { id: 'ALL', label: 'All Active Tickets', icon: <Flame className="w-3.5 h-3.5 text-emerald-400" />, badge: pendingOrders.length + inKitchenOrders.length + readyOrders.length },
-              { id: 'NEW', label: '1. New Incoming', icon: <Bell className="w-3.5 h-3.5 text-amber-400" />, badge: pendingOrders.length },
-              { id: 'COOKING', label: '2. Cooking', icon: <Flame className="w-3.5 h-3.5 text-sky-400" />, badge: inKitchenOrders.length },
-              { id: 'READY', label: '3. Ready at Pass', icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />, badge: readyOrders.length },
-              { id: 'COMPLETED', label: 'Shift History', icon: <History className="w-3.5 h-3.5 text-slate-400" />, badge: completedOrders.length },
+              { id: 'ALL', label: `Live Queue (${pendingOrders.length + inKitchenOrders.length + readyOrders.length})`, icon: <Flame className="w-3.5 h-3.5 text-emerald-400" /> },
+              { id: 'COMPLETED', label: `Shift History (${completedOrders.length})`, icon: <History className="w-3.5 h-3.5 text-slate-400" /> },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -953,13 +952,6 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
               >
                 {tab.icon}
                 <span>{tab.label}</span>
-                {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                    kitchenFilter === tab.id ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-white/10 text-slate-400'
-                  }`}>
-                    {tab.badge}
-                  </span>
-                )}
               </button>
             ))}
           </div>
@@ -1010,223 +1002,66 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
 
         {/* ONE-SCREEN OPERATIONAL BOARD */}
         <div className="w-full">
-          {/* VIEW: LIVE OPERATIONAL PIPELINE */}
+          {/* VIEW: SIMPLE 2-COLUMN KITCHEN PIPELINE */}
           {kitchenFilter !== 'COMPLETED' ? (
-            <div className={kitchenFilter === 'ALL' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start"}>
-              {/* COLUMN 1: NEW INCOMING ORDERS */}
-              {(kitchenFilter === 'ALL' || kitchenFilter === 'NEW') && (
-                <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-xl space-y-4">
-                  <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#1e232e]">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Bell className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="text-sm font-semibold text-white whitespace-nowrap">
-                        Incoming
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap shrink-0">
-                        {pendingOrders.length}
-                      </span>
-                    </div>
-                    <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">
-                      Awaiting Kitchen
-                    </span>
-                  </div>
-
-                {pendingOrders.length === 0 ? (
-                  <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
-                    <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
-                      <Bell className="w-6 h-6" />
-                    </div>
-                    <p className="font-semibold text-slate-200 text-sm">Incoming Queue Clear</p>
-                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                      No unaccepted tickets waiting. New customer and waiter orders appear here instantly.
-                    </p>
-                  </div>
-                ) : (
-                  pendingOrders.map((order) => {
-                    const selectedEta = cardEtaSelections[order.id];
-                    return (
-                      <div
-                        key={order.id}
-                        className="bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-amber-400/50 p-4.5 space-y-3.5 shadow-xl transition-all rounded-2xl liquid-glass-card"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-amber-400 text-lg">
-                                {order.id.length > 10 ? `#${order.id.slice(-4)}` : `#${order.id}`}
-                              </span>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                                NEW
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-300 mt-1">
-                              {order.customerName || 'Walk-in Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
-                            </p>
-                          </div>
-                          <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-white/10 text-white border border-white/15 shadow-xs">
-                            {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter Pickup'}
-                          </span>
-                        </div>
-
-                        <div className="text-xs text-slate-300 flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5 font-mono">
-                          <span>Submitted: <strong className="text-white">{getElapsedMinutes(order.createdAt)}m ago</strong></span>
-                          <span className="text-emerald-400 font-bold">₹{order.totalAmount.toFixed(2)}</span>
-                        </div>
-
-                        {/* Dish Items list with check toggles */}
-                        <div className="space-y-1.5 border-y border-white/10 py-3">
-                          {(() => {
-                            const kitchenItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
-                            return (
-                              <>
-                                <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-2">Dish Items ({kitchenItems.length}):</p>
-                                {kitchenItems.map((item) => {
-                                  const isChecked = checkedItems[item.id] || false;
-                                  return (
-                                    <div
-                                      key={item.id}
-                                      onClick={() => toggleItemCheck(item.id)}
-                                      className={`flex items-center justify-between p-2.5 rounded-xl text-xs cursor-pointer transition-all border ${
-                                        isChecked
-                                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 line-through'
-                                          : 'bg-white/[0.03] border-white/10 text-white hover:border-white/20 hover:bg-white/[0.06]'
-                                      }`}
-                                    >
-                                      <span className="flex items-center gap-2 font-medium">
-                                        <span className={`w-4 h-4 rounded-md border flex items-center justify-center text-[9px] ${isChecked ? 'bg-emerald-500 text-slate-950 border-emerald-400' : 'border-white/30'}`}>
-                                          {isChecked && '✓'}
-                                        </span>
-                                        <span>
-                                          <strong className="text-amber-400 font-mono">{item.quantity}x</strong> {item.name}
-                                        </span>
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </>
-                            );
-                          })()}
-
-                          {order.specialInstructions && (
-                            <div className="mt-2 text-xs bg-amber-500/10 text-amber-300 p-2.5 rounded-xl border border-amber-500/20 flex items-start gap-2">
-                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
-                              <span><strong>Note:</strong> {order.specialInstructions}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Simplified 1-Click Actions + Direct ETA Chips */}
-                        <div className="space-y-2.5 pt-1">
-                          <div className="flex items-center justify-between gap-1 text-[11px] text-slate-300 bg-white/[0.02] p-2 rounded-xl border border-white/5">
-                            <span className="font-mono flex items-center gap-1.5 text-slate-300">
-                              <Clock className="w-3.5 h-3.5 text-amber-400" />
-                              <span>Optional ETA:</span>
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              {[10, 15, 20].map((mins) => {
-                                const isSel = selectedEta === mins;
-                                return (
-                                  <button
-                                    key={mins}
-                                    type="button"
-                                    onClick={() =>
-                                      setCardEtaSelections((prev) => ({
-                                        ...prev,
-                                        [order.id]: isSel ? 0 : mins,
-                                      }))
-                                    }
-                                    className={`px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all border ${
-                                      isSel
-                                        ? 'bg-amber-500 text-slate-950 font-bold border-amber-400'
-                                        : 'bg-white/5 text-slate-300 border-white/10 hover:border-white/20 hover:bg-white/10'
-                                    }`}
-                                  >
-                                    +{mins}m
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="brand"
-                              size="sm"
-                              disabled={processingOrderIds.has(order.id)}
-                              className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-98"
-                              onClick={() => handleStartPreparing(order, selectedEta || undefined)}
-                              icon={<Flame className="w-3.5 h-3.5" />}
-                            >
-                              {processingOrderIds.has(order.id)
-                                ? 'Confirming...'
-                                : selectedEta
-                                ? `Confirm Order (${selectedEta}m ETA)`
-                                : 'Confirm Order'}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={processingOrderIds.has(order.id)}
-                              className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 px-3 py-2.5 text-xs rounded-xl flex items-center gap-1.5 font-bold transition-colors"
-                              onClick={() => handleMarkReady(order)}
-                              title="Instant Ready (Already cooked / cold dish)"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              <span className="hidden sm:inline text-[11px]">Mark Ready</span>
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-
-            {/* COLUMN 2: ACTIVE COOKING STATION */}
-            {(kitchenFilter === 'ALL' || kitchenFilter === 'COOKING') && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+              {/* SECTION A: ACTIVE ORDERS (NEW + PREPARING) */}
               <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-xl space-y-4">
                 <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#1e232e]">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Flame className="w-4 h-4 text-sky-400 shrink-0" />
+                    <Flame className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="text-sm font-semibold text-white whitespace-nowrap">
-                      Cooking
+                      Active Orders
                     </span>
-                    <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30 whitespace-nowrap shrink-0">
-                      {inKitchenOrders.length}
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap shrink-0">
+                      {pendingOrders.length + inKitchenOrders.length}
                     </span>
                   </div>
                   <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">
-                    Prep Board
+                    Kitchen Prep Queue
                   </span>
                 </div>
 
-                {inKitchenOrders.length === 0 ? (
+                {pendingOrders.length + inKitchenOrders.length === 0 ? (
                   <div className="p-10 sm:p-12 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
-                    <div className="w-12 h-12 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 mx-auto flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
                       <Flame className="w-6 h-6" />
                     </div>
-                    <p className="font-semibold text-slate-200 text-sm">Cooking Grid Idle</p>
+                    <p className="font-semibold text-slate-200 text-sm">Kitchen Queue Clear</p>
                     <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                      Orders confirmed for preparation appear here with live countdown timers and dish bump checklists.
+                      New food orders appear here instantly. Click Start Preparing, set an optional timer if needed, then Pass to Waiter.
                     </p>
                   </div>
                 ) : (
-                  inKitchenOrders.map((order) => {
-                    const isOverdue = calculateRemainingTime(order).isOverdue;
+                  [...pendingOrders, ...inKitchenOrders].map((order) => {
+                    const isPreparing = order.kitchenStatus === 'PREPARING' || order.status === 'PREPARING';
+                    const selectedEta = cardEtaSelections[order.id] || 0;
+                    const isOverdue = isPreparing && calculateRemainingTime(order).isOverdue;
+                    const kitchenItems = (order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN');
                     return (
                       <div
                         key={order.id}
-                        className={`p-4.5 space-y-3.5 transition-all rounded-2xl border liquid-glass-card backdrop-blur-xl ${
+                        className={`p-4.5 space-y-3.5 shadow-xl transition-all rounded-2xl border liquid-glass-card backdrop-blur-xl ${
                           isOverdue
                             ? 'border-rose-500/80 bg-rose-950/20'
-                            : 'border-white/10 hover:border-sky-500/40 bg-white/[0.04]'
+                            : isPreparing
+                            ? 'border-sky-500/40 bg-white/[0.04]'
+                            : 'border-white/10 hover:border-amber-400/50 bg-white/[0.04]'
                         }`}
                       >
                         <div className="flex justify-between items-start">
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-white text-lg">{order.id.length > 10 ? `#${order.id.slice(-4)}` : `#${order.id}`}</span>
+                              <span className={`font-mono font-bold text-lg ${isPreparing ? 'text-sky-300' : 'text-amber-400'}`}>
+                                {order.id.length > 10 ? `#${order.id.slice(-4)}` : `#${order.id}`}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                                isPreparing
+                                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              }`}>
+                                {isPreparing ? 'PREPARING' : 'NEW'}
+                              </span>
                               {isOverdue && (
                                 <span className="text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full animate-pulse">
                                   OVERDUE
@@ -1234,7 +1069,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                               )}
                             </div>
                             <p className="text-xs text-slate-300 mt-1">
-                              {order.customerName || 'Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'}
+                              {order.customerName || 'Guest'} • {order.orderType === 'PICKUP' || order.tableNumber === 'COUNTER' ? 'Pickup' : 'Dine-in'} • {getElapsedMinutes(order.createdAt)}m ago
                             </p>
                           </div>
                           <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-white/10 text-white border border-white/15 shadow-xs">
@@ -1242,52 +1077,17 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                           </span>
                         </div>
 
-                        {/* Localized Countdown Timer Component */}
-                        <CookingCountdown
-                          order={order}
-                          onToggleTimer={handleToggleTimer}
-                          onOpenHistory={setHistoryOrder}
-                        />
+                        {isPreparing && (
+                          <CookingCountdown
+                            order={order}
+                            onToggleTimer={handleToggleTimer}
+                            onOpenHistory={setHistoryOrder}
+                          />
+                        )}
 
-                        {/* ETA Quick Adjusters */}
-                        <div className="flex items-center justify-between bg-white/[0.02] p-2 rounded-xl border border-white/5">
-                          <span className="text-[11px] text-slate-300 font-mono">
-                            {order.estimatedPrepTimeMinutes ? `ETA (${order.estimatedPrepTimeMinutes}m):` : 'Elapsed Prep:'}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
-                              onClick={() => handleEtaDelta(order.id, 5)}
-                            >
-                              +5m
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
-                              onClick={() => handleEtaDelta(order.id, -5)}
-                            >
-                              -5m
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
-                              onClick={() => {
-                                setSelectedOrderForEta(order);
-                                setCustomEtaInput((order.estimatedPrepTimeMinutes || 15).toString());
-                              }}
-                            >
-                              Custom
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Dish Item Checklist */}
+                        {/* Dish Items */}
                         <div className="space-y-1.5 border-y border-white/10 py-3">
-                          {(order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((item) => {
+                          {kitchenItems.map((item) => {
                             const isChecked = checkedItems[item.id] || false;
                             return (
                               <div
@@ -1304,47 +1104,142 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                                     {isChecked && '✓'}
                                   </span>
                                   <span>
-                                    <strong className="text-orange-400 font-mono">{item.quantity}x</strong> {item.name}
+                                    <strong className="text-amber-400 font-mono">{item.quantity}x</strong> {item.name}
                                   </span>
                                 </span>
                               </div>
                             );
                           })}
+
+                          {order.specialInstructions && (
+                            <div className="mt-2 text-xs bg-amber-500/10 text-amber-300 p-2.5 rounded-xl border border-amber-500/20 flex items-start gap-2">
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
+                              <span><strong>Note:</strong> {order.specialInstructions}</span>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Primary Bump Action: Mark Ready */}
-                        <Button
-                          variant="brand"
-                          size="sm"
-                          disabled={processingOrderIds.has(order.id)}
-                          className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-98"
-                          onClick={() => handleMarkReady(order)}
-                          icon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                        >
-                          {processingOrderIds.has(order.id) ? 'Marking Ready...' : 'Mark Ready (Pass to Waiter)'}
-                        </Button>
+                        {/* Optional Timer + 1-Click Action */}
+                        {!isPreparing ? (
+                          <div className="space-y-2.5 pt-1">
+                            <div className="flex items-center justify-between gap-1 text-[11px] text-slate-300 bg-white/[0.02] p-2 rounded-xl border border-white/5">
+                              <span className="font-mono flex items-center gap-1.5 text-slate-300">
+                                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Timer (optional):</span>
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setCardEtaSelections((prev) => ({ ...prev, [order.id]: 0 }))}
+                                  className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all border ${
+                                    !selectedEta
+                                      ? 'bg-white/15 text-white border-white/30'
+                                      : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  None
+                                </button>
+                                {[10, 15, 20].map((mins) => {
+                                  const isSel = selectedEta === mins;
+                                  return (
+                                    <button
+                                      key={mins}
+                                      type="button"
+                                      onClick={() =>
+                                        setCardEtaSelections((prev) => ({
+                                          ...prev,
+                                          [order.id]: isSel ? 0 : mins,
+                                        }))
+                                      }
+                                      className={`px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all border ${
+                                        isSel
+                                          ? 'bg-amber-500 text-slate-950 font-bold border-amber-400'
+                                          : 'bg-white/5 text-slate-300 border-white/10 hover:border-white/20 hover:bg-white/10'
+                                      }`}
+                                    >
+                                      {mins}m
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <Button
+                              variant="brand"
+                              size="sm"
+                              disabled={processingOrderIds.has(order.id)}
+                              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-98"
+                              onClick={() => handleStartPreparing(order, selectedEta || undefined)}
+                              icon={<Flame className="w-3.5 h-3.5" />}
+                            >
+                              {processingOrderIds.has(order.id)
+                                ? 'Starting...'
+                                : selectedEta
+                                ? `Start Preparing (${selectedEta}m Timer)`
+                                : 'Start Preparing'}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 pt-1">
+                            <div className="flex items-center justify-between bg-white/[0.02] p-2 rounded-xl border border-white/5">
+                              <span className="text-[11px] text-slate-300 font-mono">
+                                {order.estimatedPrepTimeMinutes ? `Timer (${order.estimatedPrepTimeMinutes}m):` : 'Set Timer (optional):'}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
+                                  onClick={() => handleEtaDelta(order.id, 5)}
+                                >
+                                  +5m
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="px-2.5 py-0.5 text-[10px] border-white/10 bg-white/5 text-slate-300 hover:text-white rounded-lg h-6.5 transition-colors"
+                                  onClick={() => {
+                                    setSelectedOrderForEta(order);
+                                    setCustomEtaInput((order.estimatedPrepTimeMinutes || 15).toString());
+                                  }}
+                                >
+                                  Set Timer
+                                </Button>
+                              </div>
+                            </div>
+
+                            <Button
+                              variant="brand"
+                              size="sm"
+                              disabled={processingOrderIds.has(order.id)}
+                              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-98"
+                              onClick={() => handleMarkReady(order)}
+                              icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                            >
+                              {processingOrderIds.has(order.id) ? 'Passing to Waiter...' : 'Pass to Waiter'}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })
                 )}
               </div>
-            )}
 
-            {/* COLUMN 3: PLATED & READY FOR PASS PICKUP */}
-            {(kitchenFilter === 'ALL' || kitchenFilter === 'READY') && (
+              {/* SECTION B: PASSED TO WAITER */}
               <div className="bg-[#12151b] border border-[#1e232e] p-5 rounded-xl space-y-4">
                 <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#1e232e]">
                   <div className="flex items-center gap-2 min-w-0">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span className="text-sm font-semibold text-white whitespace-nowrap">
-                      Ready
+                      Passed to Waiter
                     </span>
                     <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 whitespace-nowrap shrink-0">
                       {readyOrders.length}
                     </span>
                   </div>
                   <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">
-                    Pass Window
+                    Awaiting Waiter Pickup
                   </span>
                 </div>
 
@@ -1353,9 +1248,9 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                     <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center">
                       <UtensilsCrossed className="w-6 h-6" />
                     </div>
-                    <p className="font-semibold text-slate-200 text-sm">Pass Window Clean</p>
+                    <p className="font-semibold text-slate-200 text-sm">All Passed Dishes Collected</p>
                     <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                      No dishes awaiting waiter pickup. Cooked orders marked ready appear here until floor pickup.
+                      Orders passed to the waiter appear here until delivered to the table.
                     </p>
                   </div>
                 ) : (
@@ -1367,7 +1262,7 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="font-mono font-bold text-emerald-400 text-lg">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>
-                          <p className="text-xs text-emerald-300 font-medium mt-1">Plated & Ready for Service</p>
+                          <p className="text-xs text-emerald-300 font-medium mt-1">Passed to Waiter</p>
                         </div>
                         <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-white/10 text-white border border-white/15 shadow-xs">
                           {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter Pickup'}
@@ -1375,42 +1270,26 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       </div>
 
                       <div className="text-xs text-slate-300 bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-1.5">
-                        <p className="text-slate-400 font-mono text-[10px] uppercase mb-1">Items Ready to Serve:</p>
                         {(order.items || []).filter((i) => getFulfillmentStation(i) === 'KITCHEN').map((i) => (
                           <div key={i.id} className="text-slate-200 flex justify-between font-medium">
                             <span>• {i.quantity}x {i.name}</span>
-                            <span className="text-emerald-400 font-mono text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">Plated</span>
+                            <span className="text-emerald-400 font-mono text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">Ready</span>
                           </div>
                         ))}
                       </div>
 
-                      {((order as any).kitchenWaiterRequested || waiterRequestedOrderIds.has(order.id) || order.deliveryStatus === 'WAITING_FOR_WAITER' || order.deliveryStatus === 'COLLECTED') ? (
-                        <div className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30">
-                          <span className="flex items-center gap-1.5 font-mono">
-                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                            <span>Waiter Requested • Floor Alert Active</span>
-                          </span>
-                          <span className="text-[10px] text-amber-400 font-mono bg-amber-500/20 px-2 py-0.5 rounded-full">Dispatched</span>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="brand"
-                          size="sm"
-                          disabled={processingOrderIds.has(order.id)}
-                          className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-98"
-                          onClick={() => handleRequestWaiter(order)}
-                          icon={<Bell className="w-3.5 h-3.5" />}
-                        >
-                          {processingOrderIds.has(order.id) ? 'Requesting Waiter...' : 'Request Waiter'}
-                        </Button>
-                      )}
+                      <div className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30">
+                        <span className="flex items-center gap-1.5 font-mono">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>Waiter Notified • Ready for Pickup</span>
+                        </span>
+                      </div>
                     </div>
                   ))
                 )}
               </div>
-            )}
-          </div>
-        ) : (
+            </div>
+          ) : (
           /* VIEW: COMPLETED SHIFT ORDERS HISTORY */
           <div className="bg-[#12151b] border border-[#1e232e] p-5 lg:p-6 rounded-xl space-y-5">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">

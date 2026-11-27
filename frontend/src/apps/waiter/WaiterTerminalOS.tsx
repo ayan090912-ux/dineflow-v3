@@ -2088,35 +2088,22 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
                                     </Button>
                                   </>
                                 ) : (
-                                  <>
-                                    {isPending && (
-                                      <Button
-                                        variant="brand"
-                                        size="sm"
-                                        disabled={isProcessing}
-                                        className="w-1/2 text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold h-8"
-                                        onClick={() => handleAcceptRequest(req.id)}
-                                      >
-                                        Acknowledge
-                                      </Button>
+                                  <Button
+                                    variant="success"
+                                    size="sm"
+                                    disabled={isProcessing}
+                                    className="w-full text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold h-8 flex items-center justify-center gap-1.5"
+                                    onClick={() => handleCompleteRequest(req.id)}
+                                  >
+                                    {isProcessing ? (
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>Mark Fulfilled</span>
+                                      </>
                                     )}
-                                    <Button
-                                      variant="success"
-                                      size="sm"
-                                      disabled={isProcessing}
-                                      className={`${isPending ? 'w-1/2' : 'w-full'} text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold h-8 flex items-center justify-center gap-1.5`}
-                                      onClick={() => handleCompleteRequest(req.id)}
-                                    >
-                                      {isProcessing ? (
-                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                      ) : (
-                                        <>
-                                          <Check className="w-3.5 h-3.5" />
-                                          <span>Mark Fulfilled</span>
-                                        </>
-                                      )}
-                                    </Button>
-                                  </>
+                                  </Button>
                                 )}
                               </div>
                             </div>
