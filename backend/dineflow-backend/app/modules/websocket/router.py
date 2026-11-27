@@ -46,7 +46,7 @@ async def websocket_endpoint(
             role = ch_role
 
     raw_role = (role or "CUSTOMER").strip().upper()
-    privileged_roles = {"PLATFORM_ADMIN", "PLATFORM", "OWNER", "RESTAURANT_OWNER", "WAITER", "KITCHEN", "BAR", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY"}
+    privileged_roles = {"PLATFORM_ADMIN", "PLATFORM", "OWNER", "RESTAURANT_OWNER", "WAITER", "KITCHEN", "BAR", "HOOKAH", "SHISHA", "MANAGER", "INVENTORY", "DELIVERY", "DRIVER", "RIDER"}
 
     verified_role = raw_role
     effective_rest_id = (restaurant_id or "global").strip()

@@ -61,6 +61,20 @@ class CreateOrderSchema(BaseModel):
     legalDrinkingAgeAffirmed: Optional[bool] = None
     estimatedPrepTimeMinutes: Optional[int] = None
     estimated_prep_time_minutes: Optional[int] = None
+    customerPhone: Optional[str] = None
+    deliveryAddress: Optional[str] = None
+    deliveryLandmark: Optional[str] = None
+    deliveryLat: Optional[float] = None
+    deliveryLng: Optional[float] = None
+    liveLocationEnabled: Optional[bool] = False
+    deliveryMeta: Optional[Dict[str, Any]] = None
+
+class DeliveryLocationSchema(BaseModel):
+    latitude: float
+    longitude: float
+    accuracy: Optional[float] = None
+    address: Optional[str] = None
+    liveLocationEnabled: Optional[bool] = True
 
 class RedeemPickupCodeSchema(BaseModel):
     code: str
@@ -105,6 +119,20 @@ class UpdateOrderETASchema(BaseModel):
     eta_target_timestamp: Optional[str] = None
     estimatedPrepTimeMinutes: Optional[int] = None
     estimated_prep_time_minutes: Optional[int] = None
+    customerPhone: Optional[str] = None
+    deliveryAddress: Optional[str] = None
+    deliveryLandmark: Optional[str] = None
+    deliveryLat: Optional[float] = None
+    deliveryLng: Optional[float] = None
+    liveLocationEnabled: Optional[bool] = False
+    deliveryMeta: Optional[Dict[str, Any]] = None
+
+class DeliveryLocationSchema(BaseModel):
+    latitude: float
+    longitude: float
+    accuracy: Optional[float] = None
+    address: Optional[str] = None
+    liveLocationEnabled: Optional[bool] = True
     reason: Optional[str] = None
 
 def resolve_item_station(it: Any) -> str:
@@ -303,6 +331,8 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
         "barWaiterRequested": getattr(order, "bar_waiter_requested", False) or False,
         "hookah_waiter_requested": getattr(order, "hookah_waiter_requested", False) or False,
         "hookahWaiterRequested": getattr(order, "hookah_waiter_requested", False) or False,
+        "delivery_meta": getattr(order, "delivery_meta_json", None),
+        "deliveryMeta": getattr(order, "delivery_meta_json", None),
         "created_at": created_at_val,
         "createdAt": created_at_val,
     }
@@ -471,51 +501,50 @@ async def create_order(
                     )
 
         now_utc = datetime.now(timezone.utc)
-        tbl_num = payload.tableNumber or "Table 01"
-        tbl_id = payload.tableId or f"tbl-{restaurant.id}-{(tbl_num).lower().replace(' ', '_')}"
+        is_delivery_order = (payload.orderType or "").upper() == "DELIVERY"
+        tbl_num = "DELIVERY" if is_delivery_order else (payload.tableNumber or "Table 01")
+        tbl_id = None if is_delivery_order else (payload.tableId or f"tbl-{restaurant.id}-{(tbl_num).lower().replace(' ', '_')}")
 
         existing_tbl = None
-        if payload.tableId:
-            res_tbl_check = await db.execute(select(Table).where(
-                (Table.id == payload.tableId) & (Table.restaurant_id == restaurant.id)
-            ))
-            existing_tbl = res_tbl_check.scalar_one_or_none()
-            if not existing_tbl:
-                # Check if tableId was passed for table in another restaurant
-                res_wrong_rest = await db.execute(select(Table).where(Table.id == payload.tableId))
-                wrong_tbl = res_wrong_rest.scalar_one_or_none()
-                if wrong_tbl and wrong_tbl.restaurant_id != restaurant.id:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Table '{payload.tableId}' does not belong to restaurant '{restaurant.id}'"
-                    )
-                # Fallback: check if payload.tableId or tbl_num matches table_number
-                t_variants = get_table_variants(tbl_num)
-                candidates = list(set(t_variants + ([payload.tableId] if payload.tableId else [])))
+        if not is_delivery_order:
+            if payload.tableId:
                 res_tbl_check = await db.execute(select(Table).where(
-                    (Table.restaurant_id == restaurant.id) &
-                    (Table.table_number.in_(candidates))
+                    (Table.id == payload.tableId) & (Table.restaurant_id == restaurant.id)
                 ))
                 existing_tbl = res_tbl_check.scalar_one_or_none()
-        else:
-            t_variants = get_table_variants(tbl_num)
-            res_tbl_check = await db.execute(select(Table).where(
-                (Table.restaurant_id == restaurant.id) & 
-                (Table.table_number.in_(t_variants))
-            ))
-            existing_tbl = res_tbl_check.scalar_one_or_none()
+                if not existing_tbl:
+                    res_wrong_rest = await db.execute(select(Table).where(Table.id == payload.tableId))
+                    wrong_tbl = res_wrong_rest.scalar_one_or_none()
+                    if wrong_tbl and wrong_tbl.restaurant_id != restaurant.id:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Table '{payload.tableId}' does not belong to restaurant '{restaurant.id}'"
+                        )
+                    t_variants = get_table_variants(tbl_num)
+                    candidates = list(set(t_variants + ([payload.tableId] if payload.tableId else [])))
+                    res_tbl_check = await db.execute(select(Table).where(
+                        (Table.restaurant_id == restaurant.id) &
+                        (Table.table_number.in_(candidates))
+                    ))
+                    existing_tbl = res_tbl_check.scalar_one_or_none()
+            else:
+                t_variants = get_table_variants(tbl_num)
+                res_tbl_check = await db.execute(select(Table).where(
+                    (Table.restaurant_id == restaurant.id) & 
+                    (Table.table_number.in_(t_variants))
+                ))
+                existing_tbl = res_tbl_check.scalar_one_or_none()
 
-        if not existing_tbl and tbl_num:
-            # Auto-create table so TableSession NOT NULL foreign key constraint is guaranteed
-            existing_tbl = Table(
-                id=f"tbl-{restaurant.id}-{tbl_num.lower().replace(' ', '_')}",
-                restaurant_id=restaurant.id,
-                table_number=tbl_num,
-                capacity=4,
-                status="OCCUPIED"
-            )
-            db.add(existing_tbl)
-            await db.flush()
+            if not existing_tbl and tbl_num:
+                existing_tbl = Table(
+                    id=f"tbl-{restaurant.id}-{tbl_num.lower().replace(' ', '_')}",
+                    restaurant_id=restaurant.id,
+                    table_number=tbl_num,
+                    capacity=4,
+                    status="OCCUPIED"
+                )
+                db.add(existing_tbl)
+                await db.flush()
 
         actual_session_id = None
         if existing_tbl:
@@ -526,7 +555,7 @@ async def create_order(
 
         is_wedding_event = (payload.orderType == "WEDDING_EVENT") or bool(payload.eventId)
 
-        if not is_wedding_event:
+        if not is_wedding_event and not is_delivery_order:
             session_id = payload.tableSessionId or f"sess-{restaurant.id}-{tbl_id or 'tbl'}-{int(now_utc.timestamp() * 1000)}"
             t_candidates = get_table_variants(tbl_num)
 
@@ -957,6 +986,25 @@ async def create_order(
                     print(f"[ORDER_RAPID_DUPLICATE_GUARD] Returning existing order {cand.id} to prevent double tap")
                     return format_order_response(cand, hide_financials=(is_wedding_event and not is_staff_caller))
 
+        delivery_meta_payload = None
+        if is_delivery_order:
+            base_meta = dict(payload.deliveryMeta or {})
+            if payload.customerPhone:
+                base_meta["customerPhone"] = payload.customerPhone
+            if payload.deliveryAddress:
+                base_meta["deliveryAddress"] = payload.deliveryAddress
+            if payload.deliveryLandmark:
+                base_meta["landmark"] = payload.deliveryLandmark
+            if payload.deliveryLat is not None:
+                base_meta["latitude"] = payload.deliveryLat
+            if payload.deliveryLng is not None:
+                base_meta["longitude"] = payload.deliveryLng
+            base_meta["liveLocationEnabled"] = bool(payload.liveLocationEnabled or base_meta.get("liveLocationEnabled"))
+            if base_meta.get("latitude") is not None and not base_meta.get("locationUpdatedAt"):
+                base_meta["locationUpdatedAt"] = now_utc.isoformat()
+            base_meta["dispatchedToKitchen"] = False
+            delivery_meta_payload = base_meta
+
         new_order = Order(
             id=order_id,
             restaurant_id=restaurant.id,
@@ -964,7 +1012,8 @@ async def create_order(
             table_number=tbl_num,
             table_session_id=actual_session_id,
             business_day_id=active_bday_id,
-            status="PENDING",
+            status="PENDING_DELIVERY" if is_delivery_order else "PENDING",
+            delivery_status="AWAITING_DISPATCH" if is_delivery_order else "PENDING",
             kitchen_status=kitchen_status,
             bar_status=bar_status,
             hookah_status=hookah_status,
@@ -986,12 +1035,13 @@ async def create_order(
             pickup_status="UNCLAIMED",
             payment_status="UNPAID",
             payment_method=payload.paymentMethod or payload.payment_method or "CASH",
+            delivery_meta_json=delivery_meta_payload,
             created_at=now_utc,
         )
         db.add(new_order)
 
-        # For event orders, do NOT modify ordinary restaurant floorplan tables
-        if not payload.eventId:
+        # For event or delivery orders, do NOT modify ordinary restaurant floorplan tables
+        if not payload.eventId and not is_delivery_order:
             try:
                 tbl_target = existing_tbl
                 if not tbl_target:
@@ -1099,7 +1149,11 @@ async def create_order(
 
         try:
             from app.modules.websocket.manager import ws_manager
-            order_target_aud = ["CUSTOMER", "OWNER", "CART", "STAFF", "KITCHEN", "BAR", "HOOKAH", "WAITER"]
+            order_target_aud = (
+                ["CUSTOMER", "OWNER", "DELIVERY", "POS"]
+                if is_delivery_order
+                else ["CUSTOMER", "OWNER", "CART", "STAFF", "KITCHEN", "BAR", "HOOKAH", "WAITER"]
+            )
 
             await ws_manager.broadcast_event(
                 restaurant_id=restaurant.id,
@@ -1111,7 +1165,7 @@ async def create_order(
             print(f"[PERF][WS_PUBLISHED] correlation_id={correlation_id} took={int((t_ws_published - t_start) * 1000)}ms targets={order_target_aud}")
 
             # Instantly update Active Tables across Owner, Waiter, and Customer terminals (ordinary orders only)
-            if not payload.eventId and (tbl_id or tbl_num):
+            if not payload.eventId and not is_delivery_order and (tbl_id or tbl_num):
                 bill_data = None
                 try:
                     pre_taxes = (active_taxes, tax_cats_map, tax_items_map) if 'active_taxes' in locals() else None
@@ -1412,7 +1466,7 @@ async def get_restaurant_orders(
                             Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
                         )
                     ),
-                    Order.status != "CANCELLED"
+                    Order.status.notin_(["CANCELLED", "PENDING_DELIVERY"])
                 )
 
         elif effective_station == "HOOKAH":
@@ -1438,7 +1492,7 @@ async def get_restaurant_orders(
                             Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
                         )
                     ),
-                    Order.status != "CANCELLED"
+                    Order.status.notin_(["CANCELLED", "PENDING_DELIVERY"])
                 )
 
         elif effective_station == "KITCHEN":
@@ -1455,7 +1509,7 @@ async def get_restaurant_orders(
             if active_only:
                 query = query.where(
                     Order.kitchen_status.in_(["PENDING", "PREPARING", "READY"]),
-                    Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED"])
+                    Order.status.notin_(["COMPLETED", "DELIVERED", "CANCELLED", "PENDING_DELIVERY"])
                 )
 
         elif active_only:
@@ -1469,10 +1523,10 @@ async def get_restaurant_orders(
             if active_session_ids:
                 query = query.where(
                     (Order.table_session_id.in_(active_session_ids)) |
-                    (Order.status.in_(["PENDING", "PREPARING", "READY"]))
+                    (Order.status.in_(["PENDING", "PENDING_DELIVERY", "PREPARING", "READY", "OUT_FOR_DELIVERY"]))
                 )
             else:
-                query = query.where(Order.status.in_(["PENDING", "PREPARING", "READY"]))
+                query = query.where(Order.status.in_(["PENDING", "PENDING_DELIVERY", "PREPARING", "READY", "OUT_FOR_DELIVERY"]))
 
         query = query.order_by(Order.created_at.desc()).limit(limit).offset(offset)
         result = await db.execute(query)
@@ -1516,7 +1570,7 @@ async def update_order_status(
             is_owner = (caller.uid and r_obj.owner_uid == caller.uid) or (caller.email and r_obj.owner_email and caller.email.lower() == r_obj.owner_email.lower())
             if not is_owner:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Not authorized for this restaurant")
-        elif caller.role in ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"]:
+        elif caller.role in ["RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "HOST", "CHEF", "COOK", "KITCHEN", "BAR", "BARTENDER", "HOOKAH", "SHISHA", "HOOKAH_STAFF", "SHISHA_STAFF", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER", "DELIVERY", "DRIVER", "RIDER", "DELIVERY_STAFF"]:
             if caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Staff member does not belong to this restaurant")
         else:
@@ -1547,7 +1601,8 @@ async def update_order_status(
         allowed_delivery_roles = [
             "RUNNER", "EVENT_RUNNER", "WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER",
             "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "STAFF",
-            "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"
+            "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER",
+            "DELIVERY", "DRIVER", "RIDER", "DELIVERY_STAFF"
         ]
         if not caller.is_admin and caller_role not in allowed_delivery_roles:
             raise HTTPException(
@@ -2625,6 +2680,119 @@ async def redeem_pickup_code(
     except Exception as ws_err:
         print("[WS_BROADCAST_REDEEM_NOTICE]:", ws_err)
 
+    return resp_data
+
+
+@router.post("/{order_id}/dispatch-kitchen")
+async def dispatch_delivery_order_to_kitchen(
+    order_id: str,
+    caller: CallerContext = Depends(get_caller_context),
+    db: AsyncSession = Depends(get_db)
+):
+    if not caller.is_authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to dispatch order to kitchen"
+        )
+    allowed_roles = [
+        "OWNER", "RESTAURANT_OWNER", "MANAGER", "ADMIN", "SUPER_ADMIN",
+        "DELIVERY", "DRIVER", "RIDER", "DELIVERY_STAFF", "WAITER", "STAFF"
+    ]
+    if not caller.is_admin and (caller.role or "").upper() not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Not authorized to dispatch delivery orders"
+        )
+
+    res = await db.execute(select(Order).where(Order.id == order_id))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if not caller.is_admin and caller.restaurant_id and caller.restaurant_id != order.restaurant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff does not belong to this restaurant")
+
+    now_utc = datetime.now(timezone.utc)
+    if order.status == "PENDING_DELIVERY":
+        order.status = "PENDING"
+    order.delivery_status = "DISPATCHED_TO_KITCHEN"
+    meta = dict(order.delivery_meta_json or {})
+    meta["dispatchedToKitchen"] = True
+    meta["dispatchedAt"] = now_utc.isoformat()
+    order.delivery_meta_json = meta
+
+    await db.commit()
+    await db.refresh(order)
+    resp_data = format_order_response(order)
+
+    import asyncio
+    from app.modules.websocket.manager import ws_manager
+
+    async def _broadcast_dispatch():
+        await asyncio.gather(
+            ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="order_created",
+                payload=resp_data,
+                target_audience=["KITCHEN", "BAR", "HOOKAH", "DELIVERY", "OWNER", "CUSTOMER"]
+            ),
+            ws_manager.broadcast_event(
+                restaurant_id=order.restaurant_id,
+                event_type="order_status_updated",
+                payload=resp_data,
+                target_audience=["KITCHEN", "BAR", "HOOKAH", "DELIVERY", "OWNER", "CUSTOMER"]
+            ),
+            return_exceptions=True,
+        )
+
+    asyncio.create_task(_broadcast_dispatch())
+    return resp_data
+
+
+@router.put("/{order_id}/delivery-location")
+async def update_delivery_live_location(
+    order_id: str,
+    payload: DeliveryLocationSchema,
+    db: AsyncSession = Depends(get_db)
+):
+    res = await db.execute(select(Order).where(Order.id == order_id))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    now_utc = datetime.now(timezone.utc)
+    meta = dict(order.delivery_meta_json or {})
+    meta["latitude"] = payload.latitude
+    meta["longitude"] = payload.longitude
+    if payload.accuracy is not None:
+        meta["accuracy"] = payload.accuracy
+    if payload.address:
+        meta["deliveryAddress"] = payload.address
+    meta["liveLocationEnabled"] = bool(payload.liveLocationEnabled)
+    meta["locationUpdatedAt"] = now_utc.isoformat()
+    order.delivery_meta_json = meta
+
+    await db.commit()
+    await db.refresh(order)
+    resp_data = format_order_response(order)
+
+    import asyncio
+    from app.modules.websocket.manager import ws_manager
+
+    async def _broadcast_loc():
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="delivery_location_updated",
+            payload={
+                **resp_data,
+                "orderId": order.id,
+                "order_id": order.id,
+                "deliveryMeta": meta,
+            },
+            target_audience=["DELIVERY", "OWNER", "WAITER"]
+        )
+
+    asyncio.create_task(_broadcast_loc())
     return resp_data
 
 

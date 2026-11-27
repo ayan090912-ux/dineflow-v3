@@ -122,7 +122,11 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       // If no ETA is set by station, show accurate status without inventing a completion time!
       if (!currentOrder.etaTargetTimestamp) {
         setRemainingSeconds(0);
-        if (isOrderDelivered) {
+        if (currentOrder.status === 'PENDING_DELIVERY') {
+          setEtaMessage('Order received by Delivery Terminal — dispatching to kitchen shortly.');
+        } else if (currentOrder.status === 'OUT_FOR_DELIVERY') {
+          setEtaMessage('Your order is out for delivery! Rider is on the way.');
+        } else if (isOrderDelivered) {
           if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
             setEtaMessage('Your hookah has been delivered. Enjoy!');
           } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {

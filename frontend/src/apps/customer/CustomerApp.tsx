@@ -32,6 +32,9 @@ import {
   Trash2,
   Loader2,
   Check,
+  Navigation,
+  Truck,
+  Radio,
 } from 'lucide-react';
 import {
   Button,
@@ -54,6 +57,7 @@ import { CustomerBillModal } from './CustomerBillModal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { matchTableNumber, formatStandardTableNumber } from '../../packages/utils/tableUtils';
 import { getTenantFromHostname } from '../../packages/utils/tenantResolver';
+import { reverseGeocode } from '../../packages/utils/addressGeocoding';
 
 export interface HookahOption {
   id: string;
@@ -150,6 +154,94 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
   const [isOrderStatusModalOpen, setIsOrderStatusModalOpen] = useState(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
 
+  // Online Delivery Mode (via /delivery or ?mode=delivery)
+  const isDeliveryMode = typeof window !== 'undefined' && (
+    window.location.pathname.toLowerCase().includes('/delivery') ||
+    new URLSearchParams(window.location.search).get('mode')?.toLowerCase() === 'delivery' ||
+    new URLSearchParams(window.location.search).get('orderType')?.toUpperCase() === 'DELIVERY'
+  );
+  const [deliveryName, setDeliveryName] = useState('');
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryLandmark, setDeliveryLandmark] = useState('');
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
+  const [shareLiveLocation, setShareLiveLocation] = useState(true);
+  const [isFetchingGps, setIsFetchingGps] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [isLiveGpsSharing, setIsLiveGpsSharing] = useState(false);
+  const liveWatchIdRef = React.useRef<number | null>(null);
+  const lastGpsSentRef = React.useRef<number>(0);
+
+  const stopLiveGpsSharing = () => {
+    if (liveWatchIdRef.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.clearWatch(liveWatchIdRef.current);
+      liveWatchIdRef.current = null;
+    }
+    setIsLiveGpsSharing(false);
+  };
+
+  const startLiveGpsSharing = (orderId: string) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    stopLiveGpsSharing();
+    setIsLiveGpsSharing(true);
+    liveWatchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setDeliveryCoords({ lat: latitude, lng: longitude, accuracy });
+        const now = Date.now();
+        if (now - lastGpsSentRef.current >= 5000) {
+          lastGpsSentRef.current = now;
+          api.updateDeliveryLocation(orderId, {
+            latitude,
+            longitude,
+            accuracy,
+            liveLocationEnabled: true,
+          }).catch(() => {});
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+  };
+
+  useEffect(() => {
+    return () => stopLiveGpsSharing();
+  }, []);
+
+  const handleUseCurrentGps = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsError('GPS is not supported on this device/browser.');
+      return;
+    }
+    setIsFetchingGps(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setDeliveryCoords({ lat: latitude, lng: longitude, accuracy });
+        try {
+          const geo = await reverseGeocode(latitude, longitude);
+          if (geo?.fullAddress && !deliveryAddress.trim()) {
+            setDeliveryAddress(geo.fullAddress);
+          } else if (!deliveryAddress.trim()) {
+            setDeliveryAddress(`GPS Location (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`);
+          }
+        } catch {
+          if (!deliveryAddress.trim()) {
+            setDeliveryAddress(`GPS Location (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`);
+          }
+        } finally {
+          setIsFetchingGps(false);
+        }
+      },
+      (err) => {
+        setIsFetchingGps(false);
+        setGpsError(err.message || 'Unable to access GPS location. Please allow location permission or enter address manually.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   const handleScrollToActiveOrders = () => {
     const el = document.getElementById('active-orders-section');
     if (el) {
@@ -191,8 +283,19 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       }
       const targetRestId = r.id;
 
-      // 3. Load table & active session details
-      await loadTableInfo(urlTableNumParam, targetRestId, urlTableIdParam);
+      // 3. Load table & active session details (or saved delivery orders in delivery mode)
+      if (isDeliveryMode) {
+        try {
+          const savedIds: string[] = JSON.parse(localStorage.getItem(`dinely_delivery_orders_${targetRestId}`) || '[]');
+          if (savedIds.length > 0) {
+            const fetched = await Promise.all(savedIds.slice(0, 10).map((id) => api.getOrderById(id).catch(() => null)));
+            const valid = fetched.filter((o): o is Order => Boolean(o && o.id));
+            setCustomerOrders(valid);
+          }
+        } catch {}
+      } else {
+        await loadTableInfo(urlTableNumParam, targetRestId, urlTableIdParam);
+      }
     }
 
     initCustomerApp();
@@ -236,6 +339,26 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         return;
       }
       isFetchingOrders = true;
+      if (isDeliveryMode) {
+        let savedIds: string[] = [];
+        try {
+          savedIds = JSON.parse(localStorage.getItem(`dinely_delivery_orders_${restId}`) || '[]');
+        } catch {}
+        if (savedIds.length === 0) {
+          isFetchingOrders = false;
+          return;
+        }
+        Promise.all(savedIds.slice(0, 10).map((id) => api.getOrderById(id).catch(() => null)))
+          .then((fetched) => {
+            const valid = fetched.filter((o): o is Order => Boolean(o && o.id));
+            setCustomerOrders((prev) => (isOrdersEqual(prev, valid) ? prev : valid));
+          })
+          .catch(() => {})
+          .finally(() => {
+            isFetchingOrders = false;
+          });
+        return;
+      }
       api.getCustomerOrders(restId, tId || selectedTableNum, sId)
         .then((orders) => {
           if (Array.isArray(orders)) {
@@ -881,17 +1004,47 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const restId = currentRestaurant?.id || api.getCurrentRestaurantId() || '';
     const isNoTable = currentRestaurant?.hasTables === false;
 
+    if (isDeliveryMode) {
+      if (!deliveryName.trim()) {
+        addToast('error', 'Name Required', 'Please enter your name for delivery.');
+        setIsSubmittingOrder(false);
+        return;
+      }
+      if (!deliveryPhone.trim()) {
+        addToast('error', 'Phone Required', 'Please enter your phone number so our rider can reach you.');
+        setIsSubmittingOrder(false);
+        return;
+      }
+      if (!deliveryAddress.trim() && !deliveryCoords) {
+        addToast('error', 'Address or GPS Required', 'Please enter your delivery address or tap Use GPS Location.');
+        setIsSubmittingOrder(false);
+        return;
+      }
+    }
+
     try {
       const clientOrderId = `ord-cli-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const newOrd = await api.createOrder({
         id: clientOrderId,
         idempotencyKey: clientOrderId,
         restaurantId: restId,
-        tableId: currentTable?.id,
-        tableNumber: isNoTable ? 'COUNTER' : selectedTableNum,
-        tableSessionId: currentTableSession?.id,
-        orderType: isNoTable ? 'PICKUP' : 'DINE_IN',
-        customerName: 'Guest',
+        tableId: isDeliveryMode ? undefined : currentTable?.id,
+        tableNumber: isDeliveryMode ? 'DELIVERY' : (isNoTable ? 'COUNTER' : selectedTableNum),
+        tableSessionId: isDeliveryMode ? undefined : currentTableSession?.id,
+        orderType: isDeliveryMode ? 'DELIVERY' : (isNoTable ? 'PICKUP' : 'DINE_IN'),
+        customerName: isDeliveryMode ? deliveryName.trim() : 'Guest',
+        customerPhone: isDeliveryMode ? deliveryPhone.trim() : undefined,
+        deliveryMeta: isDeliveryMode
+          ? {
+              customerPhone: deliveryPhone.trim(),
+              deliveryAddress: deliveryAddress.trim() || `GPS (${deliveryCoords?.lat.toFixed(5)}, ${deliveryCoords?.lng.toFixed(5)})`,
+              landmark: deliveryLandmark.trim() || undefined,
+              latitude: deliveryCoords?.lat ?? null,
+              longitude: deliveryCoords?.lng ?? null,
+              accuracy: deliveryCoords?.accuracy ?? null,
+              liveLocationEnabled: Boolean(shareLiveLocation),
+            }
+          : undefined,
         items: orderItems,
         totalAmount: total,
         status: 'PENDING',
@@ -899,7 +1052,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         paymentStatus: 'UNPAID',
       });
 
-      saveCustomerOrderId(newOrd.id, restId, selectedTableNum);
+      if (isDeliveryMode) {
+        try {
+          const key = `dinely_delivery_orders_${restId}`;
+          const prevIds: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+          localStorage.setItem(key, JSON.stringify([newOrd.id, ...prevIds.filter((x) => x !== newOrd.id)].slice(0, 10)));
+        } catch {}
+        if (shareLiveLocation) {
+          startLiveGpsSharing(newOrd.id);
+        }
+      } else {
+        saveCustomerOrderId(newOrd.id, restId, selectedTableNum);
+      }
 
       setCustomerOrders((prev) => [newOrd, ...prev.filter((o) => o.id !== newOrd.id)]);
       setCart([]);
@@ -914,8 +1078,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
       addToast(
         'success',
-        newOrd.pickupCode ? `Pickup Code: ${newOrd.pickupCode}` : 'Order Transmitted',
-        newOrd.pickupCode
+        isDeliveryMode
+          ? 'Delivery Order Placed'
+          : newOrd.pickupCode
+          ? `Pickup Code: ${newOrd.pickupCode}`
+          : 'Order Transmitted',
+        isDeliveryMode
+          ? `Order ${newOrd.displayOrderNumber || '#' + newOrd.id.slice(-4)} received by Delivery Terminal!`
+          : newOrd.pickupCode
           ? `Order confirmed! Show code ${newOrd.pickupCode} at counter.`
           : `Order ${newOrd.displayOrderNumber || '#' + newOrd.id} routed to ${routedTo || 'Kitchen'}`.trim()
       );
@@ -1316,7 +1486,34 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       </div>
 
       {/* Quick Action Sticky Liquid-Glass Dock */}
-      {currentRestaurant?.hasTables !== false ? (
+      {isDeliveryMode ? (
+        <div className="sticky top-0 z-30 px-3.5 py-2.5 bg-[#07090D]/85 backdrop-blur-2xl border-b border-white/[0.10] shadow-xl w-full max-w-full box-border">
+          <div className="flex items-center justify-between gap-2 liquid-glass-strong px-3 py-2 rounded-2xl border border-white/15">
+            <div className="flex items-center gap-2 min-w-0">
+              <Truck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="text-xs font-semibold text-white truncate">Home Delivery</span>
+              {isLiveGpsSharing && (
+                <button
+                  type="button"
+                  onClick={stopLiveGpsSharing}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-mono text-emerald-300"
+                  title="Tap to stop sharing live GPS"
+                >
+                  <Radio className="w-2.5 h-2.5 animate-pulse" />
+                  <span>Live GPS ON</span>
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setIsOrderStatusModalOpen(true)}
+              className="h-8 px-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center gap-1.5 shrink-0"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Track ({customerOrders.filter((o) => o.status !== 'CANCELLED').length})</span>
+            </button>
+          </div>
+        </div>
+      ) : currentRestaurant?.hasTables !== false ? (
         <div className="sticky top-0 z-30 px-3.5 py-2.5 bg-[#07090D]/85 backdrop-blur-2xl border-b border-white/[0.10] shadow-xl w-full max-w-full box-border">
           <div className="grid grid-cols-3 gap-1.5 liquid-glass-strong p-1 rounded-2xl w-full min-w-0 box-border overflow-hidden shadow-lg border border-white/15">
             <button
@@ -2148,6 +2345,79 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 </div>
               ))}
             </div>
+
+            {isDeliveryMode && (
+              <div className="p-3.5 liquid-glass rounded-2xl border border-white/[0.10] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Delivery Details & GPS</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentGps}
+                    disabled={isFetchingGps}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Navigation className="w-3 h-3" />
+                    <span>{isFetchingGps ? 'Locating...' : deliveryCoords ? 'GPS Pinned ✓' : 'Use My GPS'}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Your Full Name *"
+                    value={deliveryName}
+                    onChange={(e) => setDeliveryName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#0a0c10] border border-white/10 text-xs text-white placeholder-white/40 focus:outline-none focus:border-emerald-500/50"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Phone Number *"
+                    value={deliveryPhone}
+                    onChange={(e) => setDeliveryPhone(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#0a0c10] border border-white/10 text-xs text-white placeholder-white/40 focus:outline-none focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <textarea
+                  rows={2}
+                  placeholder="Full Delivery Address (House/Flat, Street, Area) *"
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0a0c10] border border-white/10 text-xs text-white placeholder-white/40 focus:outline-none focus:border-emerald-500/50 resize-none"
+                />
+
+                <input
+                  type="text"
+                  placeholder="Landmark / Gate Instructions (optional)"
+                  value={deliveryLandmark}
+                  onChange={(e) => setDeliveryLandmark(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0a0c10] border border-white/10 text-xs text-white placeholder-white/40 focus:outline-none focus:border-emerald-500/50"
+                />
+
+                {gpsError && (
+                  <p className="text-[11px] text-rose-300">{gpsError}</p>
+                )}
+
+                <label className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 cursor-pointer select-none">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Radio className={`w-3.5 h-3.5 shrink-0 ${shareLiveLocation ? 'text-emerald-400 animate-pulse' : 'text-white/40'}`} />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-white">Share Live GPS Location</p>
+                      <p className="text-[10px] text-white/60 truncate">Lets our delivery rider track your live pin</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={shareLiveLocation}
+                    onChange={(e) => setShareLiveLocation(e.target.checked)}
+                    className="w-4 h-4 accent-emerald-500 rounded"
+                  />
+                </label>
+              </div>
+            )}
 
             <div className="p-3.5 liquid-glass rounded-2xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
               <div className="flex justify-between text-white/60">

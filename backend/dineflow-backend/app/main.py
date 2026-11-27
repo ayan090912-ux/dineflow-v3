@@ -347,6 +347,7 @@ async def ensure_db_schema_columns(conn):
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_amount FLOAT DEFAULT 0.0;",
         "ALTER TABLE bills ADD COLUMN IF NOT EXISTS service_charge_percentage FLOAT DEFAULT 0.0;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_breakdown_json JSON;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_meta_json JSON;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS business_day_id VARCHAR(255);",
         "ALTER TABLE tables ADD COLUMN IF NOT EXISTS shape VARCHAR(50) DEFAULT 'RECTANGLE';",
         "ALTER TABLE tables ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT FALSE;",

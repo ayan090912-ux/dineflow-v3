@@ -854,6 +854,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.orderClient.getCustomerOrders(restaurantId, tableId, tableSessionId);
   }
 
+  async getOrderById(orderId: string): Promise<Order | null> {
+    return this.orderClient.getOrderById(orderId);
+  }
+
   async getFulfillmentTickets(restaurantId?: string, station?: 'KITCHEN' | 'BAR') {
     return this.orderClient.getFulfillmentTickets(restaurantId, station);
   }
@@ -912,6 +916,17 @@ export class DinelyApiClient extends BaseApiClient {
 
   async updateOrderStatus(orderId: string, status: any) {
     return this.orderClient.updateOrderStatus(orderId, status);
+  }
+
+  async dispatchDeliveryOrderToKitchen(orderId: string) {
+    return this.orderClient.dispatchDeliveryOrderToKitchen(orderId);
+  }
+
+  async updateDeliveryLocation(
+    orderId: string,
+    loc: { latitude: number; longitude: number; accuracy?: number; address?: string; liveLocationEnabled?: boolean }
+  ) {
+    return this.orderClient.updateDeliveryLocation(orderId, loc);
   }
 
   async updateKitchenStatus(

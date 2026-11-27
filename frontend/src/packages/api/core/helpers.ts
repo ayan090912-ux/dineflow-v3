@@ -215,6 +215,7 @@ export function normalizeOrder(raw: any): Order {
     hookahStatus: (rawH ? String(rawH).toUpperCase() : (hasH ? (raw.status ? String(raw.status).toUpperCase() : 'PENDING') : undefined)) as any,
     claimedBy: raw.claimed_by || raw.claimedBy || undefined,
     deliveryStatus: raw.delivery_status || raw.deliveryStatus || undefined,
+    deliveryMeta: raw.delivery_meta || raw.deliveryMeta || undefined,
     deliveredAt: raw.delivered_at || raw.deliveredAt || undefined,
     customerName: raw.customer_name || raw.customerName || 'Guest',
     notes: raw.notes || '',

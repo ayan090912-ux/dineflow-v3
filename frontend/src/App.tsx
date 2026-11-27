@@ -19,6 +19,7 @@ const WaiterTerminalOS = lazy(() => import('./apps/waiter/WaiterTerminalOS').the
 const KitchenETADashboard = lazy(() => import('./apps/restaurant/KitchenETADashboard').then(m => ({ default: m.KitchenETADashboard })));
 const BarTerminal = lazy(() => import('./apps/bar/BarTerminal').then(m => ({ default: m.BarTerminal })));
 const HookahTerminal = lazy(() => import('./apps/hookah/HookahTerminal').then(m => ({ default: m.HookahTerminal })));
+const DeliveryTerminal = lazy(() => import('./apps/delivery/DeliveryTerminal').then(m => ({ default: m.DeliveryTerminal })));
 const InventoryTerminalOS = lazy(() => import('./apps/inventory/InventoryTerminalOS').then(m => ({ default: m.InventoryTerminalOS })));
 const RestaurantOperationsCenter = lazy(() => import('./apps/operations/RestaurantOperationsCenter').then(m => ({ default: m.RestaurantOperationsCenter })));
 const AuthPage = lazy(() => import('./apps/auth/AuthPage').then(m => ({ default: m.AuthPage })));
@@ -1103,6 +1104,39 @@ function AppContent() {
         }
 
         return <HookahTerminal restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
+      }
+
+      // 4.6. Delivery Terminal
+      if (tenantApp === 'DELIVERY') {
+        if (!currentUser) {
+          return (
+            <RoleLoginPage
+              portal="waiter"
+              onNavigate={navigateTo}
+              onLoginSuccess={(_, user) => {
+                setCurrentUser(user);
+                navigateTo('/delivery-terminal');
+              }}
+            />
+          );
+        }
+
+        const isAuthorizedStaff =
+          currentUser.role === 'SUPER_ADMIN' ||
+          (currentUser.restaurantId === resolvedTenant.id && ['DELIVERY', 'DRIVER', 'RIDER', 'WAITER', 'MANAGER', 'OWNER', 'RESTAURANT_OWNER'].includes(currentUser.role)) ||
+          (currentUser.email && (resolvedTenant.email?.toLowerCase() === currentUser.email.toLowerCase() || (resolvedTenant as any).ownerEmail?.toLowerCase() === currentUser.email.toLowerCase()));
+
+        if (!isAuthorizedStaff) {
+          return (
+            <AccessDeniedScreen
+              tenantName={resolvedTenant.name}
+              requiredRole="DELIVERY / FLOOR STAFF"
+              onLogout={() => handleLogout('/login')}
+            />
+          );
+        }
+
+        return <DeliveryTerminal restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
       }
 
       // 5. Inventory Terminal

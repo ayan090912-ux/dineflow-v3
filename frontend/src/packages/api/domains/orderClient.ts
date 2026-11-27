@@ -149,12 +149,13 @@ export class OrderClient {
     try {
       const apiBase = getApiBaseUrl();
       const isEventOrder = Boolean(orderData.eventId) || orderData.orderType === 'WEDDING_EVENT';
+      const isDeliveryOrder = orderData.orderType === 'DELIVERY';
       const payload = {
         id: orderData.id,
         restaurantId: restId,
-        tableId: orderData.tableId || (isEventOrder ? undefined : `tbl-${restId}-${(orderData.tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '_')}`),
-        tableNumber: orderData.tableNumber || 'Table 01',
-        tableSessionId: orderData.tableSessionId || (isEventOrder ? undefined : `sess-${restId}-${Date.now()}`),
+        tableId: isDeliveryOrder ? undefined : (orderData.tableId || (isEventOrder ? undefined : `tbl-${restId}-${(orderData.tableNumber || 'Table 01').toLowerCase().replace(/\s+/g, '_')}`)),
+        tableNumber: isDeliveryOrder ? 'DELIVERY' : (orderData.tableNumber || 'Table 01'),
+        tableSessionId: isDeliveryOrder ? undefined : (orderData.tableSessionId || (isEventOrder ? undefined : `sess-${restId}-${Date.now()}`)),
         customerName: orderData.customerName || 'Guest',
         notes: orderData.notes || '',
         orderType: orderData.orderType || (isEventOrder ? 'WEDDING_EVENT' : 'DINE_IN'),
@@ -164,6 +165,12 @@ export class OrderClient {
         legalDrinkingAgeAffirmed: (orderData as any).legalDrinkingAgeAffirmed,
         customerPhone: (orderData as any).customerPhone || undefined,
         customerEmail: (orderData as any).customerEmail || undefined,
+        deliveryAddress: (orderData as any).deliveryAddress || orderData.deliveryMeta?.deliveryAddress || undefined,
+        deliveryLandmark: (orderData as any).deliveryLandmark || orderData.deliveryMeta?.landmark || undefined,
+        deliveryLat: (orderData as any).deliveryLat ?? orderData.deliveryMeta?.latitude ?? undefined,
+        deliveryLng: (orderData as any).deliveryLng ?? orderData.deliveryMeta?.longitude ?? undefined,
+        liveLocationEnabled: (orderData as any).liveLocationEnabled ?? orderData.deliveryMeta?.liveLocationEnabled ?? undefined,
+        deliveryMeta: orderData.deliveryMeta || undefined,
         items: (orderData.items || []).map((i) => ({
           id: i.id,
           menuItemId: i.menuItemId || i.id,
@@ -845,6 +852,29 @@ export class OrderClient {
       this.base.saveDatabase();
     }
     return order;
+  }
+
+  async dispatchDeliveryOrderToKitchen(orderId: string): Promise<Order | null> {
+    const resp = await this.base.executeProtectedRequest<any>(
+      `/orders/${encodeURIComponent(orderId)}/dispatch-kitchen`,
+      { method: 'POST' }
+    );
+    return resp && resp.id ? normalizeOrder(resp) : null;
+  }
+
+  async updateDeliveryLocation(
+    orderId: string,
+    loc: { latitude: number; longitude: number; accuracy?: number; address?: string; liveLocationEnabled?: boolean }
+  ): Promise<Order | null> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/delivery-location`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(loc),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.id ? normalizeOrder(data) : null;
   }
 
   async updateKitchenStatus(

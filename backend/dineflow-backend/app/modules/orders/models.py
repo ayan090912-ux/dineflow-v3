@@ -45,6 +45,7 @@ class Order(Base, TimestampMixin):
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_status: Mapped[Optional[str]] = mapped_column(String(40), default="UNPAID", nullable=True)  # UNPAID | PAID
     payment_method: Mapped[Optional[str]] = mapped_column(String(50), default="CASH", nullable=True)
+    delivery_meta_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
 
 class OrderItem(Base, TimestampMixin):

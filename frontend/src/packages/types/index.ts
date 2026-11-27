@@ -963,7 +963,21 @@ export interface ShiftSummaryData {
   assignedSection: string;
 }
 
-export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'IN_KITCHEN' | 'PREPARING' | 'IN_PREPARATION' | 'PREPARING_DRINKS' | 'READY' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
+export type OrderStatus = 'PENDING' | 'PENDING_DELIVERY' | 'CONFIRMED' | 'IN_KITCHEN' | 'PREPARING' | 'IN_PREPARATION' | 'PREPARING_DRINKS' | 'READY' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
+
+export interface DeliveryMeta {
+  customerPhone?: string;
+  deliveryAddress?: string;
+  landmark?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy?: number | null;
+  liveLocationEnabled?: boolean;
+  locationUpdatedAt?: string;
+  dispatchedToKitchen?: boolean;
+  dispatchedAt?: string;
+  driverName?: string;
+}
 
 export interface OrderItem {
   id: string;
@@ -1028,7 +1042,8 @@ export interface Order {
   readyAt?: string;
   deliveredAt?: string;
   claimedBy?: string;
-  deliveryStatus?: 'PENDING' | 'WAITING_FOR_WAITER' | 'CLAIMED' | 'COLLECTED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+  deliveryStatus?: 'PENDING' | 'AWAITING_DISPATCH' | 'DISPATCHED_TO_KITCHEN' | 'WAITING_FOR_WAITER' | 'CLAIMED' | 'COLLECTED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+  deliveryMeta?: DeliveryMeta;
   pickupCode?: string;
   pickupStatus?: 'UNCLAIMED' | 'REDEEMED' | string;
   claimedAt?: string;

@@ -22,6 +22,7 @@ export type TenantAppType =
   | 'CART_OS'
   | 'HUB'
   | 'HOOKAH'
+  | 'DELIVERY'
   | 'INVENTORY'
   | 'BILLING'
   | 'SETTINGS'
@@ -247,6 +248,14 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
   // 4.5. Hookah & Shisha Terminal
   if (p === '/hookah' || p.startsWith('/hookah/') || p === '/shisha' || p.startsWith('/shisha/')) {
     return 'HOOKAH';
+  }
+
+  // 4.6. Delivery Terminal & Customer Delivery Ordering
+  if (p === '/delivery-terminal' || p.startsWith('/delivery-terminal/')) {
+    return 'DELIVERY';
+  }
+  if (p === '/delivery' || p.startsWith('/delivery/')) {
+    return 'CUSTOMER';
   }
 
   // 5. Inventory Terminal

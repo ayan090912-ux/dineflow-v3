@@ -96,6 +96,7 @@ import { KitchenETADashboard } from './KitchenETADashboard';
 import { WaiterTerminalOS } from '../waiter/WaiterTerminalOS';
 import { BarTerminal } from '../bar/BarTerminal';
 import { HookahTerminal } from '../hookah/HookahTerminal';
+import { DeliveryTerminal } from '../delivery/DeliveryTerminal';
 import { realtimeBus } from '../../packages/api/realtime';
 import { downloadDigitalReceiptPNG } from '../../packages/utils/receiptDownloader';
 import { calculateAuthoritativeSessionBill } from '../../packages/utils/billingUtils';
@@ -137,7 +138,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   onNavigate,
 }) => {
   const { theme, updateThemeColor, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'hookah' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'bar' | 'hookah' | 'delivery' | 'tables' | 'menu' | 'staff' | 'inventory' | 'billing' | 'theme' | 'waiter' | 'qr_pickup' | 'business_day' | 'day_management' | 'workspace_settings'>(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab')?.toLowerCase();
@@ -153,6 +154,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (tabParam === 'bar') return 'bar';
       if (tabParam === 'hookah' || tabParam === 'shisha') return 'hookah';
       if (tabParam === 'waiter') return 'waiter';
+      if (tabParam === 'delivery') return 'delivery';
       if (tabParam === 'inventory') return 'inventory';
       if (tabParam === 'billing') return 'billing';
       if (tabParam === 'theme') return 'theme';
@@ -174,6 +176,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
       if (p.includes('/orders')) return 'orders';
       if (p.includes('/theme')) return 'theme';
       if (p.includes('/waiter')) return 'waiter';
+      if (p.includes('/delivery-terminal')) return 'delivery';
       if (p.includes('/kitchen')) return 'kitchen';
       if (p.includes('/bar')) return 'bar';
       if (p.includes('/hookah') || p.includes('/shisha')) return 'hookah';
@@ -2141,6 +2144,12 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                       ? [{ id: 'waiter', label: 'Waiter Terminal', icon: <PhoneCall className="w-4 h-4 text-amber-400" />, badge: 'LIVE' }]
                       : []),
                     {
+                      id: 'delivery',
+                      label: 'Delivery Terminal',
+                      icon: <Truck className="w-4 h-4 text-emerald-400" />,
+                      badge: orders.filter((o) => (o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY') && o.status === 'PENDING_DELIVERY').length || undefined,
+                    },
+                    {
                       id: 'orders',
                       label: 'POS Orders',
                       icon: <ShoppingBag className="w-4 h-4" />,
@@ -2385,6 +2394,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'theme' && 'Brand & Storefront Terminal OS'}
               {activeTab === 'workspace_settings' && 'Terminals & Settings'}
               {activeTab === 'waiter' && 'Waiter Terminal OS'}
+              {activeTab === 'delivery' && 'Delivery Terminal & Live GPS'}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               {activeTab === 'dashboard' && 'Live performance metrics, revenue analytics, and station status across your restaurant.'}
@@ -2395,6 +2405,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
               {activeTab === 'tables' && 'Interactive dining area floorplan, live table states, and printable QR standee cards.'}
               {activeTab === 'menu' && 'Food & beverage catalog, category classifications, variants, and live availability toggles.'}
               {activeTab === 'waiter' && 'Table servicing, mobile ordering pass, and runner alerts.'}
+              {activeTab === 'delivery' && 'Receive online delivery orders, auto-dispatch to kitchen, and track customer live GPS.'}
               {activeTab === 'staff' && 'Employee profiles, shift schedules, username & password credentials, and assigned terminal stations.'}
               {activeTab === 'inventory' && 'Track kitchen and bar stock levels, minimum reorder thresholds, and suppliers.'}
               {activeTab === 'billing' && 'Table checkouts, split bills, GST/tax management, and payment receipts.'}
@@ -3272,6 +3283,17 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 </div>
               </Card>
             )}
+          </div>
+        )}
+
+        {/* Tab 3.6: Delivery Terminal */}
+        {visitedTabs.has('delivery') && (
+          <div style={{ display: activeTab === 'delivery' ? 'block' : 'none' }}>
+            <DeliveryTerminal
+              restaurant={currentRestaurant || activeRestaurant}
+              orders={orders}
+              isEmbedded={true}
+            />
           </div>
         )}
 
