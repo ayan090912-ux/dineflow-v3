@@ -2893,6 +2893,58 @@ async def update_delivery_live_location(
     return resp_data
 
 
+class RiderPaymentSchema(BaseModel):
+    paymentMethod: Optional[str] = "UPI"
+
+
+@router.post("/{order_id}/rider-payment")
+async def mark_rider_payment_received(
+    order_id: str,
+    payload: RiderPaymentSchema = RiderPaymentSchema(),
+    db: AsyncSession = Depends(get_db)
+):
+    res = await db.execute(select(Order).where(Order.id == order_id))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    now_utc = datetime.now(timezone.utc)
+    method = (payload.paymentMethod or "UPI").upper()
+    meta = dict(order.delivery_meta_json or {})
+    meta["paymentMethod"] = method
+    meta["paidAt"] = now_utc.isoformat()
+    meta["collectedByRider"] = True
+
+    order.payment_status = "PAID"
+    order.status = "DELIVERED"
+    order.delivery_meta_json = meta
+
+    await db.commit()
+    await db.refresh(order)
+    resp_data = format_order_response(order)
+
+    import asyncio
+    from app.modules.websocket.manager import ws_manager
+
+    async def _broadcast_paid():
+        await ws_manager.broadcast_event(
+            restaurant_id=order.restaurant_id,
+            event_type="order_updated",
+            payload={
+                **resp_data,
+                "orderId": order.id,
+                "order_id": order.id,
+                "paymentStatus": "PAID",
+                "status": "DELIVERED",
+                "deliveryMeta": meta,
+            },
+            target_audience=["DELIVERY", "OWNER", "POS", "BILLING", "KITCHEN"]
+        )
+
+    asyncio.create_task(_broadcast_paid())
+    return resp_data
+
+
 @router.get("/{order_id}")
 async def get_order_by_id(
     order_id: str,

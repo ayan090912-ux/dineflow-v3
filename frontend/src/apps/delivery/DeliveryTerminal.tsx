@@ -77,6 +77,7 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [qrPassOrder, setQrPassOrder] = useState<Order | null>(null);
+  const [isDeliveryQrModalOpen, setIsDeliveryQrModalOpen] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
     baseLat: null,
     baseLng: null,
@@ -465,6 +466,17 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
                 Fee: {meta.deliveryFee === 0 ? 'FREE' : formatCurrency(meta.deliveryFee)}
               </span>
             )}
+            <span
+              className={`px-2 py-0.5 rounded font-mono font-semibold border ${
+                order.paymentStatus === 'PAID'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+              }`}
+            >
+              {order.paymentStatus === 'PAID'
+                ? `PAID${meta.paymentMethod ? ` · ${meta.paymentMethod}` : ''}`
+                : 'UNPAID'}
+            </span>
             {meta.liveLocationEnabled && hasCoords ? (
               <span className="inline-flex items-center gap-1 text-emerald-400 font-mono font-semibold">
                 <Radio className="w-3 h-3 animate-pulse" />
@@ -577,6 +589,14 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
               <ExternalLink className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Open</span>
             </a>
+            <button
+              type="button"
+              onClick={() => setIsDeliveryQrModalOpen(true)}
+              className="h-8 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-xs font-semibold text-emerald-300 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span>Share QR</span>
+            </button>
           </div>
 
           <div className="lg:col-span-6 flex flex-wrap items-center justify-between lg:justify-end gap-2">
@@ -1031,6 +1051,46 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Delivery Ordering QR Share Modal */}
+      <Modal
+        isOpen={isDeliveryQrModalOpen}
+        onClose={() => setIsDeliveryQrModalOpen(false)}
+        title="Share Delivery Ordering QR"
+      >
+        <div className="space-y-4 text-xs text-slate-200">
+          <p className="text-slate-400">
+            Customers can scan this QR code or open the link to browse your menu, pin their GPS location, and place delivery orders directly to this terminal.
+          </p>
+          <div className="p-5 rounded-xl bg-white text-slate-900 flex flex-col items-center text-center space-y-2.5">
+            <span className="text-xs font-bold uppercase tracking-wide">{restaurant?.name || 'Order Delivery'}</span>
+            <QRCodeSVG value={deliveryShareUrl} size={196} level="M" includeMargin={true} />
+            <span className="text-[11px] font-mono text-slate-600 break-all">{deliveryShareUrl}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(deliveryShareUrl);
+                showToast('success', 'Link Copied', 'Delivery ordering URL copied to clipboard.');
+              }}
+              className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Copy Link</span>
+            </button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Order online from ${restaurant?.name || 'us'}! Tap here to order delivery: ${deliveryShareUrl}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-1.5"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share on WhatsApp</span>
+            </a>
+          </div>
+        </div>
+      </Modal>
 
       {/* Rider QR & Payment Pass Modal */}
       <Modal

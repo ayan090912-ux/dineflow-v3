@@ -13,6 +13,27 @@ export const RiderPassPage: React.FC<{ restaurant?: Restaurant | null }> = ({ re
   const [billingConfig, setBillingConfig] = useState<{ upiId?: string; upiMerchantName?: string; upiQrUrl?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+
+  const handleMarkPaymentReceived = async (method: 'CASH' | 'UPI') => {
+    if (!order || isMarkingPaid) return;
+    setIsMarkingPaid(true);
+    try {
+      const updated = await api.markRiderPaymentReceived(order.id, method);
+      if (updated) {
+        setOrder(updated);
+      } else {
+        setOrder({
+          ...order,
+          paymentStatus: 'PAID',
+          status: 'DELIVERED',
+          deliveryMeta: { ...(order.deliveryMeta || {}), paymentMethod: method, collectedByRider: true },
+        });
+      }
+    } finally {
+      setIsMarkingPaid(false);
+    }
+  };
 
   useEffect(() => {
     const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
@@ -199,10 +220,39 @@ export const RiderPassPage: React.FC<{ restaurant?: Restaurant | null }> = ({ re
           {upiId && (
             <p className="text-[11px] font-mono text-slate-600">UPI ID: {upiId}</p>
           )}
-          {order.paymentStatus === 'PAID' && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Already Paid
-            </span>
+          {order.paymentStatus === 'PAID' ? (
+            <div className="w-full py-2.5 px-3 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold flex items-center justify-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>
+                Payment Received{order.deliveryMeta?.paymentMethod ? ` (${order.deliveryMeta.paymentMethod})` : ''} · Delivered
+              </span>
+            </div>
+          ) : (
+            <div className="w-full pt-2 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-600">
+                Tap after collecting {formatCurrency(order.totalAmount)} from customer:
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={isMarkingPaid}
+                  onClick={() => handleMarkPaymentReceived('CASH')}
+                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{isMarkingPaid ? 'Saving...' : 'Cash Received'}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isMarkingPaid}
+                  onClick={() => handleMarkPaymentReceived('UPI')}
+                  className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{isMarkingPaid ? 'Saving...' : 'UPI Received'}</span>
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

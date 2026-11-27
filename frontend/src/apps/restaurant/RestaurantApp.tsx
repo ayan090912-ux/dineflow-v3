@@ -237,7 +237,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   const [billingStatusFilter, setBillingStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'CANCELLED'>('ALL');
   const [billingPaymentFilter, setBillingPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'UPI'>('ALL');
   const [billingDateFilter, setBillingDateFilter] = useState<'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK'>('ALL');
-  const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'taxes' | 'settings' | 'printers'>('terminal');
+  const [billingSubTab, setBillingSubTab] = useState<'terminal' | 'invoices' | 'delivery' | 'taxes' | 'settings' | 'printers'>('terminal');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const recentToastKeys = useRef<Map<string, number>>(new Map());
   const handledOrderEventsRef = useRef<Set<string>>(new Set());
@@ -245,6 +245,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
   // POS Orders Stream States & Live Watch
   const [posDayFilter, setPosDayFilter] = useState<'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK'>('TODAY');
   const [posStatusFilter, setPosStatusFilter] = useState<'ALL' | 'PENDING' | 'IN_KITCHEN' | 'READY' | 'DELIVERED'>('ALL');
+  const [posOrderTypeFilter, setPosOrderTypeFilter] = useState<'ALL' | 'DINE_IN' | 'DELIVERY'>('ALL');
   const [posSearchQuery, setPosSearchQuery] = useState<string>('');
   const [posAutoWatch, setPosAutoWatch] = useState<boolean>(true);
   const [posLastUpdated, setPosLastUpdated] = useState<Date>(new Date());
@@ -304,6 +305,15 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
         return false;
       }
 
+      // 2b. Order Type filter (Dine-In / Counter vs Delivery)
+      const isDeliveryOrder = o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY';
+      if (posOrderTypeFilter === 'DELIVERY' && !isDeliveryOrder) {
+        return false;
+      }
+      if (posOrderTypeFilter === 'DINE_IN' && isDeliveryOrder) {
+        return false;
+      }
+
       // 3. Search query
       if (posSearchQuery.trim()) {
         const q = posSearchQuery.toLowerCase().trim();
@@ -316,7 +326,7 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
       return true;
     });
-  }, [orders, posDayFilter, posStatusFilter, posSearchQuery, todayKeyStr, yesterdayKeyStr, sevenDaysAgoTime, getDayKey]);
+  }, [orders, posDayFilter, posStatusFilter, posOrderTypeFilter, posSearchQuery, todayKeyStr, yesterdayKeyStr, sevenDaysAgoTime, getDayKey]);
 
   // Group filtered orders by dayKey in descending date order
   const dayWiseOrderGroups = useMemo(() => {
@@ -2932,6 +2942,28 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
               {/* Status & Search Filters */}
               <div className="flex items-center gap-2 flex-wrap">
+                {/* Order Channel Filter: All / Dine-In & Counter / Delivery */}
+                <div className="flex items-center gap-1 border-r border-white/10 pr-2 mr-1">
+                  {[
+                    { key: 'ALL', label: 'All Orders' },
+                    { key: 'DINE_IN', label: 'Dine-In / POS' },
+                    { key: 'DELIVERY', label: `Delivery (${orders.filter((o) => o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY').length})` },
+                  ].map((ch) => (
+                    <button
+                      key={ch.key}
+                      onClick={() => setPosOrderTypeFilter(ch.key as any)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition-all cursor-pointer ${
+                        posOrderTypeFilter === ch.key
+                          ? ch.key === 'DELIVERY'
+                            ? 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-500/40'
+                            : 'bg-amber-500/25 text-amber-300 font-bold border border-amber-500/40'
+                          : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 border border-white/5'
+                      }`}
+                    >
+                      {ch.label}
+                    </button>
+                  ))}
+                </div>
                 {/* Status Dropdown / Pills */}
                 <div className="flex items-center gap-1">
                   {(['ALL', 'PENDING', 'IN_KITCHEN', 'READY', 'DELIVERED'] as const).map((status) => (
@@ -4560,6 +4592,22 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => setBillingSubTab('delivery')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    billingSubTab === 'delivery'
+                      ? 'bg-[#181d27] text-white border border-[#2d3545] shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#181d27]/60'
+                  }`}
+                >
+                  <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Delivery Bills</span>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${billingSubTab === 'delivery' ? 'bg-[#222838] text-white' : 'bg-[#181d27] text-slate-400'}`}>
+                    {orders.filter((o) => o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY').length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setBillingSubTab('taxes')}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     billingSubTab === 'taxes'
@@ -5266,6 +5314,99 @@ export const RestaurantApp: React.FC<RestaurantAppProps> = ({
                 })()}
               </>
             )}
+
+            {billingSubTab === 'delivery' && (() => {
+              const delivOrders = [...orders]
+                .filter((o) => o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY')
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              const paidTotal = delivOrders
+                .filter((o) => o.paymentStatus === 'PAID')
+                .reduce((s, o) => s + Number(o.totalAmount || 0), 0);
+              const unpaidTotal = delivOrders
+                .filter((o) => o.paymentStatus !== 'PAID' && o.status !== 'CANCELLED')
+                .reduce((s, o) => s + Number(o.totalAmount || 0), 0);
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Card className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl">
+                      <span className="text-[10px] font-mono text-slate-400 uppercase">Total Delivery Bills</span>
+                      <div className="text-xl font-bold font-mono text-white mt-1">{delivOrders.length}</div>
+                    </Card>
+                    <Card className="p-4 bg-[#12151b] border border-emerald-500/25 rounded-xl">
+                      <span className="text-[10px] font-mono text-emerald-400 uppercase">Collected (Paid)</span>
+                      <div className="text-xl font-bold font-mono text-emerald-400 mt-1">{formatCurrency(paidTotal, theme.currency)}</div>
+                    </Card>
+                    <Card className="p-4 bg-[#12151b] border border-amber-500/25 rounded-xl">
+                      <span className="text-[10px] font-mono text-amber-400 uppercase">Pending Collection</span>
+                      <div className="text-xl font-bold font-mono text-amber-400 mt-1">{formatCurrency(unpaidTotal, theme.currency)}</div>
+                    </Card>
+                  </div>
+
+                  {delivOrders.length === 0 ? (
+                    <Card className="p-10 text-center bg-[#12151b] border border-[#1e232e] rounded-xl text-xs text-slate-400 font-mono">
+                      No delivery bills recorded yet.
+                    </Card>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {delivOrders.map((ord) => (
+                        <Card key={ord.id} className="p-4 bg-[#12151b] border border-[#1e232e] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono font-bold text-white text-xs">#{ord.orderNumber || ord.id.slice(-4)}</span>
+                              <span className="text-xs font-semibold text-emerald-300">{ord.customerName || 'Customer'}</span>
+                              {(ord.deliveryMeta?.customerPhone || ord.customerPhone) && (
+                                <span className="text-[11px] font-mono text-slate-400">{ord.deliveryMeta?.customerPhone || ord.customerPhone}</span>
+                              )}
+                              <Badge variant={ord.paymentStatus === 'PAID' ? 'success' : 'warning'} className="text-[10px] font-mono">
+                                {ord.paymentStatus === 'PAID'
+                                  ? `PAID${ord.deliveryMeta?.paymentMethod ? ` (${ord.deliveryMeta.paymentMethod})` : ''}`
+                                  : 'UNPAID'}
+                              </Badge>
+                              <Badge variant="outline" className="text-[10px] font-mono border-white/10 text-slate-300">
+                                {ord.status.replace(/_/g, ' ')}
+                              </Badge>
+                            </div>
+                            {ord.deliveryMeta?.deliveryAddress && (
+                              <p className="text-[11px] text-slate-400 truncate">📍 {ord.deliveryMeta.deliveryAddress}</p>
+                            )}
+                            <p className="text-[11px] font-mono text-slate-400">
+                              {(ord.items || []).map((i) => `${i.quantity}x ${i.name}`).join(' • ')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right font-mono">
+                              <span className="text-sm font-bold text-emerald-400 block">{formatCurrency(ord.totalAmount, theme.currency)}</span>
+                              {typeof ord.deliveryMeta?.deliveryFee === 'number' && (
+                                <span className="text-[10px] text-slate-400 block">
+                                  Delivery: {ord.deliveryMeta.deliveryFee === 0 ? 'FREE' : formatCurrency(ord.deliveryMeta.deliveryFee, theme.currency)}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-500 block">
+                                {new Date(ord.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            {ord.paymentStatus !== 'PAID' && ord.status !== 'CANCELLED' && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="text-xs font-mono"
+                                onClick={async () => {
+                                  await api.markRiderPaymentReceived(ord.id, 'CASH');
+                                  loadData();
+                                  addToast('success', 'Delivery Bill Settled', `Order #${ord.id.slice(-4)} marked as PAID.`);
+                                }}
+                              >
+                                Mark Paid
+                              </Button>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <Card className="bg-[#12151b] border-[#1e232e] p-8 max-w-lg mx-auto text-center space-y-4 rounded-2xl shadow-xl mt-8">

@@ -941,6 +941,10 @@ export class DinelyApiClient extends BaseApiClient {
     return this.orderClient.updateDeliveryLocation(orderId, loc);
   }
 
+  async markRiderPaymentReceived(orderId: string, paymentMethod: 'CASH' | 'UPI' = 'UPI') {
+    return this.orderClient.markRiderPaymentReceived(orderId, paymentMethod);
+  }
+
   async updateKitchenStatus(
     orderId: string,
     status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',

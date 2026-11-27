@@ -981,6 +981,9 @@ export interface DeliveryMeta {
   deliveryFee?: number;
   rejected?: boolean;
   rejectionReason?: string;
+  paymentMethod?: string;
+  paidAt?: string;
+  collectedByRider?: boolean;
 }
 
 export interface DeliverySettings {

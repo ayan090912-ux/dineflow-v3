@@ -905,6 +905,21 @@ export class OrderClient {
     return data && data.id ? normalizeOrder(data) : null;
   }
 
+  async markRiderPaymentReceived(
+    orderId: string,
+    paymentMethod: 'CASH' | 'UPI' = 'UPI'
+  ): Promise<Order | null> {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/orders/${encodeURIComponent(orderId)}/rider-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentMethod }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.id ? normalizeOrder(data) : null;
+  }
+
   async updateKitchenStatus(
     orderId: string,
     status: 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED',
