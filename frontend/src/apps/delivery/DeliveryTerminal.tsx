@@ -806,32 +806,183 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
         </div>
 
         {viewMode === 'LIVE' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-            {/* COLUMN 1: INCOMING (AWAITING DISPATCH TO KITCHEN) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+            {/* SECTION 1: ACTIVE ORDERS (INCOMING + IN KITCHEN / READY TO COLLECT) */}
             <div className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-3.5">
               <div className="flex items-center justify-between pb-2.5 border-b border-[#1e232e]">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-amber-400" />
-                  <span className="text-sm font-semibold text-white">1. Incoming Orders</span>
+                  <span className="text-sm font-semibold text-white">Active Orders</span>
                   <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                    {incomingOrders.length}
+                    {incomingOrders.length + prepOrders.length}
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-500">Send to Kitchen</span>
+                <span className="text-[11px] text-slate-500">Incoming & Kitchen Prep</span>
               </div>
 
-              {incomingOrders.length === 0 ? (
+              {incomingOrders.length === 0 && prepOrders.length === 0 ? (
                 <div className="p-8 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
                   <Truck className="w-7 h-7 text-amber-400/60 mx-auto" />
-                  <p className="text-xs font-semibold text-slate-300">No New Delivery Orders</p>
-                  <p className="text-[11px] text-slate-500">Orders placed via the delivery link arrive here first.</p>
+                  <p className="text-xs font-semibold text-slate-300">Delivery Queue Clear</p>
+                  <p className="text-[11px] text-slate-500">New delivery orders arrive here. Accept to send to Kitchen, then collect & pass to Rider.</p>
                 </div>
               ) : (
-                incomingOrders.map((order) => (
-                  <div key={order.id} className="p-4 rounded-xl bg-white/[0.03] border border-amber-500/30 space-y-3">
+                <div className="space-y-3">
+                  {incomingOrders.map((order) => (
+                    <div key={order.id} className="p-4 rounded-xl bg-white/[0.03] border border-amber-500/30 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-amber-400 text-base">#{order.id.slice(-4)}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                            NEW ORDER
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-emerald-400 text-sm">{formatCurrency(order.totalAmount)}</span>
+                      </div>
+
+                      {renderCustomerLocationBlock(order)}
+
+                      <div className="space-y-1 text-xs border-t border-white/[0.06] pt-2">
+                        {(order.items || []).map((it) => (
+                          <div key={it.id} className="flex justify-between text-slate-200">
+                            <span><strong className="text-amber-400 font-mono">{it.quantity}x</strong> {it.name}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={processingIds.has(order.id)}
+                          onClick={() => handleRejectOrder(order)}
+                          className="col-span-1 border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-bold"
+                          icon={<X className="w-3.5 h-3.5" />}
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          variant="brand"
+                          size="sm"
+                          disabled={processingIds.has(order.id)}
+                          onClick={() => handleDispatchToKitchen(order)}
+                          className="col-span-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
+                          icon={<Send className="w-3.5 h-3.5" />}
+                        >
+                          {processingIds.has(order.id) ? 'Sending...' : 'Accept & Send to Kitchen'}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {prepOrders.map((order) => {
+                    const isReady = order.status === 'READY';
+                    return (
+                      <div
+                        key={order.id}
+                        className={`p-4 rounded-xl bg-white/[0.03] border space-y-3 ${
+                          isReady ? 'border-emerald-500/40' : 'border-sky-500/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-white text-base">#{order.id.slice(-4)}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                              isReady
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                            }`}>
+                              {isReady ? 'READY AT KITCHEN' : order.status}
+                            </span>
+                          </div>
+                          <span className="font-mono font-bold text-emerald-400 text-sm">{formatCurrency(order.totalAmount)}</span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
+                          {order.kitchenStatus && (
+                            <span className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-slate-300 inline-flex items-center gap-1">
+                              <ChefHat className="w-3 h-3 text-amber-400" /> Kitchen: {order.kitchenStatus}
+                            </span>
+                          )}
+                          {order.barStatus && (
+                            <span className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-slate-300 inline-flex items-center gap-1">
+                              <Wine className="w-3 h-3 text-sky-400" /> Bar: {order.barStatus}
+                            </span>
+                          )}
+                          {order.hookahStatus && (
+                            <span className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-slate-300 inline-flex items-center gap-1">
+                              <Sparkles className="w-3 h-3 text-amber-400" /> Hookah: {order.hookahStatus}
+                            </span>
+                          )}
+                        </div>
+
+                        {isReady && (
+                          <div className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
+                            <BellRing className="w-3.5 h-3.5 animate-pulse shrink-0" />
+                            <span>Ready at Kitchen — Collect Order for Rider</span>
+                          </div>
+                        )}
+
+                        {renderCustomerLocationBlock(order)}
+
+                        <div className="space-y-1 text-xs border-t border-white/[0.06] pt-2">
+                          {(order.items || []).map((it) => (
+                            <div key={it.id} className="flex justify-between text-slate-200">
+                              <span><strong className="text-amber-400 font-mono">{it.quantity}x</strong> {it.name}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <Button
+                          variant="brand"
+                          size="sm"
+                          disabled={processingIds.has(order.id)}
+                          onClick={() => handleOutForDelivery(order)}
+                          className={`w-full font-bold ${
+                            isReady
+                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                              : 'bg-sky-600 hover:bg-sky-500 text-white'
+                          }`}
+                          icon={<Truck className="w-3.5 h-3.5" />}
+                        >
+                          {processingIds.has(order.id)
+                            ? 'Updating...'
+                            : isReady
+                            ? 'Collect & Pass to Rider'
+                            : 'Pass to Rider'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 2: PASSED TO RIDER / OUT FOR DELIVERY */}
+            <div className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-3.5">
+              <div className="flex items-center justify-between pb-2.5 border-b border-[#1e232e]">
+                <div className="flex items-center gap-2">
+                  <Navigation className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-semibold text-white">Passed to Rider</span>
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    {outForDeliveryOrders.length}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500">Out for Delivery & Live GPS</span>
+              </div>
+
+              {outForDeliveryOrders.length === 0 ? (
+                <div className="p-8 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
+                  <Navigation className="w-7 h-7 text-emerald-400/60 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-300">No Active Riders Out</p>
+                  <p className="text-[11px] text-slate-500">Orders passed to riders appear here with WhatsApp share, QR pass, and live GPS.</p>
+                </div>
+              ) : (
+                outForDeliveryOrders.map((order) => (
+                  <div key={order.id} className="p-4 rounded-xl bg-white/[0.03] border border-emerald-500/35 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold text-amber-400 text-base">#{order.id.slice(-4)}</span>
-                      <span className="font-mono font-bold text-emerald-400 text-sm">{formatCurrency(order.totalAmount)}</span>
+                      <span className="font-mono font-bold text-emerald-400 text-base">#{order.id.slice(-4)}</span>
+                      <span className="font-mono font-bold text-white text-sm">{formatCurrency(order.totalAmount)}</span>
                     </div>
 
                     {renderCustomerLocationBlock(order)}
@@ -843,156 +994,6 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
                         </div>
                       ))}
                     </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={processingIds.has(order.id)}
-                        onClick={() => handleRejectOrder(order)}
-                        className="col-span-1 border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-bold"
-                        icon={<X className="w-3.5 h-3.5" />}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        variant="brand"
-                        size="sm"
-                        disabled={processingIds.has(order.id)}
-                        onClick={() => handleDispatchToKitchen(order)}
-                        className="col-span-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
-                        icon={<Send className="w-3.5 h-3.5" />}
-                      >
-                        {processingIds.has(order.id) ? 'Sending...' : 'Accept & Send to Kitchen'}
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* COLUMN 2: IN KITCHEN / READY FOR RIDER */}
-            <div className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-3.5">
-              <div className="flex items-center justify-between pb-2.5 border-b border-[#1e232e]">
-                <div className="flex items-center gap-2">
-                  <ChefHat className="w-4 h-4 text-sky-400" />
-                  <span className="text-sm font-semibold text-white">2. Kitchen & Ready</span>
-                  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                    {prepOrders.length}
-                  </span>
-                </div>
-                <span className="text-[11px] text-slate-500">Prep Status</span>
-              </div>
-
-              {prepOrders.length === 0 ? (
-                <div className="p-8 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
-                  <ChefHat className="w-7 h-7 text-sky-400/60 mx-auto" />
-                  <p className="text-xs font-semibold text-slate-300">No Orders in Prep</p>
-                  <p className="text-[11px] text-slate-500">Dispatched orders appear here with live kitchen status.</p>
-                </div>
-              ) : (
-                prepOrders.map((order) => {
-                  const isReady = order.status === 'READY';
-                  return (
-                    <div
-                      key={order.id}
-                      className={`p-4 rounded-xl bg-white/[0.03] border space-y-3 ${
-                        isReady ? 'border-emerald-500/40' : 'border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-white text-base">#{order.id.slice(-4)}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                            isReady
-                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                              : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                          }`}>
-                            {order.status}
-                          </span>
-                        </div>
-                        <span className="font-mono font-bold text-emerald-400 text-sm">{formatCurrency(order.totalAmount)}</span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
-                        {order.kitchenStatus && (
-                          <span className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-slate-300 inline-flex items-center gap-1">
-                            <ChefHat className="w-3 h-3 text-amber-400" /> Kitchen: {order.kitchenStatus}
-                          </span>
-                        )}
-                        {order.barStatus && (
-                          <span className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-slate-300 inline-flex items-center gap-1">
-                            <Wine className="w-3 h-3 text-sky-400" /> Bar: {order.barStatus}
-                          </span>
-                        )}
-                        {order.hookahStatus && (
-                          <span className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-slate-300 inline-flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-amber-400" /> Hookah: {order.hookahStatus}
-                          </span>
-                        )}
-                      </div>
-
-                      {isReady && (
-                        <div className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
-                          <BellRing className="w-3.5 h-3.5 animate-pulse shrink-0" />
-                          <span>Ready at Kitchen — Collect Order for Rider</span>
-                        </div>
-                      )}
-
-                      {renderCustomerLocationBlock(order)}
-
-                      <Button
-                        variant="brand"
-                        size="sm"
-                        disabled={processingIds.has(order.id)}
-                        onClick={() => handleOutForDelivery(order)}
-                        className={`w-full font-bold ${
-                          isReady
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                            : 'bg-sky-600 hover:bg-sky-500 text-white'
-                        }`}
-                        icon={<Truck className="w-3.5 h-3.5" />}
-                      >
-                        {processingIds.has(order.id)
-                          ? 'Updating...'
-                          : isReady
-                          ? 'Collect & Pass to Rider'
-                          : 'Out for Delivery'}
-                      </Button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* COLUMN 3: OUT FOR DELIVERY (LIVE GPS TRACKING) */}
-            <div className="bg-[#12151b] border border-[#1e232e] p-4 rounded-xl space-y-3.5">
-              <div className="flex items-center justify-between pb-2.5 border-b border-[#1e232e]">
-                <div className="flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-emerald-400" />
-                  <span className="text-sm font-semibold text-white">3. Out for Delivery</span>
-                  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                    {outForDeliveryOrders.length}
-                  </span>
-                </div>
-                <span className="text-[11px] text-slate-500">Live GPS</span>
-              </div>
-
-              {outForDeliveryOrders.length === 0 ? (
-                <div className="p-8 text-center rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
-                  <Navigation className="w-7 h-7 text-emerald-400/60 mx-auto" />
-                  <p className="text-xs font-semibold text-slate-300">No Active Riders Out</p>
-                  <p className="text-[11px] text-slate-500">Orders out for delivery show customer live GPS pins here.</p>
-                </div>
-              ) : (
-                outForDeliveryOrders.map((order) => (
-                  <div key={order.id} className="p-4 rounded-xl bg-white/[0.03] border border-emerald-500/35 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold text-emerald-400 text-base">#{order.id.slice(-4)}</span>
-                      <span className="font-mono font-bold text-white text-sm">{formatCurrency(order.totalAmount)}</span>
-                    </div>
-
-                    {renderCustomerLocationBlock(order)}
 
                     <div className="grid grid-cols-2 gap-2">
                       <a
