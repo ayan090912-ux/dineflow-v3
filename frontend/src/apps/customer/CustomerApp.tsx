@@ -996,7 +996,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
     const subtotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
     const taxRatePercent = typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5.0;
     const tax = Math.round(subtotal * (taxRatePercent / 100) * 100) / 100;
-    const total = subtotal + tax;
+    const total = Math.round((subtotal + tax + (isDeliveryMode ? cartPricing.delivFee : 0)) * 100) / 100;
 
     const orderItems: OrderItem[] = cart.map((c, idx) => {
       const isHookah = isHookahProduct(c.item);
@@ -1153,6 +1153,36 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
 
   const subtotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
   const totalCartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
+  const cartPricing = (() => {
+    const taxPct = typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5;
+    const taxAmt = Math.round(subtotal * (taxPct / 100) * 100) / 100;
+    let distKm: number | null = null;
+    let delivFee = 0;
+    let outOfRange = false;
+    if (isDeliveryMode && deliverySettings) {
+      if (
+        typeof deliverySettings.baseLat === 'number' &&
+        typeof deliverySettings.baseLng === 'number' &&
+        deliveryCoords
+      ) {
+        distKm = haversineKm(deliverySettings.baseLat, deliverySettings.baseLng, deliveryCoords.lat, deliveryCoords.lng);
+        outOfRange = deliverySettings.maxDistanceKm > 0 && distKm > deliverySettings.maxDistanceKm;
+        if (deliverySettings.freeAboveSubtotal > 0 && subtotal >= deliverySettings.freeAboveSubtotal) {
+          delivFee = 0;
+        } else {
+          delivFee = Math.round(
+            (deliverySettings.baseFee + Math.max(0, distKm - deliverySettings.baseDistanceKm) * deliverySettings.perKmFee) * 100
+          ) / 100;
+        }
+      } else if (deliverySettings.freeAboveSubtotal > 0 && subtotal >= deliverySettings.freeAboveSubtotal) {
+        delivFee = 0;
+      } else {
+        delivFee = deliverySettings.baseFee || 0;
+      }
+    }
+    const grandTotal = Math.round((subtotal + taxAmt + delivFee) * 100) / 100;
+    return { taxPct, taxAmt, distKm, delivFee, outOfRange, grandTotal };
+  })();
 
   const hasBarDivision = Boolean(currentRestaurant?.hasBar === true || currentRestaurant?.businessType === 'BAR');
   const hasHookahDivision = Boolean(currentRestaurant?.hasHookah !== false && isModuleEnabled(currentRestaurant, 'hookah'));
@@ -2310,10 +2340,10 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           onClick={() => setIsCartOpen(false)}
         >
           <div
-            className="w-full max-w-md liquid-glass-strong bg-[#0e1117]/95 border-t border-x border-white/[0.14] rounded-t-3xl p-5 sm:p-6 space-y-4 max-h-[85vh] flex flex-col shadow-[0_-16px_48px_rgba(0,0,0,0.7)] safe-bottom"
+            className="w-full max-w-md liquid-glass-strong bg-[#0e1117]/95 border-t border-x border-white/[0.14] rounded-t-3xl p-5 sm:p-6 space-y-3.5 max-h-[88vh] flex flex-col shadow-[0_-16px_48px_rgba(0,0,0,0.7)] safe-bottom"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+            <div className="shrink-0 flex items-center justify-between pb-3 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-4 h-4 text-amber-400" />
                 <h3 className="font-bold text-white text-sm">Your Order Cart ({totalCartCount})</h3>
@@ -2327,7 +2357,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               </button>
             </div>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
+            <div className="space-y-2">
               {cart.map((c, idx) => (
                 <div key={idx} className="p-3 liquid-glass rounded-xl border border-white/[0.08] flex items-center justify-between">
                   <div className="space-y-0.5 min-w-0 flex-1 pr-2">
@@ -2476,70 +2507,39 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 </label>
               </div>
             )}
+            </div>
 
+            <div className="shrink-0 space-y-3 pt-1">
             <div className="p-3.5 liquid-glass rounded-2xl border border-white/[0.08] space-y-1.5 font-mono text-xs">
-              {(() => {
-                const taxPct = typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5;
-                const taxAmt = Math.round(subtotal * (taxPct / 100) * 100) / 100;
-                let distKm: number | null = null;
-                let delivFee = 0;
-                let outOfRange = false;
-                if (isDeliveryMode && deliverySettings) {
-                  if (
-                    typeof deliverySettings.baseLat === 'number' &&
-                    typeof deliverySettings.baseLng === 'number' &&
-                    deliveryCoords
-                  ) {
-                    distKm = haversineKm(deliverySettings.baseLat, deliverySettings.baseLng, deliveryCoords.lat, deliveryCoords.lng);
-                    outOfRange = deliverySettings.maxDistanceKm > 0 && distKm > deliverySettings.maxDistanceKm;
-                    if (deliverySettings.freeAboveSubtotal > 0 && subtotal >= deliverySettings.freeAboveSubtotal) {
-                      delivFee = 0;
-                    } else {
-                      delivFee = Math.round(
-                        (deliverySettings.baseFee + Math.max(0, distKm - deliverySettings.baseDistanceKm) * deliverySettings.perKmFee) * 100
-                      ) / 100;
-                    }
-                  } else if (deliverySettings.freeAboveSubtotal > 0 && subtotal >= deliverySettings.freeAboveSubtotal) {
-                    delivFee = 0;
-                  } else {
-                    delivFee = deliverySettings.baseFee || 0;
-                  }
-                }
-                const grandTotal = Math.round((subtotal + taxAmt + delivFee) * 100) / 100;
-                return (
-                  <>
-                    <div className="flex justify-between text-white/60">
-                      <span>Subtotal</span>
-                      <span>{formatPrice(subtotal)}</span>
-                    </div>
-                    {taxPct > 0 && (
-                      <div className="flex justify-between text-white/60">
-                        <span>GST / Taxes ({taxPct}%)</span>
-                        <span>{formatPrice(taxAmt)}</span>
-                      </div>
-                    )}
-                    {isDeliveryMode && (
-                      <div className="flex justify-between text-white/75">
-                        <span>
-                          Delivery Fee{distKm !== null ? ` (${distKm.toFixed(1)} km)` : ''}
-                        </span>
-                        <span className={delivFee === 0 ? 'text-emerald-400 font-semibold' : ''}>
-                          {delivFee === 0 ? 'FREE' : formatPrice(delivFee)}
-                        </span>
-                      </div>
-                    )}
-                    {outOfRange && deliverySettings && (
-                      <div className="p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-sans">
-                        Your location ({distKm?.toFixed(1)} km away) is outside our {deliverySettings.maxDistanceKm} km delivery zone.
-                      </div>
-                    )}
-                    <div className="flex justify-between text-white font-semibold text-xs pt-2 border-t border-white/[0.08]">
-                      <span>Total Payable</span>
-                      <span className="text-amber-400 font-bold">{formatPrice(grandTotal)}</span>
-                    </div>
-                  </>
-                );
-              })()}
+              <div className="flex justify-between text-white/60">
+                <span>Subtotal ({totalCartCount} {totalCartCount === 1 ? 'item' : 'items'})</span>
+                <span>{formatPrice(subtotal)}</span>
+              </div>
+              {cartPricing.taxPct > 0 && (
+                <div className="flex justify-between text-white/60">
+                  <span>GST / Taxes ({cartPricing.taxPct}%)</span>
+                  <span>{formatPrice(cartPricing.taxAmt)}</span>
+                </div>
+              )}
+              {isDeliveryMode && (
+                <div className="flex justify-between text-white/75">
+                  <span>
+                    Delivery Fee{cartPricing.distKm !== null ? ` (${cartPricing.distKm.toFixed(1)} km)` : ''}
+                  </span>
+                  <span className={cartPricing.delivFee === 0 ? 'text-emerald-400 font-semibold' : ''}>
+                    {cartPricing.delivFee === 0 ? 'FREE' : formatPrice(cartPricing.delivFee)}
+                  </span>
+                </div>
+              )}
+              {cartPricing.outOfRange && deliverySettings && (
+                <div className="p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-sans">
+                  Your location ({cartPricing.distKm?.toFixed(1)} km away) is outside our {deliverySettings.maxDistanceKm} km delivery zone.
+                </div>
+              )}
+              <div className="flex justify-between text-white font-semibold text-xs pt-2 border-t border-white/[0.08]">
+                <span>Total Payable</span>
+                <span className="text-amber-400 font-bold">{formatPrice(cartPricing.grandTotal)}</span>
+              </div>
             </div>
 
             {/* Inline Age Requirement Checkbox if Bar or Hookah items present */}
@@ -2575,11 +2575,12 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                 </>
               ) : (
                 <>
-                  <span>Place Order · {formatPrice(Math.round((subtotal + subtotal * ((typeof currentRestaurant?.taxPercentage === 'number' ? currentRestaurant.taxPercentage : 5) / 100)) * 100) / 100)}</span>
+                  <span>Place Order · {formatPrice(cartPricing.grandTotal)}</span>
                   <ChevronRight className="w-4 h-4" />
                 </>
               )}
             </button>
+            </div>
           </div>
         </div>
       )}
