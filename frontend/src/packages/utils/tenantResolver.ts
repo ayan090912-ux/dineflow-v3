@@ -23,6 +23,7 @@ export type TenantAppType =
   | 'HUB'
   | 'HOOKAH'
   | 'DELIVERY'
+  | 'RIDER_PASS'
   | 'INVENTORY'
   | 'BILLING'
   | 'SETTINGS'
@@ -250,9 +251,12 @@ export function resolveTenantAppFromPath(cleanPath: string): TenantAppType {
     return 'HOOKAH';
   }
 
-  // 4.6. Delivery Terminal & Customer Delivery Ordering
+  // 4.6. Delivery Terminal & Customer Delivery Ordering & Rider Pass
   if (p === '/delivery-terminal' || p.startsWith('/delivery-terminal/')) {
     return 'DELIVERY';
+  }
+  if (p === '/rider-pass' || p.startsWith('/rider-pass/')) {
+    return 'RIDER_PASS';
   }
   if (p === '/delivery' || p.startsWith('/delivery/')) {
     return 'CUSTOMER';

@@ -1204,6 +1204,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
   const readyPlatesList = useMemo(() => {
     return orders.filter((o) => {
+      if (o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY' || o.status === 'PENDING_DELIVERY' || o.status === 'OUT_FOR_DELIVERY') {
+        return false;
+      }
       const isReady =
         o.status === 'READY' ||
         o.kitchenStatus === 'READY' ||
@@ -1227,6 +1230,9 @@ export const WaiterTerminalOS: React.FC<WaiterTerminalOSProps> = ({
 
   const cookingPlatesList = useMemo(() => {
     return orders.filter((o) => {
+      if (o.orderType === 'DELIVERY' || o.tableNumber === 'DELIVERY' || o.status === 'PENDING_DELIVERY' || o.status === 'OUT_FOR_DELIVERY') {
+        return false;
+      }
       const isDone = o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED';
       if (isDone) return false;
       const isReady =

@@ -707,13 +707,21 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
     if (processingOrderIds.has(order.id)) return;
     setProcessingOrderIds((prev) => new Set(prev).add(order.id));
     setWaiterRequestedOrderIds((prev) => new Set(prev).add(order.id));
+    const isDelivery = order.orderType === 'DELIVERY' || order.tableNumber === 'DELIVERY';
     try {
       await api.updateFulfillmentTicketStatus(order.id, 'READY', 'KITCHEN');
       await api.updateKitchenStatus(order.id, 'READY');
-      await api.requestWaiter(order.id, 'KITCHEN').catch(() => {});
+      if (!isDelivery) {
+        await api.requestWaiter(order.id, 'KITCHEN').catch(() => {});
+      }
       setBumpedHistory((prev) => [order, ...prev.slice(0, 19)]);
       if (!isMuted) playKitchenChime('BUMP');
-      showToast(`Order #${order.id.slice(-4)} passed to waiter! ✨`, 'success');
+      showToast(
+        isDelivery
+          ? `Order #${order.id.slice(-4)} passed to Delivery Terminal! 🚚`
+          : `Order #${order.id.slice(-4)} passed to waiter! ✨`,
+        'success'
+      );
       onRefreshOrdersRef.current?.();
     } catch (err: any) {
       showToast(err.message || 'Failed to pass order to waiter', 'warning');
@@ -1216,7 +1224,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                               onClick={() => handleMarkReady(order)}
                               icon={<CheckCircle2 className="w-3.5 h-3.5" />}
                             >
-                              {processingOrderIds.has(order.id) ? 'Passing to Waiter...' : 'Pass to Waiter'}
+                              {processingOrderIds.has(order.id)
+                                ? 'Passing...'
+                                : (order.orderType === 'DELIVERY' || order.tableNumber === 'DELIVERY')
+                                ? 'Pass to Delivery'
+                                : 'Pass to Waiter'}
                             </Button>
                           </div>
                         )}
@@ -1262,10 +1274,16 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="font-mono font-bold text-emerald-400 text-lg">#{order.id.length > 10 ? order.id.slice(-4) : order.id}</span>
-                          <p className="text-xs text-emerald-300 font-medium mt-1">Passed to Waiter</p>
+                          <p className="text-xs text-emerald-300 font-medium mt-1">
+                            {(order.orderType === 'DELIVERY' || order.tableNumber === 'DELIVERY') ? 'Passed to Delivery' : 'Passed to Waiter'}
+                          </p>
                         </div>
                         <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-white/10 text-white border border-white/15 shadow-xs">
-                          {order.tableNumber && order.tableNumber !== 'COUNTER' ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`) : 'Counter Pickup'}
+                          {(order.orderType === 'DELIVERY' || order.tableNumber === 'DELIVERY')
+                            ? 'DELIVERY'
+                            : order.tableNumber && order.tableNumber !== 'COUNTER'
+                            ? (order.tableNumber.startsWith('Table') ? order.tableNumber : `Table ${order.tableNumber}`)
+                            : 'Counter Pickup'}
                         </span>
                       </div>
 
@@ -1281,7 +1299,11 @@ export const KitchenETADashboard: React.FC<KitchenETADashboardProps> = ({
                       <div className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30">
                         <span className="flex items-center gap-1.5 font-mono">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>Waiter Notified • Ready for Pickup</span>
+                          <span>
+                            {(order.orderType === 'DELIVERY' || order.tableNumber === 'DELIVERY')
+                              ? 'Delivery Notified • Ready for Rider Pickup'
+                              : 'Waiter Notified • Ready for Pickup'}
+                          </span>
                         </span>
                       </div>
                     </div>

@@ -2440,6 +2440,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                   <p className="text-[11px] text-rose-300">{gpsError}</p>
                 )}
 
+                {deliveryCoords && deliverySettings && typeof deliverySettings.baseLat === 'number' && typeof deliverySettings.baseLng === 'number' && (() => {
+                  const dKm = haversineKm(deliverySettings.baseLat!, deliverySettings.baseLng!, deliveryCoords.lat, deliveryCoords.lng);
+                  const inRange = !(deliverySettings.maxDistanceKm > 0 && dKm > deliverySettings.maxDistanceKm);
+                  return (
+                    <div className={`px-3 py-2 rounded-xl border text-[11px] font-medium flex items-center justify-between ${
+                      inRange
+                        ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                        : 'bg-rose-500/15 border-rose-500/35 text-rose-300'
+                    }`}>
+                      <span>
+                        {inRange
+                          ? `✓ In Delivery Range (${dKm.toFixed(1)} km away)`
+                          : `✗ Outside ${deliverySettings.maxDistanceKm} km range (${dKm.toFixed(1)} km)`}
+                      </span>
+                      <span className="font-mono text-[10px]">Max {deliverySettings.maxDistanceKm} km</span>
+                    </div>
+                  );
+                })()}
+
                 <label className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 cursor-pointer select-none">
                   <div className="flex items-center gap-2 min-w-0">
                     <Radio className={`w-3.5 h-3.5 shrink-0 ${shareLiveLocation ? 'text-emerald-400 animate-pulse' : 'text-white/40'}`} />

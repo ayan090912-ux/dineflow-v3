@@ -19,11 +19,15 @@ import {
   Sparkles,
   Settings,
   X,
+  QrCode,
+  Share2,
+  BellRing,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { DeliverySettings, Order, Restaurant } from '../../packages/types';
 import { api } from '../../packages/api/client';
 import { realtimeBus, ConnectionStatusType } from '../../packages/api/realtime';
-import { Badge, Button, DinelyLogo, SearchInput, ToastContainer, ToastMessage } from '../../packages/ui';
+import { Badge, Button, DinelyLogo, Modal, SearchInput, ToastContainer, ToastMessage } from '../../packages/ui';
 import { formatCurrency } from '../../packages/utils/currency';
 
 interface DeliveryTerminalProps {
@@ -71,6 +75,7 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [qrPassOrder, setQrPassOrder] = useState<Order | null>(null);
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
     baseLat: null,
     baseLng: null,
@@ -194,6 +199,39 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
     }
     return `${loc.origin}/delivery`;
   }, [restaurant?.slug]);
+
+  const getRiderPassUrl = (orderId: string) => {
+    if (typeof window === 'undefined') return `/rider-pass?orderId=${encodeURIComponent(orderId)}`;
+    const loc = window.location;
+    const base =
+      restaurant?.slug && (loc.hostname === 'dinely.food' || loc.hostname === 'www.dinely.food')
+        ? `https://${restaurant.slug}.dinely.food`
+        : loc.origin;
+    return `${base}/rider-pass?orderId=${encodeURIComponent(orderId)}`;
+  };
+
+  const buildRiderWhatsAppUrl = (order: Order) => {
+    const meta = order.deliveryMeta || {};
+    const phone = meta.customerPhone || order.customerPhone || 'N/A';
+    const mapsUrl = getGoogleMapsUrl(meta.latitude, meta.longitude, meta.deliveryAddress);
+    const itemsText = (order.items || []).map((it) => `• ${it.quantity}x ${it.name}`).join('\n');
+    const riderPassUrl = getRiderPassUrl(order.id);
+    const lines = [
+      `*${restaurant?.name || 'Dinely'} — Delivery Order #${order.id.slice(-4)}*`,
+      `Customer: ${order.customerName || 'Guest'}`,
+      `Phone: ${phone}`,
+      `Address: ${meta.deliveryAddress || 'GPS Pin Shared'}${meta.landmark ? ` (Landmark: ${meta.landmark})` : ''}`,
+      typeof meta.distanceKm === 'number' ? `Distance: ${meta.distanceKm.toFixed(1)} km` : null,
+      mapsUrl ? `Live GPS Map: ${mapsUrl}` : null,
+      ``,
+      `*Order Items:*`,
+      itemsText,
+      ``,
+      `*Amount to Collect:* ${formatCurrency(order.totalAmount)}`,
+      `*Payment QR & Rider Pass:* ${riderPassUrl}`,
+    ].filter((l) => l !== null);
+    return `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`;
+  };
 
   const handleDispatchToKitchen = async (order: Order, viaBot = false) => {
     if (processingIds.has(order.id)) return;
@@ -636,14 +674,32 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
               </div>
               <div>
                 <label className="block text-slate-400 mb-1">Max Delivery Radius (km)</label>
-                <input
-                  type="number"
-                  min="1"
-                  step="0.5"
-                  value={deliverySettings.maxDistanceKm}
-                  onChange={(e) => setDeliverySettings((p) => ({ ...p, maxDistanceKm: parseFloat(e.target.value) || 1 }))}
-                  className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
-                />
+                <div className="space-y-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.5"
+                    value={deliverySettings.maxDistanceKm}
+                    onChange={(e) => setDeliverySettings((p) => ({ ...p, maxDistanceKm: parseFloat(e.target.value) || 1 }))}
+                    className="w-full px-3 py-2 rounded-xl bg-[#0b0d11] border border-white/10 text-white font-mono"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    {[10, 20, 50].map((km) => (
+                      <button
+                        key={km}
+                        type="button"
+                        onClick={() => setDeliverySettings((p) => ({ ...p, maxDistanceKm: km }))}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-mono border cursor-pointer ${
+                          deliverySettings.maxDistanceKm === km
+                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                            : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {km} km
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="block text-slate-400 mb-1">Base Fee (₹)</label>
@@ -850,6 +906,13 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
                         )}
                       </div>
 
+                      {isReady && (
+                        <div className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
+                          <BellRing className="w-3.5 h-3.5 animate-pulse shrink-0" />
+                          <span>Ready at Kitchen — Collect Order for Rider</span>
+                        </div>
+                      )}
+
                       {renderCustomerLocationBlock(order)}
 
                       <Button
@@ -857,10 +920,18 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
                         size="sm"
                         disabled={processingIds.has(order.id)}
                         onClick={() => handleOutForDelivery(order)}
-                        className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold"
+                        className={`w-full font-bold ${
+                          isReady
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            : 'bg-sky-600 hover:bg-sky-500 text-white'
+                        }`}
                         icon={<Truck className="w-3.5 h-3.5" />}
                       >
-                        {processingIds.has(order.id) ? 'Updating...' : 'Out for Delivery'}
+                        {processingIds.has(order.id)
+                          ? 'Updating...'
+                          : isReady
+                          ? 'Collect & Pass to Rider'
+                          : 'Out for Delivery'}
                       </Button>
                     </div>
                   );
@@ -896,6 +967,26 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
                     </div>
 
                     {renderCustomerLocationBlock(order)}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href={buildRiderWhatsAppUrl(order)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Rider WhatsApp</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setQrPassOrder(order)}
+                        className="py-2 px-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-amber-400" />
+                        <span>QR & Amount</span>
+                      </button>
+                    </div>
 
                     <Button
                       variant="brand"
@@ -936,6 +1027,72 @@ export const DeliveryTerminal: React.FC<DeliveryTerminalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Rider QR & Payment Pass Modal */}
+      <Modal
+        isOpen={Boolean(qrPassOrder)}
+        onClose={() => setQrPassOrder(null)}
+        title={qrPassOrder ? `Rider Pass · Order #${qrPassOrder.id.slice(-4)}` : 'Rider Pass'}
+      >
+        {qrPassOrder && (() => {
+          const upiId = restaurant?.upiId;
+          const merchantName = restaurant?.upiMerchantName || restaurant?.name || 'Dinely Merchant';
+          const upiUri = upiId
+            ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(merchantName)}&am=${qrPassOrder.totalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Order #${qrPassOrder.id.slice(-4)}`)}`
+            : null;
+          return (
+            <div className="space-y-4 text-xs text-slate-200">
+              <div className="p-3 rounded-xl bg-[#0b0d11] border border-white/10 space-y-1.5">
+                <div className="flex justify-between font-semibold text-white">
+                  <span>{qrPassOrder.customerName || 'Customer'}</span>
+                  <span className="text-emerald-400 font-mono">{formatCurrency(qrPassOrder.totalAmount)}</span>
+                </div>
+                <p className="text-slate-400">{qrPassOrder.deliveryMeta?.deliveryAddress || 'GPS Pin Shared'}</p>
+                <div className="pt-1.5 border-t border-white/[0.06] space-y-1">
+                  {(qrPassOrder.items || []).map((it) => (
+                    <div key={it.id} className="flex justify-between text-slate-300">
+                      <span>{it.quantity}x {it.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white text-slate-900 flex flex-col items-center text-center space-y-2">
+                <span className="text-xs font-bold">Scan to Pay {formatCurrency(qrPassOrder.totalAmount)}</span>
+                {restaurant?.upiQrUrl ? (
+                  <img src={restaurant.upiQrUrl} alt="Payment QR" className="w-44 h-44 object-contain rounded-lg border border-slate-200" />
+                ) : upiUri ? (
+                  <QRCodeSVG value={upiUri} size={176} level="M" includeMargin={true} />
+                ) : (
+                  <p className="py-4 text-slate-600">Set your UPI ID / QR in Billing Settings to display payment QR.</p>
+                )}
+                {upiId && <span className="text-[11px] font-mono text-slate-600">{upiId}</span>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={buildRiderWhatsAppUrl(qrPassOrder)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-1.5"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Share to WhatsApp</span>
+                </a>
+                <a
+                  href={getRiderPassUrl(qrPassOrder.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold flex items-center justify-center gap-1.5"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Rider Link</span>
+                </a>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
     </div>
   );
 };

@@ -20,6 +20,7 @@ const KitchenETADashboard = lazy(() => import('./apps/restaurant/KitchenETADashb
 const BarTerminal = lazy(() => import('./apps/bar/BarTerminal').then(m => ({ default: m.BarTerminal })));
 const HookahTerminal = lazy(() => import('./apps/hookah/HookahTerminal').then(m => ({ default: m.HookahTerminal })));
 const DeliveryTerminal = lazy(() => import('./apps/delivery/DeliveryTerminal').then(m => ({ default: m.DeliveryTerminal })));
+const RiderPassPage = lazy(() => import('./apps/delivery/RiderPassPage').then(m => ({ default: m.RiderPassPage })));
 const InventoryTerminalOS = lazy(() => import('./apps/inventory/InventoryTerminalOS').then(m => ({ default: m.InventoryTerminalOS })));
 const RestaurantOperationsCenter = lazy(() => import('./apps/operations/RestaurantOperationsCenter').then(m => ({ default: m.RestaurantOperationsCenter })));
 const AuthPage = lazy(() => import('./apps/auth/AuthPage').then(m => ({ default: m.AuthPage })));
@@ -1137,6 +1138,11 @@ function AppContent() {
         }
 
         return <DeliveryTerminal restaurant={resolvedTenant} onLogout={() => handleLogout('/staff/login')} />;
+      }
+
+      // 4.7. Public Rider Delivery & QR Payment Pass
+      if (tenantApp === 'RIDER_PASS') {
+        return <RiderPassPage restaurant={resolvedTenant} />;
       }
 
       // 5. Inventory Terminal
